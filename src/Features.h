@@ -4,7 +4,7 @@
 // Override from platformio.ini build_flags, e.g. -D FEATURE_BLE=1.
 //
 // The TWAI controller serves the panel when FEATURE_DISPLAY_CAN is on, else the
-// car (src/bus/CanRole.h).
+// car, listen-only (src/bus/TwaiVehicleSource.h).
 
 #ifndef FEATURE_DISPLAY_CAN
 #define FEATURE_DISPLAY_CAN 1     // OEM display over multimedia CAN: keys in, text out

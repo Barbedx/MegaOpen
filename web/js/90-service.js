@@ -25,8 +25,7 @@ SCR.service={title:'Сервіс',async render(m){
   <details class="sub"><summary>Сирий кадр</summary><div class="fr"><input class="in code" id="rC" placeholder="cmd" maxlength="2"><input class="in" id="rD" placeholder="дані hex: 01 00"><button class="btn pri" type="button" id="rGo">Надіслати</button></div></details>
   <details class="sub" id="ringD"><summary>Останні кадри UART</summary><pre class="json" id="ring"></pre></details>`,'','custom')+
  (V?card('Шина панелі (CAN B)','<div class="kv" id="cb"></div>'+
-  row('Помилки шини за типом','<button class="btn sm" type="button" id="eccGo">Зняти</button>','','Регістр ECC контролера TWAI: 3000 вибірок, які помилки (bit, form, stuff) і в якому місці кадру. Допомагає знайти погану пайку чи термінатор.')+'<pre class="json" id="ecc" hidden></pre>'+
-  row('Пошук холодної пайки','<a class="btn sm" href="/wiggle" id="wig">/wiggle</a>','окрема сторінка плати')):'')+
+  row('Помилки шини за типом','<button class="btn sm" type="button" id="eccGo">Зняти</button>','','Регістр ECC контролера TWAI: 3000 вибірок, які помилки (bit, form, stuff) і в якому місці кадру. Допомагає знайти погану пайку чи термінатор.')+'<pre class="json" id="ecc" hidden></pre>'):'')+
  (CP?card('Запис: розширене',row('Коли місце скінчилось, стирати найстаріші',sw('/api/cap/settings|ring',cp.ring),'вимк: запис зупиниться')+row('Заповнювати сховище до, %',num('/api/cap/settings|fill',cp.fill,'min="50" max="98"'))+row('Розмір файлу, МБ',num('/api/cap/settings|fileMB',cp.fileMB,'min="1" max="8"'))+row('Мітка ставить 🔒',sw('/api/cap/settings|autoProtect',cp.autoProtect))+
   '<div class="fr"><button class="btn dng" type="button" id="capFmt">Стерти всі записи</button></div>'):'');
  $$('.card:not(.custom)',m).forEach(c=>saver(c,genericSave,'[data-k]'));

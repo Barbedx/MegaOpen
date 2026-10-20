@@ -65,7 +65,7 @@ at that onward branch had enough resistance that the transceiver's DRIVER (70 mA
 when dominant) could not hold the bus, while its receiver (µA) and the encoder
 (µA) worked perfectly — "listens, never speaks", intermittently, for a whole night.
 Give the transceiver its own 3V3/GND pair and branch the encoders' supply at the
-DevKit pin, a breadboard rail or a terminal block. `/wiggle` finds this in seconds.
+DevKit pin, a breadboard rail or a terminal block.
 
 All four inputs are **input-only pins** — useless to the matrix, the ladder, CAN
 and the UART, so the knobs take nothing from any other build. Two consequences:

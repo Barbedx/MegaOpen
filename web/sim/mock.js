@@ -380,7 +380,7 @@ po('/api/loglevel',q=>{if(q.n===undefined||q.n==='')return fail(400,'n=0..4 requ
 /* без since — як прошивка; since= — НОВЕ замість /ws */
 g('/api/logs',q=>q.since!==undefined?logsSince(+q.since||0):{lines:logSeq,dropped:0,ringSize:300,mounted:true,mountError:'',buffered:812,used:S.logs.used,total:S.logs.total,files:S.logs.files});
 g('/api/logs/file',q=>{const f=S.logs.files[+q.n||0];return f?{bytes:f.size}:fail(404,'no such log')});
-g('/api/can',()=>({role:'display',txEnabled:true,txGated:false,txGates:0,listenOnly:false,
+g('/api/can',()=>({txEnabled:true,txGated:false,txGates:0,listenOnly:false,
  state:S.can.state,txErr:S.can.txErr,rxErr:S.can.rxErr,txFailed:0,rxMissed:0,busErr:S.can.busErr,arbLost:0,txQueued:0,twaiTxOk:S.can.twaiTxOk,twaiTxFail:S.can.twaiTxFail,twaiRx:S.can.twaiRx,twaiMode:'normal',
  rxFrames:S.can.twaiRx,ids:Object.keys(S.ids).length,frames:S.can.twaiRx,overflow:0,sniff:S.sniff,rxPin:6,txPin:7}));
 g('/api/can/ecc',()=>({seen:[{raw:0x6a,count:2,type:'stuff',dir:'while RECEIVING',where:'data'},{raw:0x78,count:1,type:'form',dir:'while RECEIVING',where:'CRC delimiter'}]}));
@@ -492,7 +492,5 @@ $('#simCan').onclick=()=>{S.can2.quiet=!S.can2.quiet};
 $('#simAp').onclick=()=>{const w=S.wifi;if(w.mode==='sta'){w.mode='ap';w.ip='192.168.4.1'}else{w.mode='sta';w.ssid='HomeWiFi';w.ip='192.168.1.50';w.rssi=-58}};
 $('#simOff').onchange=e=>{SIM.offline=e.target.checked};
 $('#simBtn').onclick=()=>$('#side').classList.toggle('open');$('#simClose').onclick=()=>$('#side').classList.remove('open');
-/* /wiggle — окрема сторінка плати; у макеті її нема */
-document.addEventListener('click',e=>{const a=e.target.closest('#wig');if(!a)return;e.preventDefault();sv(svOf(a),'bad','у макеті немає, на платі /wiggle')},true);
 jrDraw();
 }

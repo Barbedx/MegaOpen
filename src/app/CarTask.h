@@ -17,7 +17,7 @@
 // the web's raw stream), the sniffer when it is on, the recorder.
 //
 // WAKES on a task notify from the MCP2518FD's INT (T-2CAN), or every 2 ms when
-// a polled source is in the list (the TWAI vehicle role), else every
+// a polled source is in the list (the TWAI on env:direct), else every
 // 20 ms. Each wake drains up to 64 frames per source; a source that filled
 // them gets the CPU back after a yield, not after the next wake.
 //

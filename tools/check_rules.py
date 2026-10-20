@@ -27,8 +27,8 @@ Rules, by where they bite:
   WebUi*.cpp     httpd posts, stages and reads: it never writes the UART, never
                  runs the sink chain, never drives the emitter or the ladder,
                  and reads the matrix map only through its staged copy. Since
-                 Step 3 it never calls twai_* or reinstalls the driver (bench ops
-                 are Diag::CanBench requests) and never calls the panel library.
+                 Step 3 it never calls twai_* or reinstalls the driver, and never
+                 calls the panel library.
 
 Comments are stripped before matching, so a comment may name what it forbids.
 Standard library only.

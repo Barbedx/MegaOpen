@@ -74,7 +74,6 @@ static Sinks::UsbHidKeySink g_usbKeys;
 #endif
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-#include "bus/CanRole.h"
 #include "bus/TwaiBus.h"
 #include "diag/CanBench.h"
 #include <driver/twai.h>
@@ -269,7 +268,7 @@ static void memMark(const char* what)
 // ---- the OEM display --------------------------------------------------------
 // Protocol lives in AffaDisplay; here are its ports (src/display/AffaPort.*) and
 // the policy. The library owns sync, ACKs, pacing, watchdog and bus-off recovery.
-// One owner of the CAN controller: the role follows the build (g_canRole).
+// One owner of the CAN controller: in a display build, the panel's bus.
 static MegaOpen::TwaiAffaLink g_affaTwaiLink;
 static MegaOpen::ArduinoClock g_affaClock;
 static MegaOpen::AffaLogSink g_affaLog;
@@ -539,17 +538,16 @@ static void onAncsNotification(const AppleNotificationService::NotificationInfo&
 
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-// The TWAI's role follows the build (src/bus/CanRole.h). The two roles use
-// different stacks that cannot share the controller:
-//   display — AffaDisplay owns the driver, recovery and protocol.
-//   vehicle — TwaiBus in hardware TWAI_MODE_LISTEN_ONLY: cannot transmit or ACK,
-//             so it can never go bus-off or flood a car's bus with error frames.
-static constexpr Bus::Role g_canRole = Bus::ROLE;
+// The TWAI follows the build: the panel's bus where there is a display
+// (FEATURE_DISPLAY_CAN), else the car's (env:direct). Two different stacks:
+//   panel — AffaDisplay owns the driver, recovery and protocol.
+//   car   — TwaiBus in hardware TWAI_MODE_LISTEN_ONLY: cannot transmit or ACK,
+//           so it can never go bus-off or flood a car's bus with error frames.
 static uint32_t  g_canRx = 0;
 
-// Listen-only (never transmits or ACKs, so never bus-off; forced on in the
-// Vehicle role) and the loopback test are Diag::CanBench's: they run on
-// this loop, which owns the driver, and the web asks for them.
+// Listen-only (never transmits or ACKs, so never bus-off; on in a build with
+// no display) is Diag::CanBench's, which samples the controller on this
+// loop, the driver's owner.
 #endif
 
 // esp_log tap: IDF/library log lines into the LogBus as "[idf] ...", so they
@@ -620,7 +618,7 @@ static void ringPut(char dir, uint32_t id, const uint8_t* data, uint8_t len)
 
 // Every car frame, on the car task (App::Car's tap), after the decode: the
 // frame ring, the counter and the web's raw stream. The sniffer table and the
-// recorder are the car task's own. CAN A and the TWAI vehicle role both
+// recorder are the car task's own. CAN A and the TWAI on env:direct both
 // arrive here; the TWAI owner (this loop) only hands its frames over
 // (TwaiVehicleSource).
 static void carTap(const Frame& f)
@@ -1625,7 +1623,7 @@ void setup()
 #if FEATURE_DISPLAY_CAN
     // The render policy's settings from NVS, what it draws from, and its UiQ
     // (before the panel can post a verdict to it). The task starts below,
-    // in the display role only.
+    // when there is a panel.
     {
         App::Ui::Deps d;
         d.box    = &g_affaBox;
@@ -1808,27 +1806,24 @@ void setup()
 #endif
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-    logf("[can] role=%s rx=GPIO%d tx=GPIO%d", Bus::roleName(g_canRole),
-         (int)Board::PIN_CAN_RX, (int)Board::PIN_CAN_TX);
+    logf("[can] rx=GPIO%d tx=GPIO%d", (int)Board::PIN_CAN_RX, (int)Board::PIN_CAN_TX);
 #endif
 
-#if FEATURE_VEHICLE_CAN
-    if (g_canRole == Bus::Role::Vehicle) {
-        // The car's bus: hardware listen-only, never transmits or ACKs.
-        // TwaiBus::begin takes (tx, rx); a swapped pair is silence, not an error.
-        TwaiBus::instance().begin((gpio_num_t)Board::PIN_CAN_TX,
-                                  (gpio_num_t)Board::PIN_CAN_RX,
-                                  500000, TWAI_MODE_LISTEN_ONLY);
-        // Handed to the car task, which decodes; this loop keeps the driver.
-        TwaiBus::instance().onReceive(TwaiVehicleSource::push, nullptr);
-        TwaiBus::instance().onTransmit(noteTxFrame);
-        // Unmask all alerts: Diag::CanBench samples them into its snapshot.
-        twai_reconfigure_alerts(TWAI_ALERT_ALL, nullptr);
-        logf("[can] vehicle: listen-only, never transmits, never ACKs, "
-             "cannot go bus-off. No display on this bus.");
-        logf("[can] no termination resistor needed here — an OBD tap is not a "
-             "two-node stub");
-    }
+#if FEATURE_VEHICLE_CAN && !FEATURE_DISPLAY_CAN
+    // The car's bus: hardware listen-only, never transmits or ACKs.
+    // TwaiBus::begin takes (tx, rx); a swapped pair is silence, not an error.
+    TwaiBus::instance().begin((gpio_num_t)Board::PIN_CAN_TX,
+                              (gpio_num_t)Board::PIN_CAN_RX,
+                              500000, TWAI_MODE_LISTEN_ONLY);
+    // Handed to the car task, which decodes; this loop keeps the driver.
+    TwaiBus::instance().onReceive(TwaiVehicleSource::push, nullptr);
+    TwaiBus::instance().onTransmit(noteTxFrame);
+    // Unmask all alerts: Diag::CanBench samples them into its snapshot.
+    twai_reconfigure_alerts(TWAI_ALERT_ALL, nullptr);
+    logf("[can] vehicle: listen-only, never transmits, never ACKs, "
+         "cannot go bus-off. No display on this bus.");
+    logf("[can] no termination resistor needed here — an OBD tap is not a "
+         "two-node stub");
 #endif
 
 #if FEATURE_DISPLAY_CAN
@@ -1837,16 +1832,14 @@ void setup()
     // copies into its ring.
     g_affaLog.begin([](const char* line) { LogBus::line(line); });
 
-    if (g_canRole == Bus::Role::Display) {
-        // Our own TWAI driver with a 64-deep RX queue: an unanswered panel sends
-        // 4-10.7k frames/s (see src/display/TwaiAffaLink.h). TwaiBus::begin() is
-        // (TX, RX); the config is (RX, TX). A swapped pair is silence, not an error.
-        const bool ok = TwaiBus::instance().begin((gpio_num_t)Board::PIN_CAN_TX,
-                                                  (gpio_num_t)Board::PIN_CAN_RX,
-                                                  500000, TWAI_MODE_NORMAL);
-        logf(ok ? "[can] display: TwaiBus @500k normal, rxq=64"
-                : "[can] display: TwaiBus::begin FAILED — no controller");
-    }
+    // Our own TWAI driver with a 64-deep RX queue: an unanswered panel sends
+    // 4-10.7k frames/s (see src/display/TwaiAffaLink.h). TwaiBus::begin() is
+    // (TX, RX); the config is (RX, TX). A swapped pair is silence, not an error.
+    const bool ok = TwaiBus::instance().begin((gpio_num_t)Board::PIN_CAN_TX,
+                                              (gpio_num_t)Board::PIN_CAN_RX,
+                                              500000, TWAI_MODE_NORMAL);
+    logf(ok ? "[can] display: TwaiBus @500k normal, rxq=64"
+            : "[can] display: TwaiBus::begin FAILED — no controller");
 
     const String& dt = g_cfg.s().displayType;
     {
@@ -1893,7 +1886,7 @@ void setup()
     logf("[affa] frame trace follows the log level - raise it to TRC (/api/loglevel?n=4); it will slow the loop");
 
     // begin() transmits nothing; the first heartbeat leaves on the first poll().
-    if (g_canRole == Bus::Role::Display) panel.begin();
+    panel.begin();
     memMark("display.begin");
 
     logf("[MegaOpen] display=%s funcreg=%s\n",
@@ -1901,18 +1894,12 @@ void setup()
 #endif
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-    // The web's loopback test and the controller's status, served by this
-    // task between two passes. Before httpd: its routes call straight in.
+    // The controller's status, sampled by this task between two passes.
+    // Before httpd: its routes read it.
     {
         Diag::CanBench::Setup cb;
-        cb.role  = g_canRole;
-#if FEATURE_VEHICLE_CAN
-        // A reinstall in the vehicle role hands frames to the car task again.
-        cb.rx    = TwaiVehicleSource::push;
-#endif
-        cb.txTap = noteTxFrame;
-        // Display role: we ACK and transmit. Vehicle: never.
-        cb.listenOnly = g_canRole != Bus::Role::Display;
+        // With the panel we ACK and transmit. On the car's bus: never.
+        cb.listenOnly = !FEATURE_DISPLAY_CAN;
         Diag::CanBench::begin(cb);
     }
 #endif
@@ -2008,8 +1995,8 @@ void setup()
     memMark("keys+hu");
 #if FEATURE_DISPLAY_CAN
     // The render policy on its own task (priority 2, core 1): the panel task
-    // only pumps now. Not in the vehicle role, where nothing is drawn.
-    if (g_canRole == Bus::Role::Display && App::Panel::present()) {
+    // only pumps now.
+    if (App::Panel::present()) {
         App::Ui::start();
         memMark("ui");
     }
@@ -2053,7 +2040,7 @@ void setup()
                      [](uint32_t bps) { Mcp2518Source::instance().requestRate(bps); });
 #endif
     // ---- the car task: its sources are chosen here, at boot -----------------
-    // CAN A on the T-2CAN, the TWAI in the vehicle role on env:direct. None:
+    // CAN A on the T-2CAN, the TWAI on env:direct. None:
     // no task, and the loop does its chores (App::Car::service).
     {
         App::Car::Setup cs;
@@ -2061,7 +2048,9 @@ void setup()
         cs.src[cs.n++] = &Mcp2518Source::instance();
 #endif
 #if FEATURE_VEHICLE_CAN
-        if (g_canRole == Bus::Role::Vehicle) cs.src[cs.n++] = &TwaiVehicleSource::instance();
+#if !FEATURE_DISPLAY_CAN
+        cs.src[cs.n++] = &TwaiVehicleSource::instance();
+#endif
         cs.sniffer = &g_sniffer;
 #endif
         cs.state = &g_state;
@@ -2127,8 +2116,7 @@ void setup()
 #endif
 #endif
 #if FEATURE_VEHICLE_CAN
-    static bool s_isVehicle = (g_canRole == Bus::Role::Vehicle);
-    g_web.attachCan(&g_sniffer, &s_isVehicle);
+    g_web.attachCan(&g_sniffer);
 #endif
     g_web.attachVehicle(g_state, g_emitter, g_tx, g_keySink, g_huRx);
     g_web.attachHuRing(huLastFramesJson);
@@ -2323,7 +2311,7 @@ static void logLoopWindow(uint32_t now)
     }
 #endif
 #if FEATURE_DISPLAY_CAN
-    if (g_canRole == Bus::Role::Display) App::Panel::logWindow();
+    App::Panel::logWindow();
 #endif
     // The L2 baseline (flash erases freezing both cores): read it during a
     // log rotate. at= is the uptime of the worst gap in this window.
@@ -2362,7 +2350,7 @@ static void loopWait()
     static int64_t s_restedAtUs = 0;
     TickType_t ticks = pdMS_TO_TICKS(2);
 #if FEATURE_DISPLAY_CAN
-    if (g_canRole == Bus::Role::Display && App::Panel::present())
+    if (App::Panel::present())
         ticks = App::Panel::waitTicks();
 #endif
     const int64_t t0 = esp_timer_get_time();
@@ -2404,9 +2392,10 @@ void loop()
     App::Car::service(now);
 
 #if FEATURE_VEHICLE_CAN
-    // Vehicle role only; the display link drains itself inside AffaDisplay::poll().
-    if (g_canRole == Bus::Role::Vehicle)
-        TwaiBus::instance().poll();   // also recovers bus-off / stopped
+    // No display only; the display link drains itself inside AffaDisplay::poll().
+#if !FEATURE_DISPLAY_CAN
+    TwaiBus::instance().poll();   // also recovers bus-off / stopped
+#endif
     // A web reset/baseline lands here when no frame arrives to apply it,
     // unless the car task owns the table (it applies them itself).
     if (!App::Car::running()) g_sniffer.applyRequests();
@@ -2420,8 +2409,7 @@ void loop()
     lap("trace");
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-    // The web's loopback test runs here, between two polls, and the
-    // controller is sampled every 100 ms.
+    // The controller is sampled every 100 ms.
     Diag::CanBench::service(now);
 #endif
     lap("can");
@@ -2431,7 +2419,7 @@ void loop()
     // its timing is wall-clock against IClock, so nothing here needs pacing.
     // What gets drawn was decided on the ui task and is in the mailbox; its
     // verdicts go back there from inside pump().
-    if (App::Panel::present() && g_canRole == Bus::Role::Display) {
+    if (App::Panel::present()) {
         App::Panel::pump(now);
         lap("disp.poll");
         App::Panel::serviceTx(now);
@@ -2442,7 +2430,7 @@ void loop()
     // Knob events go to the KeyBus from the knob task; every key deadline
     // (releases, ladder, USB HID, macro windows) runs on the keys task, the
     // emitter on the hu task, and the vehicle sources (CAN A, the
-    // decode of the TWAI vehicle role's frames) on the car task.
+    // decode of env:direct's TWAI frames) on the car task.
 
     logLoopWindow(now);
     lap("heartbeat");

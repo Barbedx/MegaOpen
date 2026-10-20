@@ -38,7 +38,7 @@ public:
     void waitRx(TickType_t ticks);
     bool stashed() const { return _stashed; }
 
-    // Bus-off / stopped recovery only, no draining. The display role never calls
+    // Bus-off / stopped recovery only, no draining. The panel's link never calls
     // poll(), so without this the first bus-off is permanent.
     void maintain();
 
@@ -76,7 +76,7 @@ public:
     // Not a failure: climbing txBusy with txFail 0 means the queue, not the bus.
     uint32_t txBusy() const { return _txBusy; }
     // Driver installs since boot; every one after the first is a reinstall
-    // (the loopback test, a STOPPED controller restarted).
+    // (a STOPPED controller restarted).
     uint32_t installs() const { return _installs; }
 
 private:

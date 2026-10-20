@@ -130,7 +130,7 @@ namespace Catalog
     // ---- what this image has (Catalog.h, Feature) --------------------------------
     // The same switches the routes are gated by: display = /api/display, media,
     // affamap; ble (with display) = /api/ble; ancs = /api/notifications;
-    // vehicle = /api/can*, /wiggle; can2 = /api/can2; capture = /api/cap*;
+    // vehicle = /api/can*; can2 = /api/can2; capture = /api/cap*;
     // knobs = /api/knobs*; matrix = /api/keymap*; res = /api/res*; logfs =
     // /api/logs/file; usb and uart = routing destinations.
     // Macros, routing, the map and the Raise console are in every image.

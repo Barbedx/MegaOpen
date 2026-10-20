@@ -13,7 +13,7 @@ WHY IT READS PageGz.cpp AND NOT THE SOURCES. The app is web/index.html with
 web/app.css and web/js/*.js inlined and their whole-line comments stripped — so
 checking web/ checks files nobody ever receives. Decompressing the gz arrays out
 of the generated translation unit gives the exact bytes a browser gets: the app
-(PAGE_APP) and /wiggle (PAGE_WIGGLE).
+(PAGE_APP).
 
 This is a syntax and wiring check. It does not open a browser and it cannot tell
 you a page WORKS: that takes a browser on the live board.
@@ -65,7 +65,7 @@ def main():
             want |= set(re.findall(r'querySelector\(\s*[\'"]#([A-Za-z0-9_-]+)[\'"]\s*\)', joined))
 
             # THE HELPER NAMES ARE READ OUT OF THE PAGE, not assumed: `$` is
-            # querySelector in the app and getElementById on /wiggle. A checker
+            # querySelector in the app, getElementById on a plain page. A checker
             # that only knew one form once skipped whole pages in silence. Which
             # of the two a name is decides whether the argument carries a '#'.
             for helper, kind in re.findall(

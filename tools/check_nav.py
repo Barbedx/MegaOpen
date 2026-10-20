@@ -6,8 +6,7 @@ WHAT IT PROVES, per env:
   1. "/" serves the app: WebUi.cpp registers "/" with PAGE_APP_GZ, and the array
      is in the .elf.
   2. Every page the app links to (href="/..." in the served PAGE_APP; /update is
-     ElegantOTA's own and skipped) is in this binary. Today that is /wiggle,
-     which lives in routesCan() and so exists only with FEATURE_VEHICLE_CAN.
+     ElegantOTA's own and skipped) is in this binary. Today there is none.
   3. The service console: every cmd in the catalog has a route.
   4. The layout parameters: every one is reported and assigned by /api/media.
 
@@ -36,7 +35,7 @@ ELF  = os.path.join(ROOT, ".pio", "build", ENV, "firmware.elf")
 WEBUI = os.path.join(ROOT, "src", "net", "WebUi.cpp")
 
 # page path -> the gz array its route serves
-SYM  = {"/": "PAGE_APP", "/wiggle": "PAGE_WIGGLE"}
+SYM  = {"/": "PAGE_APP"}
 SKIP = {"/update"}
 
 def nm_symbols(elf):

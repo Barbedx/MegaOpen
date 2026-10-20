@@ -116,7 +116,7 @@ namespace App
         // setup(): the settings from NVS, the objects it draws from, and the
         // UiQ, before any task can post a completion.
         void begin(Cfg::Config& cfg, const Deps& d);
-        // The ui task, in the display role only (setup(), after the panel).
+        // The ui task, with a panel only (setup(), after the panel).
         void start();
 
         // ---- the panel task ------------------------------------------------------

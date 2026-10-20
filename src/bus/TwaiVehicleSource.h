@@ -2,11 +2,11 @@
 #include <atomic>
 #include "IVehicleSource.h"
 
-// The car's frames from the TWAI controller in the vehicle role (env:direct's
-// OBD tap). Portable: a ring and two counters, native-tested.
+// The car's frames from the TWAI controller in a build with no display
+// (env:direct's OBD tap). Portable: a ring and two counters, native-tested.
 //
 // The TWAI driver stays with the task that owns it — the loop task, where the
-// CAN bench ops, the bus-off recovery and the wait-for-a-frame sleep all live —
+// status sampling, the bus-off recovery and the wait-for-a-frame sleep all live —
 // so this source does not read the controller. The owner's RX handler push()es
 // each frame here; the car task drain()s them. One producer, one consumer: a
 // lock-free ring, and a frame that finds it full is dropped and counted, never
@@ -25,7 +25,7 @@ public:
     const char* name() const override { return "twai"; }
     bool        begin() override { return true; }
     size_t      drain(Frame* out, size_t max, uint32_t nowMs) override;
-    // The vehicle role runs the TWAI at a fixed 500k (setup() in main.cpp).
+    // The car's TWAI runs at a fixed 500k (setup() in main.cpp).
     uint32_t    bitrate() const override { return 500000; }
     Stats       stats() const override;
 

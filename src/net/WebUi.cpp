@@ -1680,17 +1680,15 @@ void WebUi::routesMedia()
 #endif
 
 #if FEATURE_VEHICLE_CAN
-// ---- CAN role + sniffer ------------------------------------------------------
+// ---- CAN status + sniffer ------------------------------------------------------
 void WebUi::routesCan()
 {
     route("/api/can", HTTP_GET, [this](PsychicRequest* r) {
         JsonDocument d;
-        const bool veh = _isVehicle && *_isVehicle;
-        d["role"]      = veh ? "vehicle" : "display";
-        // Listen-only on the car's bus; in the display role the panel task's
+        // Listen-only on the car's bus; with the panel, the panel task's
         // TX gate can also have turned transmit off (nobody ACKs, nothing
         // heard), which is why busErr and twaiTx stop moving: say so here.
-        d["txEnabled"] = !veh && TwaiBus::instance().txEnabled();
+        d["txEnabled"] = FEATURE_DISPLAY_CAN && TwaiBus::instance().txEnabled();
 #if FEATURE_DISPLAY_CAN
         if (_panel) {
             const MegaOpen::PanelStatus p = _panel->read();
@@ -1786,31 +1784,6 @@ void WebUi::routesCan()
             o["dir"]   = (v & 0x20) ? "while RECEIVING" : "while SENDING";
             o["where"] = segName(v & 0x1F);
         }
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    // Wiggle page (WiggleAssets.h): /api/can/loop ten times a second with a tone when good, for
-    // pressing on joints hands-free. The controller is off the pins 40 ms in
-    // every 100 while it runs, so the panel will not register.
-    route("/wiggle", HTTP_GET, [](PsychicRequest* r) {
-        return replyPage(r, PAGE_WIGGLE_GZ, PAGE_WIGGLE_GZ_LEN);
-    });
-
-    // Toggled loopback: hundreds of 50 us CTX lows, never a held one; counts
-    // how many come back on CRX. Panel off the bus, or its traffic counts.
-    route("/api/can/loop", HTTP_POST, [this](PsychicRequest* r) {
-        // On the loop: it takes the pins from the controller and gives them back.
-        uint32_t cycles = 0, followed = 0;
-        if (!Diag::CanBench::loopTest(cycles, followed))
-            return r->reply(503, "text/plain", "the CAN owner did not answer in 2 s");
-        JsonDocument d;
-        d["cycles"]   = cycles;
-        d["followed"] = followed;
-        d["verdict"]  = !cycles ? "no pins"
-                      : (followed * 10 >= cycles * 9) ? "CRX follows CTX — the transceiver drives the bus"
-                      : followed ? "CRX follows only sometimes — marginal"
-                                 : "CRX NEVER follows CTX — the driver does not reach the bus";
         String out; serializeJson(d, out);
         return replyJson(r, out);
     });

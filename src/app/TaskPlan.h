@@ -129,7 +129,7 @@ namespace App
         // chip service masks interrupts on its core for the whole FIFO drain
         // ([can2] maskMaxUs). Over 200 us, or BLE links dropping while CAN A
         // is busy, moves it to core 1 at priority 3, below the panel and keys.
-        // Not created on a board with no car source (a C3 in the display role).
+        // Not created on a board with no car source.
         constexpr UBaseType_t CAR_PRIO  = 4;  constexpr int CAR_CORE  = 0;
         constexpr uint32_t    CAR_STACK  = 4096;
     }
