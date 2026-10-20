@@ -2,6 +2,8 @@
 #include <AffaDisplay.h>
 #include <Arduino.h>
 #include <atomic>
+#include "GlassGate.h"
+#include "../utils/Locks.h"
 
 // Every render this firmware makes, from whichever task makes it, and the
 // glass policy the library cannot know about.
@@ -13,12 +15,13 @@
 // submit() is the library call, on the caller's task. pressKey, the aborts
 // and begin() (Resync) are posted by the library the same way.
 //
-// What stays here is policy, shared through atomics:
+// What stays here is policy:
 //   * a person's screen (the web console, a macro) moves deliberateSeq() when
 //     accepted, and the ui task holds the glass on each new value;
 //   * an automatic repaint (`yields`) carries the deliberateSeq() its poster had
 //     seen; if a person's screen was accepted since, it is refused Aborted here
-//     instead of covering that screen;
+//     instead of covering that screen. The check and the render are one step
+//     under a lock (GlassGate.h), so the two cannot interleave;
 //   * Clear is only a count, which the ui task acts on; Resync is counted too.
 namespace MegaOpen
 {
@@ -125,11 +128,11 @@ namespace MegaOpen
 
         // ---- for the ui task and the panel task -------------------------------
         // Deliberate screens accepted (the ui holds the glass on each new one).
-        uint16_t deliberateSeq() const { return _deliberateSeq.load(std::memory_order_acquire); }
+        uint16_t deliberateSeq() const { return _glass.seq(); }
         uint32_t clears() const        { return _clears.load(std::memory_order_relaxed); }
         uint32_t resyncs() const       { return _resyncs.load(std::memory_order_relaxed); }
         // Automatic repaints refused because a deliberate screen overtook them.
-        uint32_t yielded() const       { return _yielded.load(std::memory_order_relaxed); }
+        uint32_t yielded() const       { return _glass.yielded(); }
 
         // The ops a person's screen is drawn with: accepted and `deliberate`,
         // they hold the glass against the automatic repaints. Not the popup (an
@@ -147,8 +150,18 @@ namespace MegaOpen
         // Every task posts: the loop, httpd, the keys task (popups, macros),
         // the hu task (head-unit text) and the ui task.
         std::atomic<uint32_t> _posted{0}, _refused{0};
-        std::atomic<uint16_t> _deliberateSeq{0};
-        std::atomic<uint32_t> _clears{0}, _resyncs{0}, _yielded{0};
+        std::atomic<uint32_t> _clears{0}, _resyncs{0};
+
+        // The glass check's lock: a FreeRTOS mutex (priority inheritance, so a
+        // keys-task macro waiting on the ui task is not inverted), held for
+        // one ring push.
+        static constexpr uint32_t GLASS_WAIT_MS = 20;
+        struct GlassLock {
+            Locks::Mutex m;
+            bool lock()   { return m.take(GLASS_WAIT_MS); }
+            void unlock() { m.give(); }
+        };
+        GlassGate<GlassLock> _glass;
     };
 
     // The Carminat fullscreen (0x21 05), built here so its geometry can be

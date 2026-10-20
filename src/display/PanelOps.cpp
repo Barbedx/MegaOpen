@@ -215,24 +215,23 @@ namespace MegaOpen
 
     affa::Submitted PanelOps::submit(const Req& r)
     {
-        affa::Submitted s;
-        if (!_d) {
-            s = affa::Submitted::refused(affa::Result::NotSupported);
-        } else if (r.yields && r.epoch != deliberateSeq()) {
-            // A repaint decided before a person's screen went up: not drawn
-            // over it. The ui learns of the screen on its next pass and holds
-            // the glass from there.
-            s = affa::Submitted::refused(affa::Result::Aborted);
-            _yielded.fetch_add(1, std::memory_order_relaxed);
-        } else {
-            s = render(r);
+        affa::Submitted s = affa::Submitted::refused(affa::Result::NotSupported);
+        if (_d) {
+            // A person's screen, taken, holds the glass for a while; a repaint
+            // decided before one was taken is not drawn over it (the ui learns
+            // of the screen on its next pass and holds the glass from there).
+            // Checked and rendered as one step (GlassGate.h).
+            const GlassVerdict v = _glass.run(r.yields, r.epoch,
+                                              r.deliberate && holdsGlass(r.op),
+                                              [&]() { s = render(r); return accepted(s); });
+            if (v == GlassVerdict::Yielded) s = affa::Submitted::refused(affa::Result::Aborted);
+            // The lock is held for one ring push; not had within
+            // GLASS_WAIT_MS, it is refused like a full ring.
+            if (v == GlassVerdict::Busy)    s = affa::Submitted::refused(affa::Result::QueueFull);
         }
 
         if (accepted(s)) {
             _posted.fetch_add(1, std::memory_order_relaxed);
-            // A person's screen, accepted: the glass is theirs for a while.
-            if (r.deliberate && holdsGlass(r.op))
-                _deliberateSeq.fetch_add(1, std::memory_order_release);
         } else {
             _refused.fetch_add(1, std::memory_order_relaxed);
             // The ui task says what matters about its own, rate-limited:
