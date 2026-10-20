@@ -470,21 +470,43 @@ void WebUi::routes()
 
     // ---- every setting the registry describes (src/cfg/SettingsRegistry.h) ----
     // The same table the panel menu draws: a key here is a registry id, a
-    // Bool is true/false, an Int a number, an Enum its stored id.
+    // Bool is true/false, an Int a number, an Enum its stored id. A Table is
+    // a list of rows, each a list of cells in column order (the catalog's
+    // `cols`), cells as above; a scaled Int has its decimal point placed.
     route("/api/settings", HTTP_GET, [this](PsychicRequest* r) {
         auto& s = _cfg->s();
         JsonDocument d;
+        // The newest rules, applied or not (the car task owns them).
+        Vehicle::AlertRules al;
+        Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
 #if FEATURE_KNOBS
         Knobs::Config kc;
         if (_knobs) kc = _knobs->config();
-        const Cfg::Model m{&s, _knobs ? &kc : nullptr};
+        const Cfg::Model m{&s, _knobs ? &kc : nullptr, alp};
 #else
-        const Cfg::Model m{&s, nullptr};
+        const Cfg::Model m{&s, nullptr, alp};
 #endif
         for (size_t i = 0; i < Cfg::Registry::count(); ++i) {
             const Cfg::SEntry& e = Cfg::Registry::at(i);
             if (e.type == Cfg::SType::Group || !(e.flags & Cfg::F_WEB) || !Cfg::Registry::available(m, e))
                 continue;
+            if (e.type == Cfg::SType::Table) {
+                JsonArray rows = d[e.id].to<JsonArray>();
+                char b[16];
+                for (uint8_t ri = 0; ri < e.tab->rows; ++ri) {
+                    JsonArray row = rows.add<JsonArray>();
+                    for (uint8_t c = 0; c < e.tab->cols; ++c) {
+                        const Cfg::SColumn& col = e.tab->col[c];
+                        const int32_t v = Cfg::Registry::cell(m, e, ri, c);
+                        const uint8_t dp = Cfg::Registry::cellDecimals(m, e, ri, c);
+                        if (col.type == Cfg::SType::Bool)      row.add(v != 0);
+                        else if (col.type == Cfg::SType::Enum) row.add(col.en->id((uint8_t)v));
+                        else if (dp) row.add(serialized(String(Cfg::Registry::decText(b, sizeof(b), v, dp))));
+                        else         row.add(v);
+                    }
+                }
+                continue;
+            }
             const int32_t v = Cfg::Registry::get(m, e);
             switch (e.type) {
                 case Cfg::SType::Bool: d[e.id] = v != 0; break;
@@ -515,23 +537,30 @@ void WebUi::routes()
         if (apPass.length() && (apPass.length() < 8 || apPass.length() > 63))
             return r->reply(400, "text/plain", "apPass: 8 to 63 characters");
 
+        // The alert rules are sent whole: written into an empty table (rows
+        // not sent stay empty), which replaces the car task's when accepted.
+        // Static: httpd serves one request at a time.
+        static Vehicle::AlertRules al;
+        al = Vehicle::AlertRules{};
+        bool alSent = false;
 #if FEATURE_KNOBS
         Knobs::Config kc;
         if (_knobs) kc = _knobs->config();
-        Cfg::Model m{&s, _knobs ? &kc : nullptr};
+        Cfg::Model m{&s, _knobs ? &kc : nullptr, &al};
 #else
-        Cfg::Model m{&s, nullptr};
+        Cfg::Model m{&s, nullptr, &al};
 #endif
 
         // Everything that can be refused is checked before anything is applied
         // (the /api/map rule): a 400 leaves the settings as they were. Keys the
         // registry does not know (apPass, huForget) are not refused. An Int
-        // out of range is brought into it, as the handlers before did.
+        // out of range is brought into it, as the handlers before did; a
+        // table's cell is not (the table's own check refuses it).
         struct Change { const Cfg::SEntry* e; int32_t v; };
         // Static: httpd serves one request at a time, and 1 kB is not for its stack.
         static Change ch[64];
         uint8_t n = 0;
-        static char err[64];
+        static char err[96];
         for (JsonPairConst kv : d.as<JsonObjectConst>()) {
             const Cfg::SEntry* e = Cfg::Registry::find(kv.key().c_str());
             if (!e || e->type == Cfg::SType::Group) continue;
@@ -540,6 +569,47 @@ void WebUi::routes()
             int32_t v = 0;
             if (e->flags & Cfg::F_RO)                    why = "read-only";
             else if (!Cfg::Registry::available(m, *e))   why = "not on this board";
+            else if (e->type == Cfg::SType::Table) {
+                // Row i = rule i; a row is its cells in column order, a
+                // missing or null cell keeps the empty row's.
+                if (!j.is<JsonArrayConst>() || j.size() > e->tab->rows) {
+                    snprintf(err, sizeof(err), "%s: a list of %u rows at most", e->id, (unsigned)e->tab->rows);
+                    return r->reply(400, "text/plain", err);
+                }
+                uint8_t ri = 0;
+                for (JsonVariantConst jr : j.as<JsonArrayConst>()) {
+                    if (!jr.is<JsonArrayConst>()) {
+                        snprintf(err, sizeof(err), "%s %u: a list of cells", e->id, (unsigned)(ri + 1));
+                        return r->reply(400, "text/plain", err);
+                    }
+                    uint8_t c = 0;
+                    for (JsonVariantConst jc : jr.as<JsonArrayConst>()) {
+                        if (c >= e->tab->cols) break;
+                        const Cfg::SColumn& col = e->tab->col[c];
+                        const char* cw = nullptr;
+                        int32_t cv = 0;
+                        if (jc.isNull()) { ++c; continue; }
+                        if (col.type == Cfg::SType::Bool) {
+                            if (jc.is<bool>()) cv = jc.as<bool>() ? 1 : 0; else cw = "true or false";
+                        } else if (col.type == Cfg::SType::Enum) {
+                            const int x = jc.is<const char*>() ? Cfg::Registry::colEnumIndex(col, jc.as<const char*>()) : -1;
+                            if (x < 0) cw = "unknown value"; else cv = x;
+                        } else if (!jc.is<double>() ||
+                                   !Cfg::Registry::decParse(jc.as<double>(), Cfg::Registry::cellDecimals(m, *e, ri, c), cv)) {
+                            cw = "a number";
+                        }
+                        if (!cw && !Cfg::Registry::setCell(m, *e, ri, c, cv)) cw = "out of range";
+                        if (cw) {
+                            snprintf(err, sizeof(err), "%s %u: %s: %s", e->id, (unsigned)(ri + 1), col.id, cw);
+                            return r->reply(400, "text/plain", err);
+                        }
+                        ++c;
+                    }
+                    ++ri;
+                }
+                alSent = true;
+                continue;
+            }
             else if (e->type == Cfg::SType::Bool) {
                 if (j.is<bool>()) v = j.as<bool>() ? 1 : 0; else why = "true or false";
             } else if (e->type == Cfg::SType::Int) {
@@ -558,6 +628,17 @@ void WebUi::routes()
                 return r->reply(400, "text/plain", err);
             }
             if (n < sizeof(ch) / sizeof(ch[0])) ch[n++] = Change{e, v};
+        }
+
+        // The rules first: a busy hand-off is the last refusal, so a refused
+        // request has changed nothing.
+        bool alSaved = true;
+        if (alSent) {
+            if (!App::Car::alertRules().stage(al)) return r->reply(503, "text/plain", "busy, try again");
+            uint8_t on = 0;
+            for (const Vehicle::AlertRule& x : al.r) on += x.on;
+            alSaved = _cfg->saveAlerts(al);
+            LogBus::printf("[alert] rules saved: %u on%s", (unsigned)on, alSaved ? "" : ", NOT in NVS");
         }
 
         // What the head-unit text learner had, so only a real change resets it.
@@ -624,6 +705,7 @@ void WebUi::routes()
 
         _cfg->save();
         LogBus::printf("settings saved: %u value(s)%s", (unsigned)n, restart ? ", pending reboot" : "");
+        if (!alSaved) return r->reply(500, "text/plain", "alerts: applied until the next boot only: NVS write failed");
         return r->reply(200, "application/json", restart ? "{\"ok\":true,\"pendingReboot\":true}"
                                                          : "{\"ok\":true}");
     });

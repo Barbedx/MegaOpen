@@ -118,12 +118,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   loop-task-owned detach. Where: `apple_notification_service.cpp`.
 ### Web UI
 
-- **Alert rules as a settings-registry Table entry, deferred 2026-10-20.**
-  The panel alerts (src/vehicle/AlertRules, 16 rows x sig/cond/thr/cooldownS/
-  on) are edited through `POST /api/map {alerts}`; the plan was one `alerts`
-  entry of a new `SType::Table` in src/cfg/SettingsRegistry, served by
-  `/api/settings`, staging `App::Car::alertRules()` and `Config::saveAlerts()`
-  as WebUiMap.cpp does. Deferred so the car test of 03a42e1 has a fixed target.
 - **Fold the per-feature settings routes into the registry (slice 7),
   deferred 2026-10-20.** `/api/settings` is registry-driven since 718c354, but
   `/api/knobs` (settings half), `/api/loglevel`, `/api/routing`,

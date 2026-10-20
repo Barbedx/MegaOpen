@@ -207,12 +207,20 @@ g('/api/health',health);
 /* кожен id реєстру, якого нема в defSet, — з першого значення (enum) або min (int) */
 const regDef=f=>f.type==='bool'?false:f.type==='int'?f.min:f.enum[0].v;
 g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type!=='table'&&!(f.id in S.set))S.set[f.id]=regDef(f);
- const st=S.staged,o={...S.set,fw:S.fw,build:S.build,cfgVer:S.cfgVer,cfgVerWas:0,wifiSleep:false,ssid2:S.wifi2.ssid};   /* ssid2 — НОВЕ */
+ const st=S.staged,o={...S.set,alerts:S.alerts.map(a=>a.slice()),fw:S.fw,build:S.build,cfgVer:S.cfgVer,cfgVerWas:0,wifiSleep:false,ssid2:S.wifi2.ssid};   /* ssid2 — НОВЕ */
  if(st.bleMode)o.bleMode=st.bleMode;if(st.wifi)o.ssid=st.wifi.ssid;return o});
 /* НОВЕ (план, зріз 4): перезапуск не побічний ефект, а pendingReboot; apPass */
 po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass);
  if(ap&&(ap.length<8||ap.length>63))return fail(400,'apPass: 8 to 63 characters');
  let rb=typeof q.mdnsOn==='boolean'&&q.mdnsOn!==s.mdnsOn;
+ /* таблиця реєстру `alerts` (WebUi.cpp): рядок = клітинки в порядку колонок; ті самі тексти помилок */
+ let AL=null;if(q.alerts!==undefined){if(!Array.isArray(q.alerts)||q.alerts.length>16)return fail(400,'alerts: a list of 16 rows at most');AL=[];
+  for(let i=0;i<q.alerts.length;i++){const a=q.alerts[i],id='alerts '+(i+1)+': ';if(!Array.isArray(a))return fail(400,id+'a list of cells');
+   const[sig='',cond='rises',thr=0,cd=0,on=false]=a.map(x=>x===null?undefined:x),m=META.find(x=>x[0]===sig);
+   if(sig&&!m)return fail(400,id+'sig: unknown value');if(!COND.some(c=>c[0]===cond))return fail(400,id+'cond: unknown value');
+   if(typeof thr!=='number')return fail(400,id+'thr: a number');if(m&&(toInt(thr,m[2])<m[5]||toInt(thr,m[2])>m[6]))return fail(400,id+'thr: out of range');
+   if(!(isInt(cd)&&cd>=0&&cd<=65535))return fail(400,id+'cooldownS: '+(typeof cd==='number'?'out of range':'a number'));
+   if(typeof on!=='boolean')return fail(400,id+'on: true or false');AL.push([sig,cond,thr,cd,!!on&&!!sig])}}
  /* реєстр (catalog.settings): невідоме значення enum -> 400, число в межі, як прошивка */
  for(const f of C.settings||[]){if(f.type==='group'||f.type==='table'||q[f.id]===undefined||['bleMode','mediaSource','huTitleCmd','huArtistCmd'].includes(f.id))continue;
   if(f.ro)return fail(400,f.id+': read-only');
@@ -225,6 +233,7 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
  if(q.uartEnabled===false)S.emitter=false;
  if(typeof q.bleMode==='string'&&C.bleModes.some(b=>b.id===q.bleMode)){rb=rb||q.bleMode!==s.bleMode;S.staged.bleMode=q.bleMode}
  if(ap){rb=rb||ap!==(S.staged.apPass||S.wifi.apPass);S.staged.apPass=ap}
+ if(AL){S.alerts=Array.from({length:16},(_,i)=>AL[i]||['','rises',0,0,false]);emit(2,'CAN','[alert] rules saved: '+S.alerts.filter(a=>a[4]).length+' on')}
  emit(2,'NET',rb?'settings saved, pending reboot':'settings saved');return rb?{ok:true,pendingReboot:true}:ok});
 g('/api/display',()=>{const d=S.disp,car=d.type==='carminat';return {type:d.type,funcReg:d.funcReg,canRx:S.can.twaiRx,attached:true,sync:d.registered?15:1,synced:d.registered,registered:d.registered,passive:!d.funcReg,busy:false,queued:0,lastResult:'Ok',
  supports:{text:true,time:car,power:car,menu:car,popup:car,fullscreen:car,confirm:car,info:car},phase:d.phase,lastRendered:'text',lastRenderedMs:1200,glassHoldMs:10000,glassHeldMs:0,
@@ -357,7 +366,7 @@ g('/api/map',q=>{const o=mapBase();o.rows=q.live?[]:C.raise.map(t=>({id:t.id,...
  if(q.live){const t=Date.now();o.sigs=META.map(m=>{const v=liveVal(m[0],t),src=DERIVED.has(m[0])?'d':BOUND.has(m[0])?'c':'o';
   return [v===undefined?null:decStr(v,m[2]),v===undefined?null:Math.floor(Math.random()*300),src,['door_fl','door_fr','door_rl','door_rr','boot','light_pos','light_dip'].includes(m[0])?1:0]});
   o.alertStats={fired:0,shown:0,dropped:0}}
- if(q.meta){o.meta=META.map(m=>[m[0],m[1],m[2],m[3],m[4],decStr(m[5],m[2]),decStr(m[6],m[2]),m[7]]);o.conds=COND;o.alerts=S.alerts.map(a=>a.slice())}
+ if(q.meta)o.meta=META.map(m=>[m[0],m[1],m[2],m[3],m[4],decStr(m[5],m[2]),decStr(m[6],m[2]),m[7]]);
  return o});
 const isInt=x=>Number.isInteger(x),hexOk=x=>/^(0x)?[0-9a-f]{1,8}$/i.test(String(x==null?'':x)),hexV=x=>parseInt(String(x).replace(/^0x/i,''),16);
 /* DecodeJson::canFrom: ті самі перевірки й тексти */
@@ -377,18 +386,12 @@ po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(
   E.push([r,t])}
 
  if(q.exp!==undefined&&!(isInt(q.exp)&&q.exp>=0&&q.exp<=7))return fail(400,'exp: 0..7, the experiment bits');
- if(q.alerts){if(!Array.isArray(q.alerts)||q.alerts.length>16)return fail(400,'alerts: 16 rules at most');
-  for(let i=0;i<q.alerts.length;i++){const a=q.alerts[i],id='alert '+(i+1)+': ',m=META.find(x=>x[0]===a.sig);
-   if(a.sig&&!m)return fail(400,id+'sig: no such signal');if(!COND.some(c=>c[0]===(a.cond||'rises')))return fail(400,id+'cond: above, below, rises, falls or changes');
-   if(m&&a.thr!=null&&(toInt(a.thr,m[2])<m[5]||toInt(a.thr,m[2])>m[6]))return fail(400,id+"thr: outside the signal's range");
-   if(a.cooldownS!=null&&!(isInt(a.cooldownS)&&a.cooldownS>=0&&a.cooldownS<=65535))return fail(400,id+'cooldownS: 0..65535')}}
  if(q.exp!==undefined){S.huExp=q.exp;emit(2,'HU','[map] head-unit experiments: '+q.exp)}
  if(q.send!==undefined){S.emitter=!!q.send;emit(2,'HU','[map] send to the head unit '+(S.emitter?'on':'off'))}
  if(q.units){if(q.units.fuel!=null)S.tun.fuelUnit=q.units.fuel;if(q.units.trip!=null)S.tun.tripUnit=q.units.trip}
  if(q.reset)S.map=defMap();
  for(const[r,t]of E){const c=r.can||{};S.map[r.id]={src:r.src,can:r.src==='can'?{id:'0x'+hexV(c.id).toString(16).toUpperCase().padStart(3,'0'),byte:c.byte,len:c.len??1,shift:c.shift??0,mask:hexV(c.mask).toString(16).toUpperCase(),mul:c.mul??1,div:c.div??1,add:c.add??0,le:!!c.le,signed:!!c.signed}:null,k:r.src==='const'?toInt(r.k,t.dec)/pow10(t.dec):0}}
  if(q.reset||E.length)emit(2,'CAN','[map] '+(q.reset?'back to factory':'saved')+': '+E.length+' field(s)');
- if(q.alerts){S.alerts=Array.from({length:16},(_,i)=>{const a=q.alerts[i];return a&&a.sig?[a.sig,a.cond||'rises',a.thr??0,a.cooldownS??0,!!a.on]:['','rises',0,0,false]});emit(2,'CAN','[alert] rules saved: '+S.alerts.filter(a=>a[4]).length+' on')}
  return ok});
 const frameFor=(t,v)=>{const[c,sub0]=t.cmd.split(' '),sub=sub0&&sub0!=='A/C'?sub0:'',n=Math.round(+v*pow10(t.dec))&0xFFFF;return ('2E '+c+' 0'+(sub?3:2)+' '+(sub?sub+' ':'')+h2(n)+' '+h2(n>>8)+' CS').toUpperCase()};
 /* WebUiMap.cpp: перед тестом — чи носить 0x28 цю форму; ворота повідомлень (одометр, TPMS…) мок не моделює */

@@ -70,15 +70,6 @@ namespace
         return b;
     }
 
-    // The page's value back to the signal's scaled integer.
-    bool undec(double x, uint8_t d, int32_t& out)
-    {
-        for (uint8_t i = 0; i < d; ++i) x *= 10;
-        if (!isfinite(x) || x > INT32_MAX || x < INT32_MIN) return false;
-        out = (int32_t)lround(x);
-        return true;
-    }
-
     // ?live=1: every signal, in enum order (the meta's order), as
     // [value, ageMs, src, verified]: value null when there is none, age null
     // when CAN never set it; src c=can k=const p=pinned d=derived o=off.
@@ -112,8 +103,8 @@ namespace
 
     // ?meta=1: what the live page needs once — every signal's name, unit,
     // decimals, yes/no, group, range and Ukrainian label ("" = the Raise
-    // field of that name has one), and the alert rules as
-    // [sig name or "", cond, thr, cooldownS, on].
+    // field of that name has one). The alert rules are a settings-registry
+    // table: GET/POST /api/settings `alerts`, described by the catalog.
     void putMeta(ChunkOut& out)
     {
         char b[224], lo[16], hi[16];
@@ -125,21 +116,6 @@ namespace
                                     dec(lo, sizeof(lo), m.min, m.decimals), dec(hi, sizeof(hi), m.max, m.decimals),
                                     Vehicle::label(s)),
                            sizeof(b)));
-        }
-        Vehicle::AlertRules rules;
-        App::Car::alertRules().peek(rules);
-        out.put("],\"conds\":[");
-        for (uint8_t c = 0; c < Vehicle::AC_COUNT; ++c)
-            out.put(b, fit(snprintf(b, sizeof(b), "%s[\"%s\",\"%s\"]", c ? "," : "", Vehicle::ALERT_COND[c].id,
-                                    Vehicle::ALERT_COND[c].name), sizeof(b)));
-        out.put("],\"alerts\":[");
-        for (uint8_t i = 0; i < Vehicle::AlertRules::ROWS; ++i) {
-            const Vehicle::AlertRule& x = rules.r[i];
-            const bool used = x.sig < Vehicle::SIG_COUNT;
-            out.put(b, fit(snprintf(b, sizeof(b), "%s[\"%s\",\"%s\",%s,%u,%s]", i ? "," : "",
-                                    used ? Vehicle::meta(x.sig).name : "", uiId(Vehicle::ALERT_COND, x.cond),
-                                    dec(lo, sizeof(lo), x.thr, used ? Vehicle::meta(x.sig).decimals : 0),
-                                    (unsigned)x.cooldownS, x.on ? "true" : "false"), sizeof(b)));
         }
         out.put("]");
     }
@@ -155,7 +131,7 @@ void WebUi::routesMap()
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy, try again");
         const uint32_t now = millis();
         // ?live=1: the live-car page's poll, every signal and no Raise rows;
-        // ?meta=1: the signals' descriptions and the alert rules, once.
+        // ?meta=1: the signals' descriptions, once.
         const bool live = r->hasParam("live"), meta = r->hasParam("meta");
         ChunkOut out(r);
         char b[200], v[16], k[16];
@@ -212,7 +188,7 @@ void WebUi::routesMap()
         return out.finish();
     });
 
-    // Any of: {send:bool}, {units:{fuel,trip}}, {exp:n}, {alerts:[...]}, {rows:[{id,src,k,can}]},
+    // Any of: {send:bool}, {units:{fuel,trip}}, {exp:n}, {rows:[{id,src,k,can}]},
     // {reset:true} (back to decode_defaults.inc: the NVS blob is erased). Every
     // part is checked before any is applied. A row replaces whatever bound
     // that field; the map goes to the car task (no reboot) and to NVS (`decode`).
@@ -244,38 +220,6 @@ void WebUi::routesMap()
             for (const auto& u : Canbox::TRIP_UNITS) tok |= u.v == trip;
             if (!fok) return r->reply(400, "text/plain", "units.fuel: one of the catalog's fuelUnits");
             if (!tok) return r->reply(400, "text/plain", "units.trip: one of the catalog's tripUnits");
-        }
-
-        // {alerts:[{sig,cond,thr,cooldownS,on}, ...]}: the whole table, row i
-        // = rule i; rows not sent are emptied. sig "" = an empty row; thr in
-        // the signal's own units (decimal point placed, as GET ?meta=1 gives it).
-        const bool hasAlerts = d["alerts"].is<JsonArrayConst>();
-        Vehicle::AlertRules rules;
-        if (hasAlerts) {
-            JsonArrayConst a = d["alerts"].as<JsonArrayConst>();
-            if (a.size() > Vehicle::AlertRules::ROWS) return r->reply(400, "text/plain", "alerts: 16 rules at most");
-            uint8_t i = 0;
-            for (JsonObjectConst o : a) {
-                char id[16];
-                snprintf(id, sizeof(id), "alert %u", (unsigned)(i + 1));
-                const char* name = o["sig"] | "";
-                uint8_t sig = Vehicle::SIG_COUNT;
-                if (*name && (sig = Vehicle::sigByName(name)) >= Vehicle::SIG_COUNT) return bad(r, 400, id, "sig: no such signal");
-                const int c = uiFind(Vehicle::ALERT_COND, o["cond"] | "rises");
-                if (c < 0) return bad(r, 400, id, "cond: above, below, rises, falls or changes");
-                int32_t thr = 0;
-                const uint8_t dp = sig < Vehicle::SIG_COUNT ? Vehicle::meta(sig).decimals : 0;
-                if (!o["thr"].isNull() && (!o["thr"].is<double>() || !undec(o["thr"].as<double>(), dp, thr)))
-                    return bad(r, 400, id, "thr: a number");
-                Vehicle::AlertRules& t = rules;
-                if (!t.set(i, Vehicle::AlertRules::C_SIG, sig) || !t.set(i, Vehicle::AlertRules::C_COND, c))
-                    return bad(r, 400, id, "bad rule");
-                if (!t.set(i, Vehicle::AlertRules::C_THR, thr)) return bad(r, 400, id, "thr: outside the signal's range");
-                if (!t.set(i, Vehicle::AlertRules::C_COOLDOWN, o["cooldownS"] | 0))
-                    return bad(r, 400, id, "cooldownS: 0..65535");
-                t.r[i].on = (o["on"] | false) && sig < Vehicle::SIG_COUNT;
-                ++i;
-            }
         }
 
         const bool reset = d["reset"] | false;
@@ -404,14 +348,6 @@ void WebUi::routesMap()
             if (why) return bad(r, 500, "applied until the next boot only", why);
         }
 
-        if (hasAlerts) {
-            if (!App::Car::alertRules().stage(rules)) return r->reply(503, "text/plain", "busy, try again");
-            uint8_t on = 0;
-            for (const Vehicle::AlertRule& x : rules.r) on += x.on;
-            const bool saved = _cfg->saveAlerts(rules);
-            LogBus::printf("[alert] rules saved: %u on%s", (unsigned)on, saved ? "" : ", NOT in NVS");
-            if (!saved) return bad(r, 500, "applied until the next boot only", "NVS write failed");
-        }
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
 

@@ -1,8 +1,10 @@
 /* ============ Авто — наживо ============
    Усі сигнали Vehicle::State: значення, вік, звідки, чи перевірено в машині.
    GET /api/map?live=1 раз на 2 с (одне опитування на тік; вкладка схована —
-   99-main.js не тікає), опис сигналів і правила сповіщень — ?meta=1 раз.
-   Без вебсокетів. Правила: POST /api/map {alerts}, уся таблиця з 16 рядків. */
+   99-main.js не тікає), опис сигналів — ?meta=1 раз.
+   Без вебсокетів. Правила сповіщень — таблиця реєстру налаштувань `alerts`:
+   GET/POST /api/settings, рядок = [сигнал, умова, поріг, пауза, увімк],
+   уся таблиця з 16 рядків; колонки й умови — з CAT.settings. */
 const LV_GRP=['Рух','Кузов','Світло','Поїздка й пальне','Клімат','Радар','Шини','Звук','Налаштування','Двигун','Безпека','Динаміка'];
 const LV_SRC={c:['CAN','ok'],k:['стала','warn'],p:['закріплено','warn'],d:['розрах.','ok'],o:['нема','off']};
 /* meta: [name, unit, decimals, yes/no, group, min, max, label]; sigs: [value, ageMs, src, verified] */
@@ -11,7 +13,9 @@ const lvUnit=m=>m[1]&&!/^-?\d|^raw$/.test(m[1])?' '+m[1]:'';
 const lvVal=(m,v)=>v==null?DASH:m[3]?(+v?'так':'ні'):v+lvUnit(m);
 const lvAge=a=>a==null?DASH:a<1000?'<1 с':a<60000?Math.round(a/1000)+' с':Math.round(a/60000)+' хв';
 SCR.live={title:'Авто — наживо',hidden:true,async render(m){
- const r=await API.get('/api/map?meta=1&live=1');this.M=r.meta;this.C=r.conds;this.A=r.alerts;this.n=0;
+ const[r,se]=await Promise.all([API.get('/api/map?meta=1&live=1'),API.get('/api/settings')]);
+ const al=(CAT.settings||[]).find(f=>f.id==='alerts')||{cols:[]},cond=al.cols.find(c=>c.id==='cond')||{enum:[]};
+ this.M=r.meta;this.C=cond.enum.map(o=>[o.v,o.name]);this.A=se.alerts||[];this.n=0;
  m.innerHTML=card('Сигнали',row('Оновлювати',sw('#lvAuto',true,'data-nosave'),'раз на 2 с, поки сторінка відкрита')+
   row('Лише з даними',sw('#lvOnly',true,'data-nosave'))+row('Сповіщень',`<span id="lvAl" class="muted">${DASH}</span>`,'спрацювало / показано / зняли до показу')+
   `<div class="tw"><table><thead><tr><th>Сигнал</th><th>Зараз</th><th>Вік</th><th>Звідки</th><th title="перевірено в машині">✓</th><th></th></tr></thead><tbody id="lvT"></tbody></table></div>`,'lvCard','custom full')+
@@ -20,7 +24,7 @@ SCR.live={title:'Авто — наживо',hidden:true,async render(m){
   '<div class="fr"><button class="btn pri" type="button" id="alSave">Зберегти правила</button></div>','alCard','custom');
  this.draw(r);this.drawAlerts();
  $('[data-f="lvOnly"]').onchange=()=>this.draw(this.last);
- $('#alSave').onclick=e=>{this.A=this.readAlerts();run(e.target,()=>API.post('/api/map',{alerts:this.A.map(a=>({sig:a[0],cond:a[1],thr:+a[2]||0,cooldownS:parseInt(a[3])||0,on:!!a[4]}))}),'збережено')};
+ $('#alSave').onclick=e=>{this.A=this.readAlerts();run(e.target,()=>API.post('/api/settings',{alerts:this.A.map(a=>[a[0],a[1],+a[2]||0,parseInt(a[3])||0,!!a[4]])}),'збережено')};
  $('#lvT').onclick=e=>{const b=e.target.closest('[data-add]');if(!b)return;this.A=this.readAlerts();
   const i=this.A.findIndex(a=>!a[0]);if(i<0){sv(svOf($('#alSave')),'bad','усі 16 зайняті');return}
   const mm=this.M[+b.dataset.add];this.A[i]=[mm[0],mm[3]?'rises':'above',0,60,true];this.drawAlerts();$('#alCard').scrollIntoView({behavior:'smooth'})};
