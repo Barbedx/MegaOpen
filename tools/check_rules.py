@@ -197,8 +197,6 @@ for rel in ['src/net/WebUi.cpp', 'src/net/WebUiMacro.cpp', 'src/net/WebUiRes.cpp
     check(rel, src, r'\b_map\s*->\s*\w+', 'the matrix map is the scan task\'s: _st.keymap->peek()')
     # The CAN controller and the panel are the loop's (Step 3).
     check(rel, src, r'\btwai_\w+\s*\(', 'httpd never calls the TWAI driver: Diag::CanBench')
-    check(rel, src, r'\bTwaiBus::instance\s*\(\s*\)\s*\.\s*(begin|end|restart|poll|waitRx)\s*\(',
-          'httpd never drives the TWAI driver: Diag::CanBench')
     check(rel, src, r'\b_disp\b', 'httpd reads the panel\'s snapshot (_panel), never the library')
 
 if problems:

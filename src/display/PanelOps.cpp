@@ -304,7 +304,7 @@ namespace MegaOpen
                 // Local by default: in the radio role we receive key frames,
                 // and Local takes the same path as a key decoded off the bus.
                 // p[0] asks for Wire: the frame itself, onto the bus.
-                res.result = d.pressKey((affa::Key)r.u16,
+                res = d.pressKey((affa::Key)r.u16,
                                  r.flag ? affa::KeyEdge::Hold : affa::KeyEdge::Click,
                                  r.p[0] ? affa::KeySource::Wire : affa::KeySource::Local);
                 break;

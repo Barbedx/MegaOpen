@@ -18,7 +18,7 @@ public:
 
     static TwaiVehicleSource& instance();
 
-    // The TWAI owner's RX handler (a TwaiBus::RxHandler). Any one task, never blocks.
+    // The TWAI owner's hand-off (main.cpp, carLinkPump). Any one task, never blocks.
     static void push(const Frame& f, void* ctx);
     bool put(const Frame& f);
 

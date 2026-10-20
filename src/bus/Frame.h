@@ -2,8 +2,8 @@
 #include <stdint.h>
 
 // Portable CAN frame, no driver dependency, so code above the controller builds
-// on the native host. TwaiBus (env:direct) and the CAN A source convert to it;
-// the panel's frames stay affa::Frame inside AffaDisplay.
+// on the native host. The car's TWAI (env:direct, main.cpp carLinkPump) and the
+// CAN A source convert to it; the panel's frames stay affa::Frame.
 struct Frame {
     // Which bus the frame came from, tagged at the conversion points.
     enum Source : uint8_t {

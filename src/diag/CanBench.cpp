@@ -1,9 +1,6 @@
 #include "CanBench.h"
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
 #include "../utils/Snapshot.h"
-#if !FEATURE_DISPLAY_CAN
-#include "../bus/TwaiBus.h"
-#endif
 
 namespace Diag
 {
@@ -19,7 +16,6 @@ namespace Diag
             // One writer (the owner); httpd reads the word.
             volatile bool s_listenOnly = true;
 
-#if FEATURE_DISPLAY_CAN
             const affa::TwaiLink* s_link = nullptr;
 
             void sample(uint32_t now)
@@ -47,40 +43,12 @@ namespace Diag
                 c.installs   = d.installs;
                 s_status.publish(c);
             }
-#else
-            void sample(uint32_t now)
-            {
-                TwaiBus& bus = TwaiBus::instance();
-                CanStatus c;
-                c.atMs = now;
-                c.installed = bus.isLive();
-                c.mode = (uint8_t)bus.mode();
-                twai_status_info_t s{};
-                if (c.installed && twai_get_status_info(&s) == ESP_OK) {
-                    c.state    = (uint8_t)s.state;
-                    c.tec      = s.tx_error_counter;
-                    c.rec      = s.rx_error_counter;
-                    c.txFailed = s.tx_failed_count;
-                    c.rxMissed = s.rx_missed_count;
-                    c.busErr   = s.bus_error_count;
-                    c.arbLost  = s.arb_lost_count;
-                    c.msgsToTx = s.msgs_to_tx;
-                    c.msgsToRx = s.msgs_to_rx;
-                }
-                // Listen-only: nothing is ever offered for transmit.
-                c.twaiRx   = bus.rxCount();
-                c.installs = bus.installs();
-                s_status.publish(c);
-            }
-#endif
         }
 
         void begin(const Setup& s)
         {
             s_listenOnly = s.listenOnly;
-#if FEATURE_DISPLAY_CAN
             s_link = s.link;
-#endif
             // A first sample now, so a page opened before the first pass reads
             // something real.
             sample(millis());

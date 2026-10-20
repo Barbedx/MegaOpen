@@ -163,10 +163,11 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 - **AffaDisplay is pinned to a branch, not a tag.** `platformio.ini` follows
   `release/next`. Release it as a tag and pin the tag.
 - **`AFFA_ENABLE_TASK=0` on purpose.** The loop task owns `poll()` and sleeps
-  in `TwaiLink::waitRx()`, so a panel key wakes it at once; `AffaTask` polls on
-  a fixed 2 ms period. Every other task renders through the library's dispatch
-  ring, which needs only the declared poll owner. Revisit if `AffaTask` learns
-  to sleep in the link.
+  in `TwaiLink::waitRx()` paced by `affa::WakePacer`, the same wake `AffaTask`
+  has since release/next `b1ee06f`. It stays the loop because the same pass
+  samples the TWAI status, drains the frame trace, publishes `PanelStatus` and
+  beats the task registry the OTA trial watches; `AffaTask` has no per-pass
+  hook, so it would be a second task. Revisit if it gets one.
 - **AffaDisplay docs disagree with its code in ~12 places** (API.md §2.10
   `Esp32CanLink`, §4.1 RX topology, TX queue depth 6 not 4, payload 119 not
   113, the missing `examples/19_owned_task`...). Ticket upstream, with the L1

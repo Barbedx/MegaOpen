@@ -59,7 +59,7 @@ The rules behind this layout (the ownership and blocking rules are checked by
 | --- | --- |
 | `app/` | tasks (`*Task`), the KeyBus, the panel owner, request/reply slots, the OTA trial |
 | `board/` | `BoardProfile.h`, the only file that names a pin |
-| `bus/` | the MCP2518FD driver, `env:direct`'s listen-only TWAI, the vehicle-frame sources, autobaud |
+| `bus/` | the MCP2518FD driver, the vehicle-frame sources, autobaud |
 | `display/` | AffaDisplay ports (clock, log, panel factory), `PanelOps`, screen/pane composers |
 | `keys/`, `input/` | key model, map, router, macros; encoders, debounce, matrix |
 | `sinks/` | key outputs: Raise UART, resistive ladder, BLE HID/AMS |
@@ -79,8 +79,9 @@ The rules behind this layout (the ownership and blocking rules are checked by
 
 The `FEATURE_*` switches in `src/Features.h` are set per env in `platformio.ini`.
 Code behind a disabled flag is compiled out, not merely switched off. The TWAI
-serves the panel where the build has one (on AffaDisplay's `TwaiLink`), else
-the car (`env:direct`, on `bus/TwaiBus`, listen-only). Runtime
+serves the panel where the build has one, else the car (`env:direct`,
+listen-only, the link alone through `<AffaTwai.h>`); either way it runs on
+AffaDisplay's `TwaiLink`. Runtime
 choices (BLE mode, knobs on or off, key routes) are NVS settings that the web
 app edits.
 

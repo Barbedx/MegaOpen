@@ -74,8 +74,8 @@ static Sinks::UsbHidKeySink g_usbKeys;
 #endif
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-#include "bus/TwaiBus.h"   // env:direct only; empty with a panel
 #include "diag/CanBench.h"
+#include <core/WakePacer.h>
 #include <driver/twai.h>
 #endif
 
@@ -258,9 +258,6 @@ static void memMark(const char* what)
 // ---- the OEM display --------------------------------------------------------
 // Protocol lives in AffaDisplay; here are its ports (src/display/AffaPort.*) and
 // the policy. The library owns sync, ACKs, pacing, watchdog and bus-off recovery.
-// One owner of the CAN controller: in a display build, the panel's bus, on
-// the library's own link (the IDF TWAI driver, rxq 64, the TX gate).
-static affa::TwaiLink        g_panelLink;
 static MegaOpen::ArduinoClock g_affaClock;
 static MegaOpen::AffaLogSink g_affaLog;
 static Keys::AffaKeySource   g_affaKeys;
@@ -528,10 +525,13 @@ static void onAncsNotification(const AppleNotificationService::NotificationInfo&
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
 // The TWAI follows the build: the panel's bus where there is a display
-// (FEATURE_DISPLAY_CAN), else the car's (env:direct). Two different stacks:
-//   panel — AffaDisplay owns the driver, recovery and protocol.
-//   car   — TwaiBus in hardware TWAI_MODE_LISTEN_ONLY: cannot transmit or ACK,
-//           so it can never go bus-off or flood a car's bus with error frames.
+// (FEATURE_DISPLAY_CAN), else the car's (env:direct). One driver either way,
+// AffaDisplay's link (the IDF TWAI driver, rxq 64), owned by this loop:
+//   panel — the display's poll() runs it: recovery, the TX gate, protocol.
+//   car   — hardware listen-only, no display (<AffaTwai.h>): cannot transmit
+//           or ACK, so it can never go bus-off or flood a car's bus with error
+//           frames. carLinkPump() drains it to the car task.
+static affa::TwaiLink g_twai;
 static uint32_t  g_canRx = 0;
 
 // Listen-only (never transmits or ACKs, so never bus-off; on in a build with
@@ -616,6 +616,32 @@ static void carTap(const Frame& f)
     ringPut('R', f.id, f.data, f.len);
 }
 
+#endif
+
+#if FEATURE_VEHICLE_CAN && !FEATURE_DISPLAY_CAN
+// The car's TWAI, with no display to poll it: drained to the car task, which
+// decodes (TwaiVehicleSource), and recovered here. At most the driver queue's
+// depth a pass, so a flood cannot hold the loop. A link that is down is asked
+// to recover once a second: a restart can take hundreds of ms.
+static void carLinkPump(uint32_t now)
+{
+    affa::Frame in;
+    for (uint8_t n = 0; n < 64 && g_twai.recv(in); ++n) {
+        Frame f;
+        f.id       = in.id;
+        f.len      = in.len > 8 ? 8 : in.len;
+        memcpy(f.data, in.data, f.len);
+        f.extended = in.ext;
+        f.source   = Frame::SRC_MM_CAN;
+        TwaiVehicleSource::push(f, nullptr);
+    }
+    g_twai.service(now);
+    static uint32_t s_recoverAtMs = 0;
+    if (!g_twai.healthy() && (int32_t)(now - s_recoverAtMs) >= 0) {
+        s_recoverAtMs = now + 1000;
+        (void)g_twai.recover();
+    }
+}
 #endif
 
 // ---- head-unit UART ---------------------------------------------------------
@@ -1760,13 +1786,17 @@ void setup()
 #endif
 
 #if FEATURE_VEHICLE_CAN && !FEATURE_DISPLAY_CAN
-    // The car's bus: hardware listen-only, never transmits or ACKs.
-    // TwaiBus::begin takes (tx, rx); a swapped pair is silence, not an error.
-    TwaiBus::instance().begin((gpio_num_t)Board::PIN_CAN_TX,
-                              (gpio_num_t)Board::PIN_CAN_RX,
-                              500000, TWAI_MODE_LISTEN_ONLY);
-    // Handed to the car task, which decodes; this loop keeps the driver.
-    TwaiBus::instance().onReceive(TwaiVehicleSource::push, nullptr);
+    // The car's bus: hardware listen-only, never transmits or ACKs. A swapped
+    // pin pair is silence, not an error. Its frames go to the car task, which
+    // decodes; this loop keeps the driver (carLinkPump).
+    {
+        affa::TwaiConfig cfg;
+        cfg.tx         = (gpio_num_t)Board::PIN_CAN_TX;
+        cfg.rx         = (gpio_num_t)Board::PIN_CAN_RX;
+        cfg.listenOnly = true;
+        if (!g_twai.begin(cfg))
+            logf("[can] vehicle: TwaiLink::begin FAILED — no controller (it keeps trying)");
+    }
     logf("[can] vehicle: listen-only, never transmits, never ACKs, "
          "cannot go bus-off. No display on this bus.");
     logf("[can] no termination resistor needed here — an OBD tap is not a "
@@ -1787,7 +1817,7 @@ void setup()
         // loop task, which is the panel task) and PanelOps' for rendering.
         affa::CarminatDisplay* carminat = nullptr;
         affa::AffaDisplayBase* display =
-            MegaOpen::createDisplay(dt.c_str(), g_panelLink, g_affaClock, &carminat);
+            MegaOpen::createDisplay(dt.c_str(), g_twai, g_affaClock, &carminat);
         g_panelOps.attach(display, carminat);
         // Callbacks before begin(), or the first poll()'s sync transition is
         // missed: App::Panel counts the verdicts, and every ticket's verdict
@@ -1795,7 +1825,7 @@ void setup()
         App::Panel::Setup ps;
         ps.display  = display;
         ps.carminat = carminat;
-        ps.link     = &g_panelLink;
+        ps.link     = &g_twai;
         ps.ops      = &g_panelOps;
         ps.hooks.onCompletion = App::Ui::postCompletion;
         App::Panel::begin(ps);
@@ -1811,7 +1841,7 @@ void setup()
         affa::TwaiConfig cfg;
         cfg.tx = (gpio_num_t)Board::PIN_CAN_TX;
         cfg.rx = (gpio_num_t)Board::PIN_CAN_RX;
-        const bool ok = g_panelLink.begin(cfg);
+        const bool ok = g_twai.begin(cfg);
         logf(ok ? "[can] display: TwaiLink @500k normal, rxq=%u"
                 : "[can] display: TwaiLink::begin FAILED — no controller (it keeps trying)",
              (unsigned)cfg.rxQueue);
@@ -1832,7 +1862,7 @@ void setup()
     panel.onKey(&onPanelKey, nullptr);
 
     // Every AFFA frame to USB serial, gated on log level TRC.
-    g_panelLink.onRaw(affaTap, nullptr);
+    g_twai.onRaw(affaTap, nullptr);
     logf("[affa] frame trace follows the log level - raise it to TRC (/api/loglevel?n=4); it will slow the loop");
 
     // begin() transmits nothing; the first heartbeat leaves on the first poll().
@@ -1850,9 +1880,7 @@ void setup()
         Diag::CanBench::Setup cb;
         // With the panel we ACK and transmit. On the car's bus: never.
         cb.listenOnly = !FEATURE_DISPLAY_CAN;
-#if FEATURE_DISPLAY_CAN
-        cb.link = &g_panelLink;
-#endif
+        cb.link = &g_twai;
         Diag::CanBench::begin(cb);
     }
 #endif
@@ -2230,8 +2258,8 @@ static void logLoopWindow(uint32_t now)
             }
         }
 
-        // Reported only: the driver's owner recovers it (the library's link
-        // with a panel, TwaiBus::poll() on the car's bus).
+        // Reported only: the driver's owner recovers it (the display's poll()
+        // with a panel, carLinkPump() on the car's bus).
         if (st.state == TWAI_STATE_BUS_OFF || st.state == TWAI_STATE_STOPPED)
             logf("[can] %s (the driver's owner recovers it)", kState[st.state]);
     }
@@ -2254,39 +2282,24 @@ static void logLoopWindow(uint32_t now)
 }
 
 // ---- the sleep between passes ---------------------------------------------------
-// Not delay(2) any more: the loop sleeps in twai_receive(), so the frame that
-// carries a panel key wakes it at once and goes to poll() in the same pass
-// (the link's waitRx keeps it). How long it may sleep is the panel's answer
-// (App::Panel::wait): 1 ms while the library is busy, else 2 ms.
+// Not delay(2) any more: the loop sleeps in twai_receive() (TwaiLink::waitRx), so
+// the frame that carries a panel key wakes it at once and goes to poll() in the
+// same pass (the link keeps it for the next recv()).
 //
 // Under a flood (an unanswered panel sends 4-10k frames/s) a frame is always
 // waiting, so the wait returns at once and the loop would never leave the CPU
-// at priority 5. After REST_EVERY_US without a real sleep it takes one tick
-// off, so whatever runs below it still gets time; delay(2) used to give that
-// for free. With no panel on two cores only IDLE1 sits below it, and one tick
-// in 20 ms is plenty; with the panel, the ui task (priority 2, core 1) sits
-// below it too, so it gets the 2 ms rule. A single-core chip (none is built
-// today) gets it too: there httpd, ble_svc, net_svc and logbus all share the
-// CPU with it, and one tick in 20 ms would leave them 5%.
+// at priority 5. affa::WakePacer polls at once on one early wake and yields a
+// tick on the next one back to back, so whatever runs below it on this core
+// (the ui task, IDLE1 and its watchdog) still gets time.
 static void loopWait()
 {
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-    constexpr int64_t REST_EVERY_US = (portNUM_PROCESSORS == 1 || FEATURE_DISPLAY_CAN) ? 2000 : 20000;
-    static int64_t s_restedAtUs = 0;
-    const int64_t t0 = esp_timer_get_time();
-    if (t0 - s_restedAtUs > REST_EVERY_US) {
-        vTaskDelay(1);
-        s_restedAtUs = esp_timer_get_time();
-        return;
+    static affa::WakePacer s_pacer;
+    switch (s_pacer.after(g_twai.waitRx(2))) {
+        case affa::WakeAction::SleepPeriod:   vTaskDelay(pdMS_TO_TICKS(2)); break;
+        case affa::WakeAction::YieldThenPoll: vTaskDelay(1);                break;
+        case affa::WakeAction::PollNow:                                     break;
     }
-#if FEATURE_DISPLAY_CAN
-    if (App::Panel::present()) App::Panel::wait();
-    else                       vTaskDelay(pdMS_TO_TICKS(2));
-#else
-    TwaiBus::instance().waitRx(pdMS_TO_TICKS(2));
-#endif
-    const int64_t t1 = esp_timer_get_time();
-    if (t1 - t0 >= 500) s_restedAtUs = t1;
 #else
     // No CAN in this image: nothing to wake on but time.
     vTaskDelay(pdMS_TO_TICKS(2));
@@ -2319,7 +2332,7 @@ void loop()
 #if FEATURE_VEHICLE_CAN
     // No display only; the display link drains itself inside AffaDisplay::poll().
 #if !FEATURE_DISPLAY_CAN
-    TwaiBus::instance().poll();   // also recovers bus-off / stopped
+    carLinkPump(now);
 #endif
     // A web reset/baseline lands here when no frame arrives to apply it,
     // unless the car task owns the table (it applies them itself).

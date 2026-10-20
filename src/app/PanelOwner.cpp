@@ -156,19 +156,6 @@ namespace App
             publish();
         }
 
-        // library gap: AffaTask sleeps a fixed period, not in TwaiLink::waitRx(), so this task polls.
-        void wait()
-        {
-            uint32_t ms = 2;
-            // Gated, the library holds its jobs as LinkDown and stays busy()
-            // until their hold runs out: a pass every millisecond would do
-            // nothing for that whole window. A frame from the panel still
-            // wakes us. busy() counts the renders posted and not yet admitted.
-            if (s_s.display && s_s.link && !s_s.link->gate().shut() && lib().busy()) ms = 1;
-            if (s_s.link) s_s.link->waitRx(ms);
-            else          vTaskDelay(pdMS_TO_TICKS(ms));
-        }
-
         void logWindow()
         {
             if (!s_s.display) return;

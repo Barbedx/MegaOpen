@@ -3,15 +3,13 @@
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
 #include <Arduino.h>
 #include <driver/twai.h>
-#if FEATURE_DISPLAY_CAN
-#include <AffaDisplay.h>
-#endif
+#include <AffaTwai.h>
 
 // The CAN controller's status, sampled by the one task that owns the TWAI
 // driver: the loop (the panel task when there is a panel)
-// (docs/design/event-tasks.md, Step 3). The driver is the panel link's
-// (affa::TwaiLink::driver()) where there is a panel, else TwaiBus's (the car,
-// listen-only); nothing else in this firmware reads it.
+// (docs/design/event-tasks.md, Step 3). The driver is affa::TwaiLink's: the
+// panel's bus where there is a panel, else the car's, listen-only. Nothing
+// else in this firmware reads it.
 //
 // The controller's counters are sampled here every 100 ms and published as a
 // snapshot, so /api/can and the heartbeat read a copy.
@@ -36,9 +34,7 @@ namespace Diag
     {
         struct Setup {
             bool               listenOnly = true;
-#if FEATURE_DISPLAY_CAN
-            const affa::TwaiLink* link = nullptr;   // the panel's bus
-#endif
+            const affa::TwaiLink* link = nullptr;
         };
 
         // setup(), on the task that will own the driver, before httpd starts.

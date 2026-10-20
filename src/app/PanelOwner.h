@@ -18,11 +18,14 @@
 //   * pump() is one panel pass: poll(), which also runs the link's TX gate
 //     and bus-off recovery (affa::TwaiLink). After it, the status is
 //     published as a Snapshot<PanelStatus> for every other reader.
-//   * wait() is how the task sleeps: in twai_receive() (TwaiLink::waitRx), so
-//     a panel key frame wakes it at once. 1 ms while the library is busy (a
-//     render posted counts), else 2 ms (always 2 ms while the TX gate is
-//     shut); the library's own deadlines are ~200 ms, so nothing it times is
-//     late.
+//   * between passes the loop sleeps in the link's waitRx(), so a panel key
+//     frame wakes it at once, paced by affa::WakePacer (main.cpp, loopWait).
+//
+// Not AffaTask, which now sleeps in the link the same way: this loop also
+// runs the TWAI status sample, the frame trace and the heartbeat, publishes
+// PanelStatus after every poll() and beats the task registry the OTA trial
+// watches.
+// library gap: AffaTask has no per-pass hook for that work; it would be a second task at the same latency.
 //
 // The library's callbacks (onSync, onComplete) arrive here, on this task, and
 // since Step 4 they end here: the render policy is the ui task's. What it needs
@@ -61,10 +64,6 @@ namespace App
 
         // One panel pass. Keys leave inside poll(), straight onto the KeyBus.
         void pump(uint32_t nowMs);
-        // The sleep between passes, in TwaiLink::waitRx(): a panel frame ends
-        // it early. 1 ms while the library is busy, else (or while gated) 2 ms.
-        void wait();
-
         // The [panel] heartbeat line, and a new window for its maxima.
         void logWindow();
 
