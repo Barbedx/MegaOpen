@@ -92,6 +92,11 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   GPIO36; watch `/api/knobs/live` while it turns. Where: `knobs/KnobSource`.
 - **SK6812 RGBW strips are not supported** (WS2812B GRB / RGB only).
   Where: `knobs/LedStrip`.
+- **A refused web key goes unlogged when more than 4 are in flight.** The
+  verdicts are matched to their tickets in `KeyVerdicts::SLOTS` = 4 slots; a
+  fifth key posted before the first is answered still goes out, but a refusal
+  of it is not logged. Fine for the console's one-at-a-time keys; raise SLOTS
+  if a web macro ever posts bursts. Where: `display/KeyVerdicts.h`.
 
 ### BLE
 
