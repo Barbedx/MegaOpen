@@ -4,6 +4,7 @@
 #include "../app/HuTask.h"
 #include "../proto/canbox/RaiseTargets.h"
 #include "../vehicle/DecodeTable.h"
+#include "../vehicle/Derived.h"
 #include "../utils/LogBus.h"
 
 // ---------------------------------------------------------------------------
@@ -57,6 +58,91 @@ namespace
         snprintf(b, sizeof(b), "%s%s%s", id ? id : "", id ? ": " : "", why);
         return r->reply(code, "text/plain", b);
     }
+
+    // A scaled integer with its decimal point placed: 1368, 2 -> "13.68".
+    const char* dec(char* b, size_t cap, int32_t v, uint8_t d)
+    {
+        if (!d) { snprintf(b, cap, "%ld", (long)v); return b; }
+        int32_t p = 1;
+        for (uint8_t i = 0; i < d; ++i) p *= 10;
+        const uint32_t a = v < 0 ? (uint32_t)-(int64_t)v : (uint32_t)v;
+        snprintf(b, cap, "%s%lu.%0*lu", v < 0 ? "-" : "", (unsigned long)(a / p), (int)d, (unsigned long)(a % p));
+        return b;
+    }
+
+    // The page's value back to the signal's scaled integer.
+    bool undec(double x, uint8_t d, int32_t& out)
+    {
+        for (uint8_t i = 0; i < d; ++i) x *= 10;
+        if (!isfinite(x) || x > INT32_MAX || x < INT32_MIN) return false;
+        out = (int32_t)lround(x);
+        return true;
+    }
+
+    // ?live=1: every signal, in enum order (the meta's order), as
+    // [value, ageMs, src, verified]: value null when there is none, age null
+    // when CAN never set it; src c=can k=const p=pinned d=derived o=off.
+    // Compact on purpose: the live page polls it every 1.5 s.
+    void putLive(ChunkOut& out, const Vehicle::State& st, uint32_t now)
+    {
+        uint8_t how[Vehicle::SIG_COUNT];
+        for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) {
+            const uint8_t* in = nullptr;
+            how[s] = Vehicle::Derived::inputs(s, in) ? 'd' : 'o';
+        }
+        App::Car::decodeTable().read([&](const Vehicle::DecodeTable& t) {
+            for (uint8_t i = 0; i < t.nRows; ++i) if (t.row[i].sig < Vehicle::SIG_COUNT) how[t.row[i].sig] = 'c';
+            for (uint8_t i = 0; i < t.nK; ++i)    if (t.k[i].sig < Vehicle::SIG_COUNT) how[t.k[i].sig] = 'k';
+        });
+        char b[64], v[16], a[12];
+        out.put(",\"sigs\":[");
+        for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) {
+            const char h = st.pinned(s) && how[s] != 'k' ? 'p' : (char)how[s];
+            const uint32_t age = st.ageMs(s, now);
+            if (age == Vehicle::State::NEVER) snprintf(a, sizeof(a), "null");
+            else snprintf(a, sizeof(a), "%lu", (unsigned long)age);
+            out.put(b, fit(snprintf(b, sizeof(b), "%s[%s,%s,\"%c\",%d]", s ? "," : "",
+                                    st.has(s) ? dec(v, sizeof(v), st.get(s), Vehicle::meta(s).decimals) : "null",
+                                    a, h, Vehicle::verified(s) ? 1 : 0), sizeof(b)));
+        }
+        const App::Car::AlertStats as = App::Car::alertStats();
+        out.put(b, fit(snprintf(b, sizeof(b), "],\"alertStats\":{\"fired\":%lu,\"shown\":%lu,\"dropped\":%lu}",
+                                (unsigned long)as.fired, (unsigned long)as.shown, (unsigned long)as.dropped), sizeof(b)));
+    }
+
+    // ?meta=1: what the live page needs once — every signal's name, unit,
+    // decimals, yes/no, group, range and Ukrainian label ("" = the Raise
+    // field of that name has one), and the alert rules as
+    // [sig name or "", cond, thr, cooldownS, on].
+    void putMeta(ChunkOut& out)
+    {
+        char b[224], lo[16], hi[16];
+        out.put(",\"meta\":[");
+        for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) {
+            const Vehicle::Meta& m = Vehicle::meta(s);
+            out.put(b, fit(snprintf(b, sizeof(b), "%s[\"%s\",\"%s\",%u,%d,%u,%s,%s,\"%s\"]", s ? "," : "", m.name, m.unit,
+                                    (unsigned)m.decimals, m.boolean ? 1 : 0, (unsigned)m.group,
+                                    dec(lo, sizeof(lo), m.min, m.decimals), dec(hi, sizeof(hi), m.max, m.decimals),
+                                    Vehicle::label(s)),
+                           sizeof(b)));
+        }
+        Vehicle::AlertRules rules;
+        App::Car::alertRules().peek(rules);
+        out.put("],\"conds\":[");
+        for (uint8_t c = 0; c < Vehicle::AC_COUNT; ++c)
+            out.put(b, fit(snprintf(b, sizeof(b), "%s[\"%s\",\"%s\"]", c ? "," : "", Vehicle::ALERT_COND[c].id,
+                                    Vehicle::ALERT_COND[c].name), sizeof(b)));
+        out.put("],\"alerts\":[");
+        for (uint8_t i = 0; i < Vehicle::AlertRules::ROWS; ++i) {
+            const Vehicle::AlertRule& x = rules.r[i];
+            const bool used = x.sig < Vehicle::SIG_COUNT;
+            out.put(b, fit(snprintf(b, sizeof(b), "%s[\"%s\",\"%s\",%s,%u,%s]", i ? "," : "",
+                                    used ? Vehicle::meta(x.sig).name : "", uiId(Vehicle::ALERT_COND, x.cond),
+                                    dec(lo, sizeof(lo), x.thr, used ? Vehicle::meta(x.sig).decimals : 0),
+                                    (unsigned)x.cooldownS, x.on ? "true" : "false"), sizeof(b)));
+        }
+        out.put("]");
+    }
 }
 
 void WebUi::routesMap()
@@ -68,12 +154,15 @@ void WebUi::routesMap()
         App::Hu::EmitterCfg cfg;
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy, try again");
         const uint32_t now = millis();
+        // ?live=1: the live-car page's poll, every signal and no Raise rows;
+        // ?meta=1: the signals' descriptions and the alert rules, once.
+        const bool live = r->hasParam("live"), meta = r->hasParam("meta");
         ChunkOut out(r);
         char b[200], v[16], k[16];
         out.put(b, fit(snprintf(b, sizeof(b), "{\"send\":%s,\"uart\":%s,\"units\":{\"fuel\":%u,\"trip\":%u},\"rows\":[",
                             cfg.enabled ? "true" : "false", _cfg->s().uartEnabled ? "true" : "false",
                             (unsigned)cfg.tuning.fuelUnit, (unsigned)cfg.tuning.tripUnit), sizeof(b)));
-        for (uint8_t i = 0; i < RT::count(); ++i) {
+        for (uint8_t i = 0; !live && i < RT::count(); ++i) {
             const TargetView t = RT::at(i);
             // The binding, copied out under the staging mutex (the newest edit).
             Vehicle::DecodeRow row{};
@@ -116,7 +205,10 @@ void WebUi::routesMap()
             }
             out.put("}");
         }
-        out.put("]}");
+        out.put("]");
+        if (live && _state) putLive(out, *_state, now);
+        if (meta) putMeta(out);
+        out.put("}");
         return out.finish();
     });
 
@@ -146,6 +238,38 @@ void WebUi::routesMap()
             for (const auto& u : Canbox::TRIP_UNITS) tok |= u.v == trip;
             if (!fok) return r->reply(400, "text/plain", "units.fuel: one of the catalog's fuelUnits");
             if (!tok) return r->reply(400, "text/plain", "units.trip: one of the catalog's tripUnits");
+        }
+
+        // {alerts:[{sig,cond,thr,cooldownS,on}, ...]}: the whole table, row i
+        // = rule i; rows not sent are emptied. sig "" = an empty row; thr in
+        // the signal's own units (decimal point placed, as GET ?meta=1 gives it).
+        const bool hasAlerts = d["alerts"].is<JsonArrayConst>();
+        Vehicle::AlertRules rules;
+        if (hasAlerts) {
+            JsonArrayConst a = d["alerts"].as<JsonArrayConst>();
+            if (a.size() > Vehicle::AlertRules::ROWS) return r->reply(400, "text/plain", "alerts: 16 rules at most");
+            uint8_t i = 0;
+            for (JsonObjectConst o : a) {
+                char id[16];
+                snprintf(id, sizeof(id), "alert %u", (unsigned)(i + 1));
+                const char* name = o["sig"] | "";
+                uint8_t sig = Vehicle::SIG_COUNT;
+                if (*name && (sig = Vehicle::sigByName(name)) >= Vehicle::SIG_COUNT) return bad(r, 400, id, "sig: no such signal");
+                const int c = uiFind(Vehicle::ALERT_COND, o["cond"] | "rises");
+                if (c < 0) return bad(r, 400, id, "cond: above, below, rises, falls or changes");
+                int32_t thr = 0;
+                const uint8_t dp = sig < Vehicle::SIG_COUNT ? Vehicle::meta(sig).decimals : 0;
+                if (!o["thr"].isNull() && (!o["thr"].is<double>() || !undec(o["thr"].as<double>(), dp, thr)))
+                    return bad(r, 400, id, "thr: a number");
+                Vehicle::AlertRules& t = rules;
+                if (!t.set(i, Vehicle::AlertRules::C_SIG, sig) || !t.set(i, Vehicle::AlertRules::C_COND, c))
+                    return bad(r, 400, id, "bad rule");
+                if (!t.set(i, Vehicle::AlertRules::C_THR, thr)) return bad(r, 400, id, "thr: outside the signal's range");
+                if (!t.set(i, Vehicle::AlertRules::C_COOLDOWN, o["cooldownS"] | 0))
+                    return bad(r, 400, id, "cooldownS: 0..65535");
+                t.r[i].on = (o["on"] | false) && sig < Vehicle::SIG_COUNT;
+                ++i;
+            }
         }
 
         const bool reset = d["reset"] | false;
@@ -264,6 +388,15 @@ void WebUi::routesMap()
             LogBus::printf("[map] %s: %u field(s)%s%s", reset ? "back to factory" : "saved", (unsigned)n,
                            why ? ", NOT in NVS: " : "", why ? why : "");
             if (why) return bad(r, 500, "applied until the next boot only", why);
+        }
+
+        if (hasAlerts) {
+            if (!App::Car::alertRules().stage(rules)) return r->reply(503, "text/plain", "busy, try again");
+            uint8_t on = 0;
+            for (const Vehicle::AlertRule& x : rules.r) on += x.on;
+            const bool saved = _cfg->saveAlerts(rules);
+            LogBus::printf("[alert] rules saved: %u on%s", (unsigned)on, saved ? "" : ", NOT in NVS");
+            if (!saved) return bad(r, 500, "applied until the next boot only", "NVS write failed");
         }
         return r->reply(200, "application/json", "{\"ok\":true}");
     });

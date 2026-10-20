@@ -218,3 +218,41 @@ namespace Vehicle
         return SIG_COUNT;
     }
 }
+
+namespace Vehicle
+{
+    // The page's Ukrainian names for the signals that have no Raise field
+    // (the Raise ones are named by RaiseTargets); from SIG_FUEL_LEVEL on.
+    static const char* const kLabel[SIG_COUNT - SIG_FUEL_LEVEL] = {
+        "Пальне, л", "Мало пального (лампа)", "Датчик рівня: діагноз", "Одометр щитка",
+        "Пальне, л (резервна копія)", "Рівень оливи (щиток)", "Лампа Check Engine", "До ТО, км",
+        "Лічильник витрати (сирий)", "Напруга АКБ", "Датчик тиску оливи", "Лампа заряду",
+        "Компресор кондиціонера (UPC)", "Обігрів заднього скла", "Педаль газу", "Зчеплення",
+        "Нейтраль", "Задня передача (UPC)", "Замки", "Ремінь водія", "Ремінь пасажира",
+        "Пасажир на сидінні", "Несправність airbag", "Airbag пасажира вимкнено",
+        "Дах: положення", "Дах: несправність", "Клімат: t° подачі повітря", "Клімат: вентилятор",
+        "Клімат: A/C вибрано", "Клімат: випарник", "Запит кондиціонера (UCH)",
+        "Запит обігріву скла", "Двірники", "Авто рухається", "Освітленість",
+        "Прискорення вздовж", "Прискорення вбік", "Швидкість повороту (yaw)",
+        "Передача", "Співвідношення км/год на 1000 об", "Витрата, л/год", "Витрата зараз",
+        "Витрата середня", "Запас ходу (розрах.)", "Пальне за поїздку", "Пробіг за поїздку",
+    };
+    static_assert(sizeof(kLabel) / sizeof(kLabel[0]) == SIG_COUNT - SIG_FUEL_LEVEL,
+                  "kLabel is out of step with enum Sig");
+
+    const char* label(uint8_t s)
+    {
+        if (s >= SIG_FUEL_LEVEL && s < SIG_COUNT) return kLabel[s - SIG_FUEL_LEVEL];
+        // The older decoded ones the Raise list does not name.
+        switch (s) {
+            case SIG_HANDBRAKE: return "Ручник";
+            case SIG_BRAKE:     return "Педаль гальма";
+            case SIG_REVERSE:   return "Задня передача";
+            case SIG_KEY_ACC:   return "Ключ: ACC";
+            case SIG_BACKLIGHT: return "Підсвітка приладів";
+            case SIG_FOG_FRONT: return "Передні протитуманні";
+            case SIG_FOG_REAR:  return "Задній протитуманний";
+            default:            return "";
+        }
+    }
+}

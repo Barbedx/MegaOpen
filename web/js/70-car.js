@@ -31,6 +31,7 @@ SCR.car={title:'Авто',async render(m){
  this.n=0;this.filesSig='';this.grp='усі';this.learn={};this.mp=mp;
  const groups=['усі',...new Set(CAT.raise.map(t=>t.group))];
  m.innerHTML=
+ card('Наживо',row('Усі сигнали машини','<a class="btn" href="#live">Відкрити</a>','значення, вік, чи перевірено; сповіщення на дисплей'))+
  (C2?card('CAN A',row('Шина','<span id="cSt" class="chip off">…</span>','<span id="cStW"></span>')+
   '<div class="kv"><div><small>Кадр/с</small><b id="cFps"></b></div><div><small>Усього</small><b id="cFr"></b></div><div><small>rec / tec</small><b id="cErr"></b></div><div><small>Переповнень</small><b id="cOv"></b></div></div>'+
   row('Швидкість',sel('/api/can2|bitrate',enumOpts('canRates'),c2.setting||0),'','Авто: спершу остання вдала, далі 500 → 250 → 125 → 1000k. Знайшла — тримає до перезапуску. Плата лише слухає.')):notBuilt('CAN A','CAN A'))+

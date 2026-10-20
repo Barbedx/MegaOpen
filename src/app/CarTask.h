@@ -6,6 +6,7 @@
 #include "../vehicle/VehicleState.h"
 #include "../vehicle/CanSniffer.h"
 #include "../vehicle/DecodeTable.h"
+#include "../vehicle/AlertRules.h"
 #include "../utils/Staged.h"
 
 // The car task (docs/design/event-tasks.md, Step 5). Priority 4 on core 0 for
@@ -57,6 +58,15 @@ namespace App
             // that does not unpack, is the factory table.
             const uint8_t*       decodeBlob = nullptr;
             size_t               decodeLen = 0;
+            // The panel alert rules (NVS "alerts", else factory: the low-fuel
+            // edge). Copied.
+            Vehicle::AlertRules  alerts;
+            // A rule fired: put it on the panel (the ui task's notification).
+            // Null = no panel in this image: rules are evaluated, nothing shown.
+            void (*alert)(const char* title, const char* text) = nullptr;
+            // Whether a popup may go up now: false while a menu or a person's
+            // screen holds the glass. Null = always.
+            bool (*glassFree)() = nullptr;
         };
 
         // setup(), before start(): the command queue and the decode table.
@@ -84,6 +94,14 @@ namespace App
         // httpd edits it (stage/edit); the car task applies it.
         // Persisting it is the caller's (pack() and Config::saveDecode).
         Staged<Vehicle::DecodeTable, true>& decodeTable();
+
+        // ---- the panel alert rules ---------------------------------------------------
+        // httpd edits (and persists, Config::saveAlerts); the car task applies
+        // them between two frames. Evaluated every ALERT_MS against State.
+        constexpr uint32_t ALERT_MS = 100;
+        Staged<Vehicle::AlertRules>& alertRules();
+        struct AlertStats { uint32_t fired = 0, shown = 0, overwritten = 0, dropped = 0; };
+        AlertStats alertStats();
 
         struct Stats {
             uint32_t frames = 0;        // since boot, all sources

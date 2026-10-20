@@ -45,6 +45,11 @@ namespace App
             Setup              s_s;
             Vehicle::CanDecode s_decode;
             Vehicle::Derived   s_derived;
+            // The panel alert rules: httpd stages, this task applies and evaluates.
+            Staged<Vehicle::AlertRules> s_alerts;
+            Vehicle::AlertEval s_eval;
+            uint32_t           s_alertAt = 0, s_shown = 0;
+            Snapshot<AlertStats> s_alertPub;
             StaticQueue_t      s_cmdBuf;
             uint8_t            s_cmdStore[CMD_DEPTH * sizeof(Cmd)];
             QueueHandle_t      s_cmd = nullptr;
@@ -181,8 +186,35 @@ namespace App
                 refreshVerified();
             }
 
+            // The panel alert rules, every ALERT_MS. One popup pending at a time
+            // (AlertEval): it waits for the glass, and goes if its condition
+            // clears first.
+            void alerts(uint32_t now)
+            {
+                s_alerts.applyIfDirty();
+                if ((uint32_t)(now - s_alertAt) < ALERT_MS) return;
+                s_alertAt = now;
+                const Vehicle::AlertRules& r = s_alerts.live();
+                s_eval.tick(r, *s_s.state, now);
+                Vehicle::AlertEval::Fire f;
+                const bool free = !s_s.glassFree || s_s.glassFree();
+                if (s_eval.take(r, *s_s.state, free, f)) {
+                    char text[48];
+                    Vehicle::AlertEval::text(text, sizeof(text), f.sig, f.value, Vehicle::verified(f.sig));
+                    if (s_s.alert) s_s.alert("Car alert", text);
+                    ++s_shown;
+                    LogBus::printf("[alert] rule %u: %s", (unsigned)(f.row + 1), text);
+                }
+                AlertStats st;
+                st.fired = s_eval.fired();
+                st.shown = s_shown;
+                st.overwritten = s_eval.overwritten();
+                st.dropped = s_eval.dropped();
+                s_alertPub.publish(st);
+            }
+
             // The owner's chores between frames: commands, a staged table,
-            // tests running out.
+            // tests running out, the alert rules.
             void chores(uint32_t now)
             {
                 if (!s_s.state) return;
@@ -190,6 +222,7 @@ namespace App
                 while (s_cmd && xQueueReceive(s_cmd, &c, 0) == pdTRUE) applyCmd(c, now);
                 if (s_table.applyIfDirty()) applyTable();
                 expireTests(now);
+                alerts(now);
             }
 
             void post(const Cmd& c)
@@ -360,6 +393,7 @@ namespace App
             if (s_s.n > MAX_SOURCES) s_s.n = MAX_SOURCES;
             s_cmd = xQueueCreateStatic(CMD_DEPTH, sizeof(Cmd), s_cmdStore, &s_cmdBuf);
             loadTable(s.decodeBlob, s.decodeLen);
+            s_alerts.init(s.alerts);
             if (s_s.sniffer) {
                 // Off where the capture recorder is the tool (T-2CAN): a busy car
                 // bus then costs no table search per frame. /api/can/sniff.
@@ -434,5 +468,7 @@ namespace App
         Staged<Vehicle::DecodeTable, true>& decodeTable() { return s_table; }
 
         Stats stats() { return s_stats.read(); }
+        Staged<Vehicle::AlertRules>& alertRules() { return s_alerts; }
+        AlertStats alertStats() { return s_alertPub.read(); }
     }
 }

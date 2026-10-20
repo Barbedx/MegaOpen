@@ -254,6 +254,22 @@ namespace Cfg
         return !_p.isKey("decode") || _p.remove("decode");
     }
 
+    bool Config::saveAlerts(const Vehicle::AlertRules& a)
+    {
+        uint8_t blob[Vehicle::AlertRules::BLOB_BYTES];
+        const size_t n = a.toBlob(blob);
+        return _p.putBytes("alerts", blob, n) == n;
+    }
+
+    bool Config::loadAlerts(Vehicle::AlertRules& a)
+    {
+        if (!_p.isKey("alerts")) return false;
+        uint8_t blob[Vehicle::AlertRules::BLOB_BYTES];
+        if (_p.getBytesLength("alerts") != sizeof(blob)) return false;
+        const size_t n = _p.getBytes("alerts", blob, sizeof(blob));
+        return a.fromBlob(blob, n);
+    }
+
     int Config::nvsFreeEntries()
     {
         nvs_stats_t st;

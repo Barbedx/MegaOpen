@@ -5,6 +5,7 @@
 #include "vehicle/VehicleState.h"
 #include "vehicle/DecodeTable.h"
 #include "vehicle/Derived.h"
+#include "vehicle/AlertRules.h"
 #include <filesystem>
 #include <string>
 
@@ -492,6 +493,19 @@ static void writeForTheSimulator(const DecodeTable& t)
     }
     j += "],\"const\":[],\"sigs\":[";
     for (uint8_t i = 0; i < SIG_COUNT; ++i) j += std::string(i ? "," : "") + "\"" + meta(i).name + "\"";
+    // GET /api/map?meta=1's rows, min and max still scaled (the mock places
+    // the point), and which signals are derived.
+    j += "],\"meta\":[";
+    for (uint8_t i = 0; i < SIG_COUNT; ++i) {
+        const Meta& m = meta(i);
+        snprintf(b, sizeof(b), "%s[\"%s\",\"%s\",%u,%d,%u,%ld,%ld,\"%s\"]", i ? "," : "", m.name, m.unit,
+                 (unsigned)m.decimals, m.boolean ? 1 : 0, (unsigned)m.group, (long)m.min, (long)m.max, label(i));
+        j += b;
+    }
+    j += "],\"derived\":[";
+    const uint8_t* in = nullptr;
+    for (uint8_t i = 0, n = 0; i < SIG_COUNT; ++i)
+        if (Derived::inputs(i, in)) j += std::string(n++ ? "," : "") + "\"" + meta(i).name + "\"";
     j += "]}\n";
     std::filesystem::path dir = std::filesystem::current_path() / "build";
     std::filesystem::create_directories(dir);
@@ -742,9 +756,166 @@ void test_derived_signals_name_their_inputs()
     for (uint8_t s = SIG_GEAR; s <= SIG_TRIP_KM; ++s) TEST_ASSERT_TRUE(Derived::inputs(s, in) > 0);
 }
 
+// ---- panel alerts --------------------------------------------------------------------
+
+void test_alert_factory_is_the_low_fuel_edge_alone()
+{
+    AlertRules a;
+    a.factory();
+    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LOW, a.r[0].sig);
+    TEST_ASSERT_EQUAL_UINT8(AC_RISES, a.r[0].cond);
+    TEST_ASSERT_TRUE(a.r[0].on);
+    for (uint8_t i = 1; i < AlertRules::ROWS; ++i) {
+        TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, a.r[i].sig);
+        TEST_ASSERT_FALSE(a.r[i].on);
+    }
+}
+
+void test_alert_cells_check_their_ranges_and_round_trip()
+{
+    AlertRules a;
+    a.factory();
+    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_SIG, SIG_BATT_V));
+    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_COND, AC_BELOW));
+    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_THR, 1180));
+    TEST_ASSERT_FALSE(a.set(3, AlertRules::C_THR, 5000));        // past batt_v's 16.00
+    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_COOLDOWN, 600));
+    TEST_ASSERT_FALSE(a.set(3, AlertRules::C_COOLDOWN, -1));
+    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_ON, 1));
+    TEST_ASSERT_FALSE(a.set(3, AlertRules::C_ON, 2));
+    TEST_ASSERT_FALSE(a.set(3, AlertRules::C_COND, AC_COUNT));
+    TEST_ASSERT_FALSE(a.set(3, AlertRules::C_SIG, SIG_COUNT + 1));
+    TEST_ASSERT_FALSE(a.set(AlertRules::ROWS, AlertRules::C_ON, 1));
+    TEST_ASSERT_FALSE(a.set(3, AlertRules::COLS, 1));
+    TEST_ASSERT_EQUAL_INT32(1180, a.get(3, AlertRules::C_THR));
+    TEST_ASSERT_EQUAL_INT32(SIG_BATT_V, a.get(3, AlertRules::C_SIG));
+
+    uint8_t blob[AlertRules::BLOB_BYTES];
+    TEST_ASSERT_EQUAL_UINT32(AlertRules::BLOB_BYTES, a.toBlob(blob));
+    AlertRules b;
+    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
+    for (uint8_t r = 0; r < AlertRules::ROWS; ++r)
+        for (uint8_t c = 0; c < AlertRules::COLS; ++c) TEST_ASSERT_EQUAL_INT32(a.get(r, c), b.get(r, c));
+    blob[0] = 2;
+    TEST_ASSERT_FALSE(b.fromBlob(blob, sizeof(blob)));
+    TEST_ASSERT_FALSE(b.fromBlob(blob, sizeof(blob) - 1));
+}
+
+void test_alert_low_fuel_edge_fires_once_and_waits_for_the_glass()
+{
+    AlertRules a;
+    a.factory();
+    AlertEval e;
+    State s;
+    AlertEval::Fire f;
+    s.set(SIG_FUEL_LOW, 0, 10);
+    e.tick(a, s, 100);
+    TEST_ASSERT_FALSE(e.take(a, s, true, f));
+    s.set(SIG_FUEL_LOW, 1, 200);                                // the lamp lights
+    e.tick(a, s, 200);
+    TEST_ASSERT_FALSE(e.take(a, s, false, f));                  // a menu holds the glass: waits
+    e.tick(a, s, 300);                                          // still on: no second fire
+    TEST_ASSERT_TRUE(e.take(a, s, true, f));
+    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LOW, f.sig);
+    TEST_ASSERT_EQUAL_INT32(1, f.value);
+    TEST_ASSERT_EQUAL_UINT32(1, e.fired());
+    // Off and on again inside the 300 s cooldown: quiet. After it: again.
+    s.set(SIG_FUEL_LOW, 0, 400);  e.tick(a, s, 400);
+    s.set(SIG_FUEL_LOW, 1, 500);  e.tick(a, s, 500);
+    TEST_ASSERT_FALSE(e.take(a, s, true, f));
+    s.set(SIG_FUEL_LOW, 0, 1000); e.tick(a, s, 1000);
+    s.set(SIG_FUEL_LOW, 1, 301000); e.tick(a, s, 301000);
+    TEST_ASSERT_TRUE(e.take(a, s, true, f));
+}
+
+void test_alert_already_on_at_first_sight_counts_as_rising()
+{
+    AlertRules a;
+    a.factory();
+    AlertEval e;
+    State s;
+    AlertEval::Fire f;
+    s.set(SIG_FUEL_LOW, 1, 10);                                 // lit at ignition
+    e.tick(a, s, 10);
+    TEST_ASSERT_TRUE(e.take(a, s, true, f));
+}
+
+void test_alert_pending_is_dropped_when_its_condition_clears()
+{
+    AlertRules a;
+    a.factory();
+    AlertEval e;
+    State s;
+    AlertEval::Fire f;
+    s.set(SIG_FUEL_LOW, 0, 10);  e.tick(a, s, 10);
+    s.set(SIG_FUEL_LOW, 1, 20);  e.tick(a, s, 20);
+    TEST_ASSERT_FALSE(e.take(a, s, false, f));                  // glass held
+    s.set(SIG_FUEL_LOW, 0, 30);  e.tick(a, s, 30);              // over before the glass was free
+    TEST_ASSERT_FALSE(e.take(a, s, true, f));
+    TEST_ASSERT_EQUAL_UINT32(1, e.dropped());
+}
+
+void test_alert_threshold_has_hysteresis_and_newest_wins()
+{
+    AlertRules a;
+    a.factory();
+    a.r[0].on = false;
+    // batt_v below 11.80 V, no cooldown; the band is 1600/50 = 0.32 V.
+    a.set(1, AlertRules::C_SIG, SIG_BATT_V);
+    a.set(1, AlertRules::C_COND, AC_BELOW);
+    a.set(1, AlertRules::C_THR, 1180);
+    a.set(1, AlertRules::C_ON, 1);
+    AlertEval e;
+    State s;
+    AlertEval::Fire f;
+    uint32_t t = 0;
+    auto at = [&](int32_t v) { t += 100; s.set(SIG_BATT_V, v, t); e.tick(a, s, t); return e.take(a, s, true, f); };
+    TEST_ASSERT_FALSE(at(1250));
+    TEST_ASSERT_TRUE(at(1170));
+    TEST_ASSERT_FALSE(at(1185));                                // back over, inside the band
+    TEST_ASSERT_FALSE(at(1175));                                // under again: not re-armed
+    TEST_ASSERT_FALSE(at(1212));                                // past thr + band: re-armed
+    TEST_ASSERT_TRUE(at(1160));
+    // Two rules firing in one tick: the later row's popup is the one shown.
+    a.set(2, AlertRules::C_SIG, SIG_HANDBRAKE);
+    a.set(2, AlertRules::C_COND, AC_CHANGES);
+    a.set(2, AlertRules::C_ON, 1);
+    s.set(SIG_HANDBRAKE, 0, t); e.tick(a, s, t);
+    TEST_ASSERT_FALSE(e.take(a, s, true, f));
+    t += 100;
+    s.set(SIG_BATT_V, 1300, t);
+    e.tick(a, s, t);                                            // re-arms batt_v
+    s.set(SIG_BATT_V, 1100, t + 1);
+    s.set(SIG_HANDBRAKE, 1, t + 1);
+    e.tick(a, s, t + 1);
+    TEST_ASSERT_TRUE(e.take(a, s, true, f));
+    TEST_ASSERT_EQUAL_UINT8(SIG_HANDBRAKE, f.sig);
+    TEST_ASSERT_EQUAL_UINT32(1, e.overwritten());
+}
+
+void test_alert_text_places_the_decimal_point()
+{
+    char b[48];
+    AlertEval::text(b, sizeof(b), SIG_BATT_V, 1180, false);
+    TEST_ASSERT_EQUAL_STRING("batt_v: 11.80 V ?", b);
+    AlertEval::text(b, sizeof(b), SIG_FUEL_LOW, 1, true);
+    TEST_ASSERT_EQUAL_STRING("fuel_low: 1", b);
+    AlertEval::text(b, sizeof(b), SIG_LOCKED, 3, true);
+    TEST_ASSERT_EQUAL_STRING("locked: 3", b);
+    AlertEval::text(b, sizeof(b), SIG_CLIM_EVAP, -15, true);
+    TEST_ASSERT_EQUAL_STRING("clim_evap: -1.5 C", b);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_alert_factory_is_the_low_fuel_edge_alone);
+    RUN_TEST(test_alert_cells_check_their_ranges_and_round_trip);
+    RUN_TEST(test_alert_low_fuel_edge_fires_once_and_waits_for_the_glass);
+    RUN_TEST(test_alert_already_on_at_first_sight_counts_as_rising);
+    RUN_TEST(test_alert_pending_is_dropped_when_its_condition_clears);
+    RUN_TEST(test_alert_threshold_has_hysteresis_and_newest_wins);
+    RUN_TEST(test_alert_text_places_the_decimal_point);
     RUN_TEST(test_gear_is_the_nearest_ratio_within_the_band);
     RUN_TEST(test_gear_from_speed_rpm_and_the_switches);
     RUN_TEST(test_fuel_rate_consumption_trip_and_range);

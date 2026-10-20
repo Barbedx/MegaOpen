@@ -2113,6 +2113,23 @@ void setup()
         uint8_t* blob = (uint8_t*)malloc(Vehicle::DecodeTable::BLOB_MAX);
         cs.decodeBlob = blob;
         cs.decodeLen  = blob ? g_cfg.loadDecode(blob, Vehicle::DecodeTable::BLOB_MAX) : 0;
+        // The panel alert rules: NVS, else the low-fuel edge alone.
+        cs.alerts.factory();
+        const bool alertsNvs = g_cfg.loadAlerts(cs.alerts);
+        uint8_t alertsOn = 0;
+        for (const Vehicle::AlertRule& r : cs.alerts.r) alertsOn += r.on && r.sig < Vehicle::SIG_COUNT;
+        logf("[alert] %u rule(s) on, from %s", (unsigned)alertsOn, alertsNvs ? "NVS" : "factory");
+#if FEATURE_DISPLAY_CAN
+        // As a phone notification is drawn, but only while nothing holds the
+        // glass: an alert never covers a menu (CarTask waits, newest wins).
+        cs.alert = App::Ui::queueNotification;
+        cs.glassFree = []() {
+            // The panel menu holds the glass without glassHeldUntilMs.
+            if (App::PanelMenu::isOpen() || App::PanelMenu::panelOff()) return false;
+            const uint32_t until = App::Ui::status().read().glassHeldUntilMs;
+            return !until || (int32_t)(millis() - until) >= 0;
+        };
+#endif
         App::Car::begin(cs);
         free(blob);
         logf("[cfg] NVS: %d entries of 32 B free", g_cfg.nvsFreeEntries());

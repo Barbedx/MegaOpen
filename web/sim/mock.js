@@ -334,7 +334,24 @@ function mapVal(t){const r=S.map[t.id],ts=S.tests[t.id];if(ts&&ts.until>now())re
  if(!r||r.src==='off')return {v:null,how:'off'};if(r.src==='const')return {v:r.k,how:'const'};
  const v=t.id in LV?LV[t.id]:(t.kind==='b'?0:+(t.min+(t.max-t.min)*.3).toFixed(t.dec));return {v,how:'can',raw:r.can.id+': '+canBytes(r.can.id).map(h2).join(' ')}}
 /* WebUiMap.cpp: назву, одиницю й межі поля сторінка бере з каталогу; тут — лише прив'язка і значення */
-g('/api/map',()=>({send:S.emitter,uart:S.set.uartEnabled,units:{fuel:S.tun.fuelUnit,trip:S.tun.tripUnit},rows:C.raise.map(t=>({id:t.id,...S.map[t.id],...mapVal(t)}))}));
+/* ?live=1 / ?meta=1 (WebUiMap.cpp putLive/putMeta): живі сигнали — вигадана поїздка; правила — AlertRules */
+const META=SIM_DECODE.meta||[],DERIVED=new Set(SIM_DECODE.derived||[]),BOUND=new Set(SIM_DECODE.rows.map(r=>r.sig));
+const decStr=(v,d)=>d?(v/pow10(d)).toFixed(d):String(v);
+const COND=[['above','вище'],['below','нижче'],['rises','зʼявилось'],['falls','зникло'],['changes','змінилось']];
+S.alerts=Array.from({length:16},(_,i)=>i?['','rises',0,0,false]:['fuel_low','rises',0,300,true]);
+function liveVal(n,t){const s=t/1000,w=(p,a,b)=>a+(b-a)*(.5+.5*Math.sin(s/p));
+ const v={speed:Math.round(w(9,0,9000)),rpm:Math.round(w(9,800,3200)),fuel_level:31,fuel_low:0,batt_v:Math.round(w(30,1380,1420)),eng_temp:89,out_temp:12,
+  throttle:Math.round(w(5,0,400)),neutral:0,clutch:s%20<1?1:0,handbrake:0,door_fl:0,door_fr:0,door_rl:0,door_rr:0,boot:0,light_pos:1,light_dip:1,
+  fuel_counter:Math.floor(s*7)%256,oil_level:9,service_km:12500,locked:0,belt_drv:0,belt_pass:3,odo_cluster:184321,fuel_level_apv:30};
+ const R5=[75,136,200,270,352];v.gear_ratio=Math.round(v.speed*100/v.rpm);let gi=0;R5.forEach((r,i)=>{if(Math.abs(v.gear_ratio-r)<Math.abs(v.gear_ratio-R5[gi]))gi=i});v.gear=v.speed<300?0:gi+1;
+ return v[n]}
+const mapBase=()=>({send:S.emitter,uart:S.set.uartEnabled,units:{fuel:S.tun.fuelUnit,trip:S.tun.tripUnit}});
+g('/api/map',q=>{const o=mapBase();o.rows=q.live?[]:C.raise.map(t=>({id:t.id,...S.map[t.id],...mapVal(t)}));
+ if(q.live){const t=Date.now();o.sigs=META.map(m=>{const v=liveVal(m[0],t),src=DERIVED.has(m[0])?'d':BOUND.has(m[0])?'c':'o';
+  return [v===undefined?null:decStr(v,m[2]),v===undefined?null:Math.floor(Math.random()*300),src,['door_fl','door_fr','door_rl','door_rr','boot','light_pos','light_dip'].includes(m[0])?1:0]});
+  o.alertStats={fired:0,shown:0,dropped:0}}
+ if(q.meta){o.meta=META.map(m=>[m[0],m[1],m[2],m[3],m[4],decStr(m[5],m[2]),decStr(m[6],m[2]),m[7]]);o.conds=COND;o.alerts=S.alerts.map(a=>a.slice())}
+ return o});
 const isInt=x=>Number.isInteger(x),hexOk=x=>/^(0x)?[0-9a-f]{1,8}$/i.test(String(x==null?'':x)),hexV=x=>parseInt(String(x).replace(/^0x/i,''),16);
 /* DecodeJson::canFrom: ті самі перевірки й тексти */
 function canWhy(c){if(!hexOk(c.id)||hexV(c.id)>0x1FFFFFFF)return 'id: a CAN id, like 0x354';
@@ -351,11 +368,17 @@ po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(
   if(r.src==='can'){if(!r.can||typeof r.can!=='object')return fail(400,r.id+': can: {id, byte, len, ...}');const w=canWhy(r.can);if(w)return fail(400,r.id+': '+w)}
   if(r.src==='const'&&!(typeof r.k==='number'&&toInt(r.k,t.dec)>=toInt(t.min,t.dec)&&toInt(r.k,t.dec)<=toInt(t.max,t.dec)))return fail(400,r.id+': k: '+t.min+'..'+t.max);
   E.push([r,t])}
+ if(q.alerts){if(!Array.isArray(q.alerts)||q.alerts.length>16)return fail(400,'alerts: 16 rules at most');
+  for(let i=0;i<q.alerts.length;i++){const a=q.alerts[i],id='alert '+(i+1)+': ',m=META.find(x=>x[0]===a.sig);
+   if(a.sig&&!m)return fail(400,id+'sig: no such signal');if(!COND.some(c=>c[0]===(a.cond||'rises')))return fail(400,id+'cond: above, below, rises, falls or changes');
+   if(m&&a.thr!=null&&(toInt(a.thr,m[2])<m[5]||toInt(a.thr,m[2])>m[6]))return fail(400,id+"thr: outside the signal's range");
+   if(a.cooldownS!=null&&!(isInt(a.cooldownS)&&a.cooldownS>=0&&a.cooldownS<=65535))return fail(400,id+'cooldownS: 0..65535')}}
  if(q.send!==undefined){S.emitter=!!q.send;emit(2,'HU','[map] send to the head unit '+(S.emitter?'on':'off'))}
  if(q.units){if(q.units.fuel!=null)S.tun.fuelUnit=q.units.fuel;if(q.units.trip!=null)S.tun.tripUnit=q.units.trip}
  if(q.reset)S.map=defMap();
  for(const[r,t]of E){const c=r.can||{};S.map[r.id]={src:r.src,can:r.src==='can'?{id:'0x'+hexV(c.id).toString(16).toUpperCase().padStart(3,'0'),byte:c.byte,len:c.len??1,shift:c.shift??0,mask:hexV(c.mask).toString(16).toUpperCase(),mul:c.mul??1,div:c.div??1,add:c.add??0,le:!!c.le,signed:!!c.signed}:null,k:r.src==='const'?toInt(r.k,t.dec)/pow10(t.dec):0}}
  if(q.reset||E.length)emit(2,'CAN','[map] '+(q.reset?'back to factory':'saved')+': '+E.length+' field(s)');
+ if(q.alerts){S.alerts=Array.from({length:16},(_,i)=>{const a=q.alerts[i];return a&&a.sig?[a.sig,a.cond||'rises',a.thr??0,a.cooldownS??0,!!a.on]:['','rises',0,0,false]});emit(2,'CAN','[alert] rules saved: '+S.alerts.filter(a=>a[4]).length+' on')}
  return ok});
 const frameFor=(t,v)=>{const[c,sub0]=t.cmd.split(' '),sub=sub0&&sub0!=='A/C'?sub0:'',n=Math.round(+v*pow10(t.dec))&0xFFFF;return ('2E '+c+' 0'+(sub?3:2)+' '+(sub?sub+' ':'')+h2(n)+' '+h2(n>>8)+' CS').toUpperCase()};
 /* WebUiMap.cpp: перед тестом — чи носить 0x28 цю форму; ворота повідомлень (одометр, TPMS…) мок не моделює */
