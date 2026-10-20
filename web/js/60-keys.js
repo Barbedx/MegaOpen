@@ -1,5 +1,9 @@
 /* ---------- Кнопки ---------- */
 const destName=d=>nameOf(CAT.dests,d);
+/* маска й живість кожного призначення: ланцюг keys з /api/health (WebUi::putDests);
+   маски пишуться в реєстр налаштувань: uart -> routeUart, ams -> routeAms, ... */
+const kRt=h=>({dest:((h.chains||[]).find(c=>c.id==='keys')||{}).dest||{}});
+const routeId=d=>'route'+d[0].toUpperCase()+d.slice(1);
 const actName=a=>nameOf(CAT.actions,a);
 /* дії, що можуть бути клавішею макросу або його дією: усі, крім «нічого» */
 const realActions=()=>CAT.actions.filter(a=>a.class!=null);
@@ -41,7 +45,7 @@ const macVis=c=>{const fx=enumOf('macroEffects',$('[data-f="effect"]',c).value)|
 const macEmpty=x=>!x.name&&!x.enabled&&!(enumOf('macroEffects',x.effect)||{}).field;
 SCR.keys={title:'Кнопки',async render(m){
  const D=has('display'),K=has('knobs');
- const[am,rt,se,kn,mc]=await Promise.all([getIf(D,'/api/affamap'),API.get('/api/routing'),API.get('/api/settings'),getIf(K,'/api/knobs'),API.get('/api/macros')]);
+ const[am,rt,se,kn,mc]=await Promise.all([getIf(D,'/api/affamap'),API.get('/api/health').then(kRt),API.get('/api/settings'),getIf(K,'/api/knobs'),API.get('/api/macros')]);
  this.kn=kn;this.seq=((am||{}).last||{}).seq;this.macCap=mc.macros.length;
  const DS=CAT.dests,off=d=>!d.built||!rt.dest[d.id];
  const shown=mc.macros.map((x,i)=>({...x,i})).filter(x=>!macEmpty(x));
@@ -68,7 +72,7 @@ SCR.keys={title:'Кнопки',async render(m){
  affa.addEventListener('click',e=>{const b=e.target.closest('[data-test]');if(!b)return;const r=am.rows.find(x=>x.index===+b.closest('.ka').dataset.i);run(b,()=>API.post('/api/display/key?code=0x'+r.wire.toString(16)+'&hold='+(r.hold?1:0)),nameOf(CAT.panelKeys,r.key)+(r.hold?' утрим.':''))});
  $('#affaDef').onclick=e=>ask(e.target,'Скинути всі '+am.rows.length+' призначень до типових?',()=>run(e.target,()=>API.post('/api/affamap/defaults')).then(()=>route()))}
  // маршрути
- saver($('#kRoute .tw'),()=>{const p={};DS.forEach(d=>p[d.id]=0);$$('#kRoute [data-f]').forEach(c=>{const[d,b]=c.dataset.f.split(':');if(c.checked)p[d]|=1<<+b});return API.post('/api/routing',p)},'[data-f]');
+ saver($('#kRoute .tw'),()=>{const p={};DS.forEach(d=>p[routeId(d.id)]=0);$$('#kRoute [data-f]').forEach(c=>{const[d,b]=c.dataset.f.split(':');if(c.checked)p[routeId(d)]|=1<<+b});return API.post('/api/settings',p)},'[data-f]');
  saver($('#rtSet'),async ks=>{const v=val($('[data-k="/api/settings|keyPopupMs"]'));const q={};for(const k of ks){const f=k.split('|')[1];if(f==='keyPopupMs'){q.keyPopup=v>0;if(v>0)q.keyPopupMs=v}else q[f]=val($(`[data-k="${k}"]`))}return API.post('/api/settings',q)},'[data-k]');
  this.why(rt);
  // ручки + підсвітка
@@ -124,5 +128,5 @@ async tick(){
  $('#mDown').innerHTML=(ml.down||[]).length?ml.down.map(k=>chipH('ok',actName(k))).join(''):'<span class="muted">—</span>';
  $('#mCnt').textContent=`спрацювань ${ml.fired} · проковтнуто ${ml.swallowed} · повторено ${ml.replayed}`;
  $$('#macs .mac').forEach(c=>{const f=$('[data-fires]',c),n=(ml.fires||[])[+c.dataset.i];if(f&&n!=null)f.textContent=n+'×'});
- if(this.n%3===0){const rt=await API.get('/api/routing');this.why(rt)}
+ if(this.n%3===0)this.why(kRt(await API.get('/api/health')));
 }};

@@ -2137,7 +2137,7 @@ void setup()
     g_web.attachHuMedia(&g_hu);
     g_web.attachBle([]() { return Bluetooth::GetStatusJson(); },
                     []() { Bluetooth::ClearBonds(); });
-    // Null for a sink not in the chain, so /api/routing can report it as not live.
+    // Null for a sink not in the chain, so /api/health (keys.dest) can report it as not live.
     g_web.attachRouting(g_amsSinkLive ? &g_amsKeys : nullptr,
                         g_hidSinkLive ? &g_hidKeys : nullptr);
 #if FEATURE_ANCS

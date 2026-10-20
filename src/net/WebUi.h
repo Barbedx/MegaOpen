@@ -149,7 +149,7 @@ public:
         _affaMap = map; _affaSrc = src; _keyLast = last;
     }
 
-    // The two BLE key sinks, for /api/routing. Null when BLE is off, and the
+    // The two BLE key sinks, for /api/health keys.dest. Null when BLE is off, and the
     // endpoint reports that rather than accepting a mask for a missing sink.
     // Read only: their masks are staged (attachStaging) and the keys task sets them.
 #if FEATURE_BLE
@@ -362,7 +362,7 @@ private:
     // `last` as JSON, for both /api/affamap shapes.
     void keyLastJson(char* out, size_t cap) const;
 #endif
-    // The routing destinations, for /api/routing and /api/health.
+    // The routing destinations, for /api/health (keys.dest).
     void putDests(JsonObject out, const App::KeysTask::Routing& k) const;
 #if FEATURE_BLE
     Sinks::BleKeyProxy*    _amsSink = nullptr;

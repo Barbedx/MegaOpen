@@ -10,8 +10,8 @@ namespace Keys
     constexpr const char* const DEST_IDS[DEST_COUNT] = {"uart", "ams", "hid", "res", "usb"};
 
     // One destination as the keys task sees it at the press: its class mask,
-    // whether it is in the chain and switched on (`live`, what /api/routing
-    // reports), and whether it acts only on a Press (the BLE and USB sinks
+    // whether it is in the chain and switched on (`live`, what /api/health
+    // keys.dest reports), and whether it acts only on a Press (the BLE and USB sinks
     // ignore a Long, so an asLong row never reaches them).
     struct DestState {
         uint8_t mask      = 0;

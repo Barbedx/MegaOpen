@@ -274,7 +274,7 @@ void WebUi::loop()
 
 // Every destination the catalog lists (Keys::DEST_IDS), from the staged
 // routing: its mask, whether it can take a key at all (`live`, and `why` when
-// it cannot), and `state`. For /api/routing and the keys chain of /api/health.
+// it cannot), and `state`. For the keys chain of /api/health.
 void WebUi::putDests(JsonObject out, const App::KeysTask::Routing& k) const
 {
     auto dest = [&](Keys::Dest i, uint8_t mask, bool live, const char* why) {
@@ -654,10 +654,13 @@ void WebUi::routes()
                 const bool on = s.uartEnabled, resOn = s.resEnabled;
                 const uint8_t u = s.routeUart, a = s.routeAms, h = s.routeHid, rs = s.routeRes,
                               us = s.routeUsb;
-                _st.routing->edit([&](App::KeysTask::Routing& k) {
-                    k.pulseMs = pulse; k.uartOn = on; k.resOn = resOn;
-                    k.uartCls = u; k.amsCls = a; k.hidCls = h; k.resCls = rs; k.usbCls = us;
-                });
+                if (!_st.routing->edit([&](App::KeysTask::Routing& k) {
+                        k.pulseMs = pulse; k.uartOn = on; k.resOn = resOn;
+                        k.uartCls = u; k.amsCls = a; k.hidCls = h; k.resCls = rs; k.usbCls = us;
+                    }))
+                    LogBus::line("settings: the keys task's routing was busy, applied at the next change");
+                LogBus::printf("routing: uart=0x%02X ams=0x%02X hid=0x%02X res=0x%02X usb=0x%02X",
+                               u, a, h, rs, us);
             }
 #if FEATURE_RESISTIVE_KEYS
             // A rung held under a mask just changed would never see its Release.
@@ -925,57 +928,9 @@ void WebUi::routes()
 #endif
 
     // ---- key routing ---------------------------------------------------------
-    // Where a press goes, per destination, as a class mask. Applied live.
-    route("/api/routing", HTTP_GET, [this](PsychicRequest* r) {
-        JsonDocument d;
-        // The classes are the catalog's (`classes`). The newest edit, applied or not (the keys task owns the sinks).
-        App::KeysTask::Routing k;
-        if (!_st.routing || !_st.routing->peek(k)) return r->reply(503, "text/plain", "busy");
-
-        putDests(d["dest"].to<JsonObject>(), k);
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    route("/api/routing", HTTP_POST, [this](PsychicRequest* r) {
-        JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
-        auto& s = _cfg->s();
-
-        // Masked to the classes that exist.
-        auto take = [&](const char* k, uint8_t cur) -> uint8_t {
-            if (!d[k].is<int>()) return cur;
-            return (uint8_t)((int)d[k] & Keys::CLASS_ALL);
-        };
-        s.routeUart = take("uart", s.routeUart);
-        s.routeAms  = take("ams",  s.routeAms);
-        s.routeHid  = take("hid",  s.routeHid);
-        s.routeRes  = take("res",  s.routeRes);
-#if FEATURE_USB_HID
-        s.routeUsb  = take("usb",  s.routeUsb);
-#endif
-
-        // Staged: the keys task applies every mask at its next pass.
-        if (_st.routing) {
-            const uint8_t u = s.routeUart, a = s.routeAms, h = s.routeHid, rs = s.routeRes,
-                          us = s.routeUsb;
-            if (!_st.routing->edit([&](App::KeysTask::Routing& k) {
-                    k.uartCls = u; k.amsCls = a; k.hidCls = h; k.resCls = rs; k.usbCls = us;
-                }))
-                return r->reply(503, "text/plain", "busy, try again");
-        }
-#if FEATURE_RESISTIVE_KEYS
-        // Release everything: a rung held down under a class just masked off
-        // would never see its Release. Asked after the masks, so it runs after
-        // them on the keys task.
-        if (_res && _st.resAllOff) _st.resAllOff();
-#endif
-        App::KeyBus::kick();
-        _cfg->save();
-        LogBus::printf("routing: uart=0x%02X ams=0x%02X hid=0x%02X res=0x%02X usb=0x%02X",
-                    s.routeUart, s.routeAms, s.routeHid, s.routeRes, s.routeUsb);
-        return r->reply(200, "application/json", "{\"ok\":true}");
-    });
+    // Where a press goes, per destination, as a class mask: the registry's
+    // route* entries (GET/POST /api/settings, staged for the keys task);
+    // each destination's mask and liveness is the keys chain of /api/health.
 
     // Blocks for a couple of seconds; explicit request only.
     route("/api/wifi/scan", HTTP_GET, [this](PsychicRequest* r) {

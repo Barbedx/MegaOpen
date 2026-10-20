@@ -171,7 +171,7 @@ function destState(){const o={
  hid:{mask:S.routing.hid,live:hidOn(),why:'bleMode has no keyboard role',press:true},
  res:{mask:0,live:false,why:'FEATURE_RESISTIVE_KEYS is off in this build'}};
  if(DESTS.includes('usb'))o.usb={mask:S.routing.usb,live:true,why:'',press:true};return o}
-/* як WebUi::putDests: те саме для /api/routing і /api/health keys.dest */
+/* як WebUi::putDests: /api/health keys.dest */
 const strip=o=>{const x={...o};if(x.live)delete x.why;delete x.press;x.state=!o.live?'off':o.mask?'ok':'muted';return x};
 /* НОВЕ (зріз 4): кожен ланцюг має стабільний code; W — ті самі пари [code, why], що в WebUi.cpp */
 const W={panel:[['panel_unregistered','registration lost — panel is not completing the handshake'],['panel_ok','']],
@@ -208,10 +208,12 @@ g('/api/health',health);
 const regDef=f=>f.type==='bool'?false:f.type==='int'?f.min:f.enum[0].v;
 /* cap.* реєстру живуть у S.cap.settings, як у прошивці — у рекордера (свій простір NVS) */
 const CAPK=['ring','fill','fileMB','autoProtect','mode','autostart'];
+const mRouteId=d=>'route'+d[0].toUpperCase()+d.slice(1);
 g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type!=='table'&&!(f.id in S.set))S.set[f.id]=regDef(f);
  const st=S.staged,o={...S.set,alerts:S.alerts.map(a=>a.slice()),fw:S.fw,build:S.build,cfgVer:S.cfgVer,cfgVerWas:0,wifiSleep:false,ssid2:S.wifi2.ssid};   /* ssid2 — НОВЕ */
  for(const k of CAPK)o['cap.'+k]=S.cap.settings[k];
  o.logLevel=LVL[S.logLevel];   /* logLevel: лише в RAM, як у прошивці */
+ for(const d of DESTS)o[mRouteId(d)]=S.routing[d]|0;   /* route*: маски призначень (S.routing, як destState) */
  if(st.bleMode)o.bleMode=st.bleMode;if(st.wifi)o.ssid=st.wifi.ssid;return o});
 /* НОВЕ (план, зріз 4): перезапуск не побічний ефект, а pendingReboot; apPass */
 po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass);
@@ -232,6 +234,7 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
   if(f.reboot&&q[f.id]!==s[f.id])rb=true;
   s[f.id]=f.type==='int'?Math.min(f.max,Math.max(f.min,+q[f.id])):q[f.id]}
  if(q.logLevel!==undefined){S.logLevel=LVL.indexOf(q.logLevel);delete s.logLevel}
+ for(const d of DESTS){const k=mRouteId(d);if(q[k]!==undefined){S.routing[d]=s[k]&0x0F;delete s[k]}}
  for(const k of CAPK)if(q['cap.'+k]!==undefined){S.cap.settings[k]=s['cap.'+k];delete s['cap.'+k];if(k==='mode')S.cap.mode=S.cap.settings.mode}
  if(typeof q.mediaSource==='string'&&['ams','hu','auto'].includes(q.mediaSource))s.mediaSource=q.mediaSource;
  if(typeof q.huTitleCmd==='number'||typeof q.huArtistCmd==='number'){if(typeof q.huTitleCmd==='number')s.huTitleCmd=q.huTitleCmd;if(typeof q.huArtistCmd==='number')s.huArtistCmd=q.huArtistCmd}
@@ -302,9 +305,6 @@ g('/api/affamap',q=>{const b={unmapped:S.unm,events:S.affaEvents,last:S.last};if
  return {rows:S.affa.map(r=>{const eff=r.code||parseInt((C.actions.find(a=>a.id===r.action)||{hu:''}).hu,16)||0;return {...r,effective:eff,effectiveName:(C.huKeys.find(k=>parseInt(k.code,16)===eff)||{name:'?'}).name}}),...b}});
 po('/api/affamap',q=>{let n=0;for(const r of q.rows||[]){const x=S.affa[r.index];if(!x)continue;x.action=C.actions.some(a=>a.id===r.action)?r.action:'None';x.code=(r.code|0)&255;x.asLong=!!r.asLong;n++}emit(2,'KEY','stalk mapping saved ('+n+' rows)');return {ok:true,applied:n}});
 po('/api/affamap/defaults',()=>{S.affa=defAffa();return ok});
-g('/api/routing',()=>{const o={};for(const[k,x]of Object.entries(destState()))o[k]=strip(x);
- return {dest:o}});
-po('/api/routing',q=>{for(const d of DESTS)if(typeof q[d]==='number')S.routing[d]=q[d]&0x0F;return ok});
 g('/api/wifi/scan',()=>({networks:S.nets.map(n=>({...n,rssi:Math.round(n.rssi+rnd(-3,3))})),count:S.nets.length,current:S.wifi.mode==='sta'?S.wifi.ssid:''}));
 /* НОВЕ (зріз 4): ssid2/pass2; порожній пароль = той самий, поки назва та сама; pendingReboot, коли щось змінилось.
    pendingReboot лише за першу мережу; друга (WifiManager::setNet2) діє без перезавантаження, з наступної спроби з точки */
