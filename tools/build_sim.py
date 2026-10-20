@@ -23,7 +23,7 @@ build/decode.json, the factory decode map in /api/map's `can` shape plus the
 signal names (test/test_decode, the firmware's own canJson), is
 window.SIM_DECODE the same way.
 
-THE ENVS. `?env=devkit` (or t2can, direct, ...) runs the simulator as that
+THE ENVS. `?env=direct` (or t2can, t2can_usbhid) runs the simulator as that
 board build: the catalog's `features` and the routes that exist. The truth is
 the board build's own: tools/gen_pages.py writes build/features/<env>.json (the
 FEATURE_* values that env compiles with) during `pio run -e <env>`, and
@@ -51,7 +51,7 @@ INI = os.path.join(ROOT, "platformio.ini")
 def web_envs():
     """The board envs that compile the web server: not native, and a
     build_src_filter (own or through `extends`) that is absent or takes +<*>
-    or +<net/>. min, bare, boardv and ledtest have none."""
+    or +<net/>."""
     cp = configparser.ConfigParser(interpolation=None, strict=False)
     cp.read(INI, encoding="utf-8")
     def get(sec, key, seen=()):

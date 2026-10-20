@@ -504,15 +504,11 @@ void WebUi::routes()
         d["huTitleFirst"]   = s.huTitleFirst;
         d["keyPopup"]       = s.keyPopup;
         d["keyPopupMs"]     = s.keyPopupMs;
-        d["canRole"]        = s.canRole;
         // fw is the build; cfgVer is the NVS schema version, not a build version.
         d["fw"]             = MEGAOPEN_VERSION;
         d["build"]          = MegaOpen::buildId();
         d["cfgVer"]         = _cfg->version();
         d["cfgVerWas"]      = _cfg->migratedFrom();
-        // canRxPin reads the transceiver's CRX; canTxPin drives its CTX.
-        d["canRxPin"]       = s.canRxPin;
-        d["canTxPin"]       = s.canTxPin;
         d["wifiSleep"]      = _wifi ? _wifi->sleeping() : false;   // derived, read-only
         String out; serializeJson(d, out);
         return replyJson(r, out);
@@ -529,37 +525,6 @@ void WebUi::routes()
 
         // Everything that can be refused is checked before anything is applied
         // (the /api/map rule): a 400 leaves the settings as they were.
-        // The transceiver pair, validated as a pair: the pins must differ (same
-        // pin twice makes the controller fight itself over one pad), and each
-        // must be usable in its own direction per Board:: (see canPinReadable()).
-        const bool pins = d["canRxPin"].is<int>() && d["canTxPin"].is<int>();
-        const int rx = pins ? (int)d["canRxPin"] : -1;
-        const int tx = pins ? (int)d["canTxPin"] : -1;
-        if (pins) {
-            if (rx == tx)
-                return r->reply(400, "text/plain",
-                                "canRxPin and canTxPin must be different pins");
-            if (!Board::canPinReadable(rx))
-                return r->reply(400, "text/plain",
-                                "canRxPin: not a usable input on this chip "
-                                "(it reads the transceiver's CRX)");
-            if (!Board::canPinDrivable(tx))
-                return r->reply(400, "text/plain",
-                                "canTxPin: not a usable output on this chip "
-                                "(it drives the transceiver's CTX)");
-        }
-        // Bus role is boot-only: display (library CanCommonLink) and vehicle (TwaiBus
-        // listen-only) are different stacks on one controller, chosen in setup().
-        // See applyCanRole().
-        const String role = d["canRole"] | "";
-        if (role.length() && role != "display" && role != "vehicle")
-            return r->reply(400, "text/plain", "canRole: display or vehicle");
-#if FEATURE_CAN2
-        // CAN A is the car's bus on this board; the TWAI is wired to the panel.
-        if (role == "vehicle")
-            return r->reply(400, "text/plain", "canRole: this board's car bus is CAN A");
-#endif
-
         // A value that is read only at boot is saved and answered with
         // pendingReboot; POST /api/reboot applies it.
         bool restart = d["mdnsOn"].is<bool>() && (bool)d["mdnsOn"] != s.mdnsOn;
@@ -630,16 +595,6 @@ void WebUi::routes()
             }
         }
 
-        if (pins) {
-            restart = restart || ((uint8_t)rx != s.canRxPin || (uint8_t)tx != s.canTxPin);
-            s.canRxPin = (uint8_t)rx;
-            s.canTxPin = (uint8_t)tx;
-        }
-        if (role.length()) {
-            restart = restart || (role != s.canRole);
-            s.canRole = role;
-        }
-
         if (apPass.length()) { restart = restart || apPass != s.apPass; s.apPass = apPass; }
 
         _cfg->save();
@@ -705,8 +660,8 @@ void WebUi::routes()
             const uint8_t i = !ps.attached ? 0 : reg ? 2 : 1;
             JsonObject o = chain("panel", !ps.attached ? "off" : reg ? "ok" : "broken", W[i]);
             o["rxFrames"] = _canRx ? *_canRx : 0;
-            o["rxPin"]    = _cfg->s().canRxPin;
-            o["txPin"]    = _cfg->s().canTxPin;
+            o["rxPin"]    = (int)Board::PIN_CAN_RX;
+            o["txPin"]    = (int)Board::PIN_CAN_TX;
             // How often the link has dropped, and how long ago.
             if (_ui.status) o["resyncs"] = us.resyncs;
             if (us.lastResyncMs)
@@ -979,92 +934,6 @@ void WebUi::routes()
 #endif
 #if FEATURE_VEHICLE_CAN
     routesCan();
-#endif
-#if FEATURE_LINK
-    // ---- board V ---------------------------------------------------------------
-    // `fps` is what reached this board, `boardV.fps` what V saw on the bus; the
-    // gap is the filter, or UART loss (counted in `resyncs`).
-    route("/api/link", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_link) return r->reply(503, "text/plain", "no link");
-        const uint32_t now = millis();
-        JsonDocument d;
-        d["alive"]     = _link->alive(now);
-        d["version"]   = _link->version();
-        d["frames"]    = _link->frames();
-        d["fps"]       = _link->fps();
-        d["crcErrors"] = _link->crcErrors();
-        d["resyncs"]   = _link->resyncs();
-        const Link::Status& s = _link->status();
-        JsonObject v = d["boardV"].to<JsonObject>();
-        v["frames"]    = s.frames;
-        v["forwarded"] = s.forwarded;
-        v["fps"]       = s.fps;
-        v["rxErr"]     = s.rxErr;
-        v["busErr"]    = s.busErr;
-        static const char* const kState[] = {"stopped", "running", "bus-off", "recovering"};
-        v["state"]     = kState[s.state <= 3 ? s.state : 0];
-        v["mode"]      = s.mode;
-        // As reported by V: simulated frames look real once in the sniffer table.
-        v["sim"]       = s.sim;
-        JsonObject f = d["filter"].to<JsonObject>();
-        static const char* const kMode[] = {"all", "changes", "list", "list-changes"};
-        f["mode"] = kMode[_link->filterMode() <= 3 ? _link->filterMode() : 0];
-        uint32_t ids[Link::MAX_FILTER_IDS];
-        const uint8_t n = _link->filterIds(ids);
-        JsonArray a = f["ids"].to<JsonArray>();
-        for (uint8_t i = 0; i < n; ++i) a.add(ids[i]);
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    // Bench test: V invents frames at `fps` where real ones would enter, so the
-    // link is exercised without a car. No cap beyond uint16: finding the drop
-    // rate is the point (a busy 500k bus is under 2000/s).
-    route("/api/link/sim", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_link) return r->reply(503, "text/plain", "no link");
-        const String v = paramStr(r, "fps");
-        if (!v.length()) return r->reply(400, "text/plain", "fps=0..65535 required");
-        const long n = v.toInt();
-        if (n < 0 || n > 65535) return r->reply(400, "text/plain", "fps out of range");
-        _link->setSim((uint16_t)n);
-        // V confirms the rate in its next status.
-        return r->reply(200, "application/json",
-                        "{\"ok\":true,\"note\":\"board V confirms in its next status\"}");
-    });
-
-    // {"mode":"all|changes|list|list-changes","ids":[0x181,...]}, ids as numbers
-    // or "0x" strings. Pushed to V and persisted here, since V keeps nothing.
-    route("/api/link/filter", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_link) return r->reply(503, "text/plain", "no link");
-        JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
-        Link::FilterMode mode = _link->filterMode();
-        const char* m = d["mode"] | (const char*)nullptr;
-        if (m) {
-            if      (!strcmp(m, "all"))          mode = Link::F_ALL;
-            else if (!strcmp(m, "changes"))      mode = Link::F_CHANGES;
-            else if (!strcmp(m, "list"))         mode = Link::F_LIST;
-            else if (!strcmp(m, "list-changes")) mode = Link::F_LIST_CHANGES;
-            else return r->reply(400, "text/plain", "mode: all|changes|list|list-changes");
-        }
-        uint32_t ids[Link::MAX_FILTER_IDS];
-        uint8_t n = _link->filterIds(ids);
-        if (d["ids"].is<JsonArrayConst>()) {
-            n = 0;
-            for (JsonVariantConst v : d["ids"].as<JsonArrayConst>()) {
-                if (n >= Link::MAX_FILTER_IDS) break;
-                if (v.is<const char*>()) ids[n++] = (uint32_t)strtoul(v.as<const char*>(), nullptr, 0);
-                else if (v.is<int>())    ids[n++] = (uint32_t)v.as<int>();
-            }
-        }
-        _link->setFilter(mode, ids, n);
-        _cfg->s().linkMode = (uint8_t)mode;
-        _cfg->s().linkIdCount = n;
-        for (uint8_t i = 0; i < 7; ++i) _cfg->s().linkIds[i] = i < n ? ids[i] : 0;
-        _cfg->save();
-        LogBus::printf("link: filter mode=%u ids=%u", (unsigned)mode, (unsigned)n);
-        return r->reply(200, "application/json", "{\"ok\":true}");
-    });
 #endif
 #if FEATURE_CAN2
     routesCan2();
@@ -1879,14 +1748,8 @@ void WebUi::routesCan()
             car["dropped"]  = c.srcDropped;
             car["cmdDrops"] = c.cmdDrops;
         }
-        // Pins in use (NVS, overrides the profile) next to the profile's pins,
-        // so the page can flag a mismatch.
-        {
-            d["rxPin"]        = _cfg->s().canRxPin;
-            d["txPin"]        = _cfg->s().canTxPin;
-            d["rxPinProfile"] = (int)Board::PIN_CAN_RX;
-            d["txPinProfile"] = (int)Board::PIN_CAN_TX;
-        }
+        d["rxPin"] = (int)Board::PIN_CAN_RX;
+        d["txPin"] = (int)Board::PIN_CAN_TX;
         String out; serializeJson(d, out);
         return replyJson(r, out);
     });
@@ -1900,8 +1763,7 @@ void WebUi::routesCan()
         if (!*_isVehicle)
             return r->reply(409, "application/json",
                             "{\"ok\":false,\"note\":\"display role: listen-only would drop the "
-                            "panel session. POST /api/settings {canRole:'vehicle'}, then "
-                            "POST /api/reboot\"}");
+                            "panel session\"}");
         const bool on = paramBool(r, "on", true);
         // A driver reinstall: the loop runs it, between two passes.
         bool ok = false;
@@ -1998,7 +1860,7 @@ void WebUi::routesCan()
     route("/api/can/level", HTTP_GET, [this, benchRefusal](PsychicRequest* r) {
         if (!_cfg) return r->reply(503, "text/plain", "no config");
         if (const char* why = benchRefusal(r)) return r->reply(409, "text/plain", why);
-        const int rx = _cfg->s().canRxPin;
+        const int rx = Board::PIN_CAN_RX;
         uint32_t high = 0;
         constexpr uint32_t N = 4000;
         for (uint32_t i = 0; i < N; ++i) {
@@ -2011,7 +1873,7 @@ void WebUi::routesCan()
         // TX pad under float / pull-up / pull-down. Pull-up reads 0: something
         // holds it low against ~45k. On the loop, off the driver, which gets
         // the pad back in the role's mode afterwards.
-        const int tx = _cfg->s().canTxPin;
+        const int tx = Board::PIN_CAN_TX;
         bool pullsOk = false;
         int txFloat = -1, txPullup = -1, txPulldown = -1;
         if (!Diag::CanBench::txPulls(pullsOk, txFloat, txPullup, txPulldown))
@@ -2044,9 +1906,8 @@ void WebUi::routesCan()
         bool ok = false, rxOk = false, txOk = false;
         if (!Diag::CanBench::pinTest(ok, rxOk, txOk))
             return r->reply(503, "text/plain", "the CAN owner did not answer in 2 s");
-        // The pins the bus was started on (NVS), not the board profile's.
-        const int rxPin = _cfg ? _cfg->s().canRxPin : Board::PIN_CAN_RX;
-        const int txPin = _cfg ? _cfg->s().canTxPin : Board::PIN_CAN_TX;
+        const int rxPin = Board::PIN_CAN_RX;
+        const int txPin = Board::PIN_CAN_TX;
         JsonDocument d;
         d["rxPin"] = rxPin;
         d["txPin"] = txPin;
@@ -2119,7 +1980,7 @@ void WebUi::routesCan()
     route("/api/can/txwatch", HTTP_GET, [this, benchRefusal](PsychicRequest* r) {
         if (!_cfg) return r->reply(503, "text/plain", "no config");
         if (const char* why = benchRefusal(r)) return r->reply(409, "text/plain", why);
-        const int tx = _cfg->s().canTxPin, rx = _cfg->s().canRxPin;
+        const int tx = Board::PIN_CAN_TX, rx = Board::PIN_CAN_RX;
         if (tx > 31 || rx > 31) return r->reply(409, "text/plain", "pins above 31 not supported here");
         PIN_INPUT_ENABLE(GPIO_PIN_MUX_REG[tx]);
 
@@ -2156,7 +2017,7 @@ void WebUi::routesCan()
     // transceiver unpowered), which the raw level alone can't show.
     route("/api/can/pads", HTTP_GET, [this, benchRefusal](PsychicRequest* r) {
         if (const char* why = benchRefusal(r)) return r->reply(409, "text/plain", why);
-        const int rxPin = _cfg ? _cfg->s().canRxPin : Board::PIN_CAN_RX;
+        const int rxPin = Board::PIN_CAN_RX;
         // On the loop, between two polls: it pulls the pad the controller
         // receives on.
         int raw = -1, up = -1, down = -1, ctxRaw = -1;

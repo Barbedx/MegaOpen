@@ -41,7 +41,7 @@ The rules behind this layout (the ownership and blocking rules are checked by
 
 * **One owner per resource.** AffaDisplay is not thread-safe, so only the panel
   task calls it. Other tasks post requests through `display/AffaMailbox`. On
-  the DevKit, `AFFA_OWNER_ASSERT` aborts on a call from any other task.
+  a debug build, `AFFA_OWNER_ASSERT=1` aborts on a call from any other task.
 * **Configs edited from the web are staged.** httpd writes a staged copy, and
   the owner task picks it up (`utils/Staged.h`). Readers get snapshots
   (`utils/Snapshot.h`, `utils/Mirror.h`).
@@ -64,22 +64,21 @@ The rules behind this layout (the ownership and blocking rules are checked by
 | `proto/canbox/` | Raise/canbox framing and the RAV4 profile |
 | `vehicle/` | CAN decode table, sniffer, signal registry, vehicle state |
 | `capture/` | CAN capture to littlefs (`tools/can_dump.py` reads it) |
-| `link/` | board V → DevKit UART link (DevKit build only) |
 | `knobs/` | encoders, LED rings, config |
 | `net/` | WiFi, web server and API, `/api/catalog`, the optional cloud link |
 | `cfg/` | NVS-backed settings |
 | `utils/` | LogBus, flash log, locks, snapshots |
 | `ble/`, `*_service.cpp` | NimBLE hub, HID role, Apple AMS/ANCS and CTS clients |
 
-`main.cpp` wires everything together. `LinkMain.cpp` is the whole board V
-program.
+`main.cpp` wires everything together.
 
 ## Feature flags
 
 The `FEATURE_*` switches in `src/Features.h` are set per env in `platformio.ini`.
-Code behind a disabled flag is compiled out, not merely switched off. Runtime
-choices (which bus the single TWAI serves, BLE mode, knobs on or off, key routes)
-are NVS settings that the web app edits.
+Code behind a disabled flag is compiled out, not merely switched off. The TWAI
+serves the panel where the build has one, else the car (`env:direct`). Runtime
+choices (BLE mode, knobs on or off, key routes) are NVS settings that the web
+app edits.
 
 ## Display
 

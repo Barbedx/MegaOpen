@@ -2,8 +2,8 @@
 #include "MediaInfo.h"
 
 // A provider of now-playing state (ARCHITECTURE-V2 §6.1). Implementations:
-// AmsMediaSource (iPhone over BLE AMS), HuLinkMediaSource (DUDU7 head unit over
-// LinkProto, P1+). Portable interface — function-pointer callback, no <functional>.
+// AmsMediaSource (iPhone over BLE AMS), HuMediaSource (the head unit over the
+// Raise UART). Portable interface — function-pointer callback, no <functional>.
 class IMediaSource {
 public:
     using ChangeCb = void (*)(IMediaSource& source, void* ctx);

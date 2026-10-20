@@ -97,9 +97,6 @@ private:
 #if FEATURE_KNOBS
 #include "../knobs/KnobService.h"
 #endif
-#if FEATURE_LINK
-#include "../link/LinkRx.h"
-#endif
 #if FEATURE_CAN2
 #include "../bus/Mcp2518Source.h"
 #endif
@@ -216,12 +213,6 @@ public:
     void attachCan(Vehicle::CanSniffer* sniffer, const bool* isVehicle, RawDumpFn rawDump) {
         _sniffer = sniffer; _isVehicle = isVehicle; _rawDump = rawDump;
     }
-#endif
-
-#if FEATURE_LINK
-    // Board V's link (/api/link*): its status, and the filter this board
-    // pushes down to it. Only FEATURE_LINK gates it.
-    void attachLink(Link::Rx* l) { _link = l; }
 #endif
 
 #if FEATURE_CAN2
@@ -404,9 +395,6 @@ private:
     Vehicle::CanSniffer*   _sniffer = nullptr;
     const bool*            _isVehicle = nullptr;
     RawDumpFn              _rawDump = nullptr;
-#endif
-#if FEATURE_LINK
-    Link::Rx*              _link = nullptr;
 #endif
 #if FEATURE_CAN2
     const Snapshot<Mcp2518Source::Status>* _can2 = nullptr;

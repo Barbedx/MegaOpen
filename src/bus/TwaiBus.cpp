@@ -5,13 +5,8 @@
 // the task that owns the bus (the loop; the web's /api/can/mode and friends
 // are Diag::CanBench ops run there), and a Serial write would wait on the
 // console — up to its whole TX timeout on a USB-CDC nobody reads.
-// Board V links no LogBus; Serial is its only output.
-#if MEGAOPEN_BOARDV
-#define TWAI_LOGF(...) Serial.printf(__VA_ARGS__)
-#else
 #include "../utils/LogBus.h"
 #define TWAI_LOGF(...) LogBus::printf(__VA_ARGS__)
-#endif
 
 TwaiBus& TwaiBus::instance()
 {

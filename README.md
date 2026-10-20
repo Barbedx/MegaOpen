@@ -30,9 +30,8 @@ Pins are named in one place only, `src/board/BoardProfile.h`. Wiring drawings:
 [hardware/schematic/t2can-wiring.artifact.html](hardware/schematic/t2can-wiring.artifact.html) and
 [hardware/schematic/t2can-qwiic.artifact.html](hardware/schematic/t2can-qwiic.artifact.html).
 
-An ESP32 DevKit V1 build is also kept (`env:devkit`). It drives the panel on its
-single TWAI port and gets the car's frames over a UART link from a second board
-(`env:boardv`, an ESP32-C3; see [docs/link.md](docs/link.md)).
+An ESP32 DevKit V1 build without the panel is also kept (`env:direct`). It reads
+the keypad's own wires and listens to the car on its single TWAI port.
 
 ## Build
 
@@ -50,9 +49,7 @@ pio test -e native           # host tests for the portable logic
 | --- | --- |
 | `t2can` | T-2CAN: panel + car + head unit + BLE + knobs |
 | `t2can_usbhid` | `t2can` with a USB HID keyboard to the head unit (compile check) |
-| `devkit` | ESP32 DevKit V1 with the panel; car frames from board V |
-| `boardv` | ESP32-C3 on OBD2 CAN, forwards raw frames to `devkit` |
-| `direct` | DevKit without a panel: 6-wire key matrix + KEY1/KEY2 resistor ladder ([docs/resistive-keys.md](docs/resistive-keys.md), [docs/wiring-direct.md](docs/wiring-direct.md)) |
+| `direct` | ESP32 DevKit V1 without a panel: 6-wire key matrix + KEY1/KEY2 resistor ladder ([docs/resistive-keys.md](docs/resistive-keys.md), [docs/wiring-direct.md](docs/wiring-direct.md)) |
 | `native` | host tests |
 
 The web app in `web/` is gzipped into the firmware by `tools/gen_pages.py`

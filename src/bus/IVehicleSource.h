@@ -6,11 +6,9 @@
 // Somewhere the car's frames come from (docs/design/event-tasks.md, Step 5).
 //
 // SOURCES ARE CHOSEN AT BOOT, NOT AT BUILD TIME. The car task holds a list,
-// built in setup() from the board and the CAN role:
+// built in setup() from the board and the build:
 //   Mcp2518Source      T-2CAN, CAN A (FEATURE_CAN2): the chip, on the car task
-//   LinkSource         DevKit with board V (FEATURE_LINK): UART2
-//   TwaiVehicleSource  canRole=vehicle: frames the TWAI owner hands over
-// The DevKit can run the link and the TWAI vehicle role together.
+//   TwaiVehicleSource  env:direct (no panel): frames the TWAI owner hands over
 //
 // Every method runs on the car task, which owns whatever is behind the source
 // (an SPI chip, a UART), so none of it needs a lock. Nothing here blocks.

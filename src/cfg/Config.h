@@ -42,15 +42,6 @@ namespace Cfg
         String   displayType = "carminat";   // carminat | updatelist | updatelist_menu
         bool     funcReg     = true;         // we are the master: run FUNCSREG ourselves
 
-        // Which bus the single CAN controller serves — see src/bus/CanRole.h.
-        String   canRole = "display";        // display | vehicle (listen-only)
-
-        // Which GPIO is which transceiver half. A setting because boards are
-        // wired both ways round and the failure is silent (see
-        // Board::PIN_CAN_RX). Applied at boot; changing restarts.
-        uint8_t  canRxPin = (uint8_t)Board::PIN_CAN_RX;
-        uint8_t  canTxPin = (uint8_t)Board::PIN_CAN_TX;
-
         // BLE role: off | ams (phone: now-playing + clock) | keyboard (HID to the
         // head unit) | both (transport to the phone, volume to the head unit).
         // Read once at boot; "off" keeps ~40 kB of host state out of RAM.
@@ -136,12 +127,6 @@ namespace Cfg
 
         // KEY1/KEY2 link. Off by default, as routeRes.
         bool     resEnabled  = false;
-
-        // What board V forwards up the link: Link::FilterMode and up to seven
-        // ids. Stored here (V has no NVS); re-sent whenever either end boots.
-        uint8_t  linkMode      = 0;
-        uint8_t  linkIdCount   = 0;
-        uint32_t linkIds[7]    = {0, 0, 0, 0, 0, 0, 0};
 
         // CAN A, the car's bus on the T-2CAN (Mcp2518Source; Bus::Autobaud).
         // can2Bitrate: a rate set by hand, which always wins; 0 = find it.

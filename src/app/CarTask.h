@@ -11,13 +11,13 @@
 // The car task (docs/design/event-tasks.md, Step 5). Priority 4 on core 0 for
 // now: the core is decided by measurement (TaskPlan.h, CAR_CORE).
 //
-// It owns the vehicle sources and everything behind them (the MCP2518FD's SPI,
-// board V's UART), the decode into Vehicle::State, the sniffer table and the
+// It owns the vehicle sources and everything behind them (the MCP2518FD's SPI),
+// the decode into Vehicle::State, the sniffer table and the
 // capture hook. Per frame: CanDecode, the main.cpp tap (raw ring, counters,
 // the web's raw stream), the sniffer when it is on, the recorder.
 //
 // WAKES on a task notify from the MCP2518FD's INT (T-2CAN), or every 2 ms when
-// a polled source is in the list (board V, the TWAI vehicle role), else every
+// a polled source is in the list (the TWAI vehicle role), else every
 // 20 ms. Each wake drains up to 64 frames per source; a source that filled
 // them gets the CPU back after a yield, not after the next wake.
 //
@@ -34,7 +34,7 @@
 // applies them between two frames, no reboot. A constant binding is a pin it
 // keeps. Its two buffers are in PSRAM where there is some.
 //
-// Not created when the list is empty (a C3 in the display role): the loop then
+// Not created when the list is empty: the loop then
 // calls service(), which does the task's command and staging work, so State
 // still has one writer.
 namespace App

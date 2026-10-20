@@ -38,7 +38,7 @@ function envCatalog(c0,F){const c=JSON.parse(JSON.stringify(c0));c.features=F?{.
 /* маршрути, що є лише з функцією (як #if у WebUi*.cpp); решта — в кожній збірці */
 const GATES=[[/^\/api\/(display|affamap|media)(\/|$)/,F=>F.display],[/^\/api\/ble(\/|$)/,F=>F.display&&F.ble],[/^\/api\/notifications$/,F=>F.ancs],
  [/^\/api\/can2$/,F=>F.can2],[/^\/api\/can(\/|$)/,F=>F.vehicle],[/^\/api\/cap(\/|$)/,F=>F.capture],[/^\/api\/knobs(\/|$)/,F=>F.knobs],
- [/^\/api\/keymap(\/|$)/,F=>F.matrix],[/^\/api\/res(\/|$)/,F=>F.res],[/^\/api\/link(\/|$)/,F=>F.link],[/^\/api\/logs\/(file|format)$/,F=>F.logfs]];
+ [/^\/api\/keymap(\/|$)/,F=>F.matrix],[/^\/api\/res(\/|$)/,F=>F.res],[/^\/api\/logs\/(file|format)$/,F=>F.logfs]];
 const routeBuilt=p=>{const g=GATES.find(([re])=>re.test(p));return !g||!!g[1](CATALOG.features)};
 const C=CATALOG,LVL=C.enums.logLevels.map(e=>e.name),DESTS=C.dests.map(d=>d.id),DNAME=Object.fromEntries(C.dests.map(d=>[d.id,d.name]));
 const lay=id=>C.layouts.find(l=>l.id===id)||C.layouts.find(l=>l.id==='fullscreen');
@@ -68,7 +68,7 @@ const defKnobs=()=>({enc:encDef(true,['EncCw','EncCcw','Ok','SrcNext']),enc2:enc
  led:{enabled:false,order:'grb',brightness:128,holdMs:1500,levelSteps:30,animPeriod:60,rightFirst:false,ringReverse:false,zoneLeds:8,zones:[zone('level'),zone('flash')],
   feet:{count:0,max:144,anim:'static',brightness:96,color:'#ffffff'},maxMilliamps:400}});
 const defSet=()=>({pulseMs:120,uartEnabled:true,uartBaud:38400,ssid:'HomeWiFi',bleMode:'ams',autoTime:true,ancsPopup:true,mdnsOn:true,mediaLayout:'info',mediaSource:'auto',
- huTitleCmd:0,huArtistCmd:0,huTitleFirst:true,keyPopup:true,keyPopupMs:1200,canRole:'display',canRxPin:6,canTxPin:7});
+ huTitleCmd:0,huArtistCmd:0,huTitleFirst:true,keyPopup:true,keyPopupMs:1200});
 /* Canbox::Tuning */
 const defTun=()=>({cmd28:0,doorsLen:2,steerInvert:0,steerDiv:10,steerClamp:540,fuelUnit:2,tripUnit:2,tripFields:1,histLen:13,radarInvert:0,version:'raise-rav4-1.2   '});
 /* DecodeTable::factory у формі /api/map: рядок за id поля (= ім'я сигналу) */
@@ -183,7 +183,7 @@ const W={panel:[['panel_unregistered','registration lost — panel is not comple
 function health(){
  const d=S.disp,ch=[],chain=(id,state,i,x)=>{const[code,why]=W[id][i],o={id,state,code,...(x||{})};if(why)o.why=why;ch.push(o);return o};
  const reg=d.registered,tr=curTrack(),ck=clockStrOrEmpty(),F=C.features;
- if(F.display){chain('panel',reg?'ok':'broken',reg?1:0,{rxFrames:S.can.twaiRx,rxPin:S.set.canRxPin,txPin:S.set.canTxPin,resyncs:d.sessionsLost,txGated:false});
+ if(F.display){chain('panel',reg?'ok':'broken',reg?1:0,{rxFrames:S.can.twaiRx,rxPin:6,txPin:7,resyncs:d.sessionsLost,txGated:false});
  const mi=!S.med.auto?0:!reg?1:!phone()&&mediaSrc()!=='hu'?2:!tr.title?3:4;
  chain('media',!S.med.auto?'off':mi<4?'idle':'ok',mi,{title:tr.title,artist:tr.artist,clock:ck,delivered:1834,superseded:12,failed:0});
  chain('clock',!S.set.autoTime?'off':ck?'ok':'idle',!S.set.autoTime?0:!phone()?1:!ck?2:3,{hhmm:ck})}
@@ -205,7 +205,7 @@ g('/api/status',()=>{const w=S.wifi;return {ip:w.ip,mode:w.mode,ssid:w.mode==='s
 g('/api/health',health);
 /* прошивка зберігає в cfg одразу, тож GET бачить збережене; діє воно після перезавантаження */
 g('/api/settings',()=>{const st=S.staged,o={...S.set,fw:S.fw,build:S.build,cfgVer:S.cfgVer,cfgVerWas:0,wifiSleep:false,ssid2:S.wifi2.ssid};   /* ssid2 — НОВЕ */
- if(st.bleMode)o.bleMode=st.bleMode;if(st.pins)[o.canRxPin,o.canTxPin]=st.pins;if(st.wifi)o.ssid=st.wifi.ssid;return o});
+ if(st.bleMode)o.bleMode=st.bleMode;if(st.wifi)o.ssid=st.wifi.ssid;return o});
 /* НОВЕ (план, зріз 4): перезапуск не побічний ефект, а pendingReboot; apPass */
 po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass);
  if(ap&&(ap.length<8||ap.length>63))return fail(400,'apPass: 8 to 63 characters');
@@ -217,7 +217,6 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
  if(q.huForget){S.hu.learnedTitle=0;S.hu.learnedArtist=0}
  if(q.uartEnabled===false)S.emitter=false;
  if(typeof q.bleMode==='string'&&C.bleModes.some(b=>b.id===q.bleMode)){rb=rb||q.bleMode!==s.bleMode;S.staged.bleMode=q.bleMode}
- if(typeof q.canRxPin==='number'&&typeof q.canTxPin==='number'){if(q.canRxPin===q.canTxPin)return fail(400,'canRxPin and canTxPin must be different pins');const was=S.staged.pins||[s.canRxPin,s.canTxPin];rb=rb||q.canRxPin!==was[0]||q.canTxPin!==was[1];S.staged.pins=[q.canRxPin,q.canTxPin]}
  if(ap){rb=rb||ap!==(S.staged.apPass||S.wifi.apPass);S.staged.apPass=ap}
  emit(2,'NET',rb?'settings saved, pending reboot':'settings saved');return rb?{ok:true,pendingReboot:true}:ok});
 g('/api/display',()=>{const d=S.disp,car=d.type==='carminat';return {type:d.type,funcReg:d.funcReg,canRx:S.can.twaiRx,attached:true,sync:d.registered?15:1,synced:d.registered,registered:d.registered,passive:!d.funcReg,busy:false,queued:0,lastResult:'Ok',
@@ -295,7 +294,7 @@ po('/api/wifi',q=>{const h1=typeof q.ssid==='string',h2=typeof q.ssid2==='string
  emit(2,'NET',ch?'wifi saved, pending reboot':'wifi saved');return ch?{ok:true,pendingReboot:true}:ok});
 function doBoot(){S.bootAt=now()+4000;S.heap=Math.round(rnd(79000,82000));const st=S.staged;
  if(st.wifi){S.set.ssid=st.wifi.ssid;S.wifi.pass=st.wifi.pass}
- if(st.bleMode)S.set.bleMode=st.bleMode;if(st.pins)[S.set.canRxPin,S.set.canTxPin]=st.pins;
+ if(st.bleMode)S.set.bleMode=st.bleMode;
  if(st.apPass)S.wifi.apPass=st.apPass;if(st.dispType)S.disp.type=st.dispType;if(st.funcReg!==undefined)S.disp.funcReg=st.funcReg;S.staged={};
  const n=S.nets.find(x=>x.ssid===S.set.ssid)||S.nets.find(x=>x.ssid===S.wifi2.ssid);
  if(n){S.wifi.mode='sta';S.wifi.ssid=n.ssid;S.wifi.ip=n.ssid==='HomeWiFi'?'192.168.1.50':'172.20.10.4';S.wifi.rssi=n.rssi}else{S.wifi.mode='ap';S.wifi.ip='192.168.4.1'}
@@ -383,7 +382,7 @@ g('/api/logs',q=>q.since!==undefined?logsSince(+q.since||0):{lines:logSeq,droppe
 g('/api/logs/file',q=>{const f=S.logs.files[+q.n||0];return f?{bytes:f.size}:fail(404,'no such log')});
 g('/api/can',()=>({role:'display',txEnabled:true,txGated:false,txGates:0,listenOnly:false,loopRecessive:-1,loopDominant:-1,txPath:'broken',
  state:S.can.state,txErr:S.can.txErr,rxErr:S.can.rxErr,txFailed:0,rxMissed:0,busErr:S.can.busErr,arbLost:0,txQueued:0,twaiTxOk:S.can.twaiTxOk,twaiTxFail:S.can.twaiTxFail,twaiRx:S.can.twaiRx,twaiMode:'normal',
- rxFrames:S.can.twaiRx,ids:Object.keys(S.ids).length,frames:S.can.twaiRx,overflow:0,sniff:S.sniff,rxPin:S.set.canRxPin,txPin:S.set.canTxPin,rxPinProfile:6,txPinProfile:7}));
+ rxFrames:S.can.twaiRx,ids:Object.keys(S.ids).length,frames:S.can.twaiRx,overflow:0,sniff:S.sniff,rxPin:6,txPin:7}));
 g('/api/can/ecc',()=>({seen:[{raw:0x6a,count:2,type:'stuff',dir:'while RECEIVING',where:'data'},{raw:0x78,count:1,type:'form',dir:'while RECEIVING',where:'CRC delimiter'}]}));
 po('/api/can/sniff',q=>{S.sniff=q.on==='1';emit(2,'CAN','can sniffer '+(S.sniff?'on':'off'));return {ok:true,sniff:S.sniff}});
 const SNIFF_IDS=[0x0C2,0x181,0x354,0x551,0x5FD,0x60D,0x645,0x186,0x29A,0x352,0x3B7,0x4F8];

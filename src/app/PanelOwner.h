@@ -14,7 +14,7 @@
 // is where that is kept:
 //
 //   * lib() and carminat() are the only way to the library object. In a debug
-//     build (AFFA_OWNER_ASSERT=1, on for env:devkit) they abort when called
+//     build (-D AFFA_OWNER_ASSERT=1) they abort when called
 //     from any other task, with the caller in the backtrace. setPollOwner()
 //     only guards poll(), so a render from the wrong task would otherwise go
 //     unnoticed until the glass showed garbage.

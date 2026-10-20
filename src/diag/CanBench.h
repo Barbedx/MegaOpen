@@ -7,8 +7,6 @@
 #include "../bus/ICanBus.h"
 #include "../bus/TwaiBus.h"
 
-namespace Cfg { class Config; }
-
 // The CAN controller's bench operations and its status, run by the one task
 // that owns the TWAI driver: the loop (the panel task in the display role)
 // (docs/design/event-tasks.md, Step 3).
@@ -46,7 +44,6 @@ namespace Diag
     {
         struct Setup {
             Bus::Role          role = Bus::Role::Display;
-            Cfg::Config*       cfg  = nullptr;          // the pins, read per op
             // What a reinstall wires back up (twaiRestartInRole in main.cpp
             // before this moved): the vehicle role's receive handler and the
             // transmit tap that feeds /api/can/last.

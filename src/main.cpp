@@ -48,10 +48,6 @@
 #include "knobs/KnobService.h"
 #endif
 
-#if FEATURE_LINK
-#include "link/LinkRx.h"
-#include "link/LinkSource.h"
-#endif
 #if FEATURE_CAN2
 #include "bus/Mcp2518Source.h"
 #endif
@@ -124,11 +120,6 @@ static Sinks::ResistiveKeySink g_resSink;
 #if FEATURE_KNOBS
 // The two knobs and their LEDs. A source: events go through g_engine.dispatch().
 static Knobs::Service        g_knobs;
-#endif
-#if FEATURE_LINK
-// Board V's frames over UART2: one of the car task's sources (LinkSource).
-static Link::Rx              g_link;
-static LinkSource            g_linkSrc(g_link);
 #endif
 static Vehicle::State        g_state;
 static Canbox::Rav4Emitter   g_emitter;
@@ -278,7 +269,7 @@ static void memMark(const char* what)
 // ---- the OEM display --------------------------------------------------------
 // Protocol lives in AffaDisplay; here are its ports (src/display/AffaPort.*) and
 // the policy. The library owns sync, ACKs, pacing, watchdog and bus-off recovery.
-// One owner of the CAN controller: the role is fixed at boot (see applyCanRole).
+// One owner of the CAN controller: the role follows the build (g_canRole).
 static MegaOpen::TwaiAffaLink g_affaTwaiLink;
 static MegaOpen::ArduinoClock g_affaClock;
 static MegaOpen::AffaLogSink g_affaLog;
@@ -548,7 +539,12 @@ static void onAncsNotification(const AppleNotificationService::NotificationInfo&
 
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-static Bus::Role g_canRole = Bus::Role::Display;
+// The TWAI's role follows the build (src/bus/CanRole.h). The two roles use
+// different stacks that cannot share the controller:
+//   display — AffaDisplay owns the driver, recovery and protocol.
+//   vehicle — TwaiBus in hardware TWAI_MODE_LISTEN_ONLY: cannot transmit or ACK,
+//             so it can never go bus-off or flood a car's bus with error frames.
+static constexpr Bus::Role g_canRole = Bus::ROLE;
 static uint32_t  g_canRx = 0;
 
 // Listen-only (never transmits or ACKs, so never bus-off; forced on in the
@@ -597,37 +593,6 @@ static int logTapVprintf(const char* fmt, va_list ap)
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
 
-// The CAN role is fixed at boot; changing `canRole` needs a reboot. The two roles
-// use different stacks that cannot share the controller:
-//   display — AffaDisplay owns the driver, recovery and protocol.
-//   vehicle — TwaiBus in hardware TWAI_MODE_LISTEN_ONLY: cannot transmit or ACK,
-//             so it can never go bus-off or flood a car's bus with error frames.
-// The display bus needs termination (two nodes on a stub); an OBD tap does not.
-static void applyCanRole(Bus::Role r)
-{
-#if !FEATURE_DISPLAY_CAN
-    // No panel in this image: force vehicle, since `display` is the factory
-    // default and NVS may hold it from an earlier build. Forced here because
-    // every path goes through this function.
-    if (r != Bus::Role::Vehicle) {
-        LogBus::printf("can role: NVS says '%s', but this build has no display — "
-                       "forcing 'vehicle'", Bus::roleName(r));
-        r = Bus::Role::Vehicle;
-    }
-#elif FEATURE_CAN2
-    // Two controllers on this board: CAN A (the MCP2518FD) is always the car's
-    // bus, and the TWAI pins are wired to CAN B, the panel's. 'vehicle' here
-    // would sniff the panel bus as the car and keep the panel from starting.
-    if (r != Bus::Role::Display) {
-        LogBus::printf("can role: NVS says '%s', but on this board CAN A is the car's "
-                       "bus and the TWAI is the panel's — forcing 'display'", Bus::roleName(r));
-        r = Bus::Role::Display;
-    }
-#endif
-    g_canRole = r;
-    LogBus::printf("can role = %s (fixed until reboot)", Bus::roleName(r));
-}
-
 // Ring of the most recent raw frames, both directions (the per-ID table keeps
 // only the last payload per ID).
 struct RawFrame { uint32_t id; uint8_t len; uint8_t data[8]; char dir; };
@@ -658,8 +623,8 @@ static void ringPut(char dir, uint32_t id, const uint8_t* data, uint8_t len)
 
 // Every car frame, on the car task (App::Car's tap), after the decode: the
 // frame ring, the counter and the web's raw stream. The sniffer table and the
-// recorder are the car task's own. Board V, CAN A and the TWAI vehicle role
-// all arrive here; the TWAI owner (this loop) only hands its frames over
+// recorder are the car task's own. CAN A and the TWAI vehicle role both
+// arrive here; the TWAI owner (this loop) only hands its frames over
 // (TwaiVehicleSource).
 static void carTap(const Frame& f)
 {
@@ -1879,23 +1844,16 @@ void setup()
 #endif
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-    // ---- CAN role: chosen once here (see applyCanRole) ----------------------
-    applyCanRole(Bus::roleFromName(g_cfg.s().canRole.c_str()));
-
-    // Printed every boot: the pins live in NVS.
-    logf("[can] role=%s rx=GPIO%u tx=GPIO%u%s", Bus::roleName(g_canRole),
-         (unsigned)g_cfg.s().canRxPin, (unsigned)g_cfg.s().canTxPin,
-         (g_cfg.s().canRxPin == (uint8_t)Board::PIN_CAN_RX_CARRIER &&
-          g_cfg.s().canTxPin == (uint8_t)Board::PIN_CAN_TX_CARRIER)
-             ? " (carrier board)" : " (hand-wired)");
+    logf("[can] role=%s rx=GPIO%d tx=GPIO%d", Bus::roleName(g_canRole),
+         (int)Board::PIN_CAN_RX, (int)Board::PIN_CAN_TX);
 #endif
 
 #if FEATURE_VEHICLE_CAN
     if (g_canRole == Bus::Role::Vehicle) {
         // The car's bus: hardware listen-only, never transmits or ACKs.
         // TwaiBus::begin takes (tx, rx); a swapped pair is silence, not an error.
-        TwaiBus::instance().begin((gpio_num_t)g_cfg.s().canTxPin,
-                                  (gpio_num_t)g_cfg.s().canRxPin,
+        TwaiBus::instance().begin((gpio_num_t)Board::PIN_CAN_TX,
+                                  (gpio_num_t)Board::PIN_CAN_RX,
                                   500000, TWAI_MODE_LISTEN_ONLY);
         // Handed to the car task, which decodes; this loop keeps the driver.
         TwaiBus::instance().onReceive(TwaiVehicleSource::push, nullptr);
@@ -1919,8 +1877,8 @@ void setup()
         // Our own TWAI driver with a 64-deep RX queue: an unanswered panel sends
         // 4-10.7k frames/s (see src/display/TwaiAffaLink.h). TwaiBus::begin() is
         // (TX, RX); the config is (RX, TX). A swapped pair is silence, not an error.
-        const bool ok = TwaiBus::instance().begin((gpio_num_t)g_cfg.s().canTxPin,
-                                                  (gpio_num_t)g_cfg.s().canRxPin,
+        const bool ok = TwaiBus::instance().begin((gpio_num_t)Board::PIN_CAN_TX,
+                                                  (gpio_num_t)Board::PIN_CAN_RX,
                                                   500000, TWAI_MODE_NORMAL);
         logf(ok ? "[can] display: TwaiBus @500k normal, rxq=64"
                 : "[can] display: TwaiBus::begin FAILED — no controller");
@@ -1984,7 +1942,6 @@ void setup()
     {
         Diag::CanBench::Setup cb;
         cb.role  = g_canRole;
-        cb.cfg   = &g_cfg;
 #if FEATURE_VEHICLE_CAN
         // A reinstall in the vehicle role hands frames to the car task again.
         cb.rx    = TwaiVehicleSource::push;
@@ -2124,36 +2081,20 @@ void setup()
 #if FEATURE_KNOBS
     g_web.attachKnobs(&g_knobs);
 #endif
-#if FEATURE_LINK
-    // The port opens here; from the car task's start it is that task's alone
-    // (LinkSource). The filter is resent whenever V says hello.
-    g_link.begin(Serial2, Board::PIN_LINK_RX, Board::PIN_LINK_TX);
-    memMark("link");
-    g_link.setFilter((Link::FilterMode)g_cfg.s().linkMode, g_cfg.s().linkIds, g_cfg.s().linkIdCount);
-    g_web.attachLink(&g_link);
-    logf("[link] board V on UART2 rx=GPIO%d tx=GPIO%d @%lu, filter mode=%u ids=%u",
-         (int)Board::PIN_LINK_RX, (int)Board::PIN_LINK_TX, (unsigned long)Link::BAUD,
-         (unsigned)g_cfg.s().linkMode, (unsigned)g_cfg.s().linkIdCount);
-#endif
 #if FEATURE_CAN2
-    // CAN A: the car's bus on the board itself, where board V would otherwise
-    // be. Listen-only in the controller, its rate found by listening; started
+    // CAN A: the car's bus on the board itself. Listen-only in the controller, its rate found by listening; started
     // on the car task, which owns the SPI from its first instruction.
     Mcp2518Source::instance().configure(g_cfg.s().can2Bitrate, g_cfg.s().can2Detected);
     g_web.attachCan2(&Mcp2518Source::instance().status(),
                      [](uint32_t bps) { Mcp2518Source::instance().requestRate(bps); });
 #endif
     // ---- the car task: its sources are chosen here, at boot -----------------
-    // CAN A on the T-2CAN, board V on the DevKit, the TWAI in the vehicle role;
-    // the DevKit can have the last two together. None (a C3 showing the
-    // panel): no task, and the loop does its chores (App::Car::service).
+    // CAN A on the T-2CAN, the TWAI in the vehicle role on env:direct. None:
+    // no task, and the loop does its chores (App::Car::service).
     {
         App::Car::Setup cs;
 #if FEATURE_CAN2
         cs.src[cs.n++] = &Mcp2518Source::instance();
-#endif
-#if FEATURE_LINK
-        cs.src[cs.n++] = &g_linkSrc;
 #endif
 #if FEATURE_VEHICLE_CAN
         if (g_canRole == Bus::Role::Vehicle) cs.src[cs.n++] = &TwaiVehicleSource::instance();
@@ -2536,7 +2477,7 @@ void loop()
 
     // Knob events go to the KeyBus from the knob task; every key deadline
     // (releases, ladder, USB HID, macro windows) runs on the keys task, the
-    // emitter on the hu task, and the vehicle sources (CAN A, board V, the
+    // emitter on the hu task, and the vehicle sources (CAN A, the
     // decode of the TWAI vehicle role's frames) on the car task.
 
     logLoopWindow(now);

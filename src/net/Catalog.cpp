@@ -131,8 +131,8 @@ namespace Catalog
     // The same switches the routes are gated by: display = /api/display, media,
     // affamap; ble (with display) = /api/ble; ancs = /api/notifications;
     // vehicle = /api/can*, /wiggle; can2 = /api/can2; capture = /api/cap*;
-    // knobs = /api/knobs*; matrix = /api/keymap*; res = /api/res*; link =
-    // /api/link*; logfs = /api/logs/file; usb and uart = routing destinations.
+    // knobs = /api/knobs*; matrix = /api/keymap*; res = /api/res*; logfs =
+    // /api/logs/file; usb and uart = routing destinations.
     // Macros, routing, the map and the Raise console are in every image.
     #define FEATURE_ROW(id, m) {id, #m, (m) != 0}
     const Feature FEATURES[] = {
@@ -145,7 +145,6 @@ namespace Catalog
         FEATURE_ROW("knobs",   FEATURE_KNOBS),
         FEATURE_ROW("matrix",  FEATURE_MATRIX),
         FEATURE_ROW("res",     FEATURE_RESISTIVE_KEYS),
-        FEATURE_ROW("link",    FEATURE_LINK),
         FEATURE_ROW("logfs",   FEATURE_LOGFS),
         FEATURE_ROW("usb",     FEATURE_USB_HID),
         FEATURE_ROW("uart",    FEATURE_CANBOX_UART),

@@ -2,8 +2,8 @@
 #include <atomic>
 #include "IVehicleSource.h"
 
-// The car's frames from the TWAI controller in the vehicle role (the DevKit's
-// OBD tap, or a C3). Portable: a ring and two counters, native-tested.
+// The car's frames from the TWAI controller in the vehicle role (env:direct's
+// OBD tap). Portable: a ring and two counters, native-tested.
 //
 // The TWAI driver stays with the task that owns it — the loop task, where the
 // CAN bench ops, the bus-off recovery and the wait-for-a-frame sleep all live —
@@ -25,7 +25,7 @@ public:
     const char* name() const override { return "twai"; }
     bool        begin() override { return true; }
     size_t      drain(Frame* out, size_t max, uint32_t nowMs) override;
-    // The vehicle role runs the TWAI at a fixed 500k (applyCanRole).
+    // The vehicle role runs the TWAI at a fixed 500k (setup() in main.cpp).
     uint32_t    bitrate() const override { return 500000; }
     Stats       stats() const override;
 

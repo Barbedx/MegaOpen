@@ -32,27 +32,6 @@ namespace Cfg
 
         _s.displayType = _p.getString("dispType", "carminat");
         _s.funcReg     = _p.getBool  ("funcReg", true);
-        // Default follows the build; applyCanRole() forces `vehicle` on a
-        // display-less image anyway.
-#if FEATURE_DISPLAY_CAN
-        _s.canRole     = _p.getString("canRole", "display");
-#else
-        _s.canRole     = _p.getString("canRole", "vehicle");
-#endif
-        // Absent keys fall back to the compiled (hand-wired) pins.
-        _s.canRxPin    = _p.getUChar ("canRx", (uint8_t)Board::PIN_CAN_RX);
-        _s.canTxPin    = _p.getUChar ("canTx", (uint8_t)Board::PIN_CAN_TX);
-        // A stored pin this board refuses (an older build accepted it, or the
-        // T-2CAN, where only the wired 6/7 can work) is not started on: it
-        // could drive another peripheral's line. The compiled pins instead.
-        if (!Board::canPinReadable(_s.canRxPin) || !Board::canPinDrivable(_s.canTxPin)) {
-            LogBus::printf("[cfg] CAN pins rx=%u tx=%u not valid on this board; using %d/%d",
-                           (unsigned)_s.canRxPin, (unsigned)_s.canTxPin,
-                           (int)Board::PIN_CAN_RX, (int)Board::PIN_CAN_TX);
-            _s.canRxPin = (uint8_t)Board::PIN_CAN_RX;
-            _s.canTxPin = (uint8_t)Board::PIN_CAN_TX;
-        }
-
         _s.bleMode     = _p.getString("bleMode", "ams");
         _s.autoTime    = _p.getBool  ("autoTime", true);
         _s.mediaScreen = _p.getBool  ("mediaScr", false);
@@ -85,16 +64,6 @@ namespace Cfg
         _s.uartBaud    = _p.getULong("baud",   38400);
         _s.pulseMs     = _p.getUShort("pulse", 60);
         _s.resEnabled  = _p.getBool ("resEn",  false);
-
-        // isKey first: an absent key costs an IDF error line per boot.
-        _s.linkMode    = _p.isKey("lnkMode") ? _p.getUChar("lnkMode", 0) : 0;
-        _s.linkIdCount = 0;
-        if (_p.isKey("lnkIds")) {
-            uint32_t ids[7] = {0};
-            const size_t n = _p.getBytes("lnkIds", ids, sizeof(ids));
-            _s.linkIdCount = (uint8_t)(n / sizeof(uint32_t));
-            for (uint8_t i = 0; i < 7; ++i) _s.linkIds[i] = ids[i];
-        }
 
         _s.can2Bitrate  = _p.isKey("can2Bps") ? _p.getULong("can2Bps", 0) : 0;
         _s.can2Detected = _p.isKey("can2Det") ? _p.getULong("can2Det", 0) : 0;
@@ -137,15 +106,8 @@ namespace Cfg
             _p.putString("medLay", "fullscreen");
         }
 
-        // v2 -> v3: a stored CTX of GPIO19 (a temporary experiment) goes back to
-        // the BoardProfile.h pin; otherwise it transmits on an unwired pin and
-        // reads as a dead transceiver. Only exactly 19 is touched.
-        if (v < 3 && _s.canTxPin == 19) {
-            _s.canTxPin = (uint8_t)Board::PIN_CAN_TX;
-            _p.putUChar("canTx", _s.canTxPin);
-            LogBus::printf("[cfg] canTxPin 19 -> %u (the 2026-09-22 experiment, undone)\n",
-                          (unsigned)_s.canTxPin);
-        }
+        // v2 -> v3 moved a stored CTX pin back to the board's; the CAN pins are
+        // no longer settings, so it has nothing left to do.
 
         // An NVS write can fail (full namespace); Preferences reports it only
         // in the return value.
@@ -173,9 +135,6 @@ namespace Cfg
 
         _p.putString("dispType", _s.displayType);
         _p.putBool  ("funcReg",  _s.funcReg);
-        _p.putString("canRole",  _s.canRole);
-        _p.putUChar ("canRx",    _s.canRxPin);
-        _p.putUChar ("canTx",    _s.canTxPin);
 
         _p.putString("bleMode",  _s.bleMode);
         _p.putBool  ("autoTime", _s.autoTime);
@@ -207,8 +166,6 @@ namespace Cfg
         _p.putULong ("baud",   _s.uartBaud);
         _p.putUShort("pulse",  _s.pulseMs);
         _p.putBool  ("resEn",  _s.resEnabled);
-        _p.putUChar ("lnkMode", _s.linkMode);
-        _p.putBytes ("lnkIds",  _s.linkIds, sizeof(uint32_t) * (_s.linkIdCount > 7 ? 7 : _s.linkIdCount));
         _p.putULong ("can2Bps", _s.can2Bitrate);
         _p.putULong ("can2Det", _s.can2Detected);
     }

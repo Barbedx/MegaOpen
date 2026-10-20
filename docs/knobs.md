@@ -1,8 +1,8 @@
 # The two front-panel knobs and their backlight
 
 Reference for `src/knobs/*`, `src/input/QuadDecoder.*`, `src/input/PotStepper.*`
-and the knobs on the Кнопки screen (`#keys`, `/api/knobs`). Build flag: `FEATURE_KNOBS` — on in `devkit` and `c3`, off
-in `direct` and `bench`.
+and the knobs on the Кнопки screen (`#keys`, `/api/knobs`). Build flag: `FEATURE_KNOBS` — on in `t2can`, off
+in `direct`.
 
 **NOTHING HERE HAS BEEN ON HARDWARE YET.** The decoding, the button, the pot and
 the light logic are host-tested (`pio test -e native -f test_knobs`, 55 cases);
@@ -42,7 +42,7 @@ encoders come up ON on an empty NVS. The LEDs stay OFF there too.
 Written pin → module label. The page shows the same table, read from
 `BoardProfile.h` of the image that is actually running.
 
-### ESP32 DevKit V1 (`env:devkit`)
+### ESP32 DevKit V1 (no env builds it with the knobs any more)
 
 ```
 GPIO34      <--  S1   (right)
@@ -84,8 +84,7 @@ GPIO13 is ladder leg 0 in `env:direct`; the overlap is a `static_assert`.
 ```
 12 V ACC --> fuse 5 A --> DC-DC 12->5 V (>= 5 A) --+--> strip +5V, DIRECTLY (both ends on 2 m)
                                                    +--> DevKit VIN
-                                                   +--> the C3's 5V pin, down the link cable
-GND common: DC-DC = strip = DevKit = C3
+GND common: DC-DC = strip = DevKit
 ```
 
 100 LEDs: ~6 A white, ~2.5 A one colour at full, 0.3–0.5 A at footwell-at-night

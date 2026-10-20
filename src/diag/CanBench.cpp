@@ -1,7 +1,7 @@
 #include "CanBench.h"
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
 #include "../app/RequestReply.h"
-#include "../cfg/Config.h"
+#include "../board/BoardProfile.h"
 #include "../utils/LogBus.h"
 #include "../utils/Snapshot.h"
 #include "freertos/queue.h"
@@ -38,8 +38,8 @@ namespace Diag
             volatile bool s_listenOnly = true;
             volatile int  s_loopRec = -1, s_loopDom = -1;
 
-            int8_t rxPin() { return s_s.cfg ? (int8_t)s_s.cfg->s().canRxPin : -1; }
-            int8_t txPin() { return s_s.cfg ? (int8_t)s_s.cfg->s().canTxPin : -1; }
+            int8_t rxPin() { return Board::PIN_CAN_RX; }
+            int8_t txPin() { return Board::PIN_CAN_TX; }
 
             // Give the pins back to the controller after a diagnostic bit-banged
             // them, in the role's mode — never promote a listen-only (vehicle)

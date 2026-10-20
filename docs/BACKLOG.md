@@ -112,27 +112,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   The ANCS lock cannot be held across the write (the host task takes it in the
   notify callback while the write waits on the host). Needs a use-count or a
   loop-task-owned detach. Where: `apple_notification_service.cpp`.
-### Link / board V
-- **The C3's branch held the whole bus dominant** (2026-09-28): panel Silent,
-  brain CRX "driven dominant", C3 50 M bus errors. Unplugging the C3 from CAN
-  brought the panel straight back (Ready, 0 errors). Suspect the C3's CTX
-  floating while it is unpowered or rebooting; fit ~10 kΩ CTX->3V3 at its
-  transceiver and re-test before the C3 goes back on any bus.
-- **Board V receives ~19 % of the bus and ~49 000 bus errors/s.** Measured
-  2026-09-27 on the bench, 10 s window, listen-only on the panel's bus: brain
-  twaiRx 304/s with 53 busErr/s; C3 57 frames/s with 48 935 busErr/s. Hidden
-  until now because busErr was never counted. Earlier the same day the C3
-  forwarded up to ~460 fps, so check the C3's CAN wiring first (GPIO3->CRX,
-  GPIO4->CTX, its own 3V3/GND, no 120 R on the module), then its TWAI timing
-  on the C3 vs the DevKit. Where: `LinkMain.cpp`, the C3 transceiver.
-  **Likely explained:** the owner had unplugged the display, leaving one
-  terminator on the bus. Re-measure with the panel connected before acting.
-
-- **Board V has never been on the car's bus.** On the bench (listen-only on
-  the panel's bus, 2026-09-27) the link ran clean: `alive`, 0 CRC, 0 resyncs,
-  up to ~460 fps. The vehicle bus, its bit rate and the filter are untested.
-  Where: `LinkMain.cpp`.
-
 ### Web UI
 
 - **Settings export/import (/api/config) — UI card removed in ui-v2 slice 8

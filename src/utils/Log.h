@@ -17,7 +17,7 @@ namespace Log {
         {"PNL", "disp panel affa ui clock"},
         {"BLE", "ble bt ams cts ancs"},
         {"HU",  "hu hur media"},
-        {"CAN", "can can2 twai car link boardv"},
+        {"CAN", "can can2 twai car"},
         {"CAP", "cap"},
         {"MAC", "macro"},
         {"NET", "net wifi web cloud"},

@@ -26,7 +26,6 @@ SCR.service={title:'Сервіс',async render(m){
   <details class="sub" id="ringD"><summary>Останні кадри UART</summary><pre class="json" id="ring"></pre></details>`,'','custom')+
  (V?card('Шина панелі (CAN B)','<div class="kv" id="cb"></div>'+
   row('Помилки шини за типом','<button class="btn sm" type="button" id="eccGo">Зняти</button>','','Регістр ECC контролера TWAI: 3000 вибірок, які помилки (bit, form, stuff) і в якому місці кадру. Допомагає знайти погану пайку чи термінатор.')+'<pre class="json" id="ecc" hidden></pre>'+
-  `<div id="pinRow"${can.rxPin===can.rxPinProfile&&can.txPin===can.txPinProfile?' hidden':''}>${row('Піни відрізняються від плати','<button class="btn sm" type="button" id="pinFix">Повернути '+can.rxPinProfile+'/'+can.txPinProfile+'</button>','зараз '+can.rxPin+'/'+can.txPin)}</div>`+
   row('Пошук холодної пайки','<a class="btn sm" href="/wiggle" id="wig">/wiggle</a>','окрема сторінка плати')):'')+
  (CP?card('Запис: розширене',row('Коли місце скінчилось, стирати найстаріші',sw('/api/cap/settings|ring',cp.ring),'вимк: запис зупиниться')+row('Заповнювати сховище до, %',num('/api/cap/settings|fill',cp.fill,'min="50" max="98"'))+row('Розмір файлу, МБ',num('/api/cap/settings|fileMB',cp.fileMB,'min="1" max="8"'))+row('Мітка ставить 🔒',sw('/api/cap/settings|autoProtect',cp.autoProtect))+
   '<div class="fr"><button class="btn dng" type="button" id="capFmt">Стерти всі записи</button></div>'):'');
@@ -63,8 +62,7 @@ SCR.service={title:'Сервіс',async render(m){
  $('#cat').onclick=e=>{const b=e.target.closest('[data-kc]');if(b)$('#kc').value=b.dataset.kc};
  $('#kGo').onclick=e=>run(e.target,()=>API.post('/api/canbox/key?code='+$('#kc').value+'&state='+$('#ks').value));
  $('#rGo').onclick=e=>run(e.target,()=>API.post('/api/canbox/raw?cmd='+$('#rC').value+'&data='+encodeURIComponent($('#rD').value)).then(r=>({note:r.bytes})));
- if(V){$('#eccGo').onclick=e=>run(e.target,async()=>{const r=await API.get('/api/can/ecc');const p=$('#ecc');p.hidden=false;p.textContent=(r.seen||[]).map(x=>`${x.count}× ${x.type} ${x.dir} у ${x.where} (0x${h2(x.raw)})`).join('\n')||'помилок нема';return {note:'3000 вибірок'}});
- const pf=$('#pinFix');if(pf)pf.onclick=e=>ask(e.target,'Повернути піни CAN B до типових для плати? Після перезавантаження.',()=>{PEND['service/pins']={path:'/api/settings',params:{canRxPin:can.rxPinProfile,canTxPin:can.txPinProfile},labels:['Піни CAN B: '+can.rxPinProfile+'/'+can.txPinProfile]};rbar();sv(svOf(e.target),'ok','після перезавантаження')})}
+ if(V){$('#eccGo').onclick=e=>run(e.target,async()=>{const r=await API.get('/api/can/ecc');const p=$('#ecc');p.hidden=false;p.textContent=(r.seen||[]).map(x=>`${x.count}× ${x.type} ${x.dir} у ${x.where} (0x${h2(x.raw)})`).join('\n')||'помилок нема';return {note:'3000 вибірок'}});}
  if(CP)$('#capFmt').onclick=e=>ask(e.target,'Стерти ВСІ записи, разом із 🔒.',()=>run(e.target,()=>API.post('/api/cap/format?confirm=cap'),'стерто'),'cap');
  await this.tick();
 },async tick(){this.n++;const D=has('display');const[di,me,can]=await Promise.all([getIf(D,'/api/display'),getIf(D,'/api/media'),getIf(has('vehicle'),'/api/can')]);if(!$('#lg'))return;
