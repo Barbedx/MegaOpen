@@ -9,7 +9,6 @@
 #include <driver/twai.h>
 #include <soc/twai_struct.h>   // TWAI.error_code_capture_reg, for /api/can/ecc
 #include <driver/gpio.h>
-#include "../bus/TwaiBus.h"
 #include "../diag/CanBench.h"
 #include "../board/BoardProfile.h"
 #include "../Version.h"
@@ -1675,17 +1674,19 @@ void WebUi::routesCan()
 {
     route("/api/can", HTTP_GET, [this](PsychicRequest* r) {
         JsonDocument d;
-        // Listen-only on the car's bus; with the panel, the panel task's
-        // TX gate can also have turned transmit off (nobody ACKs, nothing
-        // heard), which is why busErr and twaiTx stop moving: say so here.
-        d["txEnabled"] = FEATURE_DISPLAY_CAN && TwaiBus::instance().txEnabled();
+        // Listen-only on the car's bus; with the panel, the link's TX gate can
+        // also have turned transmit off (nobody ACKs, nothing heard), which is
+        // why busErr and twaiTx stop moving: say so here.
+        bool txEnabled = false;
 #if FEATURE_DISPLAY_CAN
         if (_panel) {
             const MegaOpen::PanelStatus p = _panel->read();
+            txEnabled = !p.txGated;
             d["txGated"] = p.txGated;
             d["txGates"] = p.txGates;
         }
 #endif
+        d["txEnabled"] = txEnabled;
         d["listenOnly"] = Diag::CanBench::listenOnly();
 
         // Controller state: tells "no frames" from "frames but undecodable".
@@ -2158,7 +2159,8 @@ void WebUi::fillDisplay(JsonObject d)
             d["pollLateMaxUs"] = ps.pollLateMaxUs;
             d["txGated"]       = ps.txGated;
             d["txGates"]       = ps.txGates;
-            d["reinstalls"]    = ps.reinstalls;
+            const uint32_t inst = Diag::CanBench::status().installs;
+            d["reinstalls"]    = inst ? inst - 1 : 0;
             d["failStreak"]    = ps.failStreak;
         }
         if (_ops) {

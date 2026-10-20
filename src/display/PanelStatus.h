@@ -59,10 +59,9 @@ namespace MegaOpen
         // library's dispatch ring was full.
         uint32_t queuePosted = 0, queueDropped = 0;
 
-        // The TX gate: shut while nobody ACKs us (panel unplugged).
+        // The link's TX gate: shut while nobody ACKs us (panel unplugged).
         bool     txGated = false;
         uint32_t txGates = 0;           // times it shut since boot
-        uint32_t reinstalls = 0;        // TWAI driver installs after the first
 
         // ---- for the ui task (Step 4), which no longer sees the callbacks ----
         // A Carminat panel: the OEM fullscreen geometry and the 0x1F1 pane.

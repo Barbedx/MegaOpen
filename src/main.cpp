@@ -74,14 +74,13 @@ static Sinks::UsbHidKeySink g_usbKeys;
 #endif
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-#include "bus/TwaiBus.h"
+#include "bus/TwaiBus.h"   // env:direct only; empty with a panel
 #include "diag/CanBench.h"
 #include <driver/twai.h>
 #endif
 
 #if FEATURE_DISPLAY_CAN
 #include "display/AffaPort.h"
-#include "display/TwaiAffaLink.h"
 #include "display/PanelOps.h"
 #include "display/MediaScreen.h"
 #include "display/MediaPane.h"
@@ -259,8 +258,9 @@ static void memMark(const char* what)
 // ---- the OEM display --------------------------------------------------------
 // Protocol lives in AffaDisplay; here are its ports (src/display/AffaPort.*) and
 // the policy. The library owns sync, ACKs, pacing, watchdog and bus-off recovery.
-// One owner of the CAN controller: in a display build, the panel's bus.
-static MegaOpen::TwaiAffaLink g_affaTwaiLink;
+// One owner of the CAN controller: in a display build, the panel's bus, on
+// the library's own link (the IDF TWAI driver, rxq 64, the TX gate).
+static affa::TwaiLink        g_panelLink;
 static MegaOpen::ArduinoClock g_affaClock;
 static MegaOpen::AffaLogSink g_affaLog;
 static Keys::AffaKeySource   g_affaKeys;
@@ -590,8 +590,8 @@ static volatile uint8_t g_lastHead = 0;
 // this lock, a few dozen bytes, so no writer leaves a torn frame.
 static portMUX_TYPE g_lastMux = portMUX_INITIALIZER_UNLOCKED;
 
-// Writers: carTap (the car task), noteTxFrame, affaTap. Length clamped to
-// classic CAN.
+// Writers: carTap (the car task) and affaTap (the panel task). Length clamped
+// to classic CAN.
 static void ringPut(char dir, uint32_t id, const uint8_t* data, uint8_t len)
 {
     RawFrame f;
@@ -614,12 +614,6 @@ static void carTap(const Frame& f)
 {
     ++g_canRx;
     ringPut('R', f.id, f.data, f.len);
-}
-
-// Record an outgoing frame in the same ring as the received ones.
-static void noteTxFrame(const Frame& f)
-{
-    ringPut('T', f.id, f.data, f.len);
 }
 
 #endif
@@ -1047,9 +1041,10 @@ static void macroFire(const Keys::Macro& m, void*)
 
 #if FEATURE_DISPLAY_CAN
 // ---- the whole AFFA bus, both directions, to the USB console ---------------
-// The library's Layer-0 tap sees every frame in wire order. It runs inside the
-// RX/TX pump, so it only pushes to a ring; loop() prints (a 40-char Serial write
-// is ~3.5 ms at 115200, enough to miss an ISO-TP deadline).
+// The panel link's raw tap (TwaiLink::onRaw) sees every frame the driver
+// delivers and every one it accepts for transmit. It runs inside poll(), so it
+// only pushes to a ring; loop() prints (a 40-char Serial write is ~3.5 ms at
+// 115200, enough to miss an ISO-TP deadline).
 struct AffaTrace { uint32_t id; uint32_t ms; uint8_t len; uint8_t dir; uint8_t data[8]; };
 static AffaTrace       g_affaTrace[64];
 static volatile uint8_t  g_affaTraceHead = 0;
@@ -1772,9 +1767,6 @@ void setup()
                               500000, TWAI_MODE_LISTEN_ONLY);
     // Handed to the car task, which decodes; this loop keeps the driver.
     TwaiBus::instance().onReceive(TwaiVehicleSource::push, nullptr);
-    TwaiBus::instance().onTransmit(noteTxFrame);
-    // Unmask all alerts: Diag::CanBench samples them into its snapshot.
-    twai_reconfigure_alerts(TWAI_ALERT_ALL, nullptr);
     logf("[can] vehicle: listen-only, never transmits, never ACKs, "
          "cannot go bus-off. No display on this bus.");
     logf("[can] no termination resistor needed here — an OBD tap is not a "
@@ -1787,15 +1779,6 @@ void setup()
     // copies into its ring.
     g_affaLog.begin([](const char* line) { LogBus::line(line); });
 
-    // Our own TWAI driver with a 64-deep RX queue: an unanswered panel sends
-    // 4-10.7k frames/s (see src/display/TwaiAffaLink.h). TwaiBus::begin() is
-    // (TX, RX); the config is (RX, TX). A swapped pair is silence, not an error.
-    const bool ok = TwaiBus::instance().begin((gpio_num_t)Board::PIN_CAN_TX,
-                                              (gpio_num_t)Board::PIN_CAN_RX,
-                                              500000, TWAI_MODE_NORMAL);
-    logf(ok ? "[can] display: TwaiBus @500k normal, rxq=64"
-            : "[can] display: TwaiBus::begin FAILED — no controller");
-
     const String& dt = g_cfg.s().displayType;
     {
         // `carminat`: the same object typed as CarminatDisplay (styled text,
@@ -1804,7 +1787,7 @@ void setup()
         // loop task, which is the panel task) and PanelOps' for rendering.
         affa::CarminatDisplay* carminat = nullptr;
         affa::AffaDisplayBase* display =
-            MegaOpen::createDisplay(dt.c_str(), g_affaTwaiLink, g_affaClock, &carminat);
+            MegaOpen::createDisplay(dt.c_str(), g_panelLink, g_affaClock, &carminat);
         g_panelOps.attach(display, carminat);
         // Callbacks before begin(), or the first poll()'s sync transition is
         // missed: App::Panel counts the verdicts, and every ticket's verdict
@@ -1812,13 +1795,27 @@ void setup()
         App::Panel::Setup ps;
         ps.display  = display;
         ps.carminat = carminat;
-        ps.link     = &g_affaTwaiLink;
+        ps.link     = &g_panelLink;
         ps.ops      = &g_panelOps;
         ps.hooks.onCompletion = App::Ui::postCompletion;
         App::Panel::begin(ps);
     }
     affa::AffaDisplayBase& panel = App::Panel::lib();
     panel.setLogSink(&g_affaLog);
+
+    // The library's TWAI link: a 64-deep RX queue (an unanswered panel sends
+    // 4-10.7k frames/s), Busy/Rejected transmit, the TX gate and bus-off
+    // recovery, all run from poll(). A swapped pin pair is silence, not an error.
+    // After the log sink, so the link's own install lines reach the log.
+    {
+        affa::TwaiConfig cfg;
+        cfg.tx = (gpio_num_t)Board::PIN_CAN_TX;
+        cfg.rx = (gpio_num_t)Board::PIN_CAN_RX;
+        const bool ok = g_panelLink.begin(cfg);
+        logf(ok ? "[can] display: TwaiLink @500k normal, rxq=%u"
+                : "[can] display: TwaiLink::begin FAILED — no controller (it keeps trying)",
+             (unsigned)cfg.rxQueue);
+    }
     memMark("can+display");
     // Passive = a real radio owns the handshake; we send no sync or hello and
     // never register. Must be set if an OEM radio is on the bus.
@@ -1835,7 +1832,7 @@ void setup()
     panel.onKey(&onPanelKey, nullptr);
 
     // Every AFFA frame to USB serial, gated on log level TRC.
-    panel.onFrame(affaTap, nullptr);
+    g_panelLink.onRaw(affaTap, nullptr);
     logf("[affa] frame trace follows the log level - raise it to TRC (/api/loglevel?n=4); it will slow the loop");
 
     // begin() transmits nothing; the first heartbeat leaves on the first poll().
@@ -1853,6 +1850,9 @@ void setup()
         Diag::CanBench::Setup cb;
         // With the panel we ACK and transmit. On the car's bus: never.
         cb.listenOnly = !FEATURE_DISPLAY_CAN;
+#if FEATURE_DISPLAY_CAN
+        cb.link = &g_panelLink;
+#endif
         Diag::CanBench::begin(cb);
     }
 #endif
@@ -2195,22 +2195,22 @@ static void logLoopWindow(uint32_t now)
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
     // Controller state and error counters (no ACK drives TX errors to bus-off).
     // The sample Diag::CanBench took this 100 ms, not a second read.
-    if (Diag::CanBench::infoValid()) {
-        const twai_status_info_t& st = Diag::CanBench::info();
+    const Diag::CanStatus st = Diag::CanBench::status();
+    if (st.installed) {
         static const char* const kState[] = {"stopped", "running", "bus-off", "recovering"};
         logf("[can] state=%s txerr=%u rxerr=%u txfail=%u rxmiss=%u buserr=%u "
              "arblost=%u txq=%u rxq=%u",
              kState[st.state <= 3 ? st.state : 0],
-             (unsigned)st.tx_error_counter, (unsigned)st.rx_error_counter,
-             (unsigned)st.tx_failed_count, (unsigned)st.rx_missed_count,
-             (unsigned)st.bus_error_count, (unsigned)st.arb_lost_count,
-             (unsigned)st.msgs_to_tx, (unsigned)st.msgs_to_rx);
+             (unsigned)st.tec, (unsigned)st.rec,
+             (unsigned)st.txFailed, (unsigned)st.rxMissed,
+             (unsigned)st.busErr, (unsigned)st.arbLost,
+             (unsigned)st.msgsToTx, (unsigned)st.msgsToRx);
 
         // Name a flood: an un-ACKed node retransmits one frame forever and
         // rx_missed_count climbs. The dominant id comes from the frame ring.
         {
             static uint32_t s_missWas = 0, s_saidAt = 0;
-            const uint32_t miss = st.rx_missed_count;
+            const uint32_t miss = st.rxMissed;
             const uint32_t d = miss - s_missWas;
             s_missWas = miss;
             if (d > 200 && (uint32_t)(now - s_saidAt) >= 10000) {
@@ -2230,14 +2230,10 @@ static void logLoopWindow(uint32_t now)
             }
         }
 
-        // Report bus-off only: TwaiBus owns twai_initiate_recovery(). A
-        // STOPPED driver is ours to restart; this is the task that owns it.
-        if (st.state == TWAI_STATE_BUS_OFF) {
-            logf("[can] bus-off (TwaiBus recovers it)");
-        } else if (st.state == TWAI_STATE_STOPPED) {
-            const esp_err_t e = twai_start();
-            logf("[can] stopped -> twai_start(): %s", esp_err_to_name(e));
-        }
+        // Reported only: the driver's owner recovers it (the library's link
+        // with a panel, TwaiBus::poll() on the car's bus).
+        if (st.state == TWAI_STATE_BUS_OFF || st.state == TWAI_STATE_STOPPED)
+            logf("[can] %s (the driver's owner recovers it)", kState[st.state]);
     }
 #endif
 #if FEATURE_DISPLAY_CAN
@@ -2260,8 +2256,8 @@ static void logLoopWindow(uint32_t now)
 // ---- the sleep between passes ---------------------------------------------------
 // Not delay(2) any more: the loop sleeps in twai_receive(), so the frame that
 // carries a panel key wakes it at once and goes to poll() in the same pass
-// (TwaiBus::waitRx keeps it). How long it may sleep is the panel's answer: one
-// tick while the library is busy (a posted render counts), else 2 ms.
+// (the link's waitRx keeps it). How long it may sleep is the panel's answer
+// (App::Panel::wait): 1 ms while the library is busy, else 2 ms.
 //
 // Under a flood (an unanswered panel sends 4-10k frames/s) a frame is always
 // waiting, so the wait returns at once and the loop would never leave the CPU
@@ -2277,18 +2273,18 @@ static void loopWait()
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
     constexpr int64_t REST_EVERY_US = (portNUM_PROCESSORS == 1 || FEATURE_DISPLAY_CAN) ? 2000 : 20000;
     static int64_t s_restedAtUs = 0;
-    TickType_t ticks = pdMS_TO_TICKS(2);
-#if FEATURE_DISPLAY_CAN
-    if (App::Panel::present())
-        ticks = App::Panel::waitTicks();
-#endif
     const int64_t t0 = esp_timer_get_time();
     if (t0 - s_restedAtUs > REST_EVERY_US) {
         vTaskDelay(1);
         s_restedAtUs = esp_timer_get_time();
         return;
     }
-    TwaiBus::instance().waitRx(ticks);
+#if FEATURE_DISPLAY_CAN
+    if (App::Panel::present()) App::Panel::wait();
+    else                       vTaskDelay(pdMS_TO_TICKS(2));
+#else
+    TwaiBus::instance().waitRx(pdMS_TO_TICKS(2));
+#endif
     const int64_t t1 = esp_timer_get_time();
     if (t1 - t0 >= 500) s_restedAtUs = t1;
 #else
@@ -2351,7 +2347,6 @@ void loop()
     if (App::Panel::present()) {
         App::Panel::pump(now);
         lap("disp.poll");
-        App::Panel::serviceTx(now);
     }
 #endif
     lap("display");

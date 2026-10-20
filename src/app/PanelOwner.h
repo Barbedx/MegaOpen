@@ -6,7 +6,6 @@
 #include "../app/UiWaits.h"
 #include "../display/PanelOps.h"
 #include "../display/PanelStatus.h"
-#include "../display/TwaiAffaLink.h"
 #include "../utils/Snapshot.h"
 
 // The panel task: the Arduino loop task, and the owner of AffaDisplay's poll()
@@ -16,16 +15,14 @@
 // the keys (src/display/PanelOps.h). poll() from any other task is a counted
 // no-op (foreignPolls).
 //
-//   * pump() is one panel pass: bus-off recovery, then poll(). After it, the
-//     status is published as a Snapshot<PanelStatus> for every other reader.
-//   * waitTicks() says how the task may sleep: in twai_receive(), so a panel
-//     key frame wakes it at once (TwaiBus::waitRx). One tick while the library
-//     is busy (a render posted counts), else 2 ms (always 2 ms while the TX
-//     gate is shut); the library's own deadlines are ~200 ms, so nothing it
-//     times is late.
-//   * serviceTx() is the TX gate (TxGate.h): no ACK and nothing heard for 2 s
-//     shuts transmit and aborts the frame the controller keeps retrying, so a
-//     missing panel is not 1400 bus errors a second on the key core.
+//   * pump() is one panel pass: poll(), which also runs the link's TX gate
+//     and bus-off recovery (affa::TwaiLink). After it, the status is
+//     published as a Snapshot<PanelStatus> for every other reader.
+//   * wait() is how the task sleeps: in twai_receive() (TwaiLink::waitRx), so
+//     a panel key frame wakes it at once. 1 ms while the library is busy (a
+//     render posted counts), else 2 ms (always 2 ms while the TX gate is
+//     shut); the library's own deadlines are ~200 ms, so nothing it times is
+//     late.
 //
 // The library's callbacks (onSync, onComplete) arrive here, on this task, and
 // since Step 4 they end here: the render policy is the ui task's. What it needs
@@ -48,7 +45,7 @@ namespace App
         struct Setup {
             affa::AffaDisplayBase*  display  = nullptr;
             affa::CarminatDisplay*  carminat = nullptr;   // same object, typed; or null
-            MegaOpen::TwaiAffaLink* link     = nullptr;
+            affa::TwaiLink*         link     = nullptr;   // the panel's bus
             MegaOpen::PanelOps*     ops      = nullptr;   // its counts, for PanelStatus
             Hooks                   hooks;
         };
@@ -64,12 +61,9 @@ namespace App
 
         // One panel pass. Keys leave inside poll(), straight onto the KeyBus.
         void pump(uint32_t nowMs);
-        // The TX gate, on each new controller sample (every 100 ms).
-        void serviceTx(uint32_t nowMs);
-        // How long the next sleep may be: one tick while the library is busy,
-        // else (or while gated) 2 ms. The loop sleeps in
-        // TwaiBus::waitRx(), so a panel frame ends it early.
-        TickType_t waitTicks();
+        // The sleep between passes, in TwaiLink::waitRx(): a panel frame ends
+        // it early. 1 ms while the library is busy, else (or while gated) 2 ms.
+        void wait();
 
         // The [panel] heartbeat line, and a new window for its maxima.
         void logWindow();

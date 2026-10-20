@@ -1,7 +1,5 @@
 #include "PanelOwner.h"
 #if FEATURE_DISPLAY_CAN
-#include "TxGate.h"
-#include "../bus/TwaiBus.h"
 #include "../diag/CanBench.h"
 #include "../display/AffaPort.h"
 #include "../utils/LogBus.h"
@@ -29,9 +27,6 @@ namespace App
             uint16_t     s_failStreak = 0;
             // PanelOps::resyncs() as last seen: a resync clears the streak.
             uint32_t     s_resyncsSeen = 0;
-
-            TxGate   s_gate;
-            uint32_t s_gateSeq = 0;
 
             // Both edges of every sync change, for the ui task (PanelStatus).
             uint32_t s_syncChanges = 0;
@@ -96,10 +91,11 @@ namespace App
                 p.pollLateMaxUs = s_pollLateWinUs;
                 p.queuePosted   = s_s.ops ? s_s.ops->posted() : 0;
                 p.queueDropped  = d.dispatchDropped();
-                p.txGated    = s_gate.shut();
-                p.txGates    = s_gate.shuts();
-                const uint32_t inst = TwaiBus::instance().installs();
-                p.reinstalls = inst ? inst - 1 : 0;
+                // The link's own TX gate (affa::TxGate), sampled inside poll().
+                if (s_s.link) {
+                    p.txGated = s_s.link->gate().shut();
+                    p.txGates = s_s.link->gate().shuts();
+                }
                 p.carminat      = s_s.carminat != nullptr;
                 p.syncChanges   = s_syncChanges;
                 p.yielded       = s_s.ops ? s_s.ops->yielded() : 0;
@@ -139,18 +135,12 @@ namespace App
         {
             if (!s_s.display) return;
             affa::AffaDisplayBase& d = lib();
-            // Bus-off recovery in the display role (TwaiBus::poll() is not
-            // called here: it would steal the library's frames).
-            TwaiBus::instance().maintain();
             // A resync posted since the last pass gives the fresh link a clean
             // run at the breaker.
             if (s_s.ops && s_s.ops->resyncs() != s_resyncsSeen) {
                 s_resyncsSeen = s_s.ops->resyncs();
                 s_failStreak = 0;
             }
-            // Refill the RX budget, or poll() never reaches TX on a saturated
-            // bus (TwaiAffaLink.h).
-            if (s_s.link) s_s.link->newPoll();
             // The gap since the last poll() began: a key decoded in this poll
             // could have waited that long in the TWAI queue. The key callback
             // posts it with the key, and the keys task reports the worst.
@@ -158,75 +148,38 @@ namespace App
             s_pollGapUs = s_pollAtUs ? t - s_pollAtUs : 0;
             s_pollAtUs = t;
             if (s_pollGapUs > s_pollLateWinUs) s_pollLateWinUs = s_pollGapUs;
-            // Inside: the keys, then what other tasks posted, then the
-            // transmit pump. That order is the library's.
+            // Inside, in the library's order: the link's housekeeping (the TX
+            // gate, bus-off recovery), the keys (at most AFFA_RX_BUDGET frames,
+            // so a storm cannot starve the rest), what other tasks posted, then
+            // the transmit pump.
             d.poll();
             ++s_polls;
             publish();
         }
 
-        void serviceTx(uint32_t nowMs)
+        void wait()
         {
-            if (!s_s.display) return;
-            const uint32_t seq = Diag::CanBench::seq();
-            if (seq == s_gateSeq) return;
-            s_gateSeq = seq;
-
-            TwaiBus& bus = TwaiBus::instance();
-            const twai_status_info_t& st = Diag::CanBench::info();
-            const bool valid = Diag::CanBench::infoValid();
-            TxGate::Sample smp;
-            smp.nowMs      = nowMs;
-            smp.tec        = valid ? st.tx_error_counter : 0;
-            smp.txFailed   = valid ? st.tx_failed_count : 0;
-            smp.rxFrames   = bus.rxCount();
-            // Listen-only transmits nothing, and a missing driver has nothing
-            // to gate: the gate opens and forgets.
-            smp.mayTx      = valid && bus.isLive() && bus.mode() != TWAI_MODE_LISTEN_ONLY;
-
-            switch (s_gate.tick(smp)) {
-                case TxGate::Act::Shut:
-                    // Off first, so nothing new is offered; then the frame the
-                    // controller keeps retrying goes too (TwaiBus::abortTx).
-                    bus.setTxEnabled(false);
-                    {
-                        const bool aborted = bus.abortTx();
-                        LogBus::printf("[panel] TX gated: nothing heard for %u ms and nobody ACKs "
-                                       "(tec=%u rec=%u txfail=%u aborted=%u) - retry in %u ms",
-                                       (unsigned)TxGate::NO_RX_MS, (unsigned)st.tx_error_counter,
-                                       (unsigned)st.rx_error_counter, (unsigned)st.tx_failed_count,
-                                       aborted ? 1u : 0u, (unsigned)s_gate.backoffMs());
-                    }
-                    break;
-                case TxGate::Act::Open:
-                    bus.setTxEnabled(true);
-                    LogBus::printf("[panel] TX open again (%s)",
-                                   s_gate.probing() ? "probing" : "the bus is talking");
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        TickType_t waitTicks()
-        {
-            if (!s_s.display) return pdMS_TO_TICKS(2);
+            uint32_t ms = 2;
             // Gated, the library holds its jobs as LinkDown and stays busy()
-            // until their hold runs out: a pass every tick would do nothing
-            // for that whole window. A frame from the panel still wakes us.
-            if (!TwaiBus::instance().txEnabled()) return pdMS_TO_TICKS(2);
-            // busy() counts the renders posted and not yet admitted too.
-            return lib().busy() ? (TickType_t)1 : pdMS_TO_TICKS(2);
+            // until their hold runs out: a pass every millisecond would do
+            // nothing for that whole window. A frame from the panel still
+            // wakes us. busy() counts the renders posted and not yet admitted.
+            if (s_s.display && s_s.link && !s_s.link->gate().shut() && lib().busy()) ms = 1;
+            if (s_s.link) s_s.link->waitRx(ms);
+            else          vTaskDelay(pdMS_TO_TICKS(ms));
         }
 
         void logWindow()
         {
             if (!s_s.display) return;
             const MegaOpen::PanelStatus p = s_status.read();
+            const uint32_t inst = Diag::CanBench::status().installs;
+            const uint32_t reinstalls = inst ? inst - 1 : 0;
             // foreignPolls should be 0, and pollLateMax a few ms: the gap
             // between two poll()s, which is how long a key frame can wait.
             // dropped = renders the library's ring refused; yielded = repaints
-            // a person's screen overtook.
+            // a person's screen overtook; reinstalls = TWAI driver installs
+            // after the first (bus-off or a deaf controller, the library's).
             LogBus::printf("[panel] foreignPolls=%u pollLateMax=%uus polls=%u queued=%u "
                            "posted=%u dropped=%u delivered=%u superseded=%u failed=%u "
                            "failStreak=%u txGated=%u gates=%u reinstalls=%u yielded=%u",
@@ -235,7 +188,7 @@ namespace App
                            (unsigned)p.queuePosted, (unsigned)p.queueDropped,
                            (unsigned)p.delivered, (unsigned)p.superseded, (unsigned)p.failed,
                            (unsigned)p.failStreak, p.txGated ? 1u : 0u,
-                           (unsigned)p.txGates, (unsigned)p.reinstalls,
+                           (unsigned)p.txGates, (unsigned)reinstalls,
                            (unsigned)p.yielded);
             s_pollLateWinUs = 0;
         }

@@ -1,4 +1,5 @@
 #include "TwaiBus.h"
+#if FEATURE_VEHICLE_CAN && !FEATURE_DISPLAY_CAN
 #include <soc/io_mux_reg.h>
 
 // Install lines go through the LogBus, which never blocks: install() runs on
@@ -31,9 +32,6 @@ bool TwaiBus::install()
     twai_general_config_t g = TWAI_GENERAL_CONFIG_DEFAULT(_tx, _rxPin, _mode);
     g.rx_queue_len = 64;   // default 5 is overrun in microseconds at ~1000 fps
     g.tx_queue_len = 8;
-    g.alerts_enabled = TWAI_ALERT_BUS_ERROR | TWAI_ALERT_ERR_PASS |
-                       TWAI_ALERT_BUS_OFF | TWAI_ALERT_ARB_LOST |
-                       TWAI_ALERT_TX_FAILED | TWAI_ALERT_RX_QUEUE_FULL;
 
     twai_filter_config_t f = TWAI_FILTER_CONFIG_ACCEPT_ALL();
 
@@ -83,21 +81,6 @@ static void toFrame(const twai_message_t& m, Frame& out)
     out.source   = Frame::SRC_MM_CAN;
 }
 
-bool TwaiBus::recvOne(Frame& out)
-{
-    if (!_installed) return false;
-    if (_stashed) {
-        out = _stash;
-        _stashed = false;
-        return true;
-    }
-    twai_message_t m{};
-    if (twai_receive(&m, 0) != ESP_OK) return false;
-    ++_rxCount;
-    toFrame(m, out);
-    return true;
-}
-
 void TwaiBus::waitRx(TickType_t ticks)
 {
     if (!ticks) ticks = 1;
@@ -109,28 +92,6 @@ void TwaiBus::waitRx(TickType_t ticks)
     ++_rxCount;
     toFrame(m, _stash);
     _stashed = true;
-}
-
-// twai_clear_transmit_queue() alone is not enough: it empties the software
-// queue, but the frame already loaded into the controller stays there. With
-// nobody to ACK it, an error-passive node does not count ACK errors any more,
-// so it never reaches bus-off either: it retransmits that one frame for ever,
-// ~1400 bus-error interrupts a second. twai_stop() puts the controller in
-// reset mode, which aborts the frame and clears the queue; twai_start() brings
-// it back on the same driver and config. The RX queue is cleared by the start,
-// which costs nothing here: the gate only shuts after 2 s with nothing heard.
-bool TwaiBus::abortTx()
-{
-    if (!_installed) return false;
-    if (twai_stop() != ESP_OK) {
-        // Not running (bus-off, recovering): nothing is being retransmitted,
-        // and maintain() owns the way back.
-        twai_clear_transmit_queue();
-        return false;
-    }
-    if (twai_start() == ESP_OK) return true;
-    // A controller that will not start again gets the full reinstall.
-    return restart();
 }
 
 void TwaiBus::end()
@@ -155,9 +116,8 @@ bool TwaiBus::running() const
     return twai_get_status_info(&s) == ESP_OK && s.state == TWAI_STATE_RUNNING;
 }
 
-// Bus-off recovery without draining. The display link pulls via recvOne() and
-// never calls poll(), so recovery must live outside poll(); a drain here would
-// steal its frames.
+// Bus-off / stopped recovery. Listen-only cannot go bus-off, but a STOPPED
+// controller (a reinstall that started badly) is ours to start again.
 void TwaiBus::maintain()
 {
     if (!_installed) return;
@@ -189,42 +149,10 @@ void TwaiBus::poll()
         ++_rxCount;
         if (!_rx) continue;
         Frame f;
-        f.id = m.identifier;
-        f.extended = m.extd;
-        f.source = Frame::SRC_MM_CAN;
-        f.len = m.data_length_code > 8 ? 8 : m.data_length_code;
-        for (uint8_t i = 0; i < f.len; ++i) f.data[i] = m.data[i];
+        toFrame(m, f);
         _rx(f, _rxCtx);
     }
 
     _inPoll = false;
 }
-
-TwaiBus::TxResult TwaiBus::trySend(const Frame& f)
-{
-    if (!_installed || !_txEnabled || _mode == TWAI_MODE_LISTEN_ONLY)
-        return TxResult::Failed;
-
-    twai_message_t m = {};
-    m.identifier = f.id;
-    m.extd = f.extended;
-    m.data_length_code = f.len > 8 ? 8 : f.len;
-    for (uint8_t i = 0; i < m.data_length_code; ++i) m.data[i] = f.data[i];
-
-    // Tap fires on the offer, including frames the controller refuses.
-    if (_txTap) _txTap(f);
-
-    // Zero timeout: never block the task that owns the display deadlines.
-    // ESP_ERR_TIMEOUT then means "queue full now", distinct from a refusal.
-    const esp_err_t e = twai_transmit(&m, 0);
-    if (e == ESP_OK)             { ++_txOk;   return TxResult::Ok; }
-    if (e == ESP_ERR_TIMEOUT)    { ++_txBusy; return TxResult::Busy; }
-    ++_txFail;
-    return TxResult::Failed;
-}
-
-bool TwaiBus::send(const Frame& f)
-{
-    // Busy collapses to false; only the display link uses trySend() directly.
-    return trySend(f) == TxResult::Ok;
-}
+#endif
