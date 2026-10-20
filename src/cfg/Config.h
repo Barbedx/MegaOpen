@@ -8,6 +8,7 @@
 #include "../keys/AffaMap.h"
 #endif
 #include "../proto/canbox/Rav4Emitter.h"
+#include "Secrets.h"
 #if FEATURE_RESISTIVE_KEYS
 #include "../sinks/ResistiveMap.h"
 #endif
@@ -25,13 +26,13 @@ namespace Cfg
 {
     struct Settings {
         // network
-        String   ssid;
-        String   pass;
+        String   ssid = MO_WIFI_SSID;      // defaults: src/secrets.example.h
+        String   pass = MO_WIFI_PASS;
         String   mdnsName = "megaopen";     // -> http://megaopen.local
         // Off = no .local name; see WifiManager::startMdns().
         bool     mdnsOn   = true;
         String   apName = "MegaOpen";
-        String   apPass = "megaopen";      // >= 8 chars or the AP comes up open
+        String   apPass = MO_AP_PASS;      // >= 8 chars or the AP comes up open
 
         // input timing
         Input::KeyDebouncer::Params timing;

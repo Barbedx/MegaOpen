@@ -10,3 +10,4 @@ logs/
 
 # tools/build_sim.py output (the UI simulator) and test_catalog's catalog.json
 build/
+src/secrets.h

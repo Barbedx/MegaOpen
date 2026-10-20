@@ -16,11 +16,12 @@ namespace Cfg
         // `megaopen` namespace and the `ssid`/`pass` keys).
         _s.ssid  = _p.getString("ssid", "");
         _s.pass   = _p.getString("pass", "");
+        if (!_s.ssid.length()) { _s.ssid = MO_WIFI_SSID; _s.pass = MO_WIFI_PASS; }
         _s.apName = _p.getString("apName", "MegaOpen");
 
         _s.mdnsName = _p.getString("mdns", "megaopen");
         _s.mdnsOn   = _p.isKey("mdnsOn") ? _p.getBool("mdnsOn", true) : true;
-        _s.apPass = _p.getString("apPass", "megaopen");
+        _s.apPass = _p.getString("apPass", MO_AP_PASS);
 
         _s.timing.debounceMs     = _p.getUShort("dbMs",   20);
         _s.timing.fastDebounceMs = _p.getUShort("fdbMs",  2);

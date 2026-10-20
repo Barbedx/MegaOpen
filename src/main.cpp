@@ -2282,8 +2282,8 @@ void setup()
                       g_cfg.s().ssid.c_str(), g_wifi.ip().c_str(), mdns,
                       (unsigned)g_cfg.s().uartBaud);
     else
-        logf("[MegaOpen " MEGAOPEN_VERSION "] up, AP \"%s\" pass \"%s\", http://%s/  http://%s/  uart=%u baud\n",
-                      g_wifi.apSsid().c_str(), g_cfg.s().apPass.c_str(),
+        logf("[MegaOpen " MEGAOPEN_VERSION "] up, AP \"%s\", http://%s/  http://%s/  uart=%u baud\n",
+                      g_wifi.apSsid().c_str(),
                       g_wifi.ip().c_str(), mdns, (unsigned)g_cfg.s().uartBaud);
 
     // Started after every attach(): it calls into g_web immediately. The web,

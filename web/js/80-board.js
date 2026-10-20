@@ -15,7 +15,7 @@ SCR.board={title:'Плата',async render(m){
   `<div id="wForm">${row('Мережа',txt('rb:/api/wifi|ssid',se.ssid,'SSID','in','text',rbA('rb:',se.ssid,'WiFi',true)))}${row('Пароль',txt('rb:/api/wifi|pass','','без змін','in','password',rbA('rb:','','Пароль WiFi')))}
   ${row('Запасна мережа',txt('rb:/api/wifi|ssid2',ssid2,'напр. хотспот телефона','in','text',rbA('rb:',ssid2,'Запасна мережа',true)))}${row('Її пароль',txt('rb:/api/wifi|pass2','','без змін','in','password',rbA('rb:','','Пароль запасної')))}</div>`+
   row('Якщо жодної нема',`<span class="mono">${esc(st.apName||'')}</span>`,'точка 192.168.4.1','Піднімається сама, якщо за 15 с не вдалося підключитись або зв’язок зник на 30 с. Кожні 60 с пробує мережі знову, поки до точки ніхто не підключений.')+
-  row('Пароль точки й оновлення',txt('rb:/api/settings|apPass','','без змін','in','password',rbA('rb:','','Пароль точки/OTA')+' minlength="8"'),'мін. 8 символів'),'cWifi')+
+  row('Пароль точки доступу',txt('rb:/api/settings|apPass','','без змін','in','password',rbA('rb:','','Пароль точки/OTA')+' minlength="8"'),'мін. 8 символів'),'cWifi')+
  (B?card('Bluetooth',row('Роль',sel('rb:/api/settings|bleMode',CAT.bleModes.map(b=>[b.id,b.name]),se.bleMode,'data-str'+rbA('rb:',se.bleMode,'Роль Bluetooth')),`<span id="bHint">${esc(BLEHINT[se.bleMode]||'')}</span>`)+
   `<div id="bLive"${se.bleMode==='off'?' hidden':''}>${row('Стан','<span id="bSt" class="chip off">…</span>','<span id="bName"></span>')}<div class="fr"><button class="btn dng" type="button" id="bForget">Забути телефон</button></div></div>`):'')+
  card('Оновлення прошивки','<div class="kv"><div><small>Прошивка</small><b>'+esc(se.fw)+'</b></div><div><small>Збірка</small><b>'+esc(se.build)+'</b></div></div>'+

@@ -202,12 +202,9 @@ void WebUi::begin(Cfg::Config& cfg, KeyEngine& engine, KeyMap& map,
     startHeapHunt();
 #endif
     mem("routes");
-    // OTA wants HTTP basic auth (README, "Flashing"): user "megaopen",
-    // password = the AP password (NVS apPass; factory "megaopen", and the boot
-    // banner prints it). So a fresh board takes `curl -u megaopen:megaopen`,
-    // and nobody else on the AP or the LAN can erase and reflash the slot
-    // while the car is in use. An empty AP password leaves OTA open, as before.
-    ElegantOTA.begin(&_server, "megaopen", _cfg->s().apPass.c_str());
+    // No OTA password: the web API that sets every password has none either,
+    // so the WiFi password is the only real gate.
+    ElegantOTA.begin(&_server);
     mem("ota");
     if (_routesLost)
         LogBus::printf("[web] %u route(s) did not fit the table — raise ROUTE_MAX\n", _routesLost);

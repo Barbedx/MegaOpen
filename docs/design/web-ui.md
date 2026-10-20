@@ -112,7 +112,7 @@ These are the changes only. Everything not named stays as it is.
   - an empty password means "unchanged" while the name stays the same; a new name with no password is an open network. The second network goes through `WifiManager::setNet2` (NVS `net2`), which applies the same rule, so `/api/cloud` `wifi2` inherits it until slice 8 deletes that path;
   - `pendingReboot` only when the first network's name changed or a non-empty password differs from the stored one;
   - errors, `text/plain` 400: `ssid? or ssid2?`, `ssid: 32 characters at most`, `pass: 8 to 64 characters, or empty`.
-- `POST /api/settings` takes `apPass` (the AP and OTA password): empty is unchanged, else 8 to 63 characters or 400 `apPass: 8 to 63 characters`.
+- `POST /api/settings` takes `apPass` (the AP password): empty is unchanged, else 8 to 63 characters or 400 `apPass: 8 to 63 characters`.
 - `POST /api/display` answers 400 `type: unknown panel` for a type the build does not have.
 - `GET /api/affamap?live=1` returns `{last:{seq,key,wire,hold,action,dests[]},unmapped,events}`. Without `live`, `last` rides along. `g_lastKeyLine` goes.
 - `POST /api/display/key`: `wire=1` sends the key frame onto CAN B (`KeySource::Wire`) instead of into the routing.

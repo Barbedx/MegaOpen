@@ -27,8 +27,8 @@ The board in the car is a **LilyGO T-2CAN** (ESP32-S3 N16R8, two isolated CAN
 ports). CAN B is the S3's own TWAI on GPIO7/6 and goes to the display. CAN A is an
 MCP2518FD on SPI and goes to the car. The head unit is on QWIIC 1 (GPIO43/44).
 Pins are named in one place only, `src/board/BoardProfile.h`. Wiring drawings:
-[docs/t2can-wiring.artifact.html](docs/t2can-wiring.artifact.html) and
-[docs/t2can-qwiic.artifact.html](docs/t2can-qwiic.artifact.html).
+[hardware/schematic/t2can-wiring.artifact.html](hardware/schematic/t2can-wiring.artifact.html) and
+[hardware/schematic/t2can-qwiic.artifact.html](hardware/schematic/t2can-qwiic.artifact.html).
 
 An ESP32 DevKit V1 build is also kept (`env:devkit`). It drives the panel on its
 single TWAI port and gets the car's frames over a UART link from a second board
@@ -61,21 +61,29 @@ with mock data, in `build/`.
 
 ## Flashing
 
-After the first USB flash, updates go over WiFi. OTA uses HTTP basic auth: the
-user is `megaopen` and the password is the AP password.
+After the first USB flash, updates go over WiFi, from `/update` in a browser or:
 
 ```
-curl -u megaopen:<ap password> "http://<ip>/ota/start?mode=fr&hash=<md5>"
-curl -u megaopen:<ap password> -F "file=@.pio/build/t2can/firmware.bin" "http://<ip>/ota/upload"
+curl "http://<ip>/ota/start?mode=fr&hash=<md5>"
+curl -F "file=@.pio/build/t2can/firmware.bin" "http://<ip>/ota/upload"
 ```
+
+OTA has no password of its own. Neither does the web API, so the WiFi password
+is what keeps strangers off the board.
 
 A new image boots on trial and confirms itself only after its health checks pass.
 Otherwise the next reboot rolls back.
 
+## Secrets
+
+Copy `src/secrets.example.h` to `src/secrets.h` (gitignored) and set the AP
+password and, optionally, your WiFi network. These are the defaults a fresh or
+factory-reset board starts with; anything saved from the web app wins.
+
 ## Web UI
 
-Without saved WiFi credentials the board starts an AP called `MegaOpen-XXXX`.
-Its password is `megaopen` until you change it, so **change it**. The app is
+Without a WiFi network the board starts an AP called `MegaOpen-XXXX`. Its
+password is `megaopen` unless `src/secrets.h` says otherwise, so **set it**. The app is
 served at `http://192.168.4.1/`, or at the board's IP on your network. It has six
 screens: overview (health of every chain), display, keys (mapping, knobs, macros),
 car (the RAV4 map, sniffer, capture), board (WiFi, BLE, flash log) and service
@@ -89,7 +97,8 @@ src/        firmware (src/app: tasks; src/display: the AffaDisplay ports; src/pr
 web/        the web app, and web/sim: mocks for the simulator
 test/       host tests (env:native)
 tools/      build scripts, CAN capture and correlation tools, rule checks
-docs/       protocol notes, wiring, design notes (docs/design), the backlog
+docs/       protocol notes, design notes (docs/design), the backlog
+hardware/   bezel and case STLs, T-2CAN wiring
 cloud/      an optional Cloudflare Worker for fleet OTA and logs (not deployed)
 ```
 
