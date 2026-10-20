@@ -32,8 +32,16 @@ namespace Catalog
 
     // POST /api/settings validates bleMode against the same rows it serves.
     bool bleModeKnown(const char* id);
+    // The same rows by index, for the settings registry (Cfg::SEnum).
+    uint8_t     bleModeCount();
+    const char* bleModeId(uint8_t i);
+    const char* bleModeName(uint8_t i);
     // POST /api/display validates the panel type likewise (display builds).
     bool panelKnown(const char* id);
+    // By index; no rows in a build without the panel.
+    uint8_t     panelCount();
+    const char* panelId(uint8_t i);
+    const char* panelName(uint8_t i);
     // POST /api/media and /api/display/menu validate the scroll byte against
     // the `arrows` enum it serves (display builds).
     bool arrowsKnown(int v);

@@ -42,6 +42,10 @@ namespace Catalog
         return false;
     }
 
+    uint8_t bleModeCount() { return sizeof(kBleModes) / sizeof(kBleModes[0]); }
+    const char* bleModeId(uint8_t i)   { return kBleModes[i < bleModeCount() ? i : 0].id; }
+    const char* bleModeName(uint8_t i) { return kBleModes[i < bleModeCount() ? i : 0].name; }
+
 #if FEATURE_DISPLAY_CAN
     // The ids AffaPort::createDisplay() builds and NVS displayType stores.
     // caps mirror each panel's supports(); a layout is offered on a panel
@@ -63,6 +67,10 @@ namespace Catalog
         if (id) for (const auto& p : kPanels) if (!strcmp(id, p.id)) return true;
         return false;
     }
+
+    uint8_t panelCount() { return sizeof(kPanels) / sizeof(kPanels[0]); }
+    const char* panelId(uint8_t i)   { return i < panelCount() ? kPanels[i].id : ""; }
+    const char* panelName(uint8_t i) { return i < panelCount() ? kPanels[i].name : ""; }
 
     // The menu's scroll-arrow byte, from the library's captured constants.
     struct Arrow { uint8_t v; const char* name; bool up, down; };
@@ -122,6 +130,10 @@ namespace Catalog
         {"abort",        "Очистити чергу",          nullptr, 0},
     };
     #undef FLDS
+#else
+    uint8_t panelCount() { return 0; }
+    const char* panelId(uint8_t)   { return ""; }
+    const char* panelName(uint8_t) { return ""; }
 #endif
 
     // ---- what this image has (Catalog.h, Feature) --------------------------------
