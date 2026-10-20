@@ -165,11 +165,9 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   Where: `cfg/Config.cpp`, `WebUi.cpp` settings POST.
 
 ### Build / code health
-- **AffaDisplay is pinned to a branch, not a tag.** `platformio.ini` follows
-  `release/next`. Release it as a tag and pin the tag.
 - **`AFFA_ENABLE_TASK=0` on purpose.** The loop task owns `poll()` and sleeps
   in `TwaiLink::waitRx()` paced by `affa::WakePacer`, the same wake `AffaTask`
-  has since release/next `b1ee06f`. It stays the loop because the same pass
+  has. It stays the loop because the same pass
   samples the TWAI status, drains the frame trace, publishes `PanelStatus` and
   beats the task registry the OTA trial watches; `AffaTask` has no per-pass
   hook, and an owner loop on `waitRx()` + `WakePacer` is the supported shape.

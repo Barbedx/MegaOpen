@@ -3,16 +3,6 @@
 
 namespace MegaOpen
 {
-    void AffaLogSink::write(uint8_t level, const char* tag, const char* msg)
-    {
-        if (!_emit) return;
-        static const char kL[] = "-EWIDT";
-        char b[200];
-        snprintf(b, sizeof(b), "%c [%s] %s", kL[level <= 5 ? level : 0],
-                 tag ? tag : "?", msg ? msg : "");
-        _emit(b);
-    }
-
     affa::AffaDisplayBase* createDisplay(const char* type,
                                          affa::ICanLink& link, affa::IClock& clock,
                                          affa::CarminatDisplay** carminat)

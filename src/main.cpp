@@ -75,6 +75,7 @@ static Sinks::UsbHidKeySink g_usbKeys;
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
 #include "diag/CanBench.h"
+#include "display/AffaLogSink.h"
 #include <core/WakePacer.h>
 #include <driver/twai.h>
 #endif
@@ -259,7 +260,6 @@ static void memMark(const char* what)
 // Protocol lives in AffaDisplay; here are its ports (src/display/AffaPort.*) and
 // the policy. The library owns sync, ACKs, pacing, watchdog and bus-off recovery.
 static MegaOpen::ArduinoClock g_affaClock;
-static MegaOpen::AffaLogSink g_affaLog;
 static Keys::AffaKeySource   g_affaKeys;
 static Keys::AffaMap         g_affaMap;      // stalk key -> action + head-unit code; keys task
 static Staged<Keys::AffaMap> g_affaCfg;      // ...as the web edits it
@@ -533,6 +533,8 @@ static void onAncsNotification(const AppleNotificationService::NotificationInfo&
 //           frames. carLinkPump() drains it to the car task.
 static affa::TwaiLink g_twai;
 static uint32_t  g_canRx = 0;
+// The library's log lines (link and panel) into the LogBus.
+static MegaOpen::AffaLogSink g_affaLog;
 
 // Listen-only (never transmits or ACKs, so never bus-off; on in a build with
 // no display) is Diag::CanBench's, which samples the controller on this
@@ -1794,6 +1796,9 @@ void setup()
         cfg.tx         = (gpio_num_t)Board::PIN_CAN_TX;
         cfg.rx         = (gpio_num_t)Board::PIN_CAN_RX;
         cfg.listenOnly = true;
+        // Before begin(), so the link's install lines reach the log.
+        g_affaLog.begin([](const char* line) { LogBus::line(line); });
+        affa::setLogSink(&g_affaLog);
         if (!g_twai.begin(cfg))
             logf("[can] vehicle: TwaiLink::begin FAILED — no controller (it keeps trying)");
     }
