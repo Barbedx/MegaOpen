@@ -8,7 +8,7 @@
 // that calls poll() may ask it anything; this is what everyone else reads
 // instead. The panel task publishes it after every poll() through a
 // Snapshot<PanelStatus> (App::Panel::status()): httpd's /api/display,
-// /api/health and /api/media, the cloud's state, and since Step 4 the ui
+// /api/health and /api/media, and since Step 4 the ui
 // task's render policy, all read the copy.
 //
 // Plain bytes, no library types, so the struct stays a POD that can be copied

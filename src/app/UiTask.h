@@ -89,7 +89,7 @@ namespace App
         enum class ClockSrc : uint8_t { None = 0, Hu, Cts, Manual };
         const char* clockSrcName(ClockSrc s);   // "", "hu", "cts", "manual"
 
-        // The ui task's counters for the web and the cloud, published every pass.
+        // The ui task's counters for the web, published every pass.
         struct UiStatus {
             uint32_t panesSent = 0, panesFailed = 0;
             uint32_t glassHeldUntilMs = 0;  // 0 = not held

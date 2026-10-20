@@ -65,7 +65,7 @@ The rules behind this layout (the ownership and blocking rules are checked by
 | `vehicle/` | CAN decode table, sniffer, signal registry, vehicle state |
 | `capture/` | CAN capture to littlefs (`tools/can_dump.py` reads it) |
 | `knobs/` | encoders, LED rings, config |
-| `net/` | WiFi, web server and API, `/api/catalog`, the optional cloud link |
+| `net/` | WiFi, web server and API, `/api/catalog` |
 | `cfg/` | NVS-backed settings |
 | `utils/` | LogBus, flash log, locks, snapshots |
 | `ble/`, `*_service.cpp` | NimBLE hub, HID role, Apple AMS/ANCS and CTS clients |

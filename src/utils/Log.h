@@ -20,7 +20,7 @@ namespace Log {
         {"CAN", "can can2 twai car"},
         {"CAP", "cap"},
         {"MAC", "macro"},
-        {"NET", "net wifi web cloud"},
+        {"NET", "net wifi web"},
         {"SYS", ""},   // boot, hb, mem, task, stall, stk, log, cfg, idf, ...
     };
     inline constexpr uint8_t TAG_COUNT = sizeof(TAG_ROWS) / sizeof(TAG_ROWS[0]);
@@ -50,7 +50,7 @@ namespace Log {
 //
 // Format: "<L> [<cat>] <message>", L = E/W/I/D/T. Log::emit -> LogBus::line ->
 // the LogBus ring, which fans out to
-// Serial, the flash log and the cloud and keeps sent lines for the web log
+// Serial and the flash log and keeps sent lines for the web log
 // (GET /api/logs?since=, LogRing.h).
 //
 //   ERR  failure; WRN  unexpected but handled; INF  state transitions;

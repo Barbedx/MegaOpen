@@ -96,7 +96,6 @@ test/       host tests (env:native)
 tools/      build scripts, CAN capture and correlation tools, rule checks
 docs/       protocol notes, design notes (docs/design), the backlog
 hardware/   T-2CAN wiring (bezel and case to follow)
-cloud/      an optional Cloudflare Worker for fleet OTA and logs (not deployed)
 ```
 
 Further reading: [ARCHITECTURE.md](ARCHITECTURE.md),

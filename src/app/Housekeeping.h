@@ -6,8 +6,8 @@
 // every 20 ms.
 //
 // It used to be the second half of loop(): the WiFi state machine, the
-// heartbeat (whose WiFi.SSID() and String work allocate), the cloud and the
-// OTA verdict (App::OtaTrial) all ran on the task that owns the panel, between two poll()s.
+// heartbeat (whose WiFi.SSID() and String work allocate) and the OTA
+// verdict (App::OtaTrial) all ran on the task that owns the panel, between two poll()s.
 // Here a slow WiFi call costs a late heartbeat line, not a late panel frame.
 //
 // The verdict moved with it, which is what makes it honest: it now runs on a

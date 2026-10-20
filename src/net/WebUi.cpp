@@ -2083,14 +2083,14 @@ void WebUi::routesCanbox()
 }
 
 #if FEATURE_DISPLAY_CAN
-// The body of /api/display, also shipped by CloudLink with every batch.
+// The body of /api/display.
 void WebUi::fillDisplay(JsonObject d)
 {
         d["type"]     = _cfg->s().displayType;
         d["funcReg"]  = _cfg->s().funcReg;
         d["canRx"]    = _canRx ? *_canRx : 0;
         // The panel task's copy, published after every poll(): the library
-        // itself is never called from here (httpd, or the cloud task).
+        // itself is never called from here (httpd).
         const MegaOpen::PanelStatus ps = _panel ? _panel->read() : MegaOpen::PanelStatus{};
         d["attached"] = ps.attached;
         if (ps.attached) {
@@ -2135,7 +2135,7 @@ void WebUi::fillDisplay(JsonObject d)
 
             // Time left before automatic repaints resume after a posted screen;
             // check this first when the media screen "stopped". 0xFFFFFFFF = never.
-            // The ui task's copy: also read from the cloud task, so no pointers.
+            // The ui task's copy, so no pointers.
             if (_ui.status) {
                 const uint32_t nowMs = millis();
                 const uint32_t held  = _ui.status->read().glassHeldUntilMs;

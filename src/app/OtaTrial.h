@@ -17,12 +17,8 @@ namespace App
     {
         constexpr uint32_t HEALTH_HEAP_MIN = 20000;   // bytes free for "healthy"
 
-        // Told the verdict just before it is applied: true = confirmed, false =
-        // about to roll back and reboot. For whoever keeps track of versions.
-        using VerdictHook = void (*)(bool confirmed);
-
         // setup(): reads the running image's state and says whether it is on trial.
-        void begin(VerdictHook hook = nullptr);
+        void begin();
         bool onTrial();
 
         // net_svc, every pass.

@@ -89,7 +89,7 @@ private:
     uint32_t    _bitrate = 500000;
     twai_mode_t _mode = TWAI_MODE_NORMAL;
     // Atomic: one task installs and removes the driver (the loop, which owns
-    // the bus), but httpd and the cloud read isLive() for their pages.
+    // the bus), but httpd reads isLive() for its pages.
     std::atomic<bool> _installed{false};
     volatile bool _txEnabled = true;
     bool        _inPoll = false;   // re-entry guard (see poll())

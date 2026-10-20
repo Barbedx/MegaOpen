@@ -147,9 +147,7 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   first: whether the repo is public (a private one needs a token on every
   board); whether it is automatic or only "check + button" (never mid-drive:
   only with ACC on and the car parked, or from the page); and whether the TLS
-  heap fits (~40 kB; on the T-2CAN put mbedTLS in PSRAM). Overlaps
-  `src/net/CloudLink` (`cloud/`, never deployed), which already has a version
-  report: pick one path.
+  heap fits (~40 kB; on the T-2CAN put mbedTLS in PSRAM).
 - **BLE pairing vs a phone on the board's AP, on the S3 (2026-10-16).** On the
   T-2CAN the iPhone could not pair while it was joined to `MegaOpen-4580`; off
   that WiFi it connected. Same symptom as the 2026-08-07 DevKit bug fixed in
@@ -209,7 +207,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   byte 4 of 0x1E/0x28/0x31/0x58 now goes out at once. Test added, failed
   before the fix.
 - **Board V reports real bus errors** (`twai_status_info.bus_error_count`).
-- **CloudLink** `_rej`/`_fw` copies are NUL-terminated.
 
 - **`?` on glass**: typographic apostrophes (U+2019/U+02BC — every "п'ятий"),
   quotes, dashes and the ellipsis are mapped, emoji dropped, before the

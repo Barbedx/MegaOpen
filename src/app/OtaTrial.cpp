@@ -14,13 +14,11 @@ namespace App
     {
         namespace
         {
-            OtaVerdict  s_v;
-            VerdictHook s_hook = nullptr;
+            OtaVerdict s_v;
         }
 
-        void begin(VerdictHook hook)
+        void begin()
         {
-            s_hook = hook;
             const esp_partition_t* run = esp_ota_get_running_partition();
             esp_ota_img_states_t st;
             const bool pending = run && esp_ota_get_state_partition(run, &st) == ESP_OK &&
@@ -39,13 +37,11 @@ namespace App
             switch (s_v.tick(nowMs, healthy)) {
                 case OtaVerdict::Act::Confirm:
                     esp_ota_mark_app_valid_cancel_rollback();
-                    if (s_hook) s_hook(true);
                     LogBus::printf("[ota] CONFIRMED (healthy %us)",
                                    (unsigned)(OtaVerdict::CONFIRM_MS / 1000));
                     break;
                 case OtaVerdict::Act::Revert:
                     LogBus::line("[ota] never became healthy - rolling back");
-                    if (s_hook) s_hook(false);
                     // The line has to reach the flash log before the reboot.
                     LogBus::flushAndWait(300);
                     esp_ota_mark_app_invalid_rollback_and_reboot();

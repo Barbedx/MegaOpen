@@ -11,7 +11,7 @@
 // the comment says which step and to what, so the two cannot be confused.
 //
 // Stacks are per chip. The DevKit (classic ESP32) values are the tight ones:
-// its idle free heap is ~80 kB and CloudLink wants 65 kB of it for TLS. The C3
+// its idle free heap is ~80 kB. The C3
 // takes the DevKit values too; only the S3 has room to spare.
 namespace App
 {
@@ -65,7 +65,7 @@ namespace App
         // 3072 left only ~840-1060 bytes free on the S3 at idle ([task] hu
         // stk=), with the 17-argument log lines and the frame callbacks still
         // to come under load: 4096 on the S3 and the DevKit (+1 kB of heap; the
-        // DevKit idles near 80 kB against CloudLink's 65 kB). The C3 keeps
+        // DevKit idles near 80 kB). The C3 keeps
         // 3072 until its own low-water says otherwise.
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
         constexpr uint32_t    HU_STACK   = 4096;
@@ -94,7 +94,7 @@ namespace App
         constexpr uint32_t    UI_STACK   = stack(6144, 4096);
 
         // net_svc, the housekeeping task (src/app/Housekeeping.h): the web
-        // servicing, WiFi, the heartbeat, CloudLink and the OTA
+        // servicing, WiFi, the heartbeat and the OTA
         // verdict. On the WiFi core and below everything; 6144 because the
         // heartbeat's lines and the WiFi/String calls now run on it.
         constexpr UBaseType_t NET_PRIO  = 1;
@@ -109,7 +109,7 @@ namespace App
         constexpr int         BLE_CORE  = 0;
         constexpr uint32_t    BLE_STACK = 4096;
 
-        // LogBus and CloudLink: below everything, on the WiFi core.
+        // LogBus: below everything, on the WiFi core.
         constexpr UBaseType_t LOGBUS_PRIO = 1;
         constexpr int         LOGBUS_CORE = 0;
 

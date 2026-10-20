@@ -444,7 +444,7 @@ void test_the_age_limit_is_inclusive()
     TEST_ASSERT_EQUAL_INT(0, App::Tasks::firstLateCritical(t, 1, 10001, 2000));
 }
 
-// A stale non-critical task (logbus, ble_svc, cloud) never fails the verdict.
+// A stale non-critical task (logbus, ble_svc) never fails the verdict.
 void test_a_non_critical_task_never_counts()
 {
     const FakeTask t[] = { {false, 0}, {true, 99000} };

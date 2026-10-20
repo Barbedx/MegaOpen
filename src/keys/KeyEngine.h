@@ -72,7 +72,7 @@ namespace Keys
         EmitFn   _emit = nullptr;   void* _emitCtx = nullptr;
 
         void deliver(const Event& e) { if (_emit) _emit(e, _emitCtx); else dispatch(e); }
-        // Atomic: only the keys task counts, but the loop, httpd and the cloud
+        // Atomic: only the keys task counts, but the loop and httpd
         // task read them.
         std::atomic<uint32_t> _events{0};
         std::atomic<uint32_t> _filtered{0};

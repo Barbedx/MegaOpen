@@ -100,7 +100,6 @@ static Sinks::UsbHidKeySink g_usbKeys;
 // Portable: its UTF-16 decoder also serves the exchange log in every build.
 #include "media/HuMediaSource.h"
 #include <ArduinoJson.h>
-#include "net/CloudLink.h"
 #include "app/OtaTrial.h"
 
 // Wiring only — every decision lives in the objects below.
@@ -124,8 +123,6 @@ static Knobs::Service        g_knobs;
 static Vehicle::State        g_state;
 static Canbox::Rav4Emitter   g_emitter;
 static WebUi                 g_web;
-// See src/net/CloudLink.h. Static so its ring exists before setup() prints.
-static CloudLink             g_cloud;
 static WifiManager           g_wifi;
 static Canbox::RxParser      g_huRx;
 
@@ -154,7 +151,7 @@ static OneShot<App::KeysTask::ResLearn> g_resLearnReq;
 // The LogBus sinks. They run on the LogBus task, so blocking here is allowed.
 //
 // Every line also stays in the LogBus ring, which is the web log
-// (GET /api/logs?since=); these sinks decide Serial, the flash log and the cloud.
+// (GET /api/logs?since=); these sinks decide Serial and the flash log.
 //
 // "[kev] " lines are the per-event key lines from onKeyEvent. Web log only: on
 // Serial they would cost UART time per detent, and in the flash log a knob spin
@@ -167,8 +164,8 @@ static OneShot<App::KeysTask::ResLearn> g_resLearnReq;
 // "[hu] <D> " lines (one capital letter, then a space) are that ring echo,
 // one per frame: T to the head unit, V vehicle telemetry, R from it, J junk
 // (huDrainSerial). On Serial, never in the flash log. The R echo is Serial only
-// (LogBus::serialOnly): the web log and the cloud have that frame decoded, as
-// its [hur] line. No other [hu] line has that shape.
+// (LogBus::serialOnly): the web log has that frame decoded, as its [hur]
+// line. No other [hu] line has that shape.
 static constexpr char KEV[] = "[kev] ";
 static constexpr char HUR[] = "[hur] ";
 static constexpr char HUE[] = "[hu] ";
@@ -202,12 +199,6 @@ static void serialSink(const char* line, int len, uint32_t)
 #endif
     Serial.write((const uint8_t*)line, len);
     Serial.write('\n');
-}
-// Every line the web log shows, as it is, to the cloud ring (CloudLink::tap),
-// from the first one.
-static void cloudSink(const char* line, int len, uint32_t)
-{
-    if (!LogBus::serialOnly(line)) g_cloud.tap(line, len);
 }
 #if FEATURE_LOGFS
 // The [hu] ring echo never goes to flash, whatever the serial switch says: it
@@ -253,7 +244,7 @@ static TaskHandle_t g_bleTask = nullptr;
 // Task registry ids (src/app/TaskRegistry.h): each task beats its own, and the
 // [task] heartbeat line and the OTA verdict read them all. -1 = not running.
 static int g_loopTaskId = -1, g_bleTaskId = -1;
-static int g_logbusTaskId = -1, g_scanTaskId = -1, g_cloudTaskId = -1;
+static int g_logbusTaskId = -1, g_scanTaskId = -1;
 
 // Free heap at each setup() stage, with the delta since the last mark.
 static void memMark(const char* what)
@@ -566,8 +557,8 @@ static size_t stackLeft()
 
 static int logTapVprintf(const char* fmt, va_list ap)
 {
-    // Lines logged by the LogBus task itself (a sink: LittleFS, the cloud
-    // ring) are not fed back into the LogBus: the console only. That is the
+    // Lines logged by the LogBus task itself (a sink: LittleFS) are not fed
+    // back into the LogBus: the console only. That is the
     // whole re-entry guard: LogBus::line never logs and never blocks, so no
     // other task can loop through here. (The shared s_tapOwner it replaces was
     // one global for every task, and any logging task cleared another's claim.)
@@ -1490,26 +1481,6 @@ static void hkBeatSlow(uint32_t)
     }
 }
 
-// "The car is not in use", for CloudLink's install and the reboot into it:
-// no key event (stalk, panel, knobs, web) and no frame from the head unit for
-// IDLE_MS. Only ever asked on the cloud task; the two counters are words their
-// owners bump, read here without a lock. With the head unit on it is never
-// idle, so a cloud build installs on the bench, in a parked car whose head
-// unit sleeps, or not at all; nothing reboots under a driver.
-static bool carIdle(uint32_t now)
-{
-    static constexpr uint32_t IDLE_MS = 10u * 60u * 1000u;
-    static uint32_t s_keys = 0, s_hu = 0, s_since = 0;
-    const uint32_t k = g_engine.events(), h = g_huRx.frames();
-    if (!s_since || k != s_keys || h != s_hu) {
-        s_keys = k;
-        s_hu = h;
-        s_since = now ? now : 1;
-        return false;
-    }
-    return (uint32_t)(now - s_since) >= IDLE_MS;
-}
-
 // Why this boot happened, and how many there have been: tells a real reboot
 // (panic, watchdog, brownout) from a freeze that only looked like one.
 static void logBootReason()
@@ -1561,7 +1532,6 @@ void setup()
 
     // Logging first: every line from here on goes through the LogBus.
     LogBus::addSink(serialSink);
-    LogBus::addSink(cloudSink);
 #if FEATURE_LOGFS
     const bool logfs = LogFile::begin();
     if (logfs) {
@@ -1602,18 +1572,6 @@ void setup()
         logf("[log] flash log FAILED: %s; RAM and serial only", LogFile::mountError());
 #endif
 
-    CloudLink::setLog([](const char* l) { LogBus::line(l); });
-    CloudLink::setIdle(carIdle);
-    // The cloud task exists only once the cloud is switched on, so it enters
-    // the registry from its own first pass. Not critical: a cloud that cannot
-    // reach its server is no reason to roll an image back.
-    CloudLink::onWake([](uint32_t busyUs) {
-        if (g_cloudTaskId < 0) {
-            g_cloudTaskId = App::Tasks::add("cloud", false);
-            App::Tasks::setHandle(g_cloudTaskId, xTaskGetCurrentTaskHandle());
-        }
-        App::Tasks::beat(g_cloudTaskId, busyUs);
-    });
     memMark("boot");
     // Tap the system log first, so boot output reaches the browser too.
     s_idfVprintf = esp_log_set_vprintf(logTapVprintf);
@@ -2127,33 +2085,10 @@ void setup()
     // renders around it, and the ui task acts on its count.
     g_web.attachNotify(App::Ui::queueNotification, []() { g_affaBox.postClear(); });
 #endif
-    g_web.addRoute("/api/cloud", HTTP_GET, [](PsychicRequest* r) {
-        JsonDocument d;
-        g_cloud.status(d.to<JsonObject>());
-        d["wifi"]  = g_wifi.curSsid();
-        String out; serializeJson(d, out);
-        return r->reply(200, "application/json", out.c_str());
-    });
-    // {url, token, on, clearRejected} — any subset. The second WiFi network
-    // is /api/wifi's (ssid2, pass2).
-    g_web.addRoute("/api/cloud", HTTP_POST, [](PsychicRequest* r) {
-        JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
-        if (!g_cloud.configure(d.as<JsonVariantConst>())) return r->reply(400, "text/plain", "bad");
-        return r->reply(200, "application/json", "{\"ok\":true}");
-    });
     g_web.begin(g_cfg, g_engine, g_map, g_keySink);
     memMark("web");
-    g_cloud.begin([](JsonObject o) {
-        g_web.fillDisplay(o["display"].to<JsonObject>());
-        o["encSteps"] = g_encSteps;
-        o["events"]   = g_engineEvents;
-        o["wifi"]     = g_wifi.curSsid();
-    });
-    memMark("cloud");
-    // The OTA trial's verdict comes from net_svc (Housekeeping); the cloud
-    // only records which version passed.
-    App::OtaTrial::begin([](bool ok) { g_cloud.verdict(ok); });
+    // The OTA trial's verdict comes from net_svc (Housekeeping).
+    App::OtaTrial::begin();
 
     const char* mdns = g_wifi.mdnsHost().length() ? g_wifi.mdnsHost().c_str() : "(mdns FAILED)";
     if (g_wifi.connecting())
@@ -2170,7 +2105,7 @@ void setup()
                       g_wifi.ip().c_str(), mdns, (unsigned)g_cfg.s().uartBaud);
 
     // Started after every attach(): it calls into g_web immediately. The web,
-    // WiFi, the heartbeat, the cloud and the OTA verdict: none of them on the
+    // WiFi, the heartbeat and the OTA verdict: none of them on the
     // panel's task any more (src/app/Housekeeping.h).
     {
         App::Housekeeping::Hooks h;
@@ -2210,8 +2145,8 @@ void setup()
     //   5  loop (this task)  — panel protocol: the mailbox, poll(), TX gate
     //   2  ui (core 1)       — the render policy; posts to the mailbox only
     //   2  httpd, ble_svc (core 0) — web requests; BLE services and AMS writes
-    //   1  net_svc (core 0)  — web, WiFi, heartbeat, cloud, the OTA verdict
-    //   1  logbus, cloud     — log output
+    //   1  net_svc (core 0)  — web, WiFi, heartbeat, the OTA verdict
+    //   1  logbus            — log output
     // It sleeps in twai_receive() between passes (loopWait), so a panel frame
     // wakes it and everything below it on this core runs while it waits.
     vTaskPrioritySet(nullptr, App::Plan::LOOP_PRIO);
@@ -2436,7 +2371,7 @@ void loop()
 
     logLoopWindow(now);
     lap("heartbeat");
-    // WiFi, the web, the heartbeat, the cloud and the OTA verdict are net_svc's.
+    // WiFi, the web, the heartbeat and the OTA verdict are net_svc's.
 
     // Charge this pass to the window, and name a stall the moment it happens.
     {

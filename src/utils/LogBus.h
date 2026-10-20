@@ -24,7 +24,7 @@ namespace LogBus
 
     void addSink(Sink s);          // before startTask(); up to 4
 
-    // A line for Serial only, never the web log or the cloud: the [hu] echo of
+    // A line for Serial only, never the web log: the [hu] echo of
     // a frame FROM the head unit ("[hu] R ..."), which the [hur] line already
     // carries decoded. In the ring like every line; its readers skip it.
     inline bool serialOnly(const char* line) { return !strncmp(line, "[hu] R ", 7); }
