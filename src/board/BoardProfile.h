@@ -146,7 +146,7 @@ namespace Board
     inline constexpr int8_t PIN_CAN_TX_CARRIER = 7;
 
     // ---- THE QWIIC LAYOUT (owner, 2026-10-07): nothing soldered to U8 but the
-    // LED ring's three pads. docs/t2can-qwiic.artifact.html is the drawing.
+    // LED ring's three pads. hardware/schematic/t2can-qwiic.artifact.html is the drawing.
 
     // --- head-unit UART (Raise canbox, 38400 8N1): QWIIC 1 ------------------
     // The socket silk-labelled GND 3V3 TX RX is UART0's pins. The console is on

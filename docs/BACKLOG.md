@@ -31,7 +31,7 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   capture before power is lost (plan Q7). Skip it if the capture shows the
   voltage and dimmer on the bus.
 - **CAN A runs unterminated: desolder RZ2** (fixed 120 R, channel A). Keep RZ1
-  (panel). See docs/t2can-wiring.artifact.html.
+  (panel). See hardware/schematic/t2can-wiring.artifact.html.
 
 ### Display (Carminat panel)
 
