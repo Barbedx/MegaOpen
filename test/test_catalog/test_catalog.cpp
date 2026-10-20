@@ -270,6 +270,16 @@ static void test_settings_list()
             TEST_ASSERT_TRUE_MESSAGE(e->get("min")->n <= e->get("max")->n, id.c_str());
         } else if (type == "enum") {
             TEST_ASSERT_TRUE_MESSAGE(e->get("enum") && !e->get("enum")->a.empty(), id.c_str());
+        } else if (type == "table") {
+            TEST_ASSERT_TRUE_MESSAGE(e->get("rows") && e->get("rows")->n > 0, id.c_str());
+            TEST_ASSERT_TRUE_MESSAGE(e->get("cols") && !e->get("cols")->a.empty(), id.c_str());
+            for (const auto& c : e->get("cols")->a) {
+                const std::string ct = c->get("type")->s;
+                TEST_ASSERT_FALSE_MESSAGE(c->get("id")->s.empty(), id.c_str());
+                if (ct == "enum") TEST_ASSERT_TRUE_MESSAGE(c->get("enum") && !c->get("enum")->a.empty(), id.c_str());
+                else if (ct == "int") TEST_ASSERT_NOT_NULL_MESSAGE(c->get("min"), id.c_str());
+                else TEST_ASSERT_EQUAL_STRING_MESSAGE("bool", ct.c_str(), id.c_str());
+            }
         } else {
             TEST_ASSERT_EQUAL_STRING_MESSAGE("bool", type.c_str(), id.c_str());
         }

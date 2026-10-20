@@ -206,7 +206,7 @@ g('/api/health',health);
 /* прошивка зберігає в cfg одразу, тож GET бачить збережене; діє воно після перезавантаження */
 /* кожен id реєстру, якого нема в defSet, — з першого значення (enum) або min (int) */
 const regDef=f=>f.type==='bool'?false:f.type==='int'?f.min:f.enum[0].v;
-g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&!(f.id in S.set))S.set[f.id]=regDef(f);
+g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type!=='table'&&!(f.id in S.set))S.set[f.id]=regDef(f);
  const st=S.staged,o={...S.set,fw:S.fw,build:S.build,cfgVer:S.cfgVer,cfgVerWas:0,wifiSleep:false,ssid2:S.wifi2.ssid};   /* ssid2 — НОВЕ */
  if(st.bleMode)o.bleMode=st.bleMode;if(st.wifi)o.ssid=st.wifi.ssid;return o});
 /* НОВЕ (план, зріз 4): перезапуск не побічний ефект, а pendingReboot; apPass */
@@ -214,7 +214,7 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
  if(ap&&(ap.length<8||ap.length>63))return fail(400,'apPass: 8 to 63 characters');
  let rb=typeof q.mdnsOn==='boolean'&&q.mdnsOn!==s.mdnsOn;
  /* реєстр (catalog.settings): невідоме значення enum -> 400, число в межі, як прошивка */
- for(const f of C.settings||[]){if(f.type==='group'||q[f.id]===undefined||['bleMode','mediaSource','huTitleCmd','huArtistCmd'].includes(f.id))continue;
+ for(const f of C.settings||[]){if(f.type==='group'||f.type==='table'||q[f.id]===undefined||['bleMode','mediaSource','huTitleCmd','huArtistCmd'].includes(f.id))continue;
   if(f.ro)return fail(400,f.id+': read-only');
   if(f.type==='enum'&&!f.enum.some(o=>o.v===q[f.id]))return fail(400,f.id+': unknown value');
   if(f.reboot&&q[f.id]!==s[f.id])rb=true;

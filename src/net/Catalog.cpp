@@ -236,11 +236,21 @@ namespace Catalog
         // The settings registry (Cfg::Registry), in table order so a group
         // comes before its children: what GET/POST /api/settings carry and how
         // the page draws each one. `menu`: also in the panel menu. `reboot`:
-        // applied at the next boot. Enum rows inline, `v` = what is sent.
+        // applied at the next boot. Enum rows inline, `v` = what is sent. A
+        // table: `rows` and its `cols`, each like a value (id, label, type,
+        // min/max or enum).
+        void enumRows(J& j, const Cfg::SEnum& en)
+        {
+            j.k("enum").arr();
+            for (uint8_t r = 0; r < en.count(); ++r)
+                j.obj().ks("v", en.id(r)).ks("name", en.name(r)).endObj();
+            j.endArr();
+        }
+
         void settings(J& j)
         {
             using namespace Cfg;
-            static const char* const kType[] = {"group", "bool", "int", "enum"};
+            static const char* const kType[] = {"group", "bool", "int", "enum", "table"};
             j.k("settings").arr();
             for (size_t i = 0; i < Registry::count(); ++i) {
                 const SEntry& e = Registry::at(i);
@@ -256,10 +266,16 @@ namespace Catalog
                     if (e.step > 1) j.kn("step", e.step);
                     if (e.unit) j.ks("unit", e.unit);
                 }
-                if (e.type == SType::Enum && e.en) {
-                    j.k("enum").arr();
-                    for (uint8_t r = 0; r < e.en->count(); ++r)
-                        j.obj().ks("v", e.en->id(r)).ks("name", e.en->name(r)).endObj();
+                if (e.type == SType::Enum && e.en) enumRows(j, *e.en);
+                if (e.type == SType::Table && e.tab) {
+                    j.kn("rows", e.tab->rows).k("cols").arr();
+                    for (uint8_t c = 0; c < e.tab->cols; ++c) {
+                        const SColumn& col = e.tab->col[c];
+                        j.obj().ks("id", col.id).ks("label", col.label).ks("type", kType[(uint8_t)col.type]);
+                        if (col.type == SType::Int) j.kn("min", col.min).kn("max", col.max);
+                        if (col.type == SType::Enum && col.en) enumRows(j, *col.en);
+                        j.endObj();
+                    }
                     j.endArr();
                 }
                 j.endObj();

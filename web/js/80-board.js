@@ -9,6 +9,7 @@ const bars=r=>{const n=r>-55?4:r>-67?3:r>-78?2:1;return `<span class="sig">${[1,
    ті, що вже є на сторінці (data-k в `have`), не дублюються; reboot -> смуга перезавантаження */
 const allSettings=(se,have)=>{let h='';for(const f of CAT.settings||[]){
  if(f.type==='group'){h+=`<div class="row muted"><b>${esc(f.label)}</b></div>`;continue}
+ if(f.type==='table')continue;/* таблиці малює своя сторінка (сповіщення — «Авто — наживо») */
  if(!(f.id in se)||have.includes(`|${f.id}"`))continue;
  const v=se[f.id],k=(f.reboot?'rb:':'')+'/api/settings|'+f.id,ex=f.reboot?rbA(k,v,f.label):'';let c;
  if(f.ro)c=`<span class="mono">${esc(f.enum?((f.enum.find(o=>o.v===v)||{}).name||v):v)}${f.unit?' '+esc(f.unit):''}</span>`;

@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "Settings.h"
 #include "../knobs/KnobConfig.h"
+#include "../vehicle/AlertRules.h"
 
 // Every setting the user can change, described once: the web form and the
 // panel menu are both drawn from this table, so they cannot disagree on a
@@ -15,16 +16,23 @@
 // Values travel as int32_t. A Bool is 0/1; an Enum is its row index, whatever
 // the field stores (a String id or an enum class), so the menu can step it.
 // Strings the panel cannot edit (SSID, passwords, mDNS name) are not here.
+//
+// A Table is a fixed grid of such cells (the panel alerts: 16 rules x 5),
+// read and written a cell at a time; the table's own put() is the check, so
+// a cell whose range depends on another (a threshold on its row's signal) is
+// refused by the code that knows why. Tables are web-only.
 namespace Cfg
 {
     // What a registry entry reads and writes. `k` is null on a board without
-    // knobs; its entries then report unavailable.
+    // knobs, `a` where the caller has no alert rules at hand; their entries
+    // then report unavailable.
     struct Model {
-        Settings*      s = nullptr;
-        Knobs::Config* k = nullptr;
+        Settings*            s = nullptr;
+        Knobs::Config*       k = nullptr;
+        Vehicle::AlertRules* a = nullptr;
     };
 
-    enum class SType : uint8_t { Group, Bool, Int, Enum };
+    enum class SType : uint8_t { Group, Bool, Int, Enum, Table };
 
     // Where an entry is offered.
     enum : uint8_t {
@@ -42,6 +50,7 @@ namespace Cfg
         AP_KEYS   = 0x02,  // keys task: timing, pulse, links, routing
         AP_KNOBS  = 0x04,  // knob service: lights, encoders (knobs blob)
         AP_MEDIA  = 0x08,  // media router / HU text learner
+        AP_CAR    = 0x10,  // car task: the alert rules (own NVS key)
         AP_REBOOT = 0x80,  // read once at boot: saved, applied by a reboot
     };
 
@@ -51,6 +60,29 @@ namespace Cfg
         uint8_t     (*count)();
         const char* (*id)(uint8_t i);
         const char* (*name)(uint8_t i);
+    };
+
+    // A Table's column: Bool, Int or Enum. An Enum cell is its row index in
+    // `en`; an Int's min/max are what the page offers, the table's put() has
+    // the last word.
+    struct SColumn {
+        const char*  id;       // ASCII, the page's key
+        const char*  label;    // Ukrainian, the web
+        SType        type;
+        int32_t      min, max;
+        const SEnum* en;
+    };
+
+    struct STable {
+        uint8_t        rows, cols;
+        const SColumn* col;
+        int32_t (*get)(const Model&, uint8_t row, uint8_t col);
+        // False: refused, the cell unchanged. Cells of a row are written in
+        // column order, so a cell may depend on the ones before it.
+        bool    (*put)(Model&, uint8_t row, uint8_t col, int32_t v);
+        // An Int cell's decimal places (the value is a scaled integer); may
+        // depend on its row. Null = whole numbers.
+        uint8_t (*decimals)(const Model&, uint8_t row, uint8_t col);
     };
 
     struct SEntry {
@@ -67,6 +99,7 @@ namespace Cfg
         const SEnum* en;       // Enum only
         int32_t (*get)(const Model&);
         void    (*put)(Model&, int32_t);   // gets a value valid() accepted
+        const STable* tab;     // Table only (get/put are then null)
     };
 
     namespace Registry
@@ -108,5 +141,24 @@ namespace Cfg
         // the stored one ("--" when unavailable), or any value of the entry.
         void    format(const Model& m, const SEntry& e, char* out, size_t cap);
         void    formatValue(const SEntry& e, int32_t v, char* out, size_t cap);
+
+        // ---- Table cells (get()/set() of a Table read 0 and refuse) ----------
+        // A bad row or column reads 0. setCell refuses (false, nothing
+        // written) what set() would, a bad cell, an Enum/Bool value outside
+        // its rows, or whatever the table's put() refuses; an unchanged
+        // value adds no apply bits.
+        int32_t cell(const Model& m, const SEntry& e, uint8_t row, uint8_t col);
+        bool    setCell(Model& m, const SEntry& e, uint8_t row, uint8_t col, int32_t v,
+                        uint8_t* apply = nullptr);
+        uint8_t cellDecimals(const Model& m, const SEntry& e, uint8_t row, uint8_t col);
+        // A column's offered range (Enum/Bool from their rows).
+        int32_t colMin(const SColumn& c);
+        int32_t colMax(const SColumn& c);
+        int     colEnumIndex(const SColumn& c, const char* id);   // -1: unknown
+
+        // A scaled integer with its decimal point placed (1368, 2 -> "13.68"),
+        // and a page's number back to one (false: not finite, or too big).
+        const char* decText(char* out, size_t cap, int32_t v, uint8_t decimals);
+        bool        decParse(double x, uint8_t decimals, int32_t& out);
     }
 }

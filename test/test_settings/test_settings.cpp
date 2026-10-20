@@ -23,10 +23,15 @@ namespace
     }
 
     struct Fixture {
-        Settings      s;
-        Knobs::Config k;
-        Model         m{&s, &k};
+        Settings            s;
+        Knobs::Config       k;
+        Vehicle::AlertRules a;
+        Model               m{&s, &k, &a};
+        Fixture() { a.factory(); }
     };
+
+    // An entry with one value: everything but groups and tables.
+    bool scalar(const SEntry& e) { return e.type != SType::Group && e.type != SType::Table; }
 
     // The values worth trying for one entry: both ends, the middle on the
     // step grid, and every row of an enum.
@@ -110,7 +115,7 @@ void test_ranges_hold_the_defaults()
     Fixture f;
     for (size_t i = 0; i < Registry::count(); ++i) {
         const SEntry& e = Registry::at(i);
-        if (e.type == SType::Group) continue;
+        if (!scalar(e)) continue;
         TEST_ASSERT_TRUE_MESSAGE(Registry::minOf(e) <= Registry::maxOf(e), e.id);
         // A factory board must be inside every range, or the menu opens on
         // a value it could never set.
@@ -126,7 +131,7 @@ void test_every_entry_round_trips()
 {
     for (size_t i = 0; i < Registry::count(); ++i) {
         const SEntry& e = Registry::at(i);
-        if (e.type == SType::Group || (e.flags & F_RO)) continue;
+        if (!scalar(e) || (e.flags & F_RO)) continue;
         for (int32_t v : probes(e)) {
             Fixture f;
             if (isColor(e) && v == 0) continue;   // "custom" keeps what is there
@@ -143,7 +148,7 @@ void test_entries_are_independent()
 {
     for (size_t i = 0; i < Registry::count(); ++i) {
         const SEntry& e = Registry::at(i);
-        if (e.type == SType::Group || (e.flags & F_RO)) continue;
+        if (!scalar(e) || (e.flags & F_RO)) continue;
         Fixture f, ref;
         const int32_t was = Registry::get(f.m, e);
         int32_t v = Registry::stepped(e, was, +1);
@@ -152,7 +157,7 @@ void test_entries_are_independent()
         Registry::set(f.m, e, v);
         for (size_t j = 0; j < Registry::count(); ++j) {
             const SEntry& o = Registry::at(j);
-            if (j == i || o.type == SType::Group) continue;
+            if (j == i || !scalar(o)) continue;
             TEST_ASSERT_EQUAL_INT32_MESSAGE(Registry::get(ref.m, o), Registry::get(f.m, o), o.id);
         }
     }
@@ -287,7 +292,7 @@ void test_format_is_ascii_and_short()
     char b[27];
     for (size_t i = 0; i < Registry::count(); ++i) {
         const SEntry& e = Registry::at(i);
-        if (e.type == SType::Group) continue;
+        if (!scalar(e)) continue;
         Registry::format(f.m, e, b, sizeof(b));
         TEST_ASSERT_TRUE_MESSAGE(ascii(b) && *b, e.id);
     }
@@ -297,6 +302,138 @@ void test_format_is_ascii_and_short()
     TEST_ASSERT_EQUAL_STRING("On", b);
     Registry::format(f.m, *Registry::find("keyPopupMs"), b, 3);
     TEST_ASSERT_EQUAL_STRING("20", b);
+}
+
+// ---- tables: the panel alerts ----------------------------------------------------
+
+namespace
+{
+    const SEntry& alerts() { return *Registry::find("alerts"); }
+    constexpr uint8_t SIG = Vehicle::AlertRules::C_SIG, COND = Vehicle::AlertRules::C_COND,
+                      THR = Vehicle::AlertRules::C_THR, CD = Vehicle::AlertRules::C_COOLDOWN,
+                      ON = Vehicle::AlertRules::C_ON;
+}
+
+void test_tables_are_web_only_and_described()
+{
+    size_t tables = 0;
+    for (size_t i = 0; i < Registry::count(); ++i) {
+        const SEntry& e = Registry::at(i);
+        if (e.type != SType::Table) {
+            TEST_ASSERT_NULL_MESSAGE(e.tab, e.id);
+            continue;
+        }
+        ++tables;
+        // The panel has no way to edit a grid.
+        TEST_ASSERT_FALSE_MESSAGE(e.flags & F_MENU, e.id);
+        TEST_ASSERT_NOT_NULL_MESSAGE(e.tab, e.id);
+        TEST_ASSERT_TRUE_MESSAGE(e.tab->rows > 0 && e.tab->cols > 0, e.id);
+        std::set<std::string> ids;
+        for (uint8_t c = 0; c < e.tab->cols; ++c) {
+            const SColumn& col = e.tab->col[c];
+            TEST_ASSERT_TRUE_MESSAGE(ascii(col.id) && *col.id, e.id);
+            TEST_ASSERT_TRUE_MESSAGE(ids.insert(col.id).second, col.id);
+            TEST_ASSERT_TRUE_MESSAGE(col.type == SType::Bool || col.type == SType::Int || col.type == SType::Enum, col.id);
+            TEST_ASSERT_TRUE_MESSAGE(col.type != SType::Enum || col.en, col.id);
+            TEST_ASSERT_TRUE_MESSAGE(Registry::colMin(col) <= Registry::colMax(col), col.id);
+        }
+    }
+    TEST_ASSERT_EQUAL(1, tables);
+}
+
+void test_alert_cells_read_the_rules()
+{
+    Fixture f;
+    const SEntry& e = alerts();
+    // The factory rule: the car's own low-fuel lamp, on its rising edge.
+    TEST_ASSERT_EQUAL_INT32(f.a.r[0].sig, Registry::cell(f.m, e, 0, SIG));
+    TEST_ASSERT_EQUAL_STRING("fuel_low", e.tab->col[SIG].en->id((uint8_t)Registry::cell(f.m, e, 0, SIG)));
+    TEST_ASSERT_EQUAL_INT32(Vehicle::AC_RISES, Registry::cell(f.m, e, 0, COND));
+    TEST_ASSERT_EQUAL_INT32(1, Registry::cell(f.m, e, 0, ON));
+    // An empty row is the last enum row, and its id is "".
+    const int32_t empty = Registry::cell(f.m, e, 1, SIG);
+    TEST_ASSERT_EQUAL_INT32(Registry::colMax(e.tab->col[SIG]), empty);
+    TEST_ASSERT_EQUAL_STRING("", e.tab->col[SIG].en->id((uint8_t)empty));
+    TEST_ASSERT_EQUAL(empty, Registry::colEnumIndex(e.tab->col[SIG], ""));
+    // Out of the grid reads 0.
+    TEST_ASSERT_EQUAL_INT32(0, Registry::cell(f.m, e, Vehicle::AlertRules::ROWS, SIG));
+    TEST_ASSERT_EQUAL_INT32(0, Registry::cell(f.m, e, 0, Vehicle::AlertRules::COLS));
+}
+
+void test_alert_cells_write_through_the_rules_check()
+{
+    Fixture f;
+    const SEntry& e = alerts();
+    const Vehicle::Meta& bv = Vehicle::meta(Vehicle::SIG_BATT_V);
+    uint8_t ap = 0;
+    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 3, SIG, Vehicle::SIG_BATT_V, &ap));
+    TEST_ASSERT_EQUAL(AP_CAR, ap);
+    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 3, COND, Vehicle::AC_BELOW));
+    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 3, THR, bv.min));
+    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 3, CD, 300));
+    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 3, ON, 1));
+    TEST_ASSERT_EQUAL(Vehicle::SIG_BATT_V, f.a.r[3].sig);
+    TEST_ASSERT_EQUAL(bv.min, f.a.r[3].thr);
+    TEST_ASSERT_EQUAL(300, f.a.r[3].cooldownS);
+    TEST_ASSERT_TRUE(f.a.r[3].on);
+    TEST_ASSERT_EQUAL(bv.decimals, Registry::cellDecimals(f.m, e, 3, THR));
+    TEST_ASSERT_EQUAL(0, Registry::cellDecimals(f.m, e, 3, CD));
+
+    // Refused, nothing written: a threshold outside the row's signal, an
+    // enum past its rows, a cooldown past 16 bits, a cell off the grid.
+    ap = 0;
+    TEST_ASSERT_FALSE(Registry::setCell(f.m, e, 3, THR, bv.max + 1, &ap));
+    TEST_ASSERT_FALSE(Registry::setCell(f.m, e, 3, COND, Vehicle::AC_COUNT, &ap));
+    TEST_ASSERT_FALSE(Registry::setCell(f.m, e, 3, SIG, Vehicle::SIG_COUNT + 1, &ap));
+    TEST_ASSERT_FALSE(Registry::setCell(f.m, e, 3, CD, 70000, &ap));
+    TEST_ASSERT_FALSE(Registry::setCell(f.m, e, 3, ON, 2, &ap));
+    TEST_ASSERT_FALSE(Registry::setCell(f.m, e, Vehicle::AlertRules::ROWS, SIG, 0, &ap));
+    TEST_ASSERT_EQUAL(0, ap);
+    TEST_ASSERT_EQUAL(bv.min, f.a.r[3].thr);
+    TEST_ASSERT_EQUAL(Vehicle::AC_BELOW, f.a.r[3].cond);
+
+    // The same value again is no change.
+    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 3, CD, 300, &ap));
+    TEST_ASSERT_EQUAL(0, ap);
+}
+
+void test_an_empty_alert_is_never_on()
+{
+    Fixture f;
+    const SEntry& e = alerts();
+    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 5, ON, 1));
+    TEST_ASSERT_FALSE(f.a.r[5].on);
+}
+
+void test_tables_refuse_the_scalar_calls()
+{
+    Fixture f;
+    const SEntry& e = alerts();
+    TEST_ASSERT_FALSE(Registry::valid(e, 0));
+    TEST_ASSERT_FALSE(Registry::set(f.m, e, 0));
+    TEST_ASSERT_EQUAL_INT32(0, Registry::get(f.m, e));
+    // A Model without rules: unavailable, every cell refused.
+    Settings s;
+    Model m{&s, nullptr};
+    TEST_ASSERT_FALSE(Registry::available(m, e));
+    TEST_ASSERT_FALSE(Registry::setCell(m, e, 0, CD, 1));
+    TEST_ASSERT_EQUAL_INT32(0, Registry::cell(m, e, 0, CD));
+    // A scalar entry has no cells.
+    TEST_ASSERT_FALSE(Registry::setCell(f.m, *Registry::find("keyPopup"), 0, 0, 1));
+}
+
+void test_decimal_text_both_ways()
+{
+    char b[16];
+    TEST_ASSERT_EQUAL_STRING("13.68", Registry::decText(b, sizeof(b), 1368, 2));
+    TEST_ASSERT_EQUAL_STRING("-0.05", Registry::decText(b, sizeof(b), -5, 2));
+    TEST_ASSERT_EQUAL_STRING("42", Registry::decText(b, sizeof(b), 42, 0));
+    int32_t v = 0;
+    TEST_ASSERT_TRUE(Registry::decParse(13.68, 2, v));
+    TEST_ASSERT_EQUAL_INT32(1368, v);
+    TEST_ASSERT_TRUE(Registry::decParse(-0.05, 2, v));
+    TEST_ASSERT_EQUAL_INT32(-5, v);
+    TEST_ASSERT_FALSE(Registry::decParse(1e12, 0, v));
 }
 
 // ---- drift guard --------------------------------------------------------------------
@@ -316,7 +453,7 @@ void test_settings_struct_unchanged()
     size_t n = 0;
     for (size_t i = 0; i < Registry::count(); ++i) {
         const SEntry& e = Registry::at(i);
-        if (e.type != SType::Group && !(e.apply & AP_KNOBS)) ++n;
+        if (scalar(e) && !(e.apply & (AP_KNOBS | AP_CAR))) ++n;
     }
     // 40 scalar/enum fields in Settings (carSig counts three), all in the registry.
     TEST_ASSERT_EQUAL(40, n);
@@ -342,6 +479,12 @@ int main(int, char**)
     RUN_TEST(test_apply_bits_only_on_change);
     RUN_TEST(test_stepped);
     RUN_TEST(test_format_is_ascii_and_short);
+    RUN_TEST(test_tables_are_web_only_and_described);
+    RUN_TEST(test_alert_cells_read_the_rules);
+    RUN_TEST(test_alert_cells_write_through_the_rules_check);
+    RUN_TEST(test_an_empty_alert_is_never_on);
+    RUN_TEST(test_tables_refuse_the_scalar_calls);
+    RUN_TEST(test_decimal_text_both_ways);
     RUN_TEST(test_settings_struct_unchanged);
     return UNITY_END();
 }

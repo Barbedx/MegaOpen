@@ -1,4 +1,5 @@
 #include "SettingsRegistry.h"
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include "../Features.h"
@@ -162,7 +163,47 @@ namespace Cfg
                [](uint8_t i) { return T[i].name; } }
         const SEnum kReact = UI_NAMES_ENUM(Knobs::REACT_NAMES);
         const SEnum kAnim  = UI_NAMES_ENUM(Knobs::ANIM_NAMES);
+        const SEnum kConds = UI_NAMES_ENUM(Vehicle::ALERT_COND);
 #undef UI_NAMES_ENUM
+
+        // ---- the panel alerts (Vehicle::AlertRules) -------------------------
+        // A rule's signal as AlertRules stores it: signal i is row i, and
+        // SIG_COUNT, the last row, is an empty rule ("").
+        const SEnum kAlertSigs = {
+            [] { return (uint8_t)(Vehicle::SIG_COUNT + 1); },
+            [](uint8_t i) { return i < Vehicle::SIG_COUNT ? Vehicle::meta(i).name : ""; },
+            [](uint8_t i) {
+                if (i >= Vehicle::SIG_COUNT) return "—";
+                const char* l = Vehicle::label(i);
+                return *l ? l : Vehicle::meta(i).name;
+            },
+        };
+
+        // AlertRules::Col order. thr's range is its row's signal's (the
+        // table refuses the rest); the page offers any number.
+        const SColumn kAlertCols[] = {
+            {"sig",       "Сигнал",   SType::Enum, 0, 0, &kAlertSigs},
+            {"cond",      "Умова",    SType::Enum, 0, 0, &kConds},
+            {"thr",       "Поріг",    SType::Int,  INT32_MIN, INT32_MAX, nullptr},
+            {"cooldownS", "Пауза, с", SType::Int,  0, 65535, nullptr},
+            {"on",        "Увімк",    SType::Bool, 0, 1, nullptr},
+        };
+        static_assert(sizeof(kAlertCols) / sizeof(kAlertCols[0]) == Vehicle::AlertRules::COLS,
+                      "kAlertCols is out of step with AlertRules::Col");
+
+        const STable kAlerts = {
+            Vehicle::AlertRules::ROWS, Vehicle::AlertRules::COLS, kAlertCols,
+            [](const Model& m, uint8_t r, uint8_t c) { return m.a->get(r, c); },
+            [](Model& m, uint8_t r, uint8_t c, int32_t v) {
+                // An empty rule is never on (the /api/map rule before).
+                if (c == Vehicle::AlertRules::C_ON && m.a->r[r].sig >= Vehicle::SIG_COUNT) v = 0;
+                return m.a->set(r, c, v);
+            },
+            [](const Model& m, uint8_t r, uint8_t c) -> uint8_t {
+                const uint8_t sig = m.a->r[r].sig;
+                return c == Vehicle::AlertRules::C_THR && sig < Vehicle::SIG_COUNT ? Vehicle::meta(sig).decimals : 0;
+            },
+        };
 
         // A String field stored by id, read and written as its row.
         int32_t rowOf(const SEnum& en, const Str& v)
@@ -328,6 +369,11 @@ namespace Cfg
             {"can2Detected", "Знайдена швидкість CAN A", "CAN A found", "system", SType::Enum, W | F_RO, AP_NONE,
              0, 0, 0, nullptr, &kRates, S_GET(rateIndex(s.can2Detected)),
              S_PUT(s.can2Detected = rateRow((uint8_t)v))},
+
+            // ---- the panel alerts: the whole table, row i = rule i ----------
+            // Drawn by the live-car page, not the settings card.
+            {"alerts", "Сповіщення на дисплей", "Alerts", nullptr, SType::Table, W, AP_CAR,
+             0, 0, 0, nullptr, nullptr, nullptr, nullptr, &kAlerts},
         };
 #undef S_GET
 #undef S_PUT
@@ -357,6 +403,7 @@ namespace Cfg
         bool available(const Model& m, const SEntry& e)
         {
             if (e.type == SType::Group) return true;
+            if (e.apply & AP_CAR) return m.a != nullptr;
             return (e.apply & AP_KNOBS) ? m.k != nullptr : m.s != nullptr;
         }
 
@@ -374,7 +421,7 @@ namespace Cfg
 
         bool valid(const SEntry& e, int32_t v)
         {
-            return e.type != SType::Group && v >= minOf(e) && v <= maxOf(e);
+            return e.type != SType::Group && e.type != SType::Table && v >= minOf(e) && v <= maxOf(e);
         }
 
         int32_t clamp(const SEntry& e, int32_t v)
@@ -455,6 +502,77 @@ namespace Cfg
                     break;
                 default: break;
             }
+        }
+
+        // ---- Table cells ---------------------------------------------------
+
+        int32_t colMin(const SColumn& c) { return c.type == SType::Int ? c.min : 0; }
+
+        int32_t colMax(const SColumn& c)
+        {
+            switch (c.type) {
+                case SType::Int:  return c.max;
+                case SType::Bool: return 1;
+                case SType::Enum: return c.en ? (int32_t)c.en->count() - 1 : 0;
+                default:          return 0;
+            }
+        }
+
+        int colEnumIndex(const SColumn& c, const char* id)
+        {
+            if (c.type != SType::Enum || !c.en || !id) return -1;
+            const uint8_t n = c.en->count();
+            for (uint8_t i = 0; i < n; ++i) if (!strcmp(id, c.en->id(i))) return i;
+            return -1;
+        }
+
+        namespace
+        {
+            bool inTable(const Model& m, const SEntry& e, uint8_t row, uint8_t col)
+            {
+                return e.type == SType::Table && e.tab && row < e.tab->rows && col < e.tab->cols &&
+                       available(m, e);
+            }
+        }
+
+        int32_t cell(const Model& m, const SEntry& e, uint8_t row, uint8_t col)
+        {
+            return inTable(m, e, row, col) ? e.tab->get(m, row, col) : 0;
+        }
+
+        bool setCell(Model& m, const SEntry& e, uint8_t row, uint8_t col, int32_t v, uint8_t* apply)
+        {
+            if ((e.flags & F_RO) || !inTable(m, e, row, col)) return false;
+            const SColumn& c = e.tab->col[col];
+            if (c.type != SType::Int && (v < colMin(c) || v > colMax(c))) return false;
+            if (e.tab->get(m, row, col) == v) return true;
+            if (!e.tab->put(m, row, col, v)) return false;
+            if (apply) *apply |= e.apply;
+            return true;
+        }
+
+        uint8_t cellDecimals(const Model& m, const SEntry& e, uint8_t row, uint8_t col)
+        {
+            return inTable(m, e, row, col) && e.tab->decimals ? e.tab->decimals(m, row, col) : 0;
+        }
+
+        const char* decText(char* out, size_t cap, int32_t v, uint8_t d)
+        {
+            if (!d) { snprintf(out, cap, "%ld", (long)v); return out; }
+            int32_t p = 1;
+            for (uint8_t i = 0; i < d; ++i) p *= 10;
+            const uint32_t a = v < 0 ? (uint32_t)-(int64_t)v : (uint32_t)v;
+            snprintf(out, cap, "%s%lu.%0*lu", v < 0 ? "-" : "", (unsigned long)(a / p), (int)d,
+                     (unsigned long)(a % p));
+            return out;
+        }
+
+        bool decParse(double x, uint8_t d, int32_t& out)
+        {
+            for (uint8_t i = 0; i < d; ++i) x *= 10;
+            if (!isfinite(x) || x > INT32_MAX || x < INT32_MIN) return false;
+            out = (int32_t)lround(x);
+            return true;
         }
     }
 }
