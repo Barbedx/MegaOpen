@@ -41,6 +41,8 @@ namespace App
 
             void onComplete(affa::TxTicket t, affa::Result r, void*)
             {
+                // A posted key's verdict, not a render's: PanelOps reports it.
+                if (s_s.ops && s_s.ops->keyDone(t, r)) return;
                 if (r == affa::Result::Ok)           { ++s_delivered; s_failStreak = 0; }
                 // Aborted (superseded) and Cancelled (resync) are not transport
                 // faults and must not trip the breaker.

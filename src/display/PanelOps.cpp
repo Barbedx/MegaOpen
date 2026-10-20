@@ -232,6 +232,11 @@ namespace MegaOpen
 
         if (accepted(s)) {
             _posted.fetch_add(1, std::memory_order_relaxed);
+            // A key taken off the panel task is applied there; its verdict
+            // comes through onComplete (keyDone), or is already here.
+            uint8_t early;
+            if (r.op == Op::Key && s.ticket && _keys.expect(s.ticket, early))
+                logKey((affa::Result)early);
         } else {
             _refused.fetch_add(1, std::memory_order_relaxed);
             // The ui task says what matters about its own, rate-limited:
@@ -240,6 +245,20 @@ namespace MegaOpen
                 LogBus::printf("[disp] %s -> %s", opName(r.op), affa::resultName(s.result));
         }
         return s;
+    }
+
+    bool PanelOps::keyDone(affa::TxTicket t, affa::Result r)
+    {
+        if (!_keys.complete(t, (uint8_t)r)) return false;
+        logKey(r);
+        return true;
+    }
+
+    // The owner's verdict on a posted key, as the call-site refusals are logged.
+    void PanelOps::logKey(affa::Result r)
+    {
+        if (r != affa::Result::Ok)
+            LogBus::printf("[disp] %s -> %s", opName(Op::Key), affa::resultName(r));
     }
 
     affa::Submitted PanelOps::render(const Req& r)

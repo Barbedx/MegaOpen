@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <atomic>
 #include "GlassGate.h"
+#include "KeyVerdicts.h"
 #include "../utils/Locks.h"
 
 // Every render this firmware makes, from whichever task makes it, and the
@@ -122,6 +123,10 @@ namespace MegaOpen
         bool postResync();
         bool postClear();
 
+        // The panel task's onComplete: true when `t` is a key posted through
+        // here, whose verdict is then logged if it is a refusal. Not a render's.
+        bool keyDone(affa::TxTicket t, affa::Result r);
+
         // Accepted and refused calls, every task's.
         uint32_t posted() const  { return _posted.load(std::memory_order_relaxed); }
         uint32_t refused() const { return _refused.load(std::memory_order_relaxed); }
@@ -143,6 +148,7 @@ namespace MegaOpen
 
     private:
         affa::Submitted render(const Req& r);
+        void logKey(affa::Result r);
 
         affa::AffaDisplayBase* _d = nullptr;
         affa::CarminatDisplay* _carminat = nullptr;
@@ -151,6 +157,8 @@ namespace MegaOpen
         // the hu task (head-unit text) and the ui task.
         std::atomic<uint32_t> _posted{0}, _refused{0};
         std::atomic<uint32_t> _clears{0}, _resyncs{0};
+        // Keys posted from another task, until their verdict arrives.
+        KeyVerdicts           _keys;
 
         // The glass check's lock: a FreeRTOS mutex (priority inheritance, so a
         // keys-task macro waiting on the ui task is not inverted), held for
