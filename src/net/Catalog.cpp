@@ -8,6 +8,7 @@
 #include "../keys/KeyDests.h"
 #include "../keys/MacroEngine.h"
 #include "../knobs/KnobConfig.h"
+#include "../cfg/SettingsRegistry.h"
 #include "../media/MediaRouter.h"
 #include "../capture/CapFormat.h"
 #include "../bus/Autobaud.h"
@@ -229,6 +230,40 @@ namespace Catalog
         {
             j.k(key).arr();
             for (uint8_t i = 0; i < n; ++i) field(j, f[i]);
+            j.endArr();
+        }
+
+        // The settings registry (Cfg::Registry), in table order so a group
+        // comes before its children: what GET/POST /api/settings carry and how
+        // the page draws each one. `menu`: also in the panel menu. `reboot`:
+        // applied at the next boot. Enum rows inline, `v` = what is sent.
+        void settings(J& j)
+        {
+            using namespace Cfg;
+            static const char* const kType[] = {"group", "bool", "int", "enum"};
+            j.k("settings").arr();
+            for (size_t i = 0; i < Registry::count(); ++i) {
+                const SEntry& e = Registry::at(i);
+                if (!(e.flags & F_WEB)) continue;
+                j.obj().ks("id", e.id).ks("label", e.label).ks("tag", e.tag)
+                 .ks("type", kType[(uint8_t)e.type]);
+                if (e.parent) j.ks("parent", e.parent);
+                if (e.flags & F_MENU) j.kb("menu", true);
+                if (e.flags & F_RO) j.kb("ro", true);
+                if (e.apply & AP_REBOOT) j.kb("reboot", true);
+                if (e.type == SType::Int) {
+                    j.kn("min", e.min).kn("max", e.max);
+                    if (e.step > 1) j.kn("step", e.step);
+                    if (e.unit) j.ks("unit", e.unit);
+                }
+                if (e.type == SType::Enum && e.en) {
+                    j.k("enum").arr();
+                    for (uint8_t r = 0; r < e.en->count(); ++r)
+                        j.obj().ks("v", e.en->id(r)).ks("name", e.en->name(r)).endObj();
+                    j.endArr();
+                }
+                j.endObj();
+            }
             j.endArr();
         }
 
@@ -454,6 +489,7 @@ namespace Catalog
         for (const auto& m : kBleModes) j.obj().ks("id", m.id).ks("name", m.name).kb("ams", m.ams).endObj();
         j.endArr();
 
+        settings(j);
         keys(j);
 
         j.k("console").arr();

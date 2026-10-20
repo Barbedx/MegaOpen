@@ -2,6 +2,7 @@
 #include "../proto/canbox/Rav4Profile.h"
 #include "../proto/canbox/Rav4Catalog.h"
 #include "Catalog.h"
+#include "../cfg/SettingsRegistry.h"
 #include "../keys/KeyDests.h"
 #include <ArduinoJson.h>
 #include <ElegantOTA.h>
@@ -467,30 +468,33 @@ void WebUi::routes()
     });
 #endif
 
+    // ---- every setting the registry describes (src/cfg/SettingsRegistry.h) ----
+    // The same table the panel menu draws: a key here is a registry id, a
+    // Bool is true/false, an Int a number, an Enum its stored id.
     route("/api/settings", HTTP_GET, [this](PsychicRequest* r) {
         auto& s = _cfg->s();
         JsonDocument d;
-        d["debounceMs"]     = s.timing.debounceMs;
-        d["fastDebounceMs"] = s.timing.fastDebounceMs;
-        d["longMs"]         = s.timing.longMs;
-        d["repeatMs"]       = s.timing.repeatMs;
-        d["repeatEnabled"]  = s.timing.repeatEnabled;
-        d["pulseMs"]        = s.pulseMs;
-        d["uartEnabled"]    = s.uartEnabled;
-        d["uartBaud"]       = s.uartBaud;
+#if FEATURE_KNOBS
+        Knobs::Config kc;
+        if (_knobs) kc = _knobs->config();
+        const Cfg::Model m{&s, _knobs ? &kc : nullptr};
+#else
+        const Cfg::Model m{&s, nullptr};
+#endif
+        for (size_t i = 0; i < Cfg::Registry::count(); ++i) {
+            const Cfg::SEntry& e = Cfg::Registry::at(i);
+            if (e.type == Cfg::SType::Group || !(e.flags & Cfg::F_WEB) || !Cfg::Registry::available(m, e))
+                continue;
+            const int32_t v = Cfg::Registry::get(m, e);
+            switch (e.type) {
+                case Cfg::SType::Bool: d[e.id] = v != 0; break;
+                case Cfg::SType::Enum: d[e.id] = Cfg::Registry::enumId(e, v); break;
+                default:               d[e.id] = v; break;
+            }
+        }
+        // Not settings: the network names (passwords never) and the build.
         d["ssid"]           = s.ssid;
-        d["ssid2"]          = _wifi ? _wifi->net2Ssid() : String();   // passwords never
-        d["bleMode"]        = s.bleMode;
-        d["autoTime"]       = s.autoTime;
-        d["ancsPopup"]      = s.ancsPopup;
-        d["mdnsOn"]         = s.mdnsOn;
-        d["mediaLayout"]    = s.mediaLayout;
-        d["mediaSource"]    = s.mediaSource;
-        d["huTitleCmd"]     = s.huTitleCmd;
-        d["huArtistCmd"]    = s.huArtistCmd;
-        d["huTitleFirst"]   = s.huTitleFirst;
-        d["keyPopup"]       = s.keyPopup;
-        d["keyPopupMs"]     = s.keyPopupMs;
+        d["ssid2"]          = _wifi ? _wifi->net2Ssid() : String();
         // fw is the build; cfgVer is the NVS schema version, not a build version.
         d["fw"]             = MEGAOPEN_VERSION;
         d["build"]          = MegaOpen::buildId();
@@ -503,89 +507,123 @@ void WebUi::routes()
 
     route("/api/settings", HTTP_POST, [this](PsychicRequest* r) {
         JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
+        if (deserializeJson(d, r->body()) || !d.is<JsonObjectConst>())
+            return r->reply(400, "text/plain", "bad json");
         auto& s = _cfg->s();
         // The AP password, which is also the OTA password. Empty = unchanged.
         const String apPass = d["apPass"] | "";
         if (apPass.length() && (apPass.length() < 8 || apPass.length() > 63))
             return r->reply(400, "text/plain", "apPass: 8 to 63 characters");
 
-        // Everything that can be refused is checked before anything is applied
-        // (the /api/map rule): a 400 leaves the settings as they were.
-        // A value that is read only at boot is saved and answered with
-        // pendingReboot; POST /api/reboot applies it.
-        bool restart = d["mdnsOn"].is<bool>() && (bool)d["mdnsOn"] != s.mdnsOn;
-        s.timing.debounceMs     = d["debounceMs"]     | s.timing.debounceMs;
-        s.timing.fastDebounceMs = d["fastDebounceMs"] | s.timing.fastDebounceMs;
-        s.timing.longMs         = d["longMs"]         | s.timing.longMs;
-        s.timing.repeatMs       = d["repeatMs"]       | s.timing.repeatMs;
-        s.timing.repeatEnabled  = d["repeatEnabled"]  | s.timing.repeatEnabled;
-        s.pulseMs               = d["pulseMs"]        | s.pulseMs;
-        s.uartEnabled           = d["uartEnabled"]    | s.uartEnabled;
-        s.ancsPopup             = d["ancsPopup"]      | s.ancsPopup;
-        s.mdnsOn                = d["mdnsOn"]         | s.mdnsOn;      // takes effect on reboot
+#if FEATURE_KNOBS
+        Knobs::Config kc;
+        if (_knobs) kc = _knobs->config();
+        Cfg::Model m{&s, _knobs ? &kc : nullptr};
+#else
+        Cfg::Model m{&s, nullptr};
+#endif
 
-        // Staged for the tasks that own them: the debounce timing for the
-        // matrix sweep, the pulse and the link switch for the keys task.
-        if (_st.keymap) {
-            const Input::KeyDebouncer::Params t = s.timing;
-            _st.keymap->edit([&](App::KeysTask::KeyMapCfg& k) { k.timing = t; });
+        // Everything that can be refused is checked before anything is applied
+        // (the /api/map rule): a 400 leaves the settings as they were. Keys the
+        // registry does not know (apPass, huForget) are not refused. An Int
+        // out of range is brought into it, as the handlers before did.
+        struct Change { const Cfg::SEntry* e; int32_t v; };
+        // Static: httpd serves one request at a time, and 1 kB is not for its stack.
+        static Change ch[64];
+        uint8_t n = 0;
+        static char err[64];
+        for (JsonPairConst kv : d.as<JsonObjectConst>()) {
+            const Cfg::SEntry* e = Cfg::Registry::find(kv.key().c_str());
+            if (!e || e->type == Cfg::SType::Group) continue;
+            const JsonVariantConst j = kv.value();
+            const char* why = nullptr;
+            int32_t v = 0;
+            if (e->flags & Cfg::F_RO)                    why = "read-only";
+            else if (!Cfg::Registry::available(m, *e))   why = "not on this board";
+            else if (e->type == Cfg::SType::Bool) {
+                if (j.is<bool>()) v = j.as<bool>() ? 1 : 0; else why = "true or false";
+            } else if (e->type == Cfg::SType::Int) {
+                if (!j.is<long>()) why = "a number";
+                else {
+                    const long x = j.as<long>();
+                    const int32_t lo = Cfg::Registry::minOf(*e), hi = Cfg::Registry::maxOf(*e);
+                    v = (int32_t)(x < lo ? lo : x > hi ? hi : x);
+                }
+            } else {
+                const int i = j.is<const char*>() ? Cfg::Registry::enumIndex(*e, j.as<const char*>()) : -1;
+                if (i < 0) why = "unknown value"; else v = i;
+            }
+            if (why) {
+                snprintf(err, sizeof(err), "%s: %s", e->id, why);
+                return r->reply(400, "text/plain", err);
+            }
+            if (n < sizeof(ch) / sizeof(ch[0])) ch[n++] = Change{e, v};
         }
-        if (_st.routing) {
-            const uint16_t pulse = s.pulseMs;
-            const bool on = s.uartEnabled;
-            _st.routing->edit([&](App::KeysTask::Routing& k) { k.pulseMs = pulse; k.uartOn = on; });
+
+        // What the head-unit text learner had, so only a real change resets it.
+        const uint8_t huT = s.huTitleCmd, huA = s.huArtistCmd;
+        const bool huFirst = s.huTitleFirst;
+        const Cfg::Str src = s.mediaSource;
+
+        uint8_t ap = 0;
+        for (uint8_t i = 0; i < n; ++i) Cfg::Registry::set(m, *ch[i].e, ch[i].v, &ap);
+        bool restart = (ap & Cfg::AP_REBOOT) != 0;
+
+        // Staged for the tasks that own them: the debounce timing and the
+        // encoder direction for the matrix sweep; the pulse, the links and
+        // the class masks for the keys task.
+        if (ap & Cfg::AP_KEYS) {
+            if (_st.keymap) {
+                const Input::KeyDebouncer::Params t = s.timing;
+                const bool inv = s.encInverted;
+                _st.keymap->edit([&](App::KeysTask::KeyMapCfg& k) { k.timing = t; k.encInverted = inv; });
+            }
+            if (_st.routing) {
+                const uint16_t pulse = s.pulseMs;
+                const bool on = s.uartEnabled, resOn = s.resEnabled;
+                const uint8_t u = s.routeUart, a = s.routeAms, h = s.routeHid, rs = s.routeRes,
+                              us = s.routeUsb;
+                _st.routing->edit([&](App::KeysTask::Routing& k) {
+                    k.pulseMs = pulse; k.uartOn = on; k.resOn = resOn;
+                    k.uartCls = u; k.amsCls = a; k.hidCls = h; k.resCls = rs; k.usbCls = us;
+                });
+            }
+#if FEATURE_RESISTIVE_KEYS
+            // A rung held under a mask just changed would never see its Release.
+            if (_res && _st.resAllOff) _st.resAllOff();
+#endif
+            App::KeyBus::kick();
         }
-        App::KeyBus::kick();
 
 #if FEATURE_DISPLAY_CAN
-        // ---- the key popup, live ------------------------------------------
-        s.keyPopup   = d["keyPopup"]   | s.keyPopup;
-        s.keyPopupMs = d["keyPopupMs"] | s.keyPopupMs;
-        if (s.keyPopupMs < 300)   s.keyPopupMs = 300;    // shorter than a glance
-        if (s.keyPopupMs > 10000) s.keyPopupMs = 10000;  // longer than a screen
-        if (_ui.keyPopup)   *_ui.keyPopup = s.keyPopup;
-        if (_ui.keyPopupMs) *_ui.keyPopupMs = s.keyPopupMs;
+        // The screen, the pane and the key popup, live.
+        if ((ap & Cfg::AP_UI) && !App::Ui::stageFrom(s))
+            LogBus::line("settings: the screen's were busy, applied at the next change");
 
-        // ---- where the now-playing text comes from, live -------------------
-        // Applied immediately so sources can be compared with the panel in view.
-        if (d["mediaSource"].is<const char*>()) {
-            const String m = (const char*)d["mediaSource"];
-            if (m == "ams" || m == "hu" || m == "auto") {
-                s.mediaSource = m;
-                if (_router) _router->setMode(MediaRouter::modeFromStr(m.c_str()));
-            }
-        }
-
-        // Which command byte carries which field; 0 = learn. Setting either
-        // forgets what was learned.
-        if (_hu && (d["huTitleCmd"].is<int>() || d["huArtistCmd"].is<int>())) {
-            s.huTitleCmd  = (uint8_t)(d["huTitleCmd"]  | (int)s.huTitleCmd);
-            s.huArtistCmd = (uint8_t)(d["huArtistCmd"] | (int)s.huArtistCmd);
-            _hu->setChannels(s.huTitleCmd, s.huArtistCmd);
-        }
-        if (_hu && d["huTitleFirst"].is<bool>()) {
-            s.huTitleFirst = d["huTitleFirst"];
-            _hu->setTitleFirst(s.huTitleFirst);
+        // Where the now-playing text comes from: live, so sources can be
+        // compared with the panel in view. Setting a command byte forgets
+        // what was learned, so it is set only when it changed.
+        if (ap & Cfg::AP_MEDIA) {
+            if (_router && s.mediaSource != src) _router->setMode(MediaRouter::modeFromStr(s.mediaSource.c_str()));
+            if (_hu && (s.huTitleCmd != huT || s.huArtistCmd != huA)) _hu->setChannels(s.huTitleCmd, s.huArtistCmd);
+            if (_hu && s.huTitleFirst != huFirst) _hu->setTitleFirst(s.huTitleFirst);
         }
         // "Throw away what you learned and watch again", for when the learner
         // latched onto a status frame that happened to look like text.
         if (_hu && (d["huForget"] | false)) _hu->forget();
 #endif
 
-        // These take effect only at boot (BLE stack is built once in setup()).
-        if (d["bleMode"].is<const char*>()) {
-            const String m = (const char*)d["bleMode"];
-            if (Catalog::bleModeKnown(m.c_str())) {
-                restart = restart || (m != s.bleMode);
-                s.bleMode = m;
-            }
+#if FEATURE_KNOBS
+        if ((ap & Cfg::AP_KNOBS) && _knobs) {
+            _knobs->setConfig(kc);
+            _cfg->saveKnobs(kc);
         }
+#endif
 
         if (apPass.length()) { restart = restart || apPass != s.apPass; s.apPass = apPass; }
 
         _cfg->save();
-        LogBus::line(restart ? "settings saved, pending reboot" : "settings saved");
+        LogBus::printf("settings saved: %u value(s)%s", (unsigned)n, restart ? ", pending reboot" : "");
         return r->reply(200, "application/json", restart ? "{\"ok\":true,\"pendingReboot\":true}"
                                                          : "{\"ok\":true}");
     });

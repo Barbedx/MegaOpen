@@ -5,6 +5,18 @@ const BLEHINT={off:'BLE не запускається, +40 кБ пам’яті.
  keyboard:'Плата стає Bluetooth-пультом: play, next, prev, гучність. Для Android або ГУ без AMS. Тексту немає.',
  both:'Одночасно iPhone (AMS, ANCS, CTS) і пульт HID для другого пристрою.'};
 const bars=r=>{const n=r>-55?4:r>-67?3:r>-78?2:1;return `<span class="sig">${[1,2,3,4].map(i=>`<i class="${i<=n?'on':''}" style="height:${i*4}px"></i>`).join('')}</span>`};
+/* усі налаштування з реєстру прошивки (CAT.settings): ті самі, що в меню на щитку;
+   ті, що вже є на сторінці (data-k в `have`), не дублюються; reboot -> смуга перезавантаження */
+const allSettings=(se,have)=>{let h='';for(const f of CAT.settings||[]){
+ if(f.type==='group'){h+=`<div class="row muted"><b>${esc(f.label)}</b></div>`;continue}
+ if(!(f.id in se)||have.includes(`|${f.id}"`))continue;
+ const v=se[f.id],k=(f.reboot?'rb:':'')+'/api/settings|'+f.id,ex=f.reboot?rbA(k,v,f.label):'';let c;
+ if(f.ro)c=`<span class="mono">${esc(f.enum?((f.enum.find(o=>o.v===v)||{}).name||v):v)}${f.unit?' '+esc(f.unit):''}</span>`;
+ else if(f.type==='bool')c=sw(k,v,ex);
+ else if(f.type==='enum')c=sel(k,f.enum.map(o=>[o.v,o.name]),v,'data-str'+ex);
+ else c=num(k,v,`min="${f.min}" max="${f.max}"${f.step?` step="${f.step}"`:''}${ex}`);
+ h+=row(esc(f.label)+(f.unit&&!f.ro?', '+esc(f.unit):''),c,f.menu?'є і в меню на щитку':'')}
+ return h};
 SCR.board={title:'Плата',async render(m){
  const B=has('ble');
  const[st,se,lg]=await Promise.all([API.get('/api/status'),API.get('/api/settings'),getIf(has('logfs'),'/api/logs')]);
@@ -21,9 +33,12 @@ SCR.board={title:'Плата',async render(m){
  card('Оновлення прошивки','<div class="kv"><div><small>Прошивка</small><b>'+esc(se.fw)+'</b></div><div><small>Збірка</small><b>'+esc(se.build)+'</b></div></div>'+
   '<div class="fr"><input type="file" id="otaF" accept=".bin" class="in" style="flex:1"><button class="btn pri" type="button" id="otaGo">Оновити</button></div><div class="pad" id="otaP" hidden><div class="bar big"><i id="otaBar"></i></div></div>','cOta','custom')+
  (has('logfs')?card('Журнал запусків',row('','','Ті самі рядки, що йдуть у серійний порт, але на флеші: файл на кожен запуск, 8 останніх. Живий потік — Сервіс › Лог. Після зависання чи зникнення живлення останні ~16 кБ можуть не потрапити.')+`<div id="logs">${(lg.files||[]).map(f=>row(f.n?'Запуск −'+f.n:'Цей запуск',`<button class="btn sm" type="button" data-n="${f.n}">Скачати</button>`,fmtB(f.size))).join('')}</div>`,'','custom'):'')+
+ '<div id="allSlot"></div>'+
  card('Інтерфейс',row('Режим розробника',`<input type="checkbox" class="sw" id="devSw" data-nosave${DEV?' checked':''}>`,'показує вкладку Сервіс'),'','custom')+
  card('Небезпечна зона','<div class="fr"><button class="btn" type="button" id="rbt">Перезавантажити</button><button class="btn dng" type="button" id="fac">Скинути до заводських</button></div>','','custom');
+ $('#allSlot').outerHTML=fold('Усі налаштування',row('','','Ті самі значення, що в меню на щитку (утримати правий енкодер).')+allSettings(se,m.innerHTML),'cAll');
  saver($('#cWifi'),genericSave,'[data-k]');
+ saver($('#cAll'),genericSave,'[data-k]');
  if(B){saver($('[data-k="rb:/api/settings|bleMode"]').closest('.card'),genericSave,'[data-k]');
  $('[data-k="rb:/api/settings|bleMode"]').addEventListener('change',e=>{$('#bHint').textContent=BLEHINT[e.target.value]||''});
  $('#bForget').onclick=e=>ask(e.target,'Забути всі пари? На iPhone теж: Bluetooth → MEGA → Забути.',()=>run(e.target,()=>API.post('/api/ble/unbond')).then(()=>this.tick()))}

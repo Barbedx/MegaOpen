@@ -979,41 +979,6 @@ static Keys::MacroEngine  g_macros;
 // not see its own output.
 static void macroEmit(const Keys::Event& e, void*) { g_engine.dispatchRaw(e); }
 
-#if FEATURE_DISPLAY_CAN
-// A screen setting changed in the panel menu, into the ui task the way
-// POST /api/media and /api/settings stage it. Runs on net_svc.
-static void menuStageUi(const Cfg::Settings& s)
-{
-    using MegaOpen::MediaScreen;
-    using MegaOpen::MediaPane;
-    const MediaScreen::Layout layout = MediaScreen::layoutFromName(s.mediaLayout.c_str());
-    const bool paneAuto = s.mediaPane == "auto";
-    const MediaPane::Scene scene = paneAuto ? MediaPane::Scene::Off
-                                            : MediaPane::sceneFromName(s.mediaPane.c_str());
-    const bool ok = App::Ui::settings().edit([&](App::Ui::MediaSettings& m) {
-        m.mediaAuto = s.mediaScreen;
-        // Width follows the layout, as on the web.
-        if (m.layout != layout) { m.layout = layout; m.cols = MediaScreen::colsFor(layout); }
-        m.style = MediaScreen::styleFromName(s.mediaStyle.c_str());
-        // A pane choice is applied once (sceneSeq); an unchanged one would
-        // restart the carousel.
-        if (m.paneAuto != paneAuto || (!paneAuto && m.paneScene != scene)) {
-            m.paneAuto = paneAuto;
-            if (!paneAuto) m.paneScene = scene;
-            ++m.sceneSeq;
-        }
-        m.paneCycleS = s.paneCycleS;
-        m.paneSpeed  = s.paneSpeed;
-        m.splashMs   = s.trackSplashMs;
-        m.autoTime   = s.autoTime;
-    });
-    if (!ok) logf("[menu] ui settings busy: applied at the next change or reboot");
-    const App::Ui::Words w = App::Ui::words();
-    if (w.keyPopup)   *w.keyPopup = s.keyPopup;
-    if (w.keyPopupMs) *w.keyPopupMs = s.keyPopupMs;
-}
-#endif
-
 // The panel menu first (App::PanelMenu): a key the menu takes is no macro's.
 static bool macroFilter(const Keys::Event& e, void*)
 {
@@ -1675,7 +1640,9 @@ void setup()
         m.knobsGet = [](Knobs::Config& out) { out = g_knobs.config(); return true; };
         m.knobsSet = [](const Knobs::Config& c) { g_knobs.setConfig(c); g_cfg.saveKnobs(c); };
 #endif
-        m.stageUi = menuStageUi;
+        m.stageUi = [](const Cfg::Settings& s) {
+            if (!App::Ui::stageFrom(s)) logf("[menu] ui settings busy: shown after the next change");
+        };
         m.stageMedia = [](const Cfg::Settings& s) {
             g_media.setMode(MediaRouter::modeFromStr(s.mediaSource.c_str()));
         };

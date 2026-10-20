@@ -1247,6 +1247,36 @@ namespace App
             w.glassHoldMs = &g_glassHoldMs;
             return w;
         }
+
+        bool stageFrom(const Cfg::Settings& s)
+        {
+            using MegaOpen::MediaScreen;
+            using MegaOpen::MediaPane;
+            const MediaScreen::Layout layout = MediaScreen::layoutFromName(s.mediaLayout.c_str());
+            const bool paneAuto = s.mediaPane == "auto";
+            const MediaPane::Scene scene = paneAuto ? MediaPane::Scene::Off
+                                                    : MediaPane::sceneFromName(s.mediaPane.c_str());
+            const bool ok = s_settings.edit([&](MediaSettings& m) {
+                m.mediaAuto = s.mediaScreen;
+                // Width follows the layout, as POST /api/media does.
+                if (m.layout != layout) { m.layout = layout; m.cols = MediaScreen::colsFor(layout); }
+                m.style = MediaScreen::styleFromName(s.mediaStyle.c_str());
+                // A pane choice is applied once (sceneSeq); restaging an
+                // unchanged one would restart the carousel.
+                if (m.paneAuto != paneAuto || (!paneAuto && m.paneScene != scene)) {
+                    m.paneAuto = paneAuto;
+                    if (!paneAuto) m.paneScene = scene;
+                    ++m.sceneSeq;
+                }
+                m.paneCycleS = s.paneCycleS;
+                m.paneSpeed  = s.paneSpeed;
+                m.splashMs   = s.trackSplashMs;
+                m.autoTime   = s.autoTime;
+            });
+            g_keyPopup   = s.keyPopup;
+            g_keyPopupMs = s.keyPopupMs;
+            return ok;
+        }
     }
 }
 #endif

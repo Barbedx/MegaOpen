@@ -11,7 +11,7 @@
 
 class MediaRouter;
 class HuMediaSource;
-namespace Cfg { class Config; }
+namespace Cfg { class Config; struct Settings; }
 namespace Keys { class KeyEngine; }
 namespace MegaOpen { class PanelOps; }
 
@@ -155,8 +155,15 @@ namespace App
         const Mirror<MegaOpen::MediaScreen>&     mediaMirror();
         const Mirror<MegaOpen::MediaPane>&       paneMirror();
 
-        // Plain words with one writer (httpd), read here and by the keys task;
-        // allowed by §3.1 and kept so since Step 2.
+        // The screen's settings in Cfg (the registry's AP_UI entries) staged
+        // for this task as a whole: the now-playing screen, layout, style,
+        // pane, splash, clock push and the key popup. Called by whoever just
+        // stored them (httpd, net_svc for the panel menu). False: the staging
+        // mutex was busy and nothing was staged; the words were still written.
+        bool stageFrom(const Cfg::Settings& s);
+
+        // Plain words with one writer at a time (httpd, or net_svc for the
+        // panel menu), read here and by the keys task; allowed by §3.1.
         struct Words {
             bool*     keyPopup    = nullptr;
             uint16_t* keyPopupMs  = nullptr;

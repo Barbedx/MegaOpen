@@ -251,6 +251,35 @@ static void test_fixed_ids_the_page_uses()
     TEST_ASSERT_FALSE(Catalog::bleModeKnown(nullptr));
 }
 
+// `settings`: the registry as the page draws it. Ids unique, every parent a
+// group listed earlier, every type known, Ints with a range, Enums with rows.
+static void test_settings_list()
+{
+    const V& s = list("settings");
+    TEST_ASSERT_TRUE(s.a.size() > 10);
+    std::set<std::string> ids, groups;
+    for (const auto& e : s.a) {
+        const std::string id = e->get("id")->s;
+        TEST_ASSERT_TRUE_MESSAGE(ids.insert(id).second, id.c_str());
+        TEST_ASSERT_FALSE_MESSAGE(e->get("label")->s.empty(), id.c_str());
+        const std::string type = e->get("type")->s;
+        if (const V* p = e->get("parent")) TEST_ASSERT_TRUE_MESSAGE(groups.count(p->s), id.c_str());
+        if (type == "group") { groups.insert(id); continue; }
+        if (type == "int") {
+            TEST_ASSERT_NOT_NULL_MESSAGE(e->get("min"), id.c_str());
+            TEST_ASSERT_TRUE_MESSAGE(e->get("min")->n <= e->get("max")->n, id.c_str());
+        } else if (type == "enum") {
+            TEST_ASSERT_TRUE_MESSAGE(e->get("enum") && !e->get("enum")->a.empty(), id.c_str());
+        } else {
+            TEST_ASSERT_EQUAL_STRING_MESSAGE("bool", type.c_str(), id.c_str());
+        }
+    }
+    // The keys the pages already post to /api/settings are registry ids.
+    for (const char* k : {"uartEnabled", "pulseMs", "keyPopupMs", "mediaSource", "ancsPopup",
+                          "bleMode", "huTitleCmd", "huTitleFirst"})
+        TEST_ASSERT_TRUE_MESSAGE(ids.count(k), k);
+}
+
 // `features`: one bool per Catalog::FEATURES row, in its order, and the lists
 // that depend on a feature agree with it (the page trusts both).
 static void test_features()
@@ -333,6 +362,7 @@ int main(int, char**)
         RUN_TEST(test_wire_hold_only_on_the_detents);
         RUN_TEST(test_fixed_ids_the_page_uses);
         RUN_TEST(test_raise_rows_are_complete);
+        RUN_TEST(test_settings_list);
         RUN_TEST(test_features);
         RUN_TEST(writeForTheSimulator);
     }

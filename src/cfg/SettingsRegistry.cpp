@@ -1,9 +1,12 @@
 #include "SettingsRegistry.h"
 #include <stdio.h>
 #include <string.h>
+#include "../Features.h"
+#if FEATURE_DISPLAY_CAN
 #include "../display/MediaScreen.h"
 #include "../display/MediaPane.h"
 #include "../media/MediaRouter.h"
+#endif
 #include "../bus/Autobaud.h"
 #include "../net/Catalog.h"
 
@@ -11,6 +14,7 @@ namespace Cfg
 {
     namespace
     {
+#if FEATURE_DISPLAY_CAN
         using MegaOpen::MediaScreen;
         using MegaOpen::MediaPane;
 
@@ -58,6 +62,7 @@ namespace Cfg
             [](uint8_t i) { return pickRow(i).id; },
             [](uint8_t i) { return pickRow(i).name; },
         };
+#endif
 
         const SEnum kBleModes = { Catalog::bleModeCount, Catalog::bleModeId, Catalog::bleModeName };
         const SEnum kPanels   = { Catalog::panelCount,   Catalog::panelId,   Catalog::panelName };
@@ -171,6 +176,7 @@ namespace Cfg
 #define K_PUT(stmt) [](Model& m, int32_t v) { Knobs::Config& k = *m.k; (void)v; stmt; }
 
         const SEntry kTable[] = {
+#if FEATURE_DISPLAY_CAN    // the screen: nothing to set on a build without the panel
             // ---- the screen ------------------------------------------------
             G("display", "Екран", "Display", nullptr, WM),
             {"mediaScreen", "Екран «зараз грає»", "Audio screen", "display", SType::Bool, WM, AP_UI,
@@ -206,6 +212,7 @@ namespace Cfg
             {"mediaSource", "Джерело назви треку", "Track source", "display", SType::Enum, WM, AP_MEDIA,
              0, 0, 0, nullptr, &kSources, S_GET(rowOf(kSources, s.mediaSource)),
              S_PUT(s.mediaSource = kSources.id((uint8_t)v))},
+#endif
 
             // ---- the knob lights -------------------------------------------
             G("lights", "Підсвітка", "Lights", nullptr, WM),
