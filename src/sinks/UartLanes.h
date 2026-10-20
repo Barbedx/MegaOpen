@@ -23,7 +23,7 @@ namespace Sinks
 {
     namespace UartLanes
     {
-        constexpr uint16_t FIFO_BYTES  = 128;    // ESP32, S3 and C3 UART FIFO
+        constexpr uint16_t FIFO_BYTES  = 128;    // ESP32 and S3 UART FIFO
         constexpr uint32_t US_PER_BYTE = 260;    // 10 bits at 38400 baud
 
         // Frames longer than this (a hand-made raw frame can be 36 B) would

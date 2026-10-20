@@ -10,13 +10,12 @@
 // The table says what runs TODAY. Where the plan moves a task in a later step,
 // the comment says which step and to what, so the two cannot be confused.
 //
-// Stacks are per chip. The DevKit (classic ESP32) values are the tight ones:
-// its idle free heap is ~80 kB. The C3
-// takes the DevKit values too; only the S3 has room to spare.
+// Stacks are per chip. The DevKit (classic ESP32, env:direct) values are the
+// tight ones: its idle free heap is ~80 kB. The S3 has room to spare.
 namespace App
 {
-    // Core n, or core 0 on a single-core chip (C3), so one table serves all
-    // three. A negative n means "either core" (tskNO_AFFINITY).
+    // Core n, or core 0 on a single-core chip; both boards built today are
+    // dual-core. A negative n means "either core" (tskNO_AFFINITY).
     constexpr BaseType_t core(int n)
     {
         return n < 0 ? (BaseType_t)tskNO_AFFINITY
@@ -65,13 +64,8 @@ namespace App
         // 3072 left only ~840-1060 bytes free on the S3 at idle ([task] hu
         // stk=), with the 17-argument log lines and the frame callbacks still
         // to come under load: 4096 on the S3 and the DevKit (+1 kB of heap; the
-        // DevKit idles near 80 kB). The C3 keeps
-        // 3072 until its own low-water says otherwise.
-#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
+        // DevKit idles near 80 kB).
         constexpr uint32_t    HU_STACK   = 4096;
-#else
-        constexpr uint32_t    HU_STACK   = 3072;
-#endif
         constexpr UBaseType_t HU_PRIO   = 6;  constexpr int HU_CORE   = 1;
 
         // The Arduino loop task is the panel task (src/app/PanelOwner.h): the
@@ -87,9 +81,9 @@ namespace App
         // core, below everything that a key or the panel's timing waits for;
         // a slow compose or the 5 ms media-lock wait costs a late repaint and
         // nothing else. Wakes on a completion, or every 50 ms.
-        // The DevKit gets 4 kB, not the 5 kB of the plan's table: its heap is
-        // the binding case (§2.3, first mitigation), and the compose and fold
-        // buffers are static, not on this stack. Read its [task] low-water.
+        // 6 kB on the S3. The 4 kB for a classic ESP32 (no build runs the ui
+        // task there today: env:direct has no panel) is why the compose and
+        // fold buffers are static, not on this stack. Read its [task] low-water.
         constexpr UBaseType_t UI_PRIO   = 2;  constexpr int UI_CORE   = 1;
         constexpr uint32_t    UI_STACK   = stack(6144, 4096);
 

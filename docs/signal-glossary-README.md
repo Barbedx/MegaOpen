@@ -30,7 +30,7 @@ py -3.12 tools/can_corr.py selftest
 
 - **The DDT2000 definitions** (the DDT4all database, `ecu.zip`) are Renault's data, so
   they are not in this repository: unpack the `X84` ECU files (`*.json`) into a folder
-  of your own and pass it with `--ddt` (the default is `../ddt-db/x84`). `X84` is the
+  of your own and pass it with `--ddt`. `X84` is the
   Mégane II project code.
 - **Which file is OUR car's** came from the owner's DDT4all scan of 2026-06-14
   (its log is not in this repository). The injection is `S3000_A791_Can_1_X84`, the climate

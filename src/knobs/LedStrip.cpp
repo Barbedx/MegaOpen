@@ -58,7 +58,7 @@ namespace Knobs
         c.tx_config.idle_level     = RMT_IDLE_LEVEL_LOW;
 
         // Every RMT block (nothing else uses RMT): more memory = more ISR
-        // latency slack, 320 us on the classic part, 120 on the C3. Falls back
+        // latency slack, 320 us on the classic part. Falls back
         // to one block.
         c.mem_block_num = SOC_RMT_CHANNELS_PER_GROUP;
         if (rmt_config(&c) != ESP_OK) {

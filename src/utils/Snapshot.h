@@ -7,7 +7,7 @@
 // g_notifyMux and LogBus: a copy under a portMUX, nothing more.
 //
 // Not a seqlock, on purpose. A seqlock reader retries while a write is in
-// progress, and on the single-core C3 a reader that preempted the writer
+// progress, and on a single-core chip a reader that preempted the writer
 // retries forever. The structs here are small, so the copy under the spinlock
 // costs about a microsecond and nothing has to retry.
 //

@@ -19,8 +19,7 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   leg on LCD pins 1 and 2. No firmware change: keep the bits (P0-P2 right
   CLK/DT/SW, P4-P6 left), and the address is found by the 0x20-0x27 probe.
   P3 becomes a usable input (there is no backlight transistor). Kamami
-  ID 1181302, 28.91 zł, about 4 weeks to arrive. The tape-board adapter
-  was dropped for this reason.
+  ID 1181302, 28.91 zł, about 4 weeks to arrive.
 - **ADS1015 on QWIIC 2 (ordered 2026-10-15, after the CAN capture).** Car
   voltage and the 0-12 V dash dimmer. Chains with the PCF8574 (0x48, no clash);
   the knobs task owns the bus and reads one channel ~every 50 ms. Each input:
@@ -179,16 +178,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   `docs/signal-glossary.*` and `tools/can_corr.py` carry data derived from the
   Renault DDT database (ECU file names, field encodings, French parameter
   names). Settle whether that may be published, or strip it, first.
-
-### Bench / tooling
-
-- **Opening COM5 resets the brain.** The old DevKit's CP2102 is damaged: it
-  still enumerates, corrupts ESP->PC bit 0, and DTR/RTS reset the board on open.
-  Never open it; read the board over HTTP.
-- **Head-unit emulator on the C3 (`huemu`)**: listen to the brain's TX2 (Raise,
-  38400), log decoded frames over USB, send `0x9D` time and title/artist text
-  back. Waiting for the owner to move the C3's two wires to RX2/TX2 (crossed)
-  for the test.
 
 ## Done
 

@@ -56,8 +56,8 @@ namespace Log {
 //   ERR  failure; WRN  unexpected but handled; INF  state transitions;
 //   DBG  per-operation narration; TRC  per-frame firehose.
 //
-// Runtime threshold (default INF) via HTTP /api/loglevel?n=<0..4> (serial input
-// is dead on the C3 USB-CDC). Not persisted: TRC costs the CAN path real time.
+// Runtime threshold (default INF) via HTTP /api/loglevel?n=<0..4> (nothing reads
+// serial input). Not persisted: TRC costs the CAN path real time.
 // Gated-out lines return before formatting; guard costly payload builds with
 // Log::enabled(). Fixed stack buffer, no String: safe in the CAN callback.
 // ============================================================================

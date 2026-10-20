@@ -24,7 +24,7 @@ const unixNow=()=>Math.floor(Date.now()/1000);
    (pio test -e native -f test_catalog), у window.SIM_CATALOG. */
 /* Поля RAV4 і заводська мапа — з прошивки: catalog.raise (RaiseTargets) і build/decode.json
    (test_decode: заводська таблиця у формі \`can\` з /api/map і імена сигналів) у window.SIM_DECODE. */
-/* ?env=devkit (t2can, direct …): ця збірка — features з каталогу і лише її маршрути.
+/* ?env=direct (t2can, t2can_usbhid): ця збірка — features з каталогу і лише її маршрути.
    Правда про env — з самої збірки плати: build_sim.py кладе window.SIM_ENVS
    (build/features/<env>.json від gen_pages.py). Без env — t2can, коли він є. */
 const ENVS=window.SIM_ENVS||{},ENV=(()=>{let e=null;try{e=new URLSearchParams(location.search).get('env')}catch(x){}return ENVS[e]?e:ENVS.t2can?'t2can':Object.keys(ENVS)[0]||''})();

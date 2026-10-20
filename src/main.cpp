@@ -1524,7 +1524,7 @@ void setup()
 {
     Serial.begin(115200);
 #if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
-    // USB-CDC console (C3, T-2CAN): with no host reading, a write waits out the
+    // USB-CDC console (T-2CAN): with no host reading, a write waits out the
     // timeout. In the car nothing reads it; the LogBus task must not stall on it.
     Serial.setTxTimeoutMs(0);
 #endif
@@ -2276,10 +2276,9 @@ static void logLoopWindow(uint32_t now)
 // off, so whatever runs below it still gets time; delay(2) used to give that
 // for free. With no panel on two cores only IDLE1 sits below it, and one tick
 // in 20 ms is plenty; with the panel, the ui task (priority 2, core 1) sits
-// below it too, so it gets the 2 ms rule. On one core (the C3) httpd, ble_svc, net_svc and logbus all share
-// the CPU with it, so it rests a tick after every 2 ms of busy time: a third
-// of the CPU stays theirs, where one tick in 20 ms would leave them 5% —
-// exactly when the web is needed to find out why the bus is flooding.
+// below it too, so it gets the 2 ms rule. A single-core chip (none is built
+// today) gets it too: there httpd, ble_svc, net_svc and logbus all share the
+// CPU with it, and one tick in 20 ms would leave them 5%.
 static void loopWait()
 {
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN

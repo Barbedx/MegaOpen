@@ -297,7 +297,7 @@ namespace App
                 // bytes (UTF-8 Cyrillic would scroll at half speed and split
                 // mid-sequence). normalizeTitle also strips the Apple Music video
                 // tag ("• Є відео"). Static: this task alone calls it, and its
-                // stack is the DevKit's tight 4 kB.
+                // stack is sized without them (TaskPlan.h, UI_STACK).
                 static char t[MegaOpen::MediaScreen::ROW_MAX * 2];
                 static char a[MegaOpen::MediaScreen::ROW_MAX * 2];
 

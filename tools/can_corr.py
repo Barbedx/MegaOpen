@@ -4,14 +4,14 @@
 A capture taken while a diagnostic tool (DDT4all + ELM327) polls the car holds
 both: the ECUs' broadcast frames and the request/response pairs on 7xx. This
 tool reassembles the ISO-TP replies, decodes them with the DDT2000 definitions
-(the DDT4all database, ../ddt-db/x84, outside git: Renault's data), and for
+(the DDT4all database, outside git: Renault's data; --ddt DIR), and for
 every decoded value looks for the broadcast byte, word or bit that moves with
 it. Python stdlib only; the capture reader is can_dump.py's.
 
-    can_corr.py ecus     [--ddt DIR]
-    can_corr.py diag     FILE... [--ddt DIR] [--item RE] [-o OUT.csv]
-    can_corr.py corr     FILE... [--ddt DIR] [--item RE] [--top N] [--min-n N]
-    can_corr.py glossary [--fill] [--md OUT] [--ddt DIR]
+    can_corr.py ecus     --ddt DIR
+    can_corr.py diag     FILE... --ddt DIR [--item RE] [-o OUT.csv]
+    can_corr.py corr     FILE... --ddt DIR [--item RE] [--top N] [--min-n N]
+    can_corr.py glossary [--fill --ddt DIR] [--md OUT]
     can_corr.py selftest
 
 Record the session in FULL mode (/car: capture "усі кадри"). A change-only
@@ -46,7 +46,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import can_dump as cd  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_DDT = os.path.join(os.path.dirname(REPO), "ddt-db", "x84")
 GLOSSARY = os.path.join(REPO, "docs", "signal-glossary.json")
 READ_SIDS = (0x21, 0x22)          # reads only: these are what gets correlated
 
@@ -539,6 +538,8 @@ def cmd_corr(a):
 
 def cmd_glossary(a):
     g = load_glossary()
+    if a.fill and not a.ddt:
+        raise SystemExit("glossary --fill needs --ddt DIR: the DDT2000 JSON folder (outside git)")
     if a.fill:
         ecus = {}
         for name in g["ecus"]:
@@ -740,7 +741,7 @@ def main(argv=None):
         if files:
             s.add_argument("files", nargs="+")
             s.add_argument("--bus", type=int, default=0, help="the car's bus (default 0)")
-        s.add_argument("--ddt", default=DEFAULT_DDT, help="DDT2000 JSON folder (default ../ddt-db/x84)")
+        s.add_argument("--ddt", required=True, help="DDT2000 JSON folder (the X84 ECU files)")
         s.add_argument("--ecu", action="append", help="ECU file name; default: the glossary's ECUs")
 
     s = sub.add_parser("ecus", help="the definitions in use and their ids")
@@ -760,7 +761,7 @@ def main(argv=None):
     s = sub.add_parser("glossary", help="fill the glossary's encodings, render its Markdown")
     s.add_argument("--fill", action="store_true", help="copy encodings from the DDT files into the JSON")
     s.add_argument("--md", help="write the Markdown here (default: print it)")
-    s.add_argument("--ddt", default=DEFAULT_DDT)
+    s.add_argument("--ddt", help="DDT2000 JSON folder, needed by --fill")
     s.set_defaults(fn=cmd_glossary)
     s = sub.add_parser("selftest", help="a synthetic polled capture through every step")
     s.set_defaults(fn=cmd_selftest)
