@@ -133,6 +133,56 @@ namespace Vehicle
         {"hybrid_present",  "",     0,       1, 0, true,  GRP_DRIVE},
         {"hybrid_batt",     "0-8",  0,     8,   0, false, GRP_DRIVE},
         {"hybrid_flow",     "raw",  0,      63, 0, false, GRP_DRIVE},
+
+        // ---- Mégane II broadcast: ranges are what the wire field can carry ------------
+        {"fuel_level",      "L",    0,     127, 0, false, GRP_TRIP},
+        {"fuel_low",        "",     0,       1, 0, true,  GRP_TRIP},
+        {"fuel_gauge_diag", "0-3",  0,       3, 0, false, GRP_TRIP},
+        {"odo_cluster",     "km",   0, 16777215, 0, false, GRP_DRIVE},
+        {"fuel_level_apv",  "L",    0,     127, 0, false, GRP_TRIP},
+        {"oil_level",       "0-15", 0,      15, 0, false, GRP_ENGINE},
+        {"mil",             "0-3",  0,       3, 0, false, GRP_ENGINE},
+        {"service_km",      "km",   0,   63750, 0, false, GRP_ENGINE},
+        {"fuel_counter",    "raw",  0,     255, 0, false, GRP_ENGINE},
+        {"batt_v",          "V",    0,    1600, 2, false, GRP_ENGINE},
+        {"oil_press_sw",    "",     0,       1, 0, true,  GRP_ENGINE},
+        {"batt_lamp",       "",     0,       1, 0, true,  GRP_ENGINE},
+        {"ac_comp_upc",     "",     0,       1, 0, true,  GRP_CLIMATE},
+        {"rear_defrost",    "",     0,       1, 0, true,  GRP_BODY},
+        {"throttle",        "%",    0,    1000, 1, false, GRP_ENGINE},
+        {"clutch",          "",     0,       1, 0, true,  GRP_ENGINE},
+        {"neutral",         "",     0,       1, 0, true,  GRP_ENGINE},
+        {"reverse_upc",     "",     0,       1, 0, true,  GRP_ENGINE},
+        {"locked",          "0-3",  0,       3, 0, false, GRP_SAFETY},
+        {"belt_drv",        "0-3",  0,       3, 0, false, GRP_SAFETY},
+        {"belt_pass",       "0-3",  0,       3, 0, false, GRP_SAFETY},
+        {"pass_present",    "0-3",  0,       3, 0, false, GRP_SAFETY},
+        {"airbag_fault",    "",     0,       1, 0, true,  GRP_SAFETY},
+        {"pass_airbag_off", "",     0,       1, 0, true,  GRP_SAFETY},
+        {"roof_pos",        "0-7",  0,       7, 0, false, GRP_SAFETY},
+        {"roof_fault",      "",     0,       1, 0, true,  GRP_SAFETY},
+        {"clim_air_set",    "C",  -40,     215, 0, false, GRP_CLIMATE},
+        {"clim_fan_state",  "0-3",  0,       3, 0, false, GRP_CLIMATE},
+        {"clim_ac_sel",     "",     0,       1, 0, true,  GRP_CLIMATE},
+        {"clim_evap",       "C",  -400,    875, 1, false, GRP_CLIMATE},
+        {"ac_request",      "",     0,       1, 0, true,  GRP_CLIMATE},
+        {"rear_defrost_req","0-3",  0,       3, 0, false, GRP_BODY},
+        {"wipers",          "0-7",  0,       7, 0, false, GRP_BODY},
+        {"rolling",         "",     0,       1, 0, true,  GRP_DYNAMICS},
+        {"sun_lux",         "lux",  0,  255000, 0, false, GRP_BODY},
+        {"accel_long",      "m/s2", -1000,  275, 2, false, GRP_DYNAMICS},
+        {"accel_lat",       "g", -131068, 131072, 3, false, GRP_DYNAMICS},
+        {"yaw_rate",        "deg/s", -65534, 65536, 1, false, GRP_DYNAMICS},
+
+        // ---- derived ------------------------------------------------------------------
+        {"gear",            "",    -1,       6, 0, false, GRP_ENGINE},
+        {"gear_ratio",      "km/h/krpm", 0, 9999, 1, false, GRP_ENGINE},
+        {"fuel_rate",       "L/h",  0,    9999, 1, false, GRP_TRIP},
+        {"cons_inst",       "L/100km", 0, 9999, 1, false, GRP_TRIP},
+        {"cons_avg",        "L/100km", 0, 9999, 1, false, GRP_TRIP},
+        {"range_calc",      "km",   0,    9999, 0, false, GRP_TRIP},
+        {"trip_fuel",       "L",    0, 9999999, 2, false, GRP_TRIP},
+        {"trip_km",         "km",   0, 9999999, 1, false, GRP_TRIP},
     };
 
     static_assert(sizeof(kMeta) / sizeof(kMeta[0]) == SIG_COUNT,
@@ -143,6 +193,22 @@ namespace Vehicle
     static const Meta kUnknown = {"?", "", 0, 0, 0, false, GRP_COUNT};
 
     const Meta& meta(uint8_t s) { return s < SIG_COUNT ? kMeta[s] : kUnknown; }
+
+    // One bit a signal, written by the car task only; a byte store is atomic,
+    // so a reader sees each signal's old or new answer, never a torn one.
+    static volatile uint8_t s_verified[(SIG_COUNT + 7) / 8];
+
+    bool verified(uint8_t s)
+    {
+        return s < SIG_COUNT && (s_verified[s >> 3] & (1u << (s & 7)));
+    }
+
+    void setVerified(uint8_t s, bool v)
+    {
+        if (s >= SIG_COUNT) return;
+        const uint8_t bit = (uint8_t)(1u << (s & 7));
+        s_verified[s >> 3] = v ? (uint8_t)(s_verified[s >> 3] | bit) : (uint8_t)(s_verified[s >> 3] & ~bit);
+    }
 
     uint8_t sigByName(const char* name)
     {

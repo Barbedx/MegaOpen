@@ -27,7 +27,7 @@ namespace Vehicle
     };
 
     struct DecodeTable {
-        static constexpr uint8_t MAX_ROWS   = CanDecode::MAX_ROWS;   // 48
+        static constexpr uint8_t MAX_ROWS   = CanDecode::MAX_ROWS;   // 96
         static constexpr uint8_t MAX_CONSTS = 16;
 
         // THE BLOB, version 1, little-endian:
@@ -49,6 +49,12 @@ namespace Vehicle
         // The first row / the constant bound to `sig`, or -1.
         int rowOf(uint8_t sig) const;
         int constOf(uint8_t sig) const;
+        // Bound to CAN, and every row binding it is measured (no
+        // DF_HYPOTHESIS): what Vehicle::verified() reports, pins aside.
+        bool measured(uint8_t sig) const;
+        // The same bytes, bits and scale: an edit that changes nothing a
+        // measurement could have confirmed (the page re-saving a row).
+        static bool sameField(const DecodeRow& a, const DecodeRow& b);
         // Replace whatever binds `sig`. False, with nothing changed, when the
         // table has no room. Rows stay sorted by id (CanDecode needs it).
         bool bindCan(uint8_t sig, const DecodeRow& r);
@@ -66,10 +72,11 @@ namespace Vehicle
     namespace DecodeJson
     {
         // {"id":"0x354","byte":0,"len":2,"shift":0,"mask":"FFFF","mul":1,
-        //  "div":1,"add":0,"le":false,"signed":false}; the length written.
+        //  "div":1,"add":0,"le":false,"signed":false,"hyp":true}; the length
+        // written. `hyp`: not measured in the car (DF_HYPOTHESIS).
         int canJson(char* b, size_t cap, const DecodeRow& r);
         // The same keys back into `r` (canId..flags; sig and holdMs are the
-        // caller's). nullptr = ok, else why.
+        // caller's). An absent `hyp` is false. nullptr = ok, else why.
         const char* canFrom(JsonObjectConst o, DecodeRow& r);
     }
 }

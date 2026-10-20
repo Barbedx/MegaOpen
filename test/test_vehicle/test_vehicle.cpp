@@ -930,14 +930,15 @@ void test_every_sent_raise_target_changes_its_message()
         TEST_ASSERT_TRUE_MESSAGE(la != lb || memcmp(a, b, la) != 0, t.id);
     }
     // And every signal the emitter reads has a row (only the 8 it does not
-    // send are missing, and eng_temp is listed as not sent).
+    // send are missing, and eng_temp is listed as not sent). The Mégane
+    // broadcast signals from SIG_FUEL_LEVEL on have no Raise field.
     bool listed[SIG_COUNT] = {};
     uint8_t n = 0;
     for (uint8_t i = 0; i < RT::count(); ++i) {
         const uint8_t sg = RT::at(i).sig;
         if (sg < SIG_COUNT && !listed[sg]) { listed[sg] = true; ++n; }
     }
-    TEST_ASSERT_EQUAL_UINT8(SIG_COUNT - 7, n);
+    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LEVEL - 7, n);
 }
 
 void test_raise_values_place_the_decimal_point()

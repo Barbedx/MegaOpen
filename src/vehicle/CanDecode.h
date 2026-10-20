@@ -54,8 +54,8 @@ namespace Vehicle
 
     class CanDecode {
     public:
-        // The user's map (DecodeTable) is capped at this too; the factory has 23.
-        static constexpr uint8_t MAX_ROWS = 48;
+        // The user's map (DecodeTable) is capped at this too; the factory has 62.
+        static constexpr uint8_t MAX_ROWS = 96;
 
         // A DF_KEY row's value changed. Runs on the decoding task: post, never
         // block. No compiled row has the flag yet.

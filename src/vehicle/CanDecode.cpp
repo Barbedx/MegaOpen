@@ -9,7 +9,7 @@ namespace Vehicle
 #include "decode_defaults.inc"
         };
         constexpr uint8_t kDefaultCount = (uint8_t)(sizeof(kDefaults) / sizeof(kDefaults[0]));
-        static_assert(sizeof(DecodeRow) == 24, "DecodeRow grew: DecodeTable holds 2 x 48 of them");
+        static_assert(sizeof(DecodeRow) == 24, "DecodeRow grew: DecodeTable holds 2 x 96 of them");
         static_assert(sizeof(kDefaults) / sizeof(kDefaults[0]) <= CanDecode::MAX_ROWS,
                       "decode_defaults.inc has more rows than CanDecode::MAX_ROWS");
 

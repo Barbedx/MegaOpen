@@ -24,6 +24,9 @@ namespace Vehicle
         GRP_TPMS,        // 0x25
         GRP_AUDIO,       // 0x31 amplifier + 0x32 node presence
         GRP_SETTINGS,    // 0x26 / 0x50 / 0x52 vehicle settings
+        GRP_ENGINE,      // battery, oil, pedals, gearbox
+        GRP_SAFETY,      // belts, airbag, locks, roof
+        GRP_DYNAMICS,    // accelerations, yaw
         GRP_COUNT
     };
 
@@ -163,6 +166,63 @@ namespace Vehicle
                                // b2 engine->motor, b3 engine->wheels,
                                // b4 batt->motor, b5 regen
 
+        // ---- Mégane II broadcast (X84 matrix), 2026-10 -----------------------
+        // APPENDED, never inserted: the NVS decode blob stores signals by
+        // index. Positions are in decode_defaults.inc; every one is a
+        // hypothesis until the car confirms it. Most have no Raise field and
+        // are for the web page and the panel alerts only.
+        SIG_FUEL_LEVEL,        // litres, the cluster's (0x5C5)
+        SIG_FUEL_LOW,          // the cluster's low-fuel warning
+        SIG_FUEL_GAUGE_DIAG,   // 0 ok, 1 open circuit, 2 short
+        SIG_ODO_CLUSTER,       // km, the cluster's own (0x5C5); `odometer` is 0x5FD
+        SIG_FUEL_LEVEL_APV,    // litres, the after-sales backup copy (0x715)
+        SIG_OIL_LEVEL,         // the level the cluster shows, 0-15
+        SIG_MIL,               // check-engine lamp state, 0-3
+        SIG_SERVICE_KM,        // km to the next service
+        SIG_FUEL_COUNTER,      // RAW wrapping counter, 80 mm³ a count (0x551)
+        SIG_BATT_V,            // V x100
+        SIG_OIL_PRESS_SW,      // oil-pressure switch
+        SIG_BATT_LAMP,         // charge warning lamp
+        SIG_AC_COMP_UPC,       // A/C compressor as the UPC reports it; not
+                               // ac_compressor, which would start the 0x28 A/C form
+        SIG_REAR_DEFROST,      // heated rear window on
+        SIG_THROTTLE,          // accelerator pedal, % x10
+        SIG_CLUTCH,            // clutch switch
+        SIG_NEUTRAL,           // gearbox in neutral
+        SIG_REVERSE_UPC,       // reverse, the UPC's copy (0x215)
+        SIG_LOCKED,            // doors and boot locking state, 0-3
+        SIG_BELT_DRV,          // 2-bit contact state: 0 = fastened
+        SIG_BELT_PASS,
+        SIG_PASS_PRESENT,      // 2-bit: someone on the passenger seat
+        SIG_AIRBAG_FAULT,
+        SIG_PASS_AIRBAG_OFF,
+        SIG_ROOF_POS,          // the CC's roof, 0-7
+        SIG_ROOF_FAULT,
+        SIG_CLIM_AIR_SET,      // blown-air setpoint, °C (not the user's setting)
+        SIG_CLIM_FAN_STATE,    // 0-3
+        SIG_CLIM_AC_SEL,       // A/C selected on the climate panel
+        SIG_CLIM_EVAP,         // evaporator, °C x10
+        SIG_AC_REQUEST,        // the UCH's A/C request
+        SIG_REAR_DEFROST_REQ,  // 0-3
+        SIG_WIPERS,            // front wiper request, 0-7
+        SIG_ROLLING,           // the UCH's "vehicle moving"
+        SIG_SUN_LUX,           // sunlight, lux
+        SIG_ACCEL_LONG,        // m/s² x100, signed
+        SIG_ACCEL_LAT,         // g x1000, signed
+        SIG_YAW_RATE,          // °/s x10, signed
+
+        // ---- derived on the car task (Derived.h), never decoded ------------------
+        // New names, not range/fuel_inst/fuel_avg: those feed Raise messages,
+        // and what goes to the head unit stays a toggle of its own.
+        SIG_GEAR,              // -1 R, 0 N or unknown, 1..6
+        SIG_GEAR_RATIO,        // km/h per 1000 rpm x10: what the gear table is learnt from
+        SIG_FUEL_RATE,         // L/h x10
+        SIG_CONS_INST,         // L/100km x10, while rolling
+        SIG_CONS_AVG,          // L/100km x10, since boot
+        SIG_RANGE_CALC,        // km, fuel_level over cons_avg
+        SIG_TRIP_FUEL,         // L x100, since boot
+        SIG_TRIP_KM,           // km x10, since boot
+
         SIG_COUNT
     };
 
@@ -177,4 +237,11 @@ namespace Vehicle
 
     const Meta& meta(uint8_t s);
     uint8_t     sigByName(const char* name);   // SIG_COUNT when unknown
+
+    // Is this signal's value trustworthy: bound to CAN by rows that are all
+    // measured (no DF_HYPOTHESIS), and not pinned. The car task owns the
+    // answer and refreshes it whenever the map or a pin changes
+    // (setVerified); anyone may read it, from any task. False until then.
+    bool verified(uint8_t s);
+    void setVerified(uint8_t s, bool v);
 }

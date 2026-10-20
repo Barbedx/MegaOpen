@@ -189,7 +189,7 @@ void WebUi::routesMap()
             const char* full = nullptr;
             bool bound = true;
             if (!App::Car::decodeTable().edit([&](Vehicle::DecodeTable& t) {
-                    // Reset first is safe: factory (23) plus 16 edits always fits.
+                    // Reset first is safe: factory (62) plus 16 edits always fits.
                     if (reset) t.factory();
                     // Room first: a table half-changed by a refused request
                     // would be worse than the refusal.
@@ -202,7 +202,7 @@ void WebUi::routesMap()
                         if (ed[i].src == Vehicle::SRC_CAN)   ++rowsLeft;
                         if (ed[i].src == Vehicle::SRC_CONST) ++constsLeft;
                     }
-                    if (rowsLeft > Vehicle::DecodeTable::MAX_ROWS) { full = "the map is full: 48 CAN rows"; return; }
+                    if (rowsLeft > Vehicle::DecodeTable::MAX_ROWS) { full = "the map is full: 96 CAN rows"; return; }
                     if (constsLeft > Vehicle::DecodeTable::MAX_CONSTS) { full = "the map is full: 16 constants"; return; }
                     for (uint8_t i = 0; i < n; ++i) {
                         const Edit& e = ed[i];
@@ -214,6 +214,11 @@ void WebUi::routesMap()
                             if (old >= 0) {
                                 row.flags |= t.row[old].flags & (Vehicle::DF_LATCH | Vehicle::DF_KEY);
                                 if (t.row[old].flags & Vehicle::DF_LATCH) row.holdMs = t.row[old].holdMs;
+                                // Re-saving the same field is not a measurement:
+                                // a hypothesis stays one. A changed field is the
+                                // user's own, so it counts as measured.
+                                if (Vehicle::DecodeTable::sameField(row, t.row[old]))
+                                    row.flags |= t.row[old].flags & Vehicle::DF_HYPOTHESIS;
                             }
                             bound &= t.bindCan(e.sig, row);
                         } else if (e.src == Vehicle::SRC_CONST) {

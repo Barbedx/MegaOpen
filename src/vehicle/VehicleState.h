@@ -34,6 +34,14 @@ namespace Vehicle
         // Last decoded value regardless of any pin (the UI shows both).
         int32_t decoded(uint8_t s) const { return s < SIG_COUNT ? _val[s] : 0; }
         uint32_t stamp(uint8_t s) const { return s < SIG_COUNT ? _ts[s] : 0; }
+        // Since CAN last set it: 0 while pinned (a pin is always current),
+        // NEVER when nothing has set it.
+        static constexpr uint32_t NEVER = UINT32_MAX;
+        uint32_t ageMs(uint8_t s, uint32_t nowMs) const {
+            if (s >= SIG_COUNT) return NEVER;
+            if (_pinned[s]) return 0;
+            return _ts[s] ? (uint32_t)(nowMs - _ts[s]) : NEVER;
+        }
 
         static int32_t clamp(uint8_t s, int32_t v);
 

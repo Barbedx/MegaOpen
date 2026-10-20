@@ -78,6 +78,26 @@ namespace Vehicle
         return -1;
     }
 
+    bool DecodeTable::measured(uint8_t sig) const
+    {
+        bool any = false;
+        for (uint8_t i = 0; i < nRows; ++i) {
+            if (row[i].sig != sig) continue;
+            if (row[i].flags & DF_HYPOTHESIS) return false;
+            any = true;
+        }
+        return any;
+    }
+
+    bool DecodeTable::sameField(const DecodeRow& a, const DecodeRow& b)
+    {
+        const uint8_t how = DF_LE | DF_SIGNED | DF_EXT;
+        return a.canId == b.canId && a.startByte == b.startByte && a.numBytes == b.numBytes &&
+               a.shift == b.shift && a.mask == b.mask && a.mul == b.mul &&
+               (a.div ? a.div : 1) == (b.div ? b.div : 1) && a.add == b.add &&
+               (a.flags & how) == (b.flags & how);
+    }
+
     void DecodeTable::unbind(uint8_t sig)
     {
         uint8_t w = 0;
@@ -183,12 +203,13 @@ namespace Vehicle
             const bool ext = (r.flags & DF_EXT) != 0;
             const int n = snprintf(b, cap,
                                    "{\"id\":\"0x%0*lX\",\"byte\":%u,\"len\":%u,\"shift\":%u,\"mask\":\"%lX\","
-                                   "\"mul\":%d,\"div\":%d,\"add\":%ld,\"le\":%s,\"signed\":%s}",
+                                   "\"mul\":%d,\"div\":%d,\"add\":%ld,\"le\":%s,\"signed\":%s,\"hyp\":%s}",
                                    ext ? 8 : 3, (unsigned long)r.canId, (unsigned)r.startByte,
                                    (unsigned)r.numBytes, (unsigned)r.shift, (unsigned long)r.mask,
                                    (int)r.mul, (int)(r.div ? r.div : 1), (long)r.add,
                                    (r.flags & DF_LE) ? "true" : "false",
-                                   (r.flags & DF_SIGNED) ? "true" : "false");
+                                   (r.flags & DF_SIGNED) ? "true" : "false",
+                                   (r.flags & DF_HYPOTHESIS) ? "true" : "false");
             return n < 0 ? 0 : (size_t)n < cap ? n : (int)cap - 1;
         }
 
@@ -217,6 +238,7 @@ namespace Vehicle
             r.flags     = 0;
             if (o["le"] | false)     r.flags |= DF_LE;
             if (o["signed"] | false) r.flags |= DF_SIGNED;
+            if (o["hyp"] | false)    r.flags |= DF_HYPOTHESIS;
             if (id > 0x7FF)          r.flags |= DF_EXT;
             return nullptr;
         }

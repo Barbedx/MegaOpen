@@ -2,6 +2,7 @@
 #include "CarTask.h"
 #include "Rt.h"
 #include "../vehicle/CanDecode.h"
+#include "../vehicle/Derived.h"
 #include "../utils/LogBus.h"
 #include "../utils/Snapshot.h"
 #include "freertos/queue.h"
@@ -43,6 +44,7 @@ namespace App
 
             Setup              s_s;
             Vehicle::CanDecode s_decode;
+            Vehicle::Derived   s_derived;
             StaticQueue_t      s_cmdBuf;
             uint8_t            s_cmdStore[CMD_DEPTH * sizeof(Cmd)];
             QueueHandle_t      s_cmd = nullptr;
@@ -50,7 +52,7 @@ namespace App
             int                s_id = -1;
             std::atomic<uint32_t> s_cmdDrops{0};
             Snapshot<Stats>    s_stats;
-            // Two ~1.3 kB buffers, placed in begin(): PSRAM where there is some.
+            // Two ~2.4 kB buffers, placed in begin(): PSRAM where there is some.
             Staged<Vehicle::DecodeTable, true> s_table;
             // The owner's: the tests running, and the constants it pinned.
             Tests              s_tests;
@@ -64,6 +66,23 @@ namespace App
             uint32_t s_frames = 0, s_fpsCount = 0, s_fps = 0;
             uint32_t s_drainMax = 0, s_busyMaxUs = 0;
             uint32_t s_rate[MAX_SOURCES] = {};
+
+            // Vehicle::verified(): measured rows, and no pin (a constant or a
+            // test); a derived signal, when every input is. Run after anything
+            // that changes either.
+            void refreshVerified()
+            {
+                const Vehicle::DecodeTable& t = s_table.live();
+                auto pinned = [](uint8_t s) { return s_s.state && s_s.state->pinned(s); };
+                for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) {
+                    const uint8_t* in = nullptr;
+                    const uint8_t n = Vehicle::Derived::inputs(s, in);
+                    bool ok = !pinned(s);
+                    if (n) for (uint8_t i = 0; i < n; ++i) ok = ok && t.measured(in[i]) && !pinned(in[i]);
+                    else   ok = ok && t.measured(s);
+                    Vehicle::setVerified(s, ok);
+                }
+            }
 
             bool testing(uint8_t sig)
             {
@@ -125,6 +144,7 @@ namespace App
                     }
                 }
                 s_testsPub.publish(s_tests);
+                refreshVerified();
             }
 
             void expireTests(uint32_t now)
@@ -138,6 +158,7 @@ namespace App
                     changed = true;
                 }
                 if (changed) s_testsPub.publish(s_tests);
+                if (changed) refreshVerified();
             }
 
             // A new table is live: CanDecode reads it in place, the constants
@@ -150,13 +171,14 @@ namespace App
                     s_decode.load(nullptr, 0);
                     LogBus::line("[car] decode map REFUSED by CanDecode: no signals decoded");
                 }
-                if (!s_s.state) return;
+                if (!s_s.state) { refreshVerified(); return; }
                 for (uint8_t i = 0; i < s_nConst; ++i)
                     if (t.constOf(s_constSig[i]) < 0 && !testing(s_constSig[i]))
                         s_s.state->unpin(s_constSig[i]);
                 s_nConst = t.nK;
                 for (uint8_t i = 0; i < t.nK; ++i) s_constSig[i] = t.k[i].sig;
                 pinConsts();
+                refreshVerified();
             }
 
             // The owner's chores between frames: commands, a staged table,
@@ -187,7 +209,7 @@ namespace App
                 void* m = psram ? heap_caps_malloc(sizeof(Vehicle::DecodeTable), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
                                 : nullptr;
                 if (!m) m = heap_caps_malloc(sizeof(Vehicle::DecodeTable), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-                configASSERT(m);   // setup, ~1.3 kB: there is no running without it
+                configASSERT(m);   // setup, ~2.4 kB: there is no running without it
                 return new (m) Vehicle::DecodeTable();
             }
 
@@ -211,7 +233,7 @@ namespace App
 
             void frame(const Frame& f, uint32_t now)
             {
-                if (s_s.state) s_decode.apply(f, *s_s.state, now);
+                if (s_s.state && s_decode.apply(f, *s_s.state, now)) s_derived.update(*s_s.state, now);
                 if (s_s.tap) s_s.tap(f);
                 if (s_s.sniffer) {
                     // 11-bit and 29-bit ids apart: bit 31 marks

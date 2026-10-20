@@ -4,6 +4,7 @@
 #include "vehicle/CanDecode.h"
 #include "vehicle/VehicleState.h"
 #include "vehicle/DecodeTable.h"
+#include "vehicle/Derived.h"
 #include <filesystem>
 #include <string>
 
@@ -101,9 +102,211 @@ void test_compiled_defaults_load_and_are_sorted()
     TEST_ASSERT_TRUE(dec.rows() > 10);
     for (uint8_t i = 1; i < dec.rows(); ++i)
         TEST_ASSERT_TRUE(dec.row(i - 1).canId <= dec.row(i).canId);
-    // Every row is a hypothesis until it is measured in the car.
-    for (uint8_t i = 0; i < dec.rows(); ++i)
-        TEST_ASSERT_TRUE(dec.row(i).flags & DF_HYPOTHESIS);
+    // Every row is a hypothesis until it is measured in the car; the owner
+    // has measured doors, boot, lights and indicators (2026-10-20).
+    const uint8_t measured[] = {SIG_DOOR_FL, SIG_DOOR_FR, SIG_DOOR_RL, SIG_DOOR_RR, SIG_BOOT,
+                                SIG_LIGHT_POS, SIG_LIGHT_DIPPED, SIG_LIGHT_MAIN, SIG_IND_LEFT, SIG_IND_RIGHT};
+    for (uint8_t i = 0; i < dec.rows(); ++i) {
+        bool m = false;
+        for (uint8_t s : measured) m |= dec.row(i).sig == s;
+        TEST_ASSERT_EQUAL_MESSAGE(!m, (dec.row(i).flags & DF_HYPOTHESIS) != 0, meta(dec.row(i).sig).name);
+    }
+}
+
+// ---- the X84 broadcast rows (Renault's v84.05 matrix) ----------------------------
+
+// Each new row against the matrix's own `bN.O/W` (byte from 1, bit offset from
+// the MSB): one place where a hand-converted shift could go wrong.
+void test_x84_rows_match_the_matrix_positions()
+{
+    struct Ddt { uint8_t sig; uint16_t id; uint8_t n, o, w; };
+    const Ddt want[] = {
+        {SIG_THROTTLE, 0x181, 4, 0, 8},      {SIG_BRAKE, 0x181, 6, 6, 2},
+        {SIG_CLUTCH, 0x181, 6, 3, 2},        {SIG_NEUTRAL, 0x215, 2, 2, 2},
+        {SIG_REVERSE_UPC, 0x215, 2, 0, 2},   {SIG_ACCEL_LONG, 0x2A0, 1, 0, 8},
+        {SIG_AC_REQUEST, 0x35D, 1, 7, 1},    {SIG_REAR_DEFROST_REQ, 0x35D, 1, 5, 2},
+        {SIG_WIPERS, 0x35D, 3, 0, 3},        {SIG_ROLLING, 0x35D, 5, 1, 1},
+        {SIG_SUN_LUX, 0x35D, 6, 0, 8},       {SIG_CLIM_AIR_SET, 0x374, 1, 0, 8},
+        {SIG_CLIM_FAN_STATE, 0x374, 2, 1, 2}, {SIG_CLIM_AC_SEL, 0x374, 2, 3, 1},
+        {SIG_CLIM_EVAP, 0x374, 3, 0, 8},     {SIG_ENG_TEMP, 0x551, 1, 0, 8},
+        {SIG_FUEL_COUNTER, 0x551, 2, 0, 8},  {SIG_FUEL_LOW, 0x5C5, 1, 2, 1},
+        {SIG_HANDBRAKE, 0x5C5, 1, 5, 1},     {SIG_FUEL_GAUGE_DIAG, 0x5C5, 1, 6, 2},
+        {SIG_FUEL_LEVEL, 0x5C5, 8, 1, 7},    {SIG_LOCKED, 0x60D, 3, 3, 2},
+        {SIG_OUT_TEMP, 0x60D, 5, 0, 8},      {SIG_REVERSE, 0x60D, 7, 2, 2},
+        {SIG_REAR_DEFROST, 0x625, 1, 7, 1},  {SIG_AC_COMP_UPC, 0x625, 2, 0, 1},
+        {SIG_BATT_V, 0x625, 3, 0, 8},        {SIG_OIL_PRESS_SW, 0x625, 4, 0, 1},
+        {SIG_BATT_LAMP, 0x625, 4, 2, 1},     {SIG_AIRBAG_FAULT, 0x651, 1, 7, 1},
+        {SIG_PASS_AIRBAG_OFF, 0x651, 1, 6, 1}, {SIG_BELT_PASS, 0x651, 2, 0, 2},
+        {SIG_PASS_PRESENT, 0x651, 2, 2, 2},  {SIG_BELT_DRV, 0x651, 2, 6, 2},
+        {SIG_ROOF_POS, 0x684, 1, 0, 3},      {SIG_ROOF_FAULT, 0x684, 1, 4, 1},
+        {SIG_MIL, 0x715, 4, 0, 2},           {SIG_OIL_LEVEL, 0x715, 4, 2, 4},
+        {SIG_FUEL_LEVEL_APV, 0x715, 5, 0, 7}, {SIG_SERVICE_KM, 0x715, 6, 0, 8},
+    };
+    uint8_t n = 0;
+    const DecodeRow* rows = CanDecode::defaults(n);
+    for (const Ddt& d : want) {
+        const DecodeRow* r = nullptr;
+        for (uint8_t i = 0; i < n; ++i) if (rows[i].sig == d.sig) r = &rows[i];
+        TEST_ASSERT_NOT_NULL_MESSAGE(r, meta(d.sig).name);
+        TEST_ASSERT_EQUAL_HEX16_MESSAGE(d.id, r->canId, meta(d.sig).name);
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, r->numBytes, meta(d.sig).name);
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(d.n - 1, r->startByte, meta(d.sig).name);
+        // A yes/no read from a 2-bit state takes its low bit.
+        const bool lowBit = d.w == 2 && r->mask == 1;
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(8 - d.o - d.w, r->shift, meta(d.sig).name);
+        TEST_ASSERT_EQUAL_HEX32_MESSAGE(lowBit ? 1u : (1u << d.w) - 1, r->mask, meta(d.sig).name);
+    }
+}
+
+void test_x0r_sample_gives_fuel_odometer_and_handbrake()
+{
+    CanDecode dec;
+    TEST_ASSERT_TRUE(dec.loadDefaults());
+    State s;
+    // x0r.fr's 0x5C5 sample: 19 L, 50 739 km, handbrake off, no low-fuel warning.
+    TEST_ASSERT_EQUAL_UINT8(5, dec.apply(frame(0x5C5, {0x40, 0x00, 0xC6, 0x33, 0x06, 0xB0, 0x00, 0x13}), s, 10));
+    TEST_ASSERT_EQUAL_INT32(19, s.get(SIG_FUEL_LEVEL));
+    TEST_ASSERT_EQUAL_INT32(50739, s.get(SIG_ODO_CLUSTER));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_HANDBRAKE));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_FUEL_LOW));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_FUEL_GAUGE_DIAG));
+    // Handbrake is bit2 (0x04), not x0r's bit3; low fuel is bit5 (0x20).
+    dec.apply(frame(0x5C5, {0x24, 0x00, 0xC6, 0x33, 0x06, 0xB0, 0x00, 0x85}), s, 20);
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_HANDBRAKE));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_FUEL_LOW));
+    TEST_ASSERT_EQUAL_INT32(5, s.get(SIG_FUEL_LEVEL));        // b7 is not litres
+    dec.apply(frame(0x5C5, {0x08, 0, 0, 0, 0, 0, 0, 0}), s, 30);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_HANDBRAKE));         // bit3 alone: off
+}
+
+void test_cluster_backup_battery_and_pedals()
+{
+    CanDecode dec;
+    TEST_ASSERT_TRUE(dec.loadDefaults());
+    State s;
+    // 0x715: MIL 2 and oil level 9 share d3; 15 L in d4 b7-1; 40 x 250 km.
+    dec.apply(frame(0x715, {0, 0, 0, 0xA4, 0x1E, 40}), s, 10);
+    TEST_ASSERT_EQUAL_INT32(2, s.get(SIG_MIL));
+    TEST_ASSERT_EQUAL_INT32(9, s.get(SIG_OIL_LEVEL));
+    TEST_ASSERT_EQUAL_INT32(15, s.get(SIG_FUEL_LEVEL_APV));
+    TEST_ASSERT_EQUAL_INT32(10000, s.get(SIG_SERVICE_KM));
+    // 0x625: 0xDB x 0.0625 = 13.6875 V -> 1368; oil switch and charge lamp.
+    dec.apply(frame(0x625, {0x01, 0x80, 0xDB, 0xA0}), s, 10);
+    TEST_ASSERT_EQUAL_INT32(1368, s.get(SIG_BATT_V));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_REAR_DEFROST));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_AC_COMP_UPC));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_OIL_PRESS_SW));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_BATT_LAMP));
+    TEST_ASSERT_FALSE(s.has(SIG_AC_COMPRESSOR));               // the 0x28 A/C form stays quiet
+    // 0x181: pedal 0x80 = 47.3 %, released 0x10 = 0; clutch b6.3, brake b6.6.
+    dec.apply(frame(0x181, {0x1F, 0x40, 0, 0x80, 0, 0x08, 0, 0}), s, 10);
+    TEST_ASSERT_EQUAL_INT32(473, s.get(SIG_THROTTLE));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_CLUTCH));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_BRAKE));
+    dec.apply(frame(0x181, {0x1F, 0x40, 0, 0x10, 0, 0x01, 0, 0}), s, 20);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_THROTTLE));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_CLUTCH));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_BRAKE));
+    // 0x215: neutral b2.2, reverse b2.0.
+    dec.apply(frame(0x215, {0, 0x10, 0, 0}), s, 10);
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_NEUTRAL));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_REVERSE_UPC));
+    dec.apply(frame(0x215, {0, 0x40, 0, 0}), s, 20);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_NEUTRAL));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_REVERSE_UPC));
+}
+
+void test_belts_lock_roof_climate_and_dynamics()
+{
+    CanDecode dec;
+    TEST_ASSERT_TRUE(dec.loadDefaults());
+    State s;
+    dec.apply(frame(0x651, {0x02, 0x41}), s, 10);
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_BELT_DRV));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_BELT_PASS));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_PASS_PRESENT));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_PASS_AIRBAG_OFF));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_AIRBAG_FAULT));
+    dec.apply(frame(0x60D, {0, 0, 0x18, 0, 0, 0, 0, 0}), s, 10);
+    TEST_ASSERT_EQUAL_INT32(3, s.get(SIG_LOCKED));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_FOG_REAR));          // its neighbour, bit2
+    dec.apply(frame(0x684, {0xA8, 0}), s, 10);
+    TEST_ASSERT_EQUAL_INT32(5, s.get(SIG_ROOF_POS));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_ROOF_FAULT));
+    // 0x374: 62 C blown air, fan state 2, A/C selected, evaporator 3.5 C.
+    dec.apply(frame(0x374, {102, 0x50, 87}), s, 10);
+    TEST_ASSERT_EQUAL_INT32(62, s.get(SIG_CLIM_AIR_SET));
+    TEST_ASSERT_EQUAL_INT32(2, s.get(SIG_CLIM_FAN_STATE));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_CLIM_AC_SEL));
+    TEST_ASSERT_EQUAL_INT32(35, s.get(SIG_CLIM_EVAP));
+    // 0x35D: A/C request, wipers 3, rolling, 20 000 lux.
+    dec.apply(frame(0x35D, {0x01, 0, 0x60, 0, 0x40, 20, 0, 0}), s, 10);
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_AC_REQUEST));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_REAR_DEFROST_REQ));
+    TEST_ASSERT_EQUAL_INT32(3, s.get(SIG_WIPERS));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_ROLLING));
+    TEST_ASSERT_EQUAL_INT32(20000, s.get(SIG_SUN_LUX));
+    // 0x2A0 at rest: 200 = 0 m/s2, 0x7FFF = 0 g and 0 deg/s; then -1 m/s2.
+    dec.apply(frame(0x2A0, {200, 0x7F, 0xFF, 0x7F, 0xFF}), s, 10);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_ACCEL_LONG));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_ACCEL_LAT));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_YAW_RATE));
+    dec.apply(frame(0x2A0, {180, 0x80, 0xF9, 0x7F, 0xEA}), s, 20);
+    TEST_ASSERT_EQUAL_INT32(-100, s.get(SIG_ACCEL_LONG));
+    TEST_ASSERT_EQUAL_INT32(1000, s.get(SIG_ACCEL_LAT));      // +1.000 g
+    TEST_ASSERT_EQUAL_INT32(-42, s.get(SIG_YAW_RATE));
+    // 0x551 b1: the raw consumption counter.
+    dec.apply(frame(0x551, {130, 77, 0, 0, 0, 0, 0}), s, 10);
+    TEST_ASSERT_EQUAL_INT32(90, s.get(SIG_ENG_TEMP));
+    TEST_ASSERT_EQUAL_INT32(77, s.get(SIG_FUEL_COUNTER));
+}
+
+// ---- verified and age ------------------------------------------------------------
+
+void test_measured_means_every_row_and_not_a_hypothesis()
+{
+    static DecodeTable t;
+    t.factory();
+    TEST_ASSERT_TRUE(t.measured(SIG_DOOR_FL));
+    TEST_ASSERT_FALSE(t.measured(SIG_FUEL_LEVEL));              // a hypothesis
+    TEST_ASSERT_FALSE(t.measured(SIG_TPMS_FL));                 // not bound
+    TEST_ASSERT_TRUE(t.bindConst(SIG_DOOR_FR, 1));
+    TEST_ASSERT_FALSE(t.measured(SIG_DOOR_FR));                 // a constant is not CAN
+    // The page re-saving the same field is the same field; a changed one is not.
+    const DecodeRow& fuel = t.row[t.rowOf(SIG_FUEL_LEVEL)];
+    DecodeRow same = fuel;
+    same.flags = 0;
+    TEST_ASSERT_TRUE(DecodeTable::sameField(same, fuel));
+    same.shift = 1;
+    TEST_ASSERT_FALSE(DecodeTable::sameField(same, fuel));
+}
+
+void test_verified_is_one_bit_a_signal()
+{
+    for (uint8_t s = 0; s < SIG_COUNT; ++s) setVerified(s, false);
+    setVerified(SIG_DOOR_FL, true);
+    setVerified(SIG_YAW_RATE, true);
+    TEST_ASSERT_TRUE(verified(SIG_DOOR_FL));
+    TEST_ASSERT_TRUE(verified(SIG_YAW_RATE));
+    TEST_ASSERT_FALSE(verified(SIG_DOOR_FR));
+    TEST_ASSERT_FALSE(verified(SIG_COUNT));
+    setVerified(SIG_DOOR_FL, false);
+    TEST_ASSERT_FALSE(verified(SIG_DOOR_FL));
+    TEST_ASSERT_TRUE(verified(SIG_YAW_RATE));
+}
+
+void test_age_is_never_until_set_and_zero_while_pinned()
+{
+    State s;
+    TEST_ASSERT_EQUAL_UINT32(State::NEVER, s.ageMs(SIG_BATT_V, 5000));
+    s.set(SIG_BATT_V, 1368, 4000);
+    TEST_ASSERT_EQUAL_UINT32(1000, s.ageMs(SIG_BATT_V, 5000));
+    TEST_ASSERT_EQUAL_UINT32(1, s.ageMs(SIG_BATT_V, 4001));
+    s.set(SIG_BATT_V, 1368, 0xFFFFFF00u);                       // across the millis() wrap
+    TEST_ASSERT_EQUAL_UINT32(0x200, s.ageMs(SIG_BATT_V, 0x100));
+    s.pin(SIG_BATT_V, 1200);
+    TEST_ASSERT_EQUAL_UINT32(0, s.ageMs(SIG_BATT_V, 0x100));
+    TEST_ASSERT_EQUAL_UINT32(State::NEVER, s.ageMs(SIG_COUNT, 0));
 }
 
 void test_unsorted_table_is_refused()
@@ -135,7 +338,7 @@ void test_defaults_decode_speed_rpm_and_doors_into_state()
     TEST_ASSERT_EQUAL_UINT8(1, dec.apply(frame(0x354, {0x13, 0x88, 0, 0, 0, 0, 0, 0}), s, 100));
     TEST_ASSERT_EQUAL_INT32(5000, s.get(SIG_SPEED));
     // 0x181: rpm x8, and b5 bit0 the brake.
-    TEST_ASSERT_EQUAL_UINT8(2, dec.apply(frame(0x181, {0x1F, 0x40, 0, 0, 0, 0x01, 0, 0}), s, 100));
+    TEST_ASSERT_EQUAL_UINT8(4, dec.apply(frame(0x181, {0x1F, 0x40, 0, 0, 0, 0x01, 0, 0}), s, 100));
     TEST_ASSERT_EQUAL_INT32(1000, s.get(SIG_RPM));
     TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_BRAKE));
     // 0x60D: bit 19 = front-left door, byte 4 = outside temperature + 40.
@@ -302,7 +505,7 @@ void test_the_blob_round_trips_the_factory_table_and_constants()
 {
     static DecodeTable a, b;
     a.factory();
-    TEST_ASSERT_EQUAL_UINT8(23, a.nRows);
+    TEST_ASSERT_EQUAL_UINT8(62, a.nRows);
     writeForTheSimulator(a);
     TEST_ASSERT_TRUE(a.bindConst(SIG_KEY_ON, 1));
     TEST_ASSERT_TRUE(a.bindConst(SIG_OUT_TEMP, -12));
@@ -346,7 +549,7 @@ void test_a_bad_blob_is_refused_whole()
     TEST_ASSERT_FALSE(b.unpack(nullptr, 0));
 }
 
-void test_the_caps_are_48_rows_and_16_constants()
+void test_the_caps_are_96_rows_and_16_constants()
 {
     static DecodeTable t;
     t.nRows = 0; t.nK = 0;
@@ -354,7 +557,7 @@ void test_the_caps_are_48_rows_and_16_constants()
     r.numBytes = 1; r.mask = 0xFF; r.mul = 1; r.div = 1;
     for (uint8_t i = 0; i < DecodeTable::MAX_ROWS; ++i) { r.canId = 0x200 + i; t.row[t.nRows++] = r; t.row[i].sig = SIG_RPM; }
     t.row[0].sig = SIG_BRAKE;
-    TEST_ASSERT_EQUAL_UINT8(48, DecodeTable::MAX_ROWS);
+    TEST_ASSERT_EQUAL_UINT8(96, DecodeTable::MAX_ROWS);
     TEST_ASSERT_FALSE(t.bindCan(SIG_SPEED, r));                 // full: nothing moves
     TEST_ASSERT_EQUAL_UINT8(DecodeTable::MAX_ROWS, t.nRows);
     TEST_ASSERT_TRUE(t.bindCan(SIG_BRAKE, r));                  // rebinding in place fits
@@ -397,12 +600,12 @@ void test_the_can_object_reads_back_what_it_writes()
         TEST_ASSERT_FALSE(deserializeJson(d, b));
         DecodeRow r{};
         TEST_ASSERT_NULL(DecodeJson::canFrom(d.as<JsonObjectConst>(), r));
-        // The page edits the extraction; latch, key and the hypothesis mark
-        // are the row's own (WebUiMap keeps latch and key from the old row).
+        // The page edits the extraction and the hypothesis mark; latch and key
+        // are the row's own (WebUiMap keeps them from the old row).
         const DecodeRow& o = t.row[i];
         TEST_ASSERT_TRUE(r.canId == o.canId && r.startByte == o.startByte && r.numBytes == o.numBytes &&
                          r.shift == o.shift && r.mask == o.mask && r.mul == o.mul && r.div == o.div &&
-                         r.add == o.add && r.flags == (o.flags & (DF_LE | DF_SIGNED | DF_EXT)));
+                         r.add == o.add && r.flags == (o.flags & (DF_LE | DF_SIGNED | DF_EXT | DF_HYPOTHESIS)));
     }
     const char* bad[] = {
         "{\"id\":\"zz\",\"byte\":0,\"mask\":\"FF\"}",
@@ -445,12 +648,110 @@ void test_a_bound_row_decodes_into_state()
     TEST_ASSERT_EQUAL_INT32(0x1234 * 10, s.get(SIG_SPEED));
 }
 
+// ---- derived: gear, consumption, range ---------------------------------------------
+
+void test_gear_is_the_nearest_ratio_within_the_band()
+{
+    const Derived::Gears g;
+    TEST_ASSERT_EQUAL_INT8(1, Derived::gearFor(g, 75));
+    TEST_ASSERT_EQUAL_INT8(4, Derived::gearFor(g, 280));
+    TEST_ASSERT_EQUAL_INT8(5, Derived::gearFor(g, 330));
+    TEST_ASSERT_EQUAL_INT8(0, Derived::gearFor(g, 100));        // between 1st and 2nd: no gear
+    TEST_ASSERT_EQUAL_INT8(0, Derived::gearFor(g, 500));
+    Derived::Gears six;
+    six.ratio[5] = 420;
+    TEST_ASSERT_EQUAL_INT8(6, Derived::gearFor(six, 415));
+}
+
+void test_gear_from_speed_rpm_and_the_switches()
+{
+    Derived d;
+    State s;
+    uint32_t t = 100;
+    auto drive = [&](int32_t speed, int32_t rpm) {
+        t += 20;
+        s.set(SIG_SPEED, speed, t);
+        s.set(SIG_RPM, rpm, t);
+        d.update(s, t);
+    };
+    drive(5000, 1850);                                          // 50 km/h at 1850 rpm
+    TEST_ASSERT_EQUAL_INT32(270, s.get(SIG_GEAR_RATIO));
+    TEST_ASSERT_EQUAL_INT32(4, s.get(SIG_GEAR));
+    s.set(SIG_CLUTCH, 1, t);
+    drive(5000, 1850);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_GEAR));
+    s.set(SIG_CLUTCH, 0, t);
+    s.set(SIG_NEUTRAL, 1, t);
+    drive(5000, 1850);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_GEAR));
+    s.set(SIG_NEUTRAL, 0, t);
+    drive(200, 900);                                            // crawling
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_GEAR));
+    s.set(SIG_REVERSE_UPC, 1, t);
+    drive(500, 1000);
+    TEST_ASSERT_EQUAL_INT32(-1, s.get(SIG_GEAR));
+    s.set(SIG_REVERSE_UPC, 0, t);
+    drive(2000, 2700);                                          // 7.4: first
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_GEAR));
+}
+
+void test_fuel_rate_consumption_trip_and_range()
+{
+    Derived d;
+    State s;
+    s.set(SIG_SPEED, 10000, 1);                                 // 100 km/h
+    s.set(SIG_FUEL_LEVEL, 40, 1);
+    uint8_t c = 250;
+    uint32_t t = 1000;
+    auto counter = [&](uint8_t step) {
+        t += 100;
+        c = (uint8_t)(c + step);
+        s.set(SIG_FUEL_COUNTER, c, t);
+        d.update(s, t);
+    };
+    counter(0);                                                 // the base
+    for (int i = 0; i < 9; ++i) counter(5);
+    TEST_ASSERT_FALSE(s.has(SIG_FUEL_RATE));                    // 900 ms: the window is open
+    counter(5);                                                 // wraps past 255 on the way
+    // 50 counts a second x 80 mm3 = 14.4 L/h; at 100 km/h that is 14.4 L/100km.
+    TEST_ASSERT_EQUAL_INT32(144, s.get(SIG_FUEL_RATE));
+    TEST_ASSERT_EQUAL_INT32(144, s.get(SIG_CONS_INST));
+    TEST_ASSERT_FALSE(s.has(SIG_CONS_AVG));                     // under 5 km
+    for (int i = 0; i < 1800; ++i) counter(5);                  // three more minutes: 5 km
+    TEST_ASSERT_EQUAL_INT32(144, s.get(SIG_CONS_AVG));
+    TEST_ASSERT_EQUAL_INT32(50, s.get(SIG_TRIP_KM));            // 181 s at 100 km/h
+    TEST_ASSERT_EQUAL_INT32(72, s.get(SIG_TRIP_FUEL));          // 9050 counts = 0.724 L
+    TEST_ASSERT_EQUAL_INT32(277, s.get(SIG_RANGE_CALC));        // 40 L / 14.4
+    // A glitch and a silence add nothing.
+    const int32_t fuel = s.get(SIG_TRIP_FUEL);
+    counter(250);
+    t += 5000;
+    counter(30);                                                // after 5 s: a new base
+    for (int i = 0; i < 10; ++i) counter(0);
+    TEST_ASSERT_EQUAL_INT32(fuel, s.get(SIG_TRIP_FUEL));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_FUEL_RATE));
+}
+
+void test_derived_signals_name_their_inputs()
+{
+    const uint8_t* in = nullptr;
+    TEST_ASSERT_EQUAL_UINT8(0, Derived::inputs(SIG_FUEL_LEVEL, in));
+    TEST_ASSERT_NULL(in);
+    TEST_ASSERT_EQUAL_UINT8(3, Derived::inputs(SIG_RANGE_CALC, in));
+    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LEVEL, in[2]);
+    for (uint8_t s = SIG_GEAR; s <= SIG_TRIP_KM; ++s) TEST_ASSERT_TRUE(Derived::inputs(s, in) > 0);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_gear_is_the_nearest_ratio_within_the_band);
+    RUN_TEST(test_gear_from_speed_rpm_and_the_switches);
+    RUN_TEST(test_fuel_rate_consumption_trip_and_range);
+    RUN_TEST(test_derived_signals_name_their_inputs);
     RUN_TEST(test_the_blob_round_trips_the_factory_table_and_constants);
     RUN_TEST(test_a_bad_blob_is_refused_whole);
-    RUN_TEST(test_the_caps_are_48_rows_and_16_constants);
+    RUN_TEST(test_the_caps_are_96_rows_and_16_constants);
     RUN_TEST(test_binding_replaces_and_keeps_the_order);
     RUN_TEST(test_the_can_object_reads_back_what_it_writes);
     RUN_TEST(test_a_bound_row_decodes_into_state);
@@ -461,6 +762,13 @@ int main(int, char**)
     RUN_TEST(test_little_endian_flag_swaps_the_bytes);
     RUN_TEST(test_short_frame_is_skipped_not_read_past);
     RUN_TEST(test_compiled_defaults_load_and_are_sorted);
+    RUN_TEST(test_x84_rows_match_the_matrix_positions);
+    RUN_TEST(test_x0r_sample_gives_fuel_odometer_and_handbrake);
+    RUN_TEST(test_cluster_backup_battery_and_pedals);
+    RUN_TEST(test_belts_lock_roof_climate_and_dynamics);
+    RUN_TEST(test_measured_means_every_row_and_not_a_hypothesis);
+    RUN_TEST(test_verified_is_one_bit_a_signal);
+    RUN_TEST(test_age_is_never_until_set_and_zero_while_pinned);
     RUN_TEST(test_unsorted_table_is_refused);
     RUN_TEST(test_bad_signal_or_width_is_refused);
     RUN_TEST(test_defaults_decode_speed_rpm_and_doors_into_state);
