@@ -12,10 +12,11 @@ Rules, by where they bite:
                  and from Step 3 the panel task's PanelOwner.cpp, UiPolicy.cpp
                  and diag/CanBench.cpp)
                  - no portMAX_DELAY : a hot-path task never waits for ever.
-  the panel      (Step 3) AffaDisplay is reached only through App::Panel::lib()
-                 or carminat(), and only from the panel task's files:
-                 PanelOwner.cpp, UiPolicy.cpp and main.cpp (setup and loop, never
-                 a keys or hu function). No g_display / g_carminat globals.
+  the panel      (Step 3) the library object is reached through App::Panel::lib()
+                 only from the panel task's files: PanelOwner.cpp and main.cpp
+                 (setup and loop, never a keys or hu function). Every other task
+                 renders through MegaOpen::PanelOps, which the library makes
+                 safe from any task. No g_display / g_carminat globals.
   HuTask.cpp     - no readBytes() and no bare read(): the HAL UART mutex is
                    shared with the key writes, and both of those can wait on it
                    (§3.3). read(buf, n) after available() is the only form.
@@ -28,7 +29,7 @@ Rules, by where they bite:
                  runs the sink chain, never drives the emitter or the ladder,
                  and reads the matrix map only through its staged copy. Since
                  Step 3 it never calls twai_* or reinstalls the driver, and never
-                 calls the panel library.
+                 calls the panel library except through PanelOps.
 
 Comments are stripped before matching, so a comment may name what it forbids.
 Standard library only.
@@ -143,8 +144,8 @@ UI_ASKS = ('armPopup', 'releaseGlass', 'requestScene', 'postHuClock', 'queueNoti
 RENDER_WRITES = [
     (r'\bApp::Ui::(?!(?:%s)\b)\w+' % '|'.join(UI_ASKS),
      'the render state is App::Ui\'s: only its asking calls'),
-    (r'\bApp::Panel::(lib|carminat|pump|resync|serviceTx)\b',
-     'AffaDisplay is the panel task\'s: post to the mailbox'),
+    (r'\bApp::Panel::(lib|pump|wait)\b',
+     'the library object is the panel task\'s: render through PanelOps'),
 ]
 for fn in KEYS_TASK_FUNCS + HU_TASK_FUNCS:
     body, at = function_body(main, fn)
@@ -165,7 +166,7 @@ for fn in KEYS_TASK_FUNCS:
 for m in re.finditer(r'\bg_(display|carminat)\b', main):
     problems.append('%s:%d: g_%s  (the panel library is App::Panel\'s, not a global)'
                     % (main_rel, line_of(main, m.start()), m.group(1)))
-PANEL_OWNERS = {'src/app/PanelOwner.cpp', 'src/app/UiPolicy.cpp', main_rel}
+PANEL_OWNERS = {'src/app/PanelOwner.cpp', main_rel}
 for dirpath, _, files in os.walk(os.path.join(ROOT, 'src')):
     for fn in files:
         if not fn.endswith(('.cpp', '.h')):
@@ -174,8 +175,8 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, 'src')):
         if rel in PANEL_OWNERS or rel == 'src/app/PanelOwner.h':
             continue
         src = strip_comments(read(rel))
-        check(rel, src, r'\bPanel::(lib|carminat)\s*\(',
-              'only the panel task\'s files may reach AffaDisplay')
+        check(rel, src, r'\bPanel::lib\s*\(',
+              'only the panel task\'s files reach the library object: render through PanelOps')
 
 # ---- httpd ------------------------------------------------------------------------
 for rel in ['src/net/WebUi.cpp', 'src/net/WebUiMacro.cpp', 'src/net/WebUiRes.cpp',
@@ -196,8 +197,7 @@ for rel in ['src/net/WebUi.cpp', 'src/net/WebUiMacro.cpp', 'src/net/WebUiRes.cpp
     check(rel, src, r'\b_map\s*->\s*\w+', 'the matrix map is the scan task\'s: _st.keymap->peek()')
     # The CAN controller and the panel are the loop's (Step 3).
     check(rel, src, r'\btwai_\w+\s*\(', 'httpd never calls the TWAI driver: Diag::CanBench')
-    check(rel, src, r'\bTwaiBus::instance\s*\(\s*\)\s*\.\s*(begin|end|restart|setMode|setTiming|setTxEnabled|'
-                    r'poll|recvOne|waitRx|maintain|clearTx|send|trySend)\s*\(',
+    check(rel, src, r'\bTwaiBus::instance\s*\(\s*\)\s*\.\s*(begin|end|restart|poll|waitRx)\s*\(',
           'httpd never drives the TWAI driver: Diag::CanBench')
     check(rel, src, r'\b_disp\b', 'httpd reads the panel\'s snapshot (_panel), never the library')
 

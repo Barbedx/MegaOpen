@@ -54,7 +54,7 @@ namespace Keys
         Keys,      // Action, KeyCode: inline on the keys task (dispatch, the UART sink)
         UartOut,   // Raw: a frame for the hu task's vehicle lane
         Hu,        // Message: a one-shot request; the hu task owns the emitter
-        Panel,     // Text, Popup: the panel mailbox (+ the popup timer request)
+        Panel,     // Text, Popup: PanelOps (+ the popup timer request)
         Pane,      // Pane: a scene request to whoever owns the pane
     };
     EffectRoute effectRoute(Effect e);

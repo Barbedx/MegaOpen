@@ -36,8 +36,9 @@ the keypad's own wires and listens to the car on its single TWAI port.
 ## Build
 
 [PlatformIO](https://platformio.org/). Every dependency is pinned to an exact
-version or commit in `platformio.ini`, including AffaDisplay, so a fresh clone
-builds the same image.
+version or commit in `platformio.ini`, so a fresh clone builds the same image;
+the one exception is AffaDisplay, which follows its `release/next` branch until
+that is released.
 
 ```
 pio run                      # env:t2can, the default

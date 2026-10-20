@@ -30,18 +30,21 @@ have the highest priority on core 1, so a key press never waits for a repaint.
 | keys | 7 | 1 | one key dispatcher: KeyBus → router → sinks, macros |
 | hu | 6 | 1 | head-unit UART: RX, acks, non-key frames |
 | knobs / scan | 6 | 1 | 1 kHz encoder / matrix sampling, posts edges to the KeyBus |
-| loop (panel) | 5 | 1 | the only caller of AffaDisplay and the TWAI driver |
+| loop (panel) | 5 | 1 | owns AffaDisplay's `poll()` and the panel's TWAI link |
 | car | 4 | 0 | car frames: decode, sniffer, capture, telemetry |
-| ui | 2 | 1 | what goes on the glass and when; posts renders to the panel task |
+| ui | 2 | 1 | what goes on the glass and when; renders through `PanelOps` |
 | httpd, ble | 2 | 0 | web server, NimBLE |
 | net_svc, logbus | 1 | 0 | WiFi, housekeeping, log sinks |
 
 The rules behind this layout (the ownership and blocking rules are checked by
 `tools/check_rules.py`):
 
-* **One owner per resource.** AffaDisplay is not thread-safe, so only the panel
-  task calls it. Other tasks post requests through `display/AffaMailbox`. On
-  a debug build, `AFFA_OWNER_ASSERT=1` aborts on a call from any other task.
+* **One owner per resource.** The panel task owns AffaDisplay's `poll()` and
+  the panel's TWAI link (`affa::TwaiLink`); `poll()` from any other task is a
+  counted no-op. Any task may render: the library copies a render made off the
+  owner into its dispatch ring and admits it inside `poll()`, after the keys.
+  `display/PanelOps` is that render surface plus the glass policy (deliberate
+  screens, repaints that yield to them).
 * **Configs edited from the web are staged.** httpd writes a staged copy, and
   the owner task picks it up (`utils/Staged.h`). Readers get snapshots
   (`utils/Snapshot.h`, `utils/Mirror.h`).
@@ -56,8 +59,8 @@ The rules behind this layout (the ownership and blocking rules are checked by
 | --- | --- |
 | `app/` | tasks (`*Task`), the KeyBus, the panel owner, request/reply slots, the OTA trial |
 | `board/` | `BoardProfile.h`, the only file that names a pin |
-| `bus/` | TWAI and MCP2518FD drivers, the vehicle-frame sources, autobaud |
-| `display/` | AffaDisplay ports (CAN link, clock, log), the mailbox, screen/pane composers |
+| `bus/` | the MCP2518FD driver, `env:direct`'s listen-only TWAI, the vehicle-frame sources, autobaud |
+| `display/` | AffaDisplay ports (clock, log, panel factory), `PanelOps`, screen/pane composers |
 | `keys/`, `input/` | key model, map, router, macros; encoders, debounce, matrix |
 | `sinks/` | key outputs: Raise UART, resistive ladder, BLE HID/AMS |
 | `media/` | now-playing sources (iPhone AMS, head unit) and the router between them |
@@ -76,7 +79,8 @@ The rules behind this layout (the ownership and blocking rules are checked by
 
 The `FEATURE_*` switches in `src/Features.h` are set per env in `platformio.ini`.
 Code behind a disabled flag is compiled out, not merely switched off. The TWAI
-serves the panel where the build has one, else the car (`env:direct`). Runtime
+serves the panel where the build has one (on AffaDisplay's `TwaiLink`), else
+the car (`env:direct`, on `bus/TwaiBus`, listen-only). Runtime
 choices (BLE mode, knobs on or off, key routes) are NVS settings that the web
 app edits.
 
@@ -84,9 +88,10 @@ app edits.
 
 Everything about the AFFA protocol (sync, registration, ISO-TP, the ACK state
 machine, key decode, screens) lives in
-[AffaDisplay](https://github.com/Barbedx/AffaDisplay), pinned by commit in
-`platformio.ini`. This repository holds only the ports and the policy for what
-gets drawn. The registration sequence as this firmware relies on it is written
+[AffaDisplay](https://github.com/Barbedx/AffaDisplay), pinned in
+`platformio.ini`, and so does the panel's CAN link (`affa::TwaiLink`: the TWAI
+driver, the TX gate, bus-off recovery). This repository holds only the ports
+and the policy for what gets drawn. The registration sequence as this firmware relies on it is written
 down in [docs/DISPLAY-INIT-SPEC.md](docs/DISPLAY-INIT-SPEC.md).
 
 ## Head unit

@@ -2118,7 +2118,7 @@ void WebUi::fillDisplay(JsonObject d)
             f["confirm"]    = (ps.features & MegaOpen::PF_CONFIRM) != 0;
             f["info"]       = (ps.features & MegaOpen::PF_INFO) != 0;
         }
-        // Bus counters for the TwaiAffaLink path are on /api/can.
+        // Bus counters for the panel's TwaiLink are on /api/can.
         if (ps.attached) {
             // Where the opening got to, and why the last session ended (see the
             // phase log in src/app/UiTask.cpp).

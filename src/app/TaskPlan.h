@@ -69,7 +69,7 @@ namespace App
         constexpr UBaseType_t HU_PRIO   = 6;  constexpr int HU_CORE   = 1;
 
         // The Arduino loop task is the panel task (src/app/PanelOwner.h): the
-        // only caller of AffaDisplay and of the TWAI driver. Since Step 4 it
+        // owner of AffaDisplay's poll() and of the TWAI driver. Since Step 4 it
         // only pumps; the render policy is `ui`'s. 5: below the keys, the hu
         // task and the 1 kHz samplers, above everything that only renders or
         // talks to the network. It sleeps in twai_receive(), so a panel frame
@@ -77,7 +77,8 @@ namespace App
         constexpr UBaseType_t LOOP_PRIO = 5;
 
         // The render policy (src/app/UiTask.h): what goes on the glass and
-        // when. It only posts to the mailbox, so it can sit at 2 on the key
+        // when. It only renders through PanelOps (the library hands each
+        // render to the panel task's poll()), so it can sit at 2 on the key
         // core, below everything that a key or the panel's timing waits for;
         // a slow compose or the 5 ms media-lock wait costs a late repaint and
         // nothing else. Wakes on a completion, or every 50 ms.

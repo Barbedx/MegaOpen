@@ -55,7 +55,7 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 - **Fix the fullscreen in the library, then delete ours.** AffaDisplay v1.0.0
   `showFullscreenText` declares 0x60 with byte 5 = 0x40 and prefixes two spaces:
   row 1 is indented and row 3 is starved. `MegaOpen::sendFullscreen`
-  (AffaMailbox.cpp) uses the OEM 0x69 / 0x49 / text at 32 and replaces it for
+  (PanelOps.cpp) uses the OEM 0x69 / 0x49 / text at 32 and replaces it for
   notifications and the track splash. Upstream it as a new tag
   (refresh the cache, do not retag v1.0.0).
 - **Column widths are guesses elsewhere.** `MediaScreen::COLS_DEFAULT = 26`
@@ -160,16 +160,13 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   Where: `cfg/Config.cpp`, `WebUi.cpp` settings POST.
 
 ### Build / code health
-- **AffaDisplay is pinned by commit, not by tag.** `platformio.ini` uses the
-  library's commit `2e40bb9` (v1.0.0 + the bounded `1C1 70` wait and the
-  repeated-`61 11` re-arm, branch `carminat-peerchannel-probe`). Release it as a
-  tag and pin the tag.
-- **`AFFA_ENABLE_TASK=1` is blocked on the app, not the flag.** ~16 direct
-  renders/state reads on the loop task (`synced()`, `busy()`,
-  `lastEnqueued()` used as wire arbitration) must go through `AffaTask`, and
-  `AffaTask` has no `showNavBitmap`. The library's `pollLateMaxUs` /
-  `queueDropped` telemetry exists only in that mode and nothing reads it.
-  Where: `main.cpp`.
+- **AffaDisplay is pinned to a branch, not a tag.** `platformio.ini` follows
+  `release/next`. Release it as a tag and pin the tag.
+- **`AFFA_ENABLE_TASK=0` on purpose.** The loop task owns `poll()` and sleeps
+  in `TwaiLink::waitRx()`, so a panel key wakes it at once; `AffaTask` polls on
+  a fixed 2 ms period. Every other task renders through the library's dispatch
+  ring, which needs only the declared poll owner. Revisit if `AffaTask` learns
+  to sleep in the link.
 - **AffaDisplay docs disagree with its code in ~12 places** (API.md §2.10
   `Esp32CanLink`, §4.1 RX topology, TX queue depth 6 not 4, payload 119 not
   113, the missing `examples/19_owned_task`...). Ticket upstream, with the L1
