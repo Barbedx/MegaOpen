@@ -167,7 +167,7 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   has since release/next `b1ee06f`. It stays the loop because the same pass
   samples the TWAI status, drains the frame trace, publishes `PanelStatus` and
   beats the task registry the OTA trial watches; `AffaTask` has no per-pass
-  hook, so it would be a second task. Revisit if it gets one.
+  hook, and an owner loop on `waitRx()` + `WakePacer` is the supported shape.
 - **AffaDisplay docs disagree with its code in ~12 places** (API.md §2.10
   `Esp32CanLink`, §4.1 RX topology, TX queue depth 6 not 4, payload 119 not
   113, the missing `examples/19_owned_task`...). Ticket upstream, with the L1

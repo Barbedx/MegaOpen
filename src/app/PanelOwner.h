@@ -24,8 +24,9 @@
 // Not AffaTask, which now sleeps in the link the same way: this loop also
 // runs the TWAI status sample, the frame trace and the heartbeat, publishes
 // PanelStatus after every poll() and beats the task registry the OTA trial
-// watches.
-// library gap: AffaTask has no per-pass hook for that work; it would be a second task at the same latency.
+// watches. AffaTask has no per-pass hook for that work, and an owner loop on
+// waitRx() + affa::WakePacer is the library's supported shape, with the same
+// wake.
 //
 // The library's callbacks (onSync, onComplete) arrive here, on this task, and
 // since Step 4 they end here: the render policy is the ui task's. What it needs
