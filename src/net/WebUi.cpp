@@ -380,16 +380,6 @@ void WebUi::routes()
         PsychicFileResponse resp(r, LittleFS, p, "text/plain", false);
         return resp.send();
     });
-
-    // The only way the flash log's partition is ever erased after its first
-    // mount: LogFile::begin() no longer formats a partition that fails to
-    // mount. Refused while it is mounted. Logging resumes at the next boot.
-    route("/api/logs/format", HTTP_POST, [](PsychicRequest* r) {
-        if (LogFile::mounted()) return r->reply(409, "text/plain", "mounted: nothing to repair");
-        if (!LogFile::format()) return r->reply(500, "text/plain", "format failed");
-        LogBus::line("[log] littlefs formatted from the web; logging resumes at the next boot");
-        return r->reply(200, "application/json", "{\"ok\":true}");
-    });
 #endif
 
     route("/api/status", HTTP_GET, [this](PsychicRequest* r) {

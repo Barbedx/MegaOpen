@@ -109,14 +109,6 @@ void WebUi::routesCap()
         Capture::stop();
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
-    // ?m=change|full, this session only; /api/cap/settings saves it.
-    route("/api/cap/mode", HTTP_POST, [](PsychicRequest* r) {
-        const String m = capParam(r, "m");
-        const int mode = uiFind(CapFormat::MODE_NAMES, m.c_str());
-        if (mode < 0) return r->reply(400, "text/plain", "m=change|full");
-        Capture::setMode((uint8_t)mode);
-        return r->reply(200, "application/json", "{\"ok\":true}");
-    });
     auto mark = [](PsychicRequest* r) {
         const String t = capParam(r, "t");
         Capture::mark(t.c_str());
@@ -171,26 +163,6 @@ void WebUi::routesCap()
     });
     route("/api/cap/delete_unprotected", HTTP_POST, [](PsychicRequest* r) {
         return capOk(r, "deleted", Capture::removeUnprotected());
-    });
-    // ?days=N (by the header's wall clock; files without one are kept) or
-    // ?sessions=N (keep the newest N). Protected files only with force=1.
-    route("/api/cap/delete_older", HTTP_POST, [](PsychicRequest* r) {
-        const bool force = capFlag(r, "force", false);
-        if (r->hasParam("days")) {
-            uint32_t skipped = 0;
-            const uint32_t days = (uint32_t)strtoul(capParam(r, "days").c_str(), nullptr, 10);
-            const uint32_t n = Capture::removeOlderDays(days, force, &skipped);
-            char b[80];
-            snprintf(b, sizeof(b), "{\"ok\":true,\"deleted\":%lu,\"noClock\":%lu}",
-                     (unsigned long)n, (unsigned long)skipped);
-            return r->reply(200, "application/json", b);
-        }
-        if (r->hasParam("sessions")) {
-            const uint32_t keep = (uint32_t)strtoul(capParam(r, "sessions").c_str(), nullptr, 10);
-            if (!keep) return r->reply(400, "text/plain", "sessions=N keeps the newest N (N >= 1)");
-            return capOk(r, "deleted", Capture::removeOlderSessions(keep, force));
-        }
-        return r->reply(400, "text/plain", "days=N or sessions=N");
     });
     // ?f=NNNN&on=0|1: the file's whole session.
     route("/api/cap/protect", HTTP_POST, [](PsychicRequest* r) {

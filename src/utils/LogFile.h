@@ -46,9 +46,6 @@ namespace LogFile
     bool fsMounted();
     // Why begin() failed, for the boot line; "" when mounted.
     const char* mountError();
-    // Formats the partition and mounts it; refused while mounted. The web's
-    // explicit erase (POST /api/logs/format). Logging resumes at the next boot.
-    bool format();
 
     // A LogBus::Sink.
     void sink(const char* line, int len, uint32_t ms);

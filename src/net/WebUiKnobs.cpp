@@ -273,37 +273,5 @@ void WebUi::routesKnobs()
         }
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
-
-    // ---- pot end-of-travel calibration, from the filtered live reading ----
-    route("/api/knobs/cal", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_knobs) return r->reply(503, "text/plain", "no knob service");
-        JsonDocument d;
-        deserializeJson(d, r->body());
-        const char* end = d["end"] | "";
-        const bool isMin = strcmp(end, "min") == 0;
-        if (!isMin && strcmp(end, "max") != 0) return r->reply(400, "text/plain", "end: min|max");
-
-        Config c = _knobs->config();
-        const uint16_t raw = _knobs->live().potRaw;
-        // min is always the smaller reading; `inverted` decides which end is up.
-        if (isMin) c.potMin = raw; else c.potMax = raw;
-        if (c.potMin > c.potMax) { const uint16_t t = c.potMin; c.potMin = c.potMax; c.potMax = t; }
-        // 409, else sanitize() would silently reset to the full range.
-        if (c.potMax - c.potMin < 64)
-            return r->reply(409, "text/plain", "ends too close — turn the knob to the other end first");
-        _knobs->setConfig(c);
-
-        // Save into the stored config, not the live one, which may hold unsaved colours.
-        Config stored;
-        _cfg->loadKnobs(stored);
-        stored.potMin = c.potMin;
-        stored.potMax = c.potMax;
-        _cfg->saveKnobs(stored);
-
-        JsonDocument o;
-        o["ok"] = true; o["min"] = c.potMin; o["max"] = c.potMax;
-        String out; serializeJson(o, out);
-        return replyJson(r, out);
-    });
 }
 #endif  // FEATURE_KNOBS

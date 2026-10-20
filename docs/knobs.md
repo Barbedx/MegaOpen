@@ -199,7 +199,6 @@ enabled, so wiring can be proven with nothing bound to anything.
 | `GET /api/knobs` | the whole configuration, the pins, the action vocabulary; `enc` is the right knob, `enc2` the left (`fitted: false` on a board with no pins for it) |
 | `POST /api/knobs` | any subset of it; `"save": false` applies without writing NVS |
 | `GET /api/knobs/live` | detents, errors, button, pot raw/level/zone, LED frames, dropped events |
-| `POST /api/knobs/cal` | `{"end":"min"\|"max"}` — capture the current reading as that end |
 
 ## 6. Not done
 

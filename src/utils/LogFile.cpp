@@ -101,7 +101,7 @@ namespace LogFile
         if (g_mounted && partSize && lastSize != partSize) p.putUInt("logfsSize", partSize);
         p.end();
         if (!g_mounted) {
-            g_err = seen && !resized ? "mount failed; partition kept, not formatted (POST /api/logs/format erases it)"
+            g_err = seen && !resized ? "mount failed; partition kept, not formatted"
                   : resized          ? "partition resized; format failed"
                                      : "first-time format failed";
             return false;
@@ -121,26 +121,6 @@ namespace LogFile
     bool mounted() { return g_mounted && (bool)g_cur; }
     bool fsMounted() { return g_mounted; }
     const char* mountError() { return g_err; }
-
-    bool format()
-    {
-        if (g_mounted) return false;
-        if (!LittleFS.format()) return false;
-        // The LogBus file sink was not added this boot; the next boot logs.
-        g_mounted = LittleFS.begin(false, "/littlefs", 4, "littlefs");
-        if (g_mounted) {
-            LittleFS.mkdir("/log");
-            const esp_partition_t* part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA,
-                                                                   ESP_PARTITION_SUBTYPE_ANY, "littlefs");
-            Preferences p;
-            p.begin("sys", false);
-            p.putBool("logfsInit", true);
-            if (part) p.putUInt("logfsSize", (uint32_t)part->size);
-            p.end();
-            g_err = "";
-        }
-        return g_mounted;
-    }
 
     void flushNow()
     {

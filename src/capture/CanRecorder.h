@@ -111,11 +111,6 @@ namespace Capture
     enum class Res : uint8_t { OK, NOT_FOUND, BUSY, FAILED };
     Res      remove(uint32_t num);
     uint32_t removeUnprotected();
-    // Files whose header's wall clock is older than days (unknown clocks are
-    // kept, counted in *skipped), or not in the newest `sessions` sessions.
-    // Protected files only with force.
-    uint32_t removeOlderDays(uint32_t days, bool force, uint32_t* skipped);
-    uint32_t removeOlderSessions(uint32_t sessions, bool force);
     Res      protect(uint32_t num, bool on);    // the file's whole session
     // Every /cap file, protected too; recording resumes in a new session if it
     // was on. Returns files deleted.

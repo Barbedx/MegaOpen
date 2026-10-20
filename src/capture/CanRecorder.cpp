@@ -867,50 +867,6 @@ namespace Capture
         return n;
     }
 
-    uint32_t removeOlderDays(uint32_t days, bool force, uint32_t* skipped)
-    {
-        uint32_t n = 0, skip = 0;
-        if (!g_ready) { if (skipped) *skipped = 0; return 0; }
-        uint32_t atMs;
-        const uint32_t now = wallNow(atMs);
-        Lock l;
-        for (int i = (int)g_nFiles - 1; i >= 0; --i) {
-            const FileRec& f = g_files[i];
-            if (!f.wallSec || !now || f.wallSec > now) { ++skip; continue; }
-            if (now - f.wallSec < days * 86400u) continue;
-            if ((f.prot && !force) || !deletable(f)) continue;
-            if (deleteLocked((uint16_t)i)) ++n;
-        }
-        if (skipped) *skipped = skip;
-        LogBus::printf("[cap] deleted %lu file(s) older than %lu day(s) (web; %lu without a clock kept)",
-                       (unsigned long)n, (unsigned long)days, (unsigned long)skip);
-        return n;
-    }
-
-    uint32_t removeOlderSessions(uint32_t sessions, bool force)
-    {
-        if (!g_ready) return 0;
-        uint32_t n = 0;
-        Lock l;
-        // Walk newest first, counting distinct sessions; the current one counts.
-        uint32_t seen = 0, last = 0;
-        uint32_t cutoff = 0;   // sessions below this go
-        for (int i = (int)g_nFiles - 1; i >= 0; --i) {
-            if (g_files[i].session != last) { last = g_files[i].session; ++seen; }
-            if (seen > sessions) { cutoff = last + 1; break; }
-        }
-        if (!cutoff) return 0;
-        for (int i = (int)g_nFiles - 1; i >= 0; --i) {
-            const FileRec& f = g_files[i];
-            if (f.session >= cutoff) continue;
-            if ((f.prot && !force) || !deletable(f)) continue;
-            if (deleteLocked((uint16_t)i)) ++n;
-        }
-        LogBus::printf("[cap] deleted %lu file(s) outside the newest %lu session(s) (web)",
-                       (unsigned long)n, (unsigned long)sessions);
-        return n;
-    }
-
     Res protect(uint32_t num, bool on)
     {
         if (!g_ready) return Res::FAILED;
