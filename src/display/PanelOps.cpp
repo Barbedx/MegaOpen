@@ -1,16 +1,21 @@
-#include "AffaMailbox.h"
+#include "PanelOps.h"
 #include <string.h>
+#include "AffaPort.h"
+#include "../utils/LogBus.h"
 
 namespace MegaOpen
 {
     static void copyStr(char* dst, const char* src)
     {
         if (!src) { dst[0] = '\0'; return; }
-        strncpy(dst, src, AffaMailbox::STR_MAX - 1);
-        dst[AffaMailbox::STR_MAX - 1] = '\0';
+        strncpy(dst, src, PanelOps::STR_MAX - 1);
+        dst[PanelOps::STR_MAX - 1] = '\0';
     }
 
-    const char* AffaMailbox::opName(Op o)
+    // Taken by the library: a render's ticket, or Ok from an op that has none.
+    static bool accepted(const affa::Submitted& s) { return s.result == affa::Result::Ok; }
+
+    const char* PanelOps::opName(Op o)
     {
         switch (o) {
             case Op::Text:           return "text";
@@ -36,7 +41,7 @@ namespace MegaOpen
         return "?";
     }
 
-    bool AffaMailbox::holdsGlass(Op o)
+    bool PanelOps::holdsGlass(Op o)
     {
         switch (o) {
             case Op::Text:
@@ -55,87 +60,37 @@ namespace MegaOpen
         }
     }
 
-    bool AffaMailbox::begin(uint8_t depth)
-    {
-        if (_q) return true;
-        _q = xQueueCreate(depth, sizeof(Req));
-        return _q != nullptr;
-    }
-
-    AffaMailbox::ReqId AffaMailbox::post(const Req& in)
-    {
-        Req r = in;
-        r.id = _ids.next();
-        // Zero wait: an HTTP handler must never block behind the display.
-        if (!_q || xQueueSend(_q, &r, 0) != pdTRUE) {
-            _dropped.fetch_add(1, std::memory_order_relaxed);
-            return MailboxIds::NO_REQ;
-        }
-        _posted.fetch_add(1, std::memory_order_relaxed);
-        return r.id;
-    }
-
-    AffaMailbox::ReqId AffaMailbox::postRows(const Req& in)
-    {
-        if (!_q) {
-            _dropped.fetch_add(1, std::memory_order_relaxed);
-            return MailboxIds::NO_REQ;
-        }
-        Req r = in;
-        r.id = _ids.next();
-        _rowsLock.lock();
-        const bool replaced = _rowsFull;
-        _rows = r;
-        _rowsFull = true;
-        _rowsLock.unlock();
-        if (replaced) _rowsCoalesced.fetch_add(1, std::memory_order_relaxed);
-        _posted.fetch_add(1, std::memory_order_relaxed);
-        return r.id;
-    }
-
-    AffaMailbox::ReqId AffaMailbox::postNavBitmap(uint8_t slot, uint16_t epoch)
-    {
-        Req r;
-        r.op = Op::NavBitmap;
-        r.slot = slot;
-        r.track = true;
-        r.yields = true;
-        r.epoch = epoch;
-        r.deliberate = false;
-        return post(r);
-    }
-
-    bool AffaMailbox::postText(const char* text, bool deliberate)
+    bool PanelOps::postText(const char* text, bool deliberate)
     {
         Req r; r.op = Op::Text; copyStr(r.a, text);
         r.deliberate = deliberate;
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postTime(const char* hhmm)
+    bool PanelOps::postTime(const char* hhmm)
     {
         Req r; r.op = Op::Time; copyStr(r.a, hhmm);
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postPower(bool on)
+    bool PanelOps::postPower(bool on)
     {
         Req r; r.op = Op::Power; r.flag = on;
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postMenu(const char* h, const char* r0, const char* r1, uint8_t scroll)
+    bool PanelOps::postMenu(const char* h, const char* r0, const char* r1, uint8_t scroll)
     {
         Req r; r.op = Op::Menu;
         copyStr(r.a, h); copyStr(r.b, r0); copyStr(r.c, r1);
         r.u16 = scroll;
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postHighlight(uint8_t row)
+    bool PanelOps::postHighlight(uint8_t row)
     {
         Req r; r.op = Op::Highlight; r.u16 = row;
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
     affa::Submitted sendFullscreen(affa::CarminatDisplay& d, const char* l1, const char* l2,
@@ -169,28 +124,28 @@ namespace MegaOpen
         return d.enqueue(0x151, p, (uint8_t)end, opt);
     }
 
-    bool AffaMailbox::postPopup(const char* text, uint8_t icon, uint8_t srcIcon, uint8_t fmt)
+    bool PanelOps::postPopup(const char* text, uint8_t icon, uint8_t srcIcon, uint8_t fmt)
     {
         Req r; r.op = Op::Popup; copyStr(r.a, text);
         r.p[0] = icon; r.p[1] = srcIcon; r.p[2] = fmt;
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postConfirmBox(const char* caption, const char* row0, const char* row1)
+    bool PanelOps::postConfirmBox(const char* caption, const char* row0, const char* row1)
     {
         Req r; r.op = Op::ConfirmBox;
         copyStr(r.a, caption); copyStr(r.b, row0); copyStr(r.c, row1);
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postInfoPopup(const char* l1, const char* l2, const char* l3)
+    bool PanelOps::postInfoPopup(const char* l1, const char* l2, const char* l3)
     {
         Req r; r.op = Op::InfoPopup;
         copyStr(r.a, l1); copyStr(r.b, l2); copyStr(r.c, l3);
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postMessageBox(const char* row0, const char* row1, const char* labels,
+    bool PanelOps::postMessageBox(const char* row0, const char* row1, const char* labels,
                                      uint8_t buttonCount, uint8_t selected)
     {
         Req r; r.op = Op::MessageBox;
@@ -199,68 +154,99 @@ namespace MegaOpen
         r.p[0] = buttonCount > 2 ? 2 : buttonCount;
         // No buttons: the OEM sends 0xFF as the selection.
         r.p[1] = r.p[0] ? (selected < r.p[0] ? selected : 0) : 0xFF;
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postSelectButton(uint8_t index)
+    bool PanelOps::postSelectButton(uint8_t index)
     {
         Req r; r.op = Op::SelectButton; r.u16 = index;
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postTextStyled(const char* text, uint8_t icon, uint8_t srcIcon,
+    bool PanelOps::postTextStyled(const char* text, uint8_t icon, uint8_t srcIcon,
                                      uint8_t fmt, uint8_t iconBank2)
     {
         Req r; r.op = Op::TextStyled; copyStr(r.a, text);
         r.p[0] = icon; r.p[1] = srcIcon; r.p[2] = fmt; r.p[3] = iconBank2;
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postHidePopup()
+    bool PanelOps::postHidePopup()
     {
         Req r; r.op = Op::HidePopup;
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postFullscreen(const char* l1, const char* l2, const char* l3)
+    bool PanelOps::postFullscreen(const char* l1, const char* l2, const char* l3)
     {
         Req r; r.op = Op::Fullscreen;
         copyStr(r.a, l1); copyStr(r.b, l2); copyStr(r.c, l3);
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postKey(uint16_t wireCode, bool hold, bool wire)
+    bool PanelOps::postKey(uint16_t wireCode, bool hold, bool wire)
     {
         Req r; r.op = Op::Key; r.u16 = wireCode; r.flag = hold; r.p[0] = wire ? 1 : 0;
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postAbort()
+    bool PanelOps::postAbort()
     {
         Req r; r.op = Op::Abort;
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postResync()
+    bool PanelOps::postResync()
     {
         Req r; r.op = Op::Resync; r.deliberate = false;
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    bool AffaMailbox::postClear()
+    bool PanelOps::postClear()
     {
         Req r; r.op = Op::Clear; r.deliberate = false;
-        return post(r) != MailboxIds::NO_REQ;
+        return accepted(submit(r));
     }
 
-    uint32_t AffaMailbox::pending() const
+    void PanelOps::attach(affa::AffaDisplayBase* d, affa::CarminatDisplay* carminat)
     {
-        const uint32_t q = _q ? (uint32_t)uxQueueMessagesWaiting(_q) : 0u;
-        return q + (_rowsFull ? 1u : 0u);
+        _d = d;
+        _carminat = carminat;
     }
 
-    affa::Submitted AffaMailbox::render(affa::AffaDisplayBase& d, const Req& r)
+    affa::Submitted PanelOps::submit(const Req& r)
     {
+        affa::Submitted s;
+        if (!_d) {
+            s = affa::Submitted::refused(affa::Result::NotSupported);
+        } else if (r.yields && r.epoch != deliberateSeq()) {
+            // A repaint decided before a person's screen went up: not drawn
+            // over it. The ui learns of the screen on its next pass and holds
+            // the glass from there.
+            s = affa::Submitted::refused(affa::Result::Aborted);
+            _yielded.fetch_add(1, std::memory_order_relaxed);
+        } else {
+            s = render(r);
+        }
+
+        if (accepted(s)) {
+            _posted.fetch_add(1, std::memory_order_relaxed);
+            // A person's screen, accepted: the glass is theirs for a while.
+            if (r.deliberate && holdsGlass(r.op))
+                _deliberateSeq.fetch_add(1, std::memory_order_release);
+        } else {
+            _refused.fetch_add(1, std::memory_order_relaxed);
+            // The ui task says what matters about its own, rate-limited:
+            // logging each refused repaint here would flood the log.
+            if (!r.quiet)
+                LogBus::printf("[disp] %s -> %s", opName(r.op), MegaOpen::resultName(s.result));
+        }
+        return s;
+    }
+
+    affa::Submitted PanelOps::render(const Req& r)
+    {
+        affa::AffaDisplayBase& d = *_d;
         // The ops that are not renders have no ticket, only a result.
         affa::Submitted res{affa::kNoTicket, affa::Result::Ok};
         switch (r.op) {
@@ -310,11 +296,10 @@ namespace MegaOpen
                                         r.p[0], r.p[1] == 0xFF ? 0 : r.p[1]);
                 break;
             }
-            // The pane: the library keeps the pointer until the ticket
-            // completes, which is why the slot is only released then.
+            // The pane: copied into the library's pool at the call.
             case Op::NavBitmap:
-                res = (_carminat && _pane && r.slot < PaneBuffers::SLOTS)
-                          ? _carminat->showNavBitmap(_pane->data(r.slot))
+                res = (_carminat && r.img)
+                          ? _carminat->showNavBitmap(r.img)
                           : affa::Submitted::refused(affa::Result::NotSupported);
                 break;
             case Op::Key:
@@ -328,90 +313,18 @@ namespace MegaOpen
             case Op::Abort:
                 (void)d.abortPending();
                 break;
-            // Resets both FSMs and cancels the queue: whatever was posted
-            // before it and is still queued completes Cancelled (the tracked
-            // ones come back to the ui through libComplete, slots released).
+            // Resets both FSMs and cancels the queue on the panel task: what
+            // is still queued then completes Cancelled. Off that task it is
+            // posted, and false means the library's ring was full.
             case Op::Resync:
-                res.result = d.begin() ? affa::Result::Ok : affa::Result::LinkDown;
-                ++_resyncs;
+                res.result = d.begin() ? affa::Result::Ok : affa::Result::QueueFull;
+                if (accepted(res)) _resyncs.fetch_add(1, std::memory_order_relaxed);
                 break;
             // Nothing for the library: the ui task acts on the count.
             case Op::Clear:
-                ++_clears;
+                _clears.fetch_add(1, std::memory_order_relaxed);
                 break;
         }
         return res;
-    }
-
-    void AffaMailbox::complete(const MailboxIds::Completion& c)
-    {
-        // The slot first: the ui may compose into it the moment it hears.
-        if (_pane && c.slot != MailboxIds::NO_SLOT) _pane->release(c.slot);
-        if (_done) _done(c, _doneCtx);
-    }
-
-    void AffaMailbox::apply(affa::AffaDisplayBase& d, const Req& r)
-    {
-        affa::Result res;
-        // An automatic repaint decided before a person's screen went up: drop
-        // it rather than draw over that screen. The ui learns of the screen
-        // from PanelStatus on its next pass and holds the glass from there.
-        if (r.yields && r.epoch != _deliberateSeq) {
-            res = affa::Result::Aborted;
-            ++_yielded;
-            if (r.track) complete(MailboxIds::TicketMap::dropped(r.id, r.slot, (uint8_t)res));
-            else if (_pane && r.slot != MailboxIds::NO_SLOT) _pane->release(r.slot);
-        } else if (r.track) {
-            // The call's ticket is this request's; none means refused or
-            // nothing to send, and the verdict is synthesised now. A coalesced
-            // predecessor completes Aborted from inside the call, under its
-            // own, older ticket.
-            _map.beforeRender();
-            const affa::Submitted s = render(d, r);
-            res = s.result;
-            MailboxIds::Completion c;
-            if (_map.afterRender(r.id, r.slot, s.ok(), (uint8_t)res,
-                                 MailboxIds::NO_TICKET, s.ticket, c))
-                complete(c);
-        } else {
-            res = render(d, r).result;
-            // Only NavBitmap borrows, and it is always tracked: an untracked
-            // borrow has no verdict to wait for, so a refusal gives it back.
-            if (_pane && r.slot != MailboxIds::NO_SLOT && res != affa::Result::Ok)
-                _pane->release(r.slot);
-        }
-
-        // A person's screen, accepted: the glass is theirs for a while.
-        if (res == affa::Result::Ok && r.deliberate && holdsGlass(r.op)) ++_deliberateSeq;
-
-        if (_report) _report(r, res, _ctx);
-    }
-
-    uint8_t AffaMailbox::drain(affa::AffaDisplayBase& d)
-    {
-        if (!_q) return 0;
-
-        uint8_t n = 0;
-        Req r;
-        // Bounded so a busy producer cannot starve poll().
-        while (n < 16 && xQueueReceive(_q, &r, 0) == pdTRUE) {
-            apply(d, r);
-            ++n;
-        }
-        // The rows last: a deliberate screen drained above overtakes them.
-        if (_rowsFull) {
-            _rowsLock.lock();
-            const bool had = _rowsFull;
-            if (had) { r = _rows; _rowsFull = false; }
-            _rowsLock.unlock();
-            if (had) { apply(d, r); ++n; }
-        }
-        return n;
-    }
-
-    void AffaMailbox::libComplete(affa::TxTicket t, affa::Result r)
-    {
-        MailboxIds::Completion c;
-        if (_map.complete(t, (uint8_t)r, c)) complete(c);
     }
 }

@@ -984,31 +984,31 @@ void WebUi::routesDisplay()
                                                          : "{\"ok\":true}");
     });
 
-    // One reply for every render route: 202 when posted to the mailbox (the real
-    // result is logged from the drain; /api/display reports lastResult), 503
-    // when the mailbox is full.
+    // One reply for every render route: 202 when the library took it (the
+    // panel's answer comes later; /api/display reports lastResult), 503 when
+    // it refused (PanelOps logs why).
     auto posted = [this](PsychicRequest* r, bool ok) {
         JsonDocument d;
         d["queued"] = ok;
         d["note"] = ok ? "queued for the display task; the result is reported in the log"
-                       : "mailbox full — nothing was drawn";
+                       : "refused — nothing was drawn; the reason is in the log";
         String out; serializeJson(d, out);
         return r->reply(ok ? 202 : 503, "application/json", out.c_str());
     };
 
     route("/api/display/text", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "no display");
         if (!r->hasParam("text")) return r->reply(400, "text/plain", "text?");
         const String t = r->getParam("text")->value();
         LogBus::printf("display text: %s", t.c_str());
-        return posted(r, _box->postText(t.c_str()));
+        return posted(r, _ops->postText(t.c_str()));
     });
 
     route("/api/display/clock", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "no display");
         if (!r->hasParam("time")) return r->reply(400, "text/plain", "time? (HHMM)");
         const String t = r->getParam("time")->value();
-        const bool ok = _box->postTime(t.c_str());
+        const bool ok = _ops->postTime(t.c_str());
         // The ui task owns the clock's record (GET /api/media clockSrc): tell
         // it when the time is a real HHMM. It does not draw it again.
         const int hh = t.substring(0, 2).toInt(), mm = t.substring(2, 4).toInt();
@@ -1019,8 +1019,8 @@ void WebUi::routesDisplay()
     });
 
     route("/api/display/power", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
-        return posted(r, _box->postPower(paramBool(r, "on", true)));
+        if (!_ops) return r->reply(503, "text/plain", "no display");
+        return posted(r, _ops->postPower(paramBool(r, "on", true)));
     });
 
     // Hand the glass back to automatic repaints now. `ms` sets the hold for later
@@ -1035,7 +1035,7 @@ void WebUi::routesDisplay()
 
     // Three rows of arbitrary ASCII: the general "draw anything" surface.
     route("/api/display/menu", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "no display");
         const String h  = paramStr(r, "header");
         const String r0 = paramStr(r, "row0");
         const String r1 = paramStr(r, "row1");
@@ -1045,25 +1045,25 @@ void WebUi::routesDisplay()
             if (!Catalog::arrowsKnown((int)v)) return r->reply(400, "text/plain", kScrollWhy);
             scroll = (uint8_t)v;
         }
-        return posted(r, _box->postMenu(h.c_str(), r0.c_str(), r1.c_str(), scroll));
+        return posted(r, _ops->postMenu(h.c_str(), r0.c_str(), r1.c_str(), scroll));
     });
 
     // Move the selection bar. Own RenderSlot, so it and a pending redraw never
     // replace each other.
     route("/api/display/highlight", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
-        return posted(r, _box->postHighlight((uint8_t)atoi(paramStr(r, "row", "0").c_str())));
+        if (!_ops) return r->reply(503, "text/plain", "no display");
+        return posted(r, _ops->postHighlight((uint8_t)atoi(paramStr(r, "row", "0").c_str())));
     });
 
     // icon / src / fmt exposed because they are still being reverse-engineered.
     route("/api/display/popup", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
-        if (paramBool(r, "hide")) return posted(r, _box->postHidePopup());
+        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (paramBool(r, "hide")) return posted(r, _ops->postHidePopup());
         if (!r->hasParam("text")) return r->reply(400, "text/plain", "text? or hide=1");
         const uint8_t icon = (uint8_t)paramU32(r, "icon", "0x55", 0);
         const uint8_t src  = (uint8_t)paramU32(r, "src",  "0xFF", 0);
         const uint8_t fmt  = (uint8_t)paramU32(r, "fmt",  "0x60", 0);
-        const bool ok = _box->postPopup(paramStr(r, "text").c_str(), icon, src, fmt);
+        const bool ok = _ops->postPopup(paramStr(r, "text").c_str(), icon, src, fmt);
         // `ms` arms the auto-hide (default 3 s, as the firmware's own popups);
         // ms=0 leaves it up until hide=1 or /api/display/clear.
         if (ok && _armPopup) {
@@ -1089,11 +1089,11 @@ void WebUi::routesDisplay()
     });
 
     route("/api/display/confirm", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "no display");
         const String cap = paramStr(r, "caption");
         const String r0  = paramStr(r, "row0");
         const String r1  = paramStr(r, "row1");
-        return posted(r, _box->postConfirmBox(cap.c_str(), r0.c_str(), r1.c_str()));
+        return posted(r, _ops->postConfirmBox(cap.c_str(), r0.c_str(), r1.c_str()));
     });
 
     // The mode 0x05 message box with a real button count (0..2; confirm is fixed
@@ -1101,34 +1101,34 @@ void WebUi::routesDisplay()
     // two-button form is 119 wire bytes, the longest message we send, and wraps
     // the ISO-TP counter to 0x20.
     route("/api/display/msgbox", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "no display");
         const String r0  = paramStr(r, "row0");
         const String r1  = paramStr(r, "row1");
         const String lab = paramStr(r, "labels");
         const uint8_t n  = (uint8_t)paramU32(r, "buttons", "1", 10);
         const uint8_t se = (uint8_t)paramU32(r, "selected", "0", 10);
-        return posted(r, _box->postMessageBox(r0.c_str(), r1.c_str(), lab.c_str(), n, se));
+        return posted(r, _ops->postMessageBox(r0.c_str(), r1.c_str(), lab.c_str(), n, se));
     });
 
     // `03 29 05 <n>`: select a message-box button. Not /api/display/highlight,
     // which is the list's `29 01 <rowtag>`.
     route("/api/display/selectbutton", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "no display");
         const uint8_t i = (uint8_t)paramU32(r, "index", "0", 10);
-        return posted(r, _box->postSelectButton(i));
+        return posted(r, _ops->postSelectButton(i));
     });
 
     // setText with the four header bytes exposed, including iconBank2. Icon
     // polarity is inverted (set bit = icon off, so "no icons" is 0x55). Defaults
     // are the library's captured values, so a bare call is a plain setText.
     route("/api/display/styled", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "no display");
         const String t = paramStr(r, "text");
         auto byteOf = [&](const char* k, uint32_t dflt) -> uint8_t {
             if (!r->hasParam(k)) return (uint8_t)dflt;
             return (uint8_t)paramU32(r, k, "0", 0);
         };
-        return posted(r, _box->postTextStyled(t.c_str(),
+        return posted(r, _ops->postTextStyled(t.c_str(),
                                               byteOf("icon", 0x55),
                                               byteOf("src", 0xFF),
                                               byteOf("fmt", 0x60),
@@ -1138,24 +1138,24 @@ void WebUi::routesDisplay()
     // The three-row info list: three messages on the wire, one per row, not
     // coalesced. No hide command is known; draw the next screen instead.
     route("/api/display/info", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "no display");
         const String l1 = paramStr(r, "l1");
         const String l2 = paramStr(r, "l2");
         const String l3 = paramStr(r, "l3");
-        return posted(r, _box->postInfoPopup(l1.c_str(), l2.c_str(), l3.c_str()));
+        return posted(r, _ops->postInfoPopup(l1.c_str(), l2.c_str(), l3.c_str()));
     });
 
     // No hide: a fullscreen is not an overlay, setText() over it replaces it
     // (measured on the panel). `02 54 03` is popup?hide=1.
     route("/api/display/fullscreen", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "no display");
         const String l1 = paramStr(r, "l1");
         const String l2 = paramStr(r, "l2");
         const String l3 = paramStr(r, "l3");
-        return posted(r, _box->postFullscreen(l1.c_str(), l2.c_str(), l3.c_str()));
+        return posted(r, _ops->postFullscreen(l1.c_str(), l2.c_str(), l3.c_str()));
     });
 
-    // Inject a key as if the panel sent it (KeySource::Local, see AffaMailbox);
+    // Inject a key as if the panel sent it (KeySource::Local, see PanelOps);
     // same path as a key decoded off the wire.
     //
     // wire=1 instead puts the key frame on CAN B as the panel would
@@ -1166,7 +1166,7 @@ void WebUi::routesDisplay()
     // The library sends it only while the link is up and the opening is done
     // (or passive); without that it would only be refused in the log, so 409.
     route("/api/display/key", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "no display");
         if (!r->hasParam("code")) return r->reply(400, "text/plain", "code? (hex wire code)");
         const uint16_t code = (uint16_t)paramU32(r, "code", "0", 0);
         const bool wire = paramBool(r, "wire"), hold = paramBool(r, "hold");
@@ -1177,15 +1177,15 @@ void WebUi::routesDisplay()
             if (!st.synced && !st.passive)
                 return r->reply(409, "text/plain", "panel link is not up");
         }
-        return posted(r, _box->postKey(code, hold, wire));
+        return posted(r, _ops->postKey(code, hold, wire));
     });
 
-    // Re-run the handshake: begin() clears both FSMs and cancels the queue. A
-    // mailbox op, so it runs on the panel task in order with the renders posted
+    // Re-run the handshake: begin() clears both FSMs and cancels the queue. The
+    // library posts it to the panel task, in order with the renders posted
     // before it (they complete Cancelled).
     route("/api/display/resync", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
-        if (!_box->postResync()) return r->reply(503, "text/plain", "display queue full");
+        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (!_ops->postResync()) return r->reply(503, "text/plain", "display queue full");
         LogBus::line("resync requested");
         return r->reply(200, "application/json",
                         "{\"ok\":true,\"note\":\"handshake restarting; watch registered\"}");
@@ -1193,8 +1193,8 @@ void WebUi::routesDisplay()
 
     // Drop everything queued but not started; the transfer in flight completes.
     route("/api/display/abort", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_box) return r->reply(503, "text/plain", "no display");
-        return posted(r, _box->postAbort());
+        if (!_ops) return r->reply(503, "text/plain", "no display");
+        return posted(r, _ops->postAbort());
     });
 }
 
@@ -2161,10 +2161,10 @@ void WebUi::fillDisplay(JsonObject d)
             d["reinstalls"]    = ps.reinstalls;
             d["failStreak"]    = ps.failStreak;
         }
-        if (_box) {
-            d["mailboxPosted"]  = _box->posted();
-            // Render requests refused (mailbox full), never drawn.
-            d["mailboxDropped"] = _box->dropped();
+        if (_ops) {
+            d["rendersPosted"]  = _ops->posted();
+            // Renders refused at the call (the log says why), never drawn.
+            d["rendersRefused"] = _ops->refused();
         }
 }
 #else

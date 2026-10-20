@@ -67,7 +67,7 @@ private:
 };
 #if FEATURE_DISPLAY_CAN
 #include "../display/AffaPort.h"
-#include "../display/AffaMailbox.h"
+#include "../display/PanelOps.h"
 #include "../display/PanelStatus.h"
 #include "../utils/Snapshot.h"
 #include "../display/MediaScreen.h"
@@ -134,13 +134,12 @@ public:
     }
 
 #if FEATURE_DISPLAY_CAN
-    // The OEM display. httpd never touches the library (it is unlocked, and
-    // only the panel task may call it): it reads the status the panel task
-    // publishes after every poll(), and every render or request goes through
-    // the mailbox.
+    // The OEM display. httpd renders through PanelOps (the library takes a
+    // render from any task) and reads the status the panel task publishes
+    // after every poll(), never the library's own observers.
     void attachDisplay(const Snapshot<MegaOpen::PanelStatus>* status, const uint32_t* canRx,
-                       MegaOpen::AffaMailbox* box) {
-        _panel = status; _canRx = canRx; _box = box;
+                       MegaOpen::PanelOps* ops) {
+        _panel = status; _canRx = canRx; _ops = ops;
     }
 
     // The stalk mapping, the source that reports codes with no row, and the
@@ -356,7 +355,7 @@ private:
 #if FEATURE_DISPLAY_CAN
     const Snapshot<MegaOpen::PanelStatus>* _panel = nullptr;   // a copy, never the library
 
-    MegaOpen::AffaMailbox* _box = nullptr;       // every render goes through here
+    MegaOpen::PanelOps*    _ops = nullptr;       // every render goes through here
     Keys::AffaMap*         _affaMap = nullptr;
     Keys::AffaKeySource*   _affaSrc = nullptr;
     const Snapshot<Keys::PanelKeyLast>* _keyLast = nullptr;

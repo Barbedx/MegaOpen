@@ -5,9 +5,8 @@
 #include "Rt.h"
 #include "../cfg/Config.h"
 #include "../diag/CanBench.h"
-#include "../display/AffaMailbox.h"
 #include "../display/AffaPort.h"
-#include "../display/PaneBuffers.h"
+#include "../display/PanelOps.h"
 #include "../display/TextFold.h"
 #include "../keys/KeyEngine.h"
 #include "../media/MediaRouter.h"
@@ -18,20 +17,21 @@
 
 // The ui's wait must outlive the library's longest legitimate ticket: a held
 // job, then every ACKed attempt with its backoff and
-// dirty-quiet gap. MailboxIds.h cannot see AffaConfig, so it is checked here.
-static_assert(MailboxIds::Waits::LIB_WORST_MS >=
+// dirty-quiet gap. UiWaits.h cannot see AffaConfig, so it is checked here.
+static_assert(UiWaits::Waits::LIB_WORST_MS >=
                   (uint32_t)AFFA_TX_HOLD_MS +
                   (uint32_t)AFFA_ACK_TIMEOUT_MS * (AFFA_TX_MAX_RETRIES + 1) +
                   (uint32_t)AFFA_TX_RETRY_MS * ((1u << AFFA_TX_MAX_RETRIES) - 1) +
                   (uint32_t)AFFA_TX_DIRTY_QUIET_MS * AFFA_TX_MAX_RETRIES,
               "Waits::TIMEOUT_MS is shorter than the library's ticket lifetime");
-static_assert(MailboxIds::Waits::TIMEOUT_MS > MailboxIds::Waits::LIB_WORST_MS,
+static_assert(UiWaits::Waits::TIMEOUT_MS > UiWaits::Waits::LIB_WORST_MS,
               "Waits::TIMEOUT_MS needs a margin over the library's worst case");
 
 // The render policy, moved off the panel task (it was loop() until Step 3, then
 // UiPolicy inline on the panel task). The rules are the same; what changed is
-// that every library call became a post, so each answer that used to be a
-// return value now arrives later, as a Completion or as a count in PanelStatus.
+// that the library call now runs here and the panel task admits it, so the
+// call says only whether it was taken (and its ticket), and the panel's answer
+// arrives later, as a Completion or as a count in PanelStatus.
 // The state keeps its old names, so the history of each rule still reads
 // across the moves.
 namespace App
@@ -40,9 +40,9 @@ namespace App
     {
         namespace
         {
-            using MegaOpen::AffaMailbox;
-            using MailboxIds::ReqId;
-            using MailboxIds::NO_REQ;
+            using MegaOpen::PanelOps;
+            using UiWaits::Ticket;
+            using UiWaits::NO_TICKET;
 
             constexpr uint32_t WAIT_MS   = 50;      // the pass rate with nothing to answer
             constexpr uint8_t  UIQ_DEPTH = 16;
@@ -53,13 +53,13 @@ namespace App
 
             // ---- the UiQ: verdicts from the panel task --------------------------
             StaticQueue_t          s_qBuf;
-            uint8_t                s_qStore[UIQ_DEPTH * sizeof(MailboxIds::Completion)];
+            uint8_t                s_qStore[UIQ_DEPTH * sizeof(UiWaits::Completion)];
             QueueHandle_t          s_q = nullptr;
             std::atomic<uint32_t>  s_qDrops{0};
 
-            // What each tracked request was for, and the ones still owed.
+            // What each render was for, and the ones still owed.
             enum Tag : uint8_t { T_CLOCK = 1, T_PANE, T_ROWS, T_SPLASH, T_NOTIFY, T_PROBE, T_HIDE };
-            MailboxIds::Waits s_waits;
+            UiWaits::Waits    s_waits;
             uint32_t          s_completions = 0, s_stray = 0;
 
             // ---- the now-playing screen. Off until asked ----------------------
@@ -75,8 +75,8 @@ namespace App
             volatile bool g_mediaPending = false;
             uint32_t      s_mediaLockMisses = 0;
 
-            // The rows request still owed an answer, and the paint floor's clock.
-            ReqId    g_rowsReq = NO_REQ;
+            // The rows render still owed an answer, and the paint floor's clock.
+            Ticket   g_rowsReq = NO_TICKET;
             uint32_t s_lastPaintMs = 0;
 
             // ---- the 48x48 pane, the graphic half of the same screen ----------
@@ -85,12 +85,13 @@ namespace App
             // and fullscreen cover it. See MediaPane.h.
             MegaOpen::MediaPane g_pane;
 
-            // The two buffers are PaneBuffers' (the library borrows them; see
-            // there). The next image is composed into s_paneLast ^ 1, and
-            // s_paneLast holds the last one posted: the sameness reference.
-            uint8_t s_paneLast = 1;
-            // In flight, or NO_REQ. One pane at a time: rate-limits to the wire.
-            ReqId    g_paneReq = NO_REQ;
+            // The next image is composed into s_paneNext; s_paneSent holds the
+            // last one taken by the library (which copies it): the sameness
+            // reference.
+            uint8_t  s_paneNext[MegaOpen::MediaPane::BYTES];
+            uint8_t  s_paneSent[MegaOpen::MediaPane::BYTES];
+            // In flight, or NO_TICKET. One pane at a time: rate-limits to the wire.
+            Ticket   g_paneReq = NO_TICKET;
             uint32_t g_panesSent = 0, g_panesFailed = 0;
             // Send the next composition even if byte-identical to the last posted one.
             bool g_paneResend = false;
@@ -110,7 +111,7 @@ namespace App
             uint16_t g_splashMs      = 4000;     // 0 = off; from NVS, editable
             uint32_t g_splashDueMs   = 0;        // non-zero: owed at this time
             uint32_t g_splashUntilMs = 0;        // non-zero: on the glass until then
-            ReqId    s_splashReq     = NO_REQ;
+            Ticket   s_splashReq     = NO_TICKET;
             constexpr uint32_t SPLASH_SETTLE_MS = 300;   // AMS sends title, artist, album ~10-70 ms apart
             inline bool splashUp(uint32_t now)
             {
@@ -126,15 +127,15 @@ namespace App
             bool     g_notifyDue = false;
             uint32_t g_notifySeq = 0;
             char     g_notifyRows[3][MegaOpen::MediaScreen::ROW_MAX] = {};
-            ReqId    s_notifyReq = NO_REQ;
+            Ticket   s_notifyReq = NO_TICKET;
 
             // ---- who owns the glass right now ----------------------------------
-            // Held when the panel task accepts a deliberate screen (its count in
-            // PanelStatus moves); the automatic repaints (media rows, pane,
+            // Held when the library accepts a deliberate screen (the count in
+            // PanelOps moves); the automatic repaints (media rows, pane,
             // splash) stand down until it expires. A deadline, not a flag, so
             // the media screen comes back on its own. g_glassHoldMs 0 = hold
-            // indefinitely. Repaints carry s_holdSeq, the count acted on: the
-            // panel drops one decided before a newer deliberate screen.
+            // indefinitely. Repaints carry s_holdSeq, the count acted on:
+            // PanelOps refuses one decided before a newer deliberate screen.
             uint32_t g_glassHeldUntilMs = 0;
             uint32_t g_glassHoldMs = 10000;
             uint16_t s_holdSeq = 0;
@@ -154,7 +155,7 @@ namespace App
             // Latest HH:MM from the phone; pending until confirmed drawn.
             char     g_clockHhmm[5] = {0};
             bool     g_clockPending = false;
-            ReqId    g_clockReq     = NO_REQ;
+            Ticket   g_clockReq     = NO_TICKET;
             // Who set it last, and to what (GET /api/media clockSrc, clockAt).
             ClockSrc g_clockSrc = ClockSrc::None;
             uint16_t g_clockAt  = 0;
@@ -167,7 +168,7 @@ namespace App
             // millis() to take the popup down, or 0. This task's alone: the keys
             // task, macros and the web ask for it through g_armPopupReq.
             uint32_t g_popupUntilMs = 0;
-            ReqId    s_hideReq = NO_REQ;
+            Ticket   s_hideReq = NO_TICKET;
 
             // ---- requests from other tasks --------------------------------------
             // One-shot slots, latest wins (app/OneShot.h). Taken at the top of
@@ -197,8 +198,8 @@ namespace App
             bool     g_wasRegistered = false;
             // The last resync, asked or automatic: 30 s between automatic ones.
             uint32_t s_lastAutoMs = 0;
-            // Resyncs this task asked for and has not yet seen drained: the
-            // drain is not then logged a second time as "requested".
+            // Resyncs this task asked for and has not yet seen counted: they
+            // are not then logged a second time as "requested".
             uint32_t s_ownResyncs = 0;
 
             // ---- the panel's counts, as last acted on ----------------------------
@@ -217,9 +218,9 @@ namespace App
             bool     s_ok = false;
             bool     s_wasListenOnly = true;
             bool     s_wasSynced = false;
-            ReqId    s_probeReq = NO_REQ;
+            Ticket   s_probeReq = NO_TICKET;
 
-            // Something was posted this pass: the panel's busy() cannot know yet.
+            // Something was rendered this pass: the published busy() cannot know yet.
             bool s_postedThisPass = false;
 
             // ---- what the web reads ------------------------------------------------
@@ -262,28 +263,37 @@ namespace App
                 }
             }
 
-            // ---- posting ---------------------------------------------------------
-            // Every request this task makes: tracked, so its verdict comes back.
-            ReqId postTracked(AffaMailbox::Req& r, Tag tag, uint32_t now)
+            // ---- rendering -------------------------------------------------------
+            void answer(Tag tag, Ticket t, affa::Result res, bool synth, uint32_t now);
+
+            // Every render this task makes. Taken, its ticket is waited on and
+            // the panel's verdict comes back as a Completion; refused at the
+            // call, the refusal is answered now. NO_TICKET either way when
+            // nothing is owed; `taken` says which.
+            Ticket submitTracked(PanelOps::Req& r, Tag tag, uint32_t now, bool* taken = nullptr)
             {
-                r.track = true;
-                const ReqId id = s_d.box->post(r);
-                if (id == NO_REQ) return NO_REQ;
+                r.quiet = true;
+                const affa::Submitted s = s_d.ops->submit(r);
+                if (taken) *taken = s.ok();
+                if (!s) {
+                    answer(tag, NO_TICKET, s.result, true, now);
+                    return NO_TICKET;
+                }
                 s_postedThisPass = true;
-                // A full table cannot time the request out, so it is not waited on.
-                if (!s_waits.add(id, tag, now)) return NO_REQ;
-                return id;
+                // A full table cannot time the render out, so it is not waited on.
+                if (!s_waits.add(s.ticket, tag, now)) return NO_TICKET;
+                return s.ticket;
             }
 
             // Three rows as a fullscreen: the OEM geometry on a Carminat (rows
             // read from byte 32, ~22 columns), the library's otherwise.
-            void fullscreenReq(AffaMailbox::Req& r, bool carminat,
+            void fullscreenReq(PanelOps::Req& r, bool carminat,
                                const char* l1, const char* l2, const char* l3)
             {
                 auto put = [](char* dst, const char* s) {
-                    snprintf(dst, AffaMailbox::STR_MAX, "%s", s ? s : "");
+                    snprintf(dst, PanelOps::STR_MAX, "%s", s ? s : "");
                 };
-                r.op = carminat ? AffaMailbox::Op::FullscreenGeom : AffaMailbox::Op::Fullscreen;
+                r.op = carminat ? PanelOps::Op::FullscreenGeom : PanelOps::Op::Fullscreen;
                 put(r.a, l1); put(r.b, l2); put(r.c, l3);
                 r.p[0] = 0x69; r.p[1] = 0; r.p[2] = 32;
                 r.deliberate = false;
@@ -391,7 +401,7 @@ namespace App
                     // Single-line fallback when the three-row screen is off. Posted
                     // with deliberate=false, or it would arm the glass hold and
                     // starve the pane.
-                    if (!g_mediaAuto && live && s_d.box->postText(g_media3.title(), /*deliberate=*/false))
+                    if (!g_mediaAuto && live && s_d.ops->postText(g_media3.title(), /*deliberate=*/false))
                         s_postedThisPass = true;
                 } else if (live && (uint32_t)(now - s_mediaMs) >= 1000) {
                     s_mediaMs = now;
@@ -498,30 +508,31 @@ namespace App
             {
                 // Sync changed (either edge): re-owe the clock, and resend the
                 // pane: the panel forgets every layer on a new session, and the
-                // pane only sends on change. The waits are dropped as before;
-                // the panel still releases the pane's buffer on its verdict.
+                // pane only sends on change. The waits are dropped.
                 if (ps.syncChanges != s_syncSeen) {
                     s_syncSeen = ps.syncChanges;
                     if (g_clockHhmm[0]) g_clockPending = true;
-                    if (g_clockReq) { s_waits.forget(g_clockReq); g_clockReq = NO_REQ; }
+                    if (g_clockReq) { s_waits.forget(g_clockReq); g_clockReq = NO_TICKET; }
                     g_paneResend = true;
-                    if (g_paneReq) { s_waits.forget(g_paneReq); g_paneReq = NO_REQ; }
+                    if (g_paneReq) { s_waits.forget(g_paneReq); g_paneReq = NO_TICKET; }
                     // And the rows: they are credited at post time, so a new
                     // session would otherwise keep a blank glass until they change.
                     g_media3.invalidate();
                 }
 
                 // A person's screen was accepted: hold the glass from now.
-                if (ps.deliberateSeq != s_holdSeq) {
-                    s_holdSeq = ps.deliberateSeq;
+                const uint16_t deliberate = s_d.ops->deliberateSeq();
+                if (deliberate != s_holdSeq) {
+                    s_holdSeq = deliberate;
                     g_glassHeldUntilMs = now + g_glassHoldMs;
                     if (!g_glassHeldUntilMs) g_glassHeldUntilMs = 1;
                 }
 
                 // Clear: ends a splash or notification, takes a popup down, drops
                 // the glass hold and forces the text and the pane to be sent again.
-                if (ps.clears != s_clearsSeen) {
-                    s_clearsSeen = ps.clears;
+                const uint32_t clears = s_d.ops->clears();
+                if (clears != s_clearsSeen) {
+                    s_clearsSeen = clears;
                     g_glassHeldUntilMs = 0;
                     if (g_splashUntilMs) g_splashUntilMs = now;
                     g_popupUntilMs = now ? now : 1;
@@ -531,9 +542,10 @@ namespace App
 
                 // The handshake was re-run: re-owe the clock, and hold the 30 s
                 // automatic resync off for a full period.
-                if (ps.resyncsAsked != s_resyncsSeen) {
-                    const uint32_t n = ps.resyncsAsked - s_resyncsSeen;
-                    s_resyncsSeen = ps.resyncsAsked;
+                const uint32_t resyncs = s_d.ops->resyncs();
+                if (resyncs != s_resyncsSeen) {
+                    const uint32_t n = resyncs - s_resyncsSeen;
+                    s_resyncsSeen = resyncs;
                     s_lastAutoMs = now;
                     if (g_clockHhmm[0]) g_clockPending = true;
                     const uint32_t own = n < s_ownResyncs ? n : s_ownResyncs;
@@ -600,15 +612,15 @@ namespace App
 
                 // Resync after 30 s unregistered: begin() resets the FSMs, re-arms the
                 // peer deadline and cancels the queue. 30 s, because normal recovery
-                // (`61 11` + lazy 0x70 probes) takes a few seconds. A mailbox op:
-                // only the panel task may call begin().
+                // (`61 11` + lazy 0x70 probes) takes a few seconds. From here
+                // the library posts begin() to the panel task.
                 {
                     const bool stuck = !ps.registered && g_lastResyncMs &&
                                        (uint32_t)(now - g_lastResyncMs) > 30000 &&
                                        (uint32_t)(now - s_lastAutoMs) > 30000;
                     if (stuck) {
                         s_lastAutoMs = now;
-                        if (s_d.box->postResync()) {
+                        if (s_d.ops->postResync()) {
                             ++s_ownResyncs;
                             s_postedThisPass = true;
                         }
@@ -618,23 +630,23 @@ namespace App
                 }
             }
 
-            // ---- a verdict: what each kind of request does with its answer ---------
-            // `synth` = it never reached the wire (refused at enqueue, nothing to
-            // send, or dropped for a deliberate screen); otherwise the panel's own
-            // answer. A timeout arrives here as Result::Timeout, not synthesised.
-            void answer(Tag tag, ReqId id, affa::Result res, bool synth, uint32_t now)
+            // ---- a verdict: what each kind of render does with its answer ----------
+            // `synth` = it never reached the wire (refused at the call, or for a
+            // deliberate screen); otherwise the panel's own answer, under ticket
+            // `id`. A timeout arrives here as Result::Timeout, not synthesised.
+            void answer(Tag tag, Ticket id, affa::Result res, bool synth, uint32_t now)
             {
                 const bool ok = res == affa::Result::Ok;
                 switch (tag) {
                     case T_CLOCK:
                         // The clock retries on the verdict, not on the post.
-                        if (id == g_clockReq) g_clockReq = NO_REQ;
+                        if (id == g_clockReq) g_clockReq = NO_TICKET;
                         if (!ok) g_clockPending = true;
                         break;
 
                     case T_PANE:
                         // Cleared on every verdict, or the pane wedges.
-                        if (id == g_paneReq) g_paneReq = NO_REQ;
+                        if (id == g_paneReq) g_paneReq = NO_TICKET;
                         if (ok) ++g_panesSent;
                         else {
                             // Resend: the undelivered image is still the sameness
@@ -645,15 +657,16 @@ namespace App
                         break;
 
                     case T_ROWS: {
-                        const bool current = id == g_rowsReq;
-                        if (current) g_rowsReq = NO_REQ;
-                        // The rows were credited when posted; any repaint that did
+                        const bool current = synth || id == g_rowsReq;
+                        if (id == g_rowsReq) g_rowsReq = NO_TICKET;
+                        // The rows were credited when taken; any repaint that did
                         // not land (refused, wire Timeout/SendFailed/LinkDown,
                         // Cancelled by a resync, Aborted, or our own Waits expiry)
                         // makes the screen dirty again so it repaints. Only the
-                        // current request: a superseded one (its wait is forgotten
-                        // when the next is posted) never gets here, and must not
-                        // re-dirty over the newer rows.
+                        // current render: a superseded one (its wait is forgotten
+                        // when the next is made, and the library completes it
+                        // Aborted) never gets here, and must not re-dirty over
+                        // the newer rows.
                         if (current && !ok) {
                             g_media3.invalidate();
                             static uint32_t s_lastComplaintMs = 0;
@@ -669,7 +682,7 @@ namespace App
                     }
 
                     case T_SPLASH:
-                        if (id == s_splashReq) s_splashReq = NO_REQ;
+                        if (id == s_splashReq) s_splashReq = NO_TICKET;
                         // Owed until accepted: a refused splash is owed again.
                         if (synth && !ok) {
                             g_splashUntilMs = 0;
@@ -678,7 +691,7 @@ namespace App
                         break;
 
                     case T_NOTIFY:
-                        if (id == s_notifyReq) s_notifyReq = NO_REQ;
+                        if (id == s_notifyReq) s_notifyReq = NO_TICKET;
                         // Owed until accepted; the rows are still there (or newer ones).
                         if (synth && !ok) {
                             g_splashUntilMs = 0;
@@ -689,7 +702,7 @@ namespace App
                         break;
 
                     case T_PROBE: {
-                        if (id == s_probeReq) s_probeReq = NO_REQ;
+                        if (id == s_probeReq) s_probeReq = NO_TICKET;
                         // Acceptance is what the probe asks about.
                         const bool accepted = !synth || ok;
                         LogBus::printf("[disp] try %u setText(\"SUCCESS\") -> %s%s", s_tries,
@@ -702,7 +715,7 @@ namespace App
                     }
 
                     case T_HIDE:
-                        if (id == s_hideReq) s_hideReq = NO_REQ;
+                        if (id == s_hideReq) s_hideReq = NO_TICKET;
                         // A refusal retries in 500 ms, unless a newer popup has
                         // armed its own take-down meanwhile.
                         if ((synth && !ok) || res == affa::Result::Timeout) {
@@ -713,22 +726,23 @@ namespace App
                 }
             }
 
-            void onCompletion(const MailboxIds::Completion& c, uint32_t now)
+            void onCompletion(const UiWaits::Completion& c, uint32_t now)
             {
                 ++s_completions;
                 uint8_t tag;
-                if (!s_waits.take(c.id, tag)) { ++s_stray; return; }   // given up, or replaced
-                answer((Tag)tag, c.id, (affa::Result)c.result, c.synth, now);
+                // Given up, replaced, or not this task's (the web, a key popup).
+                if (!s_waits.take(c.ticket, tag)) { ++s_stray; return; }
+                answer((Tag)tag, c.ticket, (affa::Result)c.result, false, now);
             }
 
             // ---- the policy: what to say, and when ---------------------------------
             void policy(const MegaOpen::PanelStatus& ps, uint32_t now)
             {
                 const bool listenOnly = Diag::CanBench::listenOnly();
-                // The panel's busy() is up to a pass old, and cannot see what was
-                // posted but not drained yet.
+                // The published busy() is up to a pass old, and cannot see what
+                // this pass rendered.
                 auto busy = [&]() {
-                    return ps.busy || s_postedThisPass || s_d.box->pending() != 0;
+                    return ps.busy || s_postedThisPass;
                 };
 
                 // ---- the clock ------------------------------------------------------
@@ -740,13 +754,13 @@ namespace App
                     (int32_t)(now - g_clockNextMs) >= 0) {
                     // Advanced unconditionally, so a refused post also backs off.
                     g_clockNextMs = now + 1000;
-                    AffaMailbox::Req r;
-                    r.op = AffaMailbox::Op::Time;
+                    PanelOps::Req r;
+                    r.op = PanelOps::Op::Time;
                     snprintf(r.a, sizeof(r.a), "%s", g_clockHhmm);
                     r.deliberate = false;
-                    const ReqId id = postTracked(r, T_CLOCK, now);
+                    const Ticket id = submitTracked(r, T_CLOCK, now);
                     if (id) { g_clockReq = id; g_clockPending = false; }
-                    // Not posted: leave the flag set and try again after the backoff.
+                    // Refused: answer() left the flag set; try again after the backoff.
                 }
 
                 // What to say; the blocks below decide when.
@@ -760,9 +774,9 @@ namespace App
                     memcpy(rows, g_notifyRows, sizeof(rows));
                     const uint32_t seq = g_notifySeq;
                     portEXIT_CRITICAL(&g_notifyMux);
-                    AffaMailbox::Req r;
+                    PanelOps::Req r;
                     fullscreenReq(r, ps.carminat, rows[0], rows[1], rows[2]);
-                    const ReqId id = postTracked(r, T_NOTIFY, now);
+                    const Ticket id = submitTracked(r, T_NOTIFY, now);
                     if (id) {
                         s_notifyReq = id;
                         portENTER_CRITICAL(&g_notifyMux);
@@ -784,11 +798,11 @@ namespace App
                         char s2[MegaOpen::MediaScreen::ROW_MAX];
                         char s3[MegaOpen::MediaScreen::ROW_MAX];
                         g_media3.composeSplash(s1, s2, s3, MegaOpen::FS_COLS);
-                        AffaMailbox::Req r;
+                        PanelOps::Req r;
                         fullscreenReq(r, ps.carminat, s1, s2, s3);
                         r.yields = true;
                         r.epoch  = s_holdSeq;
-                        const ReqId id = postTracked(r, T_SPLASH, now);
+                        const Ticket id = submitTracked(r, T_SPLASH, now);
                         if (id) {
                             s_splashReq     = id;
                             g_splashDueMs   = 0;
@@ -831,35 +845,33 @@ namespace App
                         // No hide between frames: each screen replaces the last (~190 ms,
                         // 14 frames). Info and Text leave room for the pane; Info is three
                         // messages, one per row. Text is one 8-char row (compose() did that).
-                        AffaMailbox::Req r;
+                        PanelOps::Req r;
                         g_media3.compose(now, r.a, r.b, r.c);
                         switch (g_media3.layout()) {
                             case MegaOpen::MediaScreen::Layout::Fullscreen:
-                                r.op = AffaMailbox::Op::Fullscreen; break;
+                                r.op = PanelOps::Op::Fullscreen; break;
                             case MegaOpen::MediaScreen::Layout::Info:
-                                r.op = AffaMailbox::Op::InfoPopup; break;
+                                r.op = PanelOps::Op::InfoPopup; break;
                             case MegaOpen::MediaScreen::Layout::Text:
-                                r.op = AffaMailbox::Op::Text; break;
+                                r.op = PanelOps::Op::Text; break;
                             default:
-                                r.op = AffaMailbox::Op::Menu;
+                                r.op = PanelOps::Op::Menu;
                                 r.u16 = g_mediaScroll;
                                 break;
                         }
                         r.deliberate = false;
-                        r.track  = true;
                         r.yields = true;
                         r.epoch  = s_holdSeq;
-                        // The coalescing slot: a newer repaint replaces one not yet
-                        // drained, whose wait is dropped with it.
-                        if (g_rowsReq) { s_waits.forget(g_rowsReq); g_rowsReq = NO_REQ; }
-                        const ReqId id = s_d.box->postRows(r);
+                        // The library coalesces per RenderSlot: a newer repaint
+                        // replaces one not yet started, which completes Aborted.
+                        // Its wait is dropped here, so that verdict is a stray.
+                        if (g_rowsReq) { s_waits.forget(g_rowsReq); g_rowsReq = NO_TICKET; }
                         s_lastPaintMs = now;
-                        if (id) {
-                            s_postedThisPass = true;
-                            if (s_waits.add(id, T_ROWS, now)) g_rowsReq = id;
-                            // Credited now; a refusal makes it dirty again (answer()).
-                            g_media3.markRendered(now);
-                        }
+                        bool taken = false;
+                        g_rowsReq = submitTracked(r, T_ROWS, now, &taken);
+                        // Credited when taken; a refusal (answered at the call)
+                        // left it dirty, a failed delivery makes it dirty again.
+                        if (taken) g_media3.markRendered(now);
                     }
                 }
 
@@ -881,11 +893,9 @@ namespace App
                     s_lastKeyMs = now;
                 }
                 const bool keyQuiet = !s_lastKeyMs || (uint32_t)(now - s_lastKeyMs) >= KEY_QUIET_MS;
-                const uint8_t cur = s_paneLast ^ 1;
-
-                if (ps.carminat && s_d.pane && ps.synced && !listenOnly && keyQuiet &&
+                if (ps.carminat && ps.synced && !listenOnly && keyQuiet &&
                     failStreak < kFailStreakTrip && !glassHeld(now) && !splashUp(now) &&
-                    g_paneReq == NO_REQ && !busy() && s_d.pane->free(cur)) {
+                    g_paneReq == NO_TICKET && !busy()) {
 
                     // Fed from the text screen, not the router, so the layers agree.
                     g_pane.setHasTransport(g_media3.hasTransport());
@@ -915,28 +925,25 @@ namespace App
                                                 (uint32_t)tmNow.tm_sec);
                     }
 
-                    uint8_t* const buf = s_d.pane->data(cur);
                     // Several steps per image: the wire delivers ~2 images/s.
                     for (uint8_t i = 0; i < (g_paneSpeed ? g_paneSpeed : 1); ++i) g_pane.step();
-                    g_pane.compose(buf);
+                    g_pane.compose(s_paneNext);
 
-                    // The pane's dirty(): compare with the last posted image. The
-                    // reference is last posted, not last delivered, so g_paneResend
+                    // The pane's dirty(): compare with the last image taken. The
+                    // reference is last taken, not last delivered, so g_paneResend
                     // (non-Ok verdict, lost session) forces a send.
-                    if (g_paneResend ||
-                        memcmp(buf, s_d.pane->data(s_paneLast), MegaOpen::PaneBuffers::BYTES) != 0) {
-                        // Lent before it is posted; the panel gives it back with
-                        // the verdict. Never posted: it is ours again at once.
-                        if (s_d.pane->lend(cur)) {
-                            const ReqId id = s_d.box->postNavBitmap(cur, s_holdSeq);
-                            if (id) {
-                                s_postedThisPass = true;
-                                g_paneResend = false;
-                                s_paneLast = cur;
-                                if (s_waits.add(id, T_PANE, now)) g_paneReq = id;
-                            } else {
-                                s_d.pane->release(cur);
-                            }
+                    if (g_paneResend || memcmp(s_paneNext, s_paneSent, sizeof(s_paneSent)) != 0) {
+                        PanelOps::Req r;
+                        r.op = PanelOps::Op::NavBitmap;
+                        r.img = s_paneNext;       // copied by the library at the call
+                        r.deliberate = false;
+                        r.yields = true;
+                        r.epoch  = s_holdSeq;
+                        bool taken = false;
+                        g_paneReq = submitTracked(r, T_PANE, now, &taken);
+                        if (taken) {
+                            g_paneResend = false;
+                            memcpy(s_paneSent, s_paneNext, sizeof(s_paneSent));
                         }
                     }
                 }
@@ -948,12 +955,11 @@ namespace App
                     !s_hideReq && ps.registered && !listenOnly) {
                     // Off the deadline first; a refusal re-arms it 500 ms out (answer()).
                     g_popupUntilMs = 0;
-                    AffaMailbox::Req r;
-                    r.op = AffaMailbox::Op::HidePopup;
+                    PanelOps::Req r;
+                    r.op = PanelOps::Op::HidePopup;
                     r.deliberate = false;
-                    const ReqId id = postTracked(r, T_HIDE, now);
-                    if (id) s_hideReq = id;
-                    else    g_popupUntilMs = now + 500;    // not posted: try again shortly
+                    // A refusal re-arms the take-down (answer()).
+                    s_hideReq = submitTracked(r, T_HIDE, now);
                 }
 
                 // The bring-up probe runs only with the media screen off.
@@ -962,12 +968,11 @@ namespace App
                     s_nextTryMs = now + 5000;
                     ++s_tries;
                     // Acceptance only; the verdict says whether it was taken.
-                    AffaMailbox::Req r;
-                    r.op = AffaMailbox::Op::Text;
+                    PanelOps::Req r;
+                    r.op = PanelOps::Op::Text;
                     snprintf(r.a, sizeof(r.a), "SUCCESS");
                     r.deliberate = false;
-                    const ReqId id = postTracked(r, T_PROBE, now);
-                    if (id) s_probeReq = id;
+                    s_probeReq = submitTracked(r, T_PROBE, now);
                 }
             }
 
@@ -1029,12 +1034,12 @@ namespace App
             void logWindow()
             {
                 LogBus::printf("[ui] busyMax=%uus mediaBusy=%u completions=%u stray=%u timeouts=%u "
-                               "uiqDrops=%u waits=%u rowsCoalesced=%u panes=%u/%u",
+                               "uiqDrops=%u waits=%u panes=%u/%u",
                                (unsigned)s_busyWinUs, (unsigned)s_mediaLockMisses,
                                (unsigned)s_completions, (unsigned)s_stray,
                                (unsigned)s_waits.timeouts(),
                                (unsigned)s_qDrops.load(std::memory_order_relaxed),
-                               (unsigned)s_waits.used(), (unsigned)s_d.box->rowsCoalesced(),
+                               (unsigned)s_waits.used(),
                                (unsigned)g_panesSent, (unsigned)g_panesFailed);
                 s_busyWinUs = 0;
                 s_mediaLockMisses = 0;
@@ -1047,7 +1052,7 @@ namespace App
                     // A verdict wakes it at once (the pane's next image is due);
                     // otherwise a pass every 50 ms is plenty for 200 ms repaint
                     // floors, a 1 s clock retry and a popup's take-down.
-                    MailboxIds::Completion c;
+                    UiWaits::Completion c;
                     const bool got = xQueueReceive(s_q, &c, pdMS_TO_TICKS(WAIT_MS)) == pdTRUE;
                     const uint32_t t0 = micros();
                     uint32_t now = millis();
@@ -1059,7 +1064,7 @@ namespace App
                     }
                     // Nothing waits for ever: an answer the UiQ lost, or one the
                     // panel never got, is given up after Waits::TIMEOUT_MS (21 s).
-                    ReqId id;
+                    Ticket id;
                     uint8_t tag;
                     while (s_waits.expire(now, id, tag))
                         answer((Tag)tag, id, affa::Result::Timeout, false, now);
@@ -1088,7 +1093,7 @@ namespace App
         void begin(Cfg::Config& cfg, const Deps& d)
         {
             s_d = d;
-            if (!s_q) s_q = xQueueCreateStatic(UIQ_DEPTH, sizeof(MailboxIds::Completion), s_qStore, &s_qBuf);
+            if (!s_q) s_q = xQueueCreateStatic(UIQ_DEPTH, sizeof(UiWaits::Completion), s_qStore, &s_qBuf);
 
             const Cfg::Settings& s = cfg.s();
             g_autoTime  = s.autoTime;
@@ -1153,7 +1158,7 @@ namespace App
             spawn(spec);
         }
 
-        void postCompletion(const MailboxIds::Completion& c)
+        void postCompletion(const UiWaits::Completion& c)
         {
             if (!s_q || xQueueSend(s_q, &c, 0) != pdTRUE)
                 s_qDrops.fetch_add(1, std::memory_order_relaxed);

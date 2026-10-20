@@ -2,7 +2,7 @@
 #include "../Features.h"
 #if FEATURE_DISPLAY_CAN
 #include <Arduino.h>
-#include "MailboxIds.h"
+#include "UiWaits.h"
 #include "../display/MediaScreen.h"
 #include "../display/MediaPane.h"
 #include "../utils/Mirror.h"
@@ -13,7 +13,7 @@ class MediaRouter;
 class HuMediaSource;
 namespace Cfg { class Config; }
 namespace Keys { class KeyEngine; }
-namespace MegaOpen { class AffaMailbox; class PaneBuffers; }
+namespace MegaOpen { class PanelOps; }
 
 // The ui task: what goes on the glass, and when (docs/design/event-tasks.md,
 // Step 4). The now-playing screen, the 48x48 pane and its carousel, the track
@@ -21,12 +21,12 @@ namespace MegaOpen { class AffaMailbox; class PaneBuffers; }
 // hold, the render breaker, the bring-up probe, the 30 s stuck resync, and the
 // phase and registration watch.
 //
-// It never calls the library. It decides and posts to the mailbox; the panel
-// task makes the call and answers through the UiQ (a Completion per tracked
-// request) and through PanelStatus, which this task reads every pass. That
-// lets it run at priority 2, below everything a key or the panel's timing
-// depends on: a 5 ms wait for the AMS mutex, or a slow compose, now costs a
-// late repaint and nothing else.
+// It renders through PanelOps from its own task: the library takes the call
+// into its dispatch ring and the panel task admits it, then answers through
+// the UiQ (a Completion per ticket) and through PanelStatus, which this task
+// reads every pass. That lets it run at priority 2, below everything a key or
+// the panel's timing depends on: a 5 ms wait for the AMS mutex, or a slow
+// compose, now costs a late repaint and nothing else.
 //
 // It owns the render state, and nothing outside this file can write it:
 //   * other tasks ask (armPopup, requestScene, postHuClock, queueNotification,
@@ -102,8 +102,7 @@ namespace App
         };
 
         struct Deps {
-            MegaOpen::AffaMailbox*  box    = nullptr;
-            MegaOpen::PaneBuffers*  pane   = nullptr;
+            MegaOpen::PanelOps*     ops    = nullptr;
             MediaRouter*            router = nullptr;
             HuMediaSource*          hu     = nullptr;
             const Keys::KeyEngine*  engine = nullptr;     // events(): the pane's key-quiet gate
@@ -120,9 +119,9 @@ namespace App
         void start();
 
         // ---- the panel task ------------------------------------------------------
-        // A tracked request's verdict. Zero wait; a full UiQ drops and counts,
-        // and the ui's 4 s timeout recovers whatever was waiting on it.
-        void postCompletion(const MailboxIds::Completion& c);
+        // A ticket's verdict. Zero wait; a full UiQ drops and counts, and the
+        // ui's 21 s timeout recovers whatever was waiting on it.
+        void postCompletion(const UiWaits::Completion& c);
 
         // ---- any task: asks ------------------------------------------------------
         void armPopup(uint32_t ms);        // take the popup down this many ms from now

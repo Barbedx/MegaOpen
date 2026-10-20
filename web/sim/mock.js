@@ -221,7 +221,7 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
  emit(2,'NET',rb?'settings saved, pending reboot':'settings saved');return rb?{ok:true,pendingReboot:true}:ok});
 g('/api/display',()=>{const d=S.disp,car=d.type==='carminat';return {type:d.type,funcReg:d.funcReg,canRx:S.can.twaiRx,attached:true,sync:d.registered?15:1,synced:d.registered,registered:d.registered,passive:!d.funcReg,busy:false,queued:0,lastResult:'Ok',
  supports:{text:true,time:car,power:car,menu:car,popup:car,fullscreen:car,confirm:car,info:car},phase:d.phase,lastRendered:'text',lastRenderedMs:1200,glassHoldMs:10000,glassHeldMs:0,
- sessionsLost:d.sessionsLost,lastLoss:d.lastLoss,linkFlaps:0,linkRecoveries:0,linkDownMs:0,txGated:false,txGates:0,reinstalls:0,failStreak:0,mailboxPosted:412,mailboxDropped:0}});
+ sessionsLost:d.sessionsLost,lastLoss:d.lastLoss,linkFlaps:0,linkRecoveries:0,linkDownMs:0,txGated:false,txGates:0,reinstalls:0,failStreak:0,rendersPosted:412,rendersRefused:0}});
 po('/api/display',q=>{const st=S.staged,t0=st.dispType||S.disp.type,f0=st.funcReg!==undefined?st.funcReg:S.disp.funcReg;
  const t=q.type===undefined?t0:q.type,f=q.funcReg===undefined?f0:!!q.funcReg;
  if(!C.panels.some(p=>p.id===t))return fail(400,'type: unknown panel');

@@ -4,12 +4,12 @@
 #include <stdint.h>
 
 // What the panel task knows about the panel, as one small copy (docs/design/
-// event-tasks.md, Step 3). AffaDisplay has no locks, so nothing but the task
-// that calls poll() may ask it anything; this is what everyone else reads
-// instead. The panel task publishes it after every poll() through a
-// Snapshot<PanelStatus> (App::Panel::status()): httpd's /api/display,
-// /api/health and /api/media, and since Step 4 the ui
-// task's render policy, all read the copy.
+// event-tasks.md, Step 3). Any task may render, but the library's observers
+// are one consistent moment only on the task that calls poll(); this is what
+// everyone else reads instead. The panel task publishes it after every poll()
+// through a Snapshot<PanelStatus> (App::Panel::status()): httpd's /api/display,
+// /api/health and /api/media, and since Step 4 the ui task's render policy,
+// all read the copy.
 //
 // Plain bytes, no library types, so the struct stays a POD that can be copied
 // under a spinlock. The enums are the library's own values (affa::SyncState,
@@ -55,7 +55,8 @@ namespace MegaOpen
         uint32_t polls = 0;
         uint32_t foreignPolls = 0;
         uint32_t pollLateMaxUs = 0;
-        // The mailbox: posted, and refused because it was full.
+        // Renders accepted (PanelOps, every task), and refused because the
+        // library's dispatch ring was full.
         uint32_t queuePosted = 0, queueDropped = 0;
 
         // The TX gate: shut while nobody ACKs us (panel unplugged).
@@ -66,17 +67,10 @@ namespace MegaOpen
         // ---- for the ui task (Step 4), which no longer sees the callbacks ----
         // A Carminat panel: the OEM fullscreen geometry and the 0x1F1 pane.
         bool     carminat = false;
-        // Counts, so a reader that looks every 50 ms misses no edge: sync state
-        // changes (both edges), Clear and Resync requests drained, and
-        // deliberate screens accepted (each one holds the glass).
+        // Sync state changes (both edges), counted, so a reader that looks
+        // every 50 ms misses no edge.
         uint32_t syncChanges = 0;
-        uint32_t clears = 0;
-        uint32_t resyncsAsked = 0;
-        uint16_t deliberateSeq = 0;
-        // The ticket map: entries in use, and verdicts made up on the spot
-        // (refused, nothing sent, or dropped for a deliberate screen).
-        uint8_t  ticketsMapped = 0;
-        uint32_t synthesised = 0;
+        // Automatic repaints refused because a person's screen overtook them.
         uint32_t yielded = 0;
     };
 }

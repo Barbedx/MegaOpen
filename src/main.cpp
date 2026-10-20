@@ -82,7 +82,7 @@ static Sinks::UsbHidKeySink g_usbKeys;
 #if FEATURE_DISPLAY_CAN
 #include "display/AffaPort.h"
 #include "display/TwaiAffaLink.h"
-#include "display/AffaMailbox.h"
+#include "display/PanelOps.h"
 #include "display/MediaScreen.h"
 #include "display/MediaPane.h"
 #include "display/TextFold.h"
@@ -91,7 +91,6 @@ static Sinks::UsbHidKeySink g_usbKeys;
 #include "keys/KeyDests.h"
 #include "app/PanelOwner.h"
 #include "app/UiTask.h"
-#include "display/PaneBuffers.h"
 #endif
 
 #if FEATURE_DISPLAY_CAN || FEATURE_BLE
@@ -267,12 +266,10 @@ static MegaOpen::AffaLogSink g_affaLog;
 static Keys::AffaKeySource   g_affaKeys;
 static Keys::AffaMap         g_affaMap;      // stalk key -> action + head-unit code; keys task
 static Staged<Keys::AffaMap> g_affaCfg;      // ...as the web edits it
-// The only way to draw from off the panel task: AffaDisplay is single-task.
-// The library object itself is App::Panel's (src/app/PanelOwner.h), and the
-// render state is the ui task's (src/app/UiTask.h).
-static MegaOpen::AffaMailbox g_affaBox;
-// The pane's two images: the ui task composes, the library borrows (PaneBuffers.h).
-static MegaOpen::PaneBuffers g_paneBufs;
+// Every render, from any task (src/display/PanelOps.h). The library object
+// itself is App::Panel's (src/app/PanelOwner.h), and the render state is the
+// ui task's (src/app/UiTask.h).
+static MegaOpen::PanelOps g_panelOps;
 
 // The last panel key and where it went, for the wiring check on the page
 // (/api/affamap?live=1). The keys task publishes; httpd copies.
@@ -347,16 +344,16 @@ static void onPanelKey(affa::Key k, affa::KeyEdge e, void*)
 }
 
 // Bound as AffaKeySource::ReportCb; runs on the keys task, inside the mapping.
-// Posts through the mailbox so every render goes through one path, and asks
+// Renders through PanelOps so every render goes through one path, and asks
 // the render owner (App::Ui) to arm the popup's take-down.
 static void onAffaKeyReport(const Keys::AffaKeySource::Report& r, void*)
 {
-    char line[MegaOpen::AffaMailbox::STR_MAX];
+    char line[MegaOpen::PanelOps::STR_MAX];
     publishKeyLast(r, formatKeyLine(r, line, sizeof(line)));
 
     // Logged whether or not the popup is on, through the LogBus (it copies and
     // returns; see onKeyEvent). A small buffer: this is the keys task's stack.
-    char b[MegaOpen::AffaMailbox::STR_MAX + 16];
+    char b[MegaOpen::PanelOps::STR_MAX + 16];
     snprintf(b, sizeof(b), "[panelkey] %s", line);
     LogBus::line(b);
 
@@ -365,7 +362,7 @@ static void onAffaKeyReport(const Keys::AffaKeySource::Report& r, void*)
                           r.action == Keys::Action::EncCw   || r.action == Keys::Action::EncCcw;
     if (!App::Ui::keyPopupWanted(trackKey)) return;
     // Armed only on a successful post: never hide a popup we did not show.
-    if (g_affaBox.postPopup(line)) App::Ui::keyPopupShown();
+    if (g_panelOps.postPopup(line)) App::Ui::keyPopupShown();
 }
 
 // No fullscreen bookkeeping: on this panel every full-screen-class render (menu,
@@ -1021,14 +1018,14 @@ static void macroFire(const Keys::Macro& m, void*)
 #if FEATURE_DISPLAY_CAN
         case Keys::EffectRoute::Panel:
             if (m.effect == Keys::Effect::Text) {
-                char a[MegaOpen::AffaMailbox::STR_MAX];
-                char b[MegaOpen::AffaMailbox::STR_MAX];
-                char c[MegaOpen::AffaMailbox::STR_MAX];
+                char a[MegaOpen::PanelOps::STR_MAX];
+                char b[MegaOpen::PanelOps::STR_MAX];
+                char c[MegaOpen::PanelOps::STR_MAX];
                 macroRows(m.arg, a, b, c, sizeof(a));
-                if (b[0] || c[0]) g_affaBox.postFullscreen(a, b, c);
-                else              g_affaBox.postText(a);
+                if (b[0] || c[0]) g_panelOps.postFullscreen(a, b, c);
+                else              g_panelOps.postText(a);
             } else {
-                g_affaBox.postPopup(m.arg);
+                g_panelOps.postPopup(m.arg);
                 // Auto-hide, armed by the render owner: the deadline is its state.
                 App::Ui::armPopup(App::Ui::keyPopupMs());
             }
@@ -1585,8 +1582,7 @@ void setup()
     // when there is a panel.
     {
         App::Ui::Deps d;
-        d.box    = &g_affaBox;
-        d.pane   = &g_paneBufs;
+        d.ops    = &g_panelOps;
         d.router = &g_media;
         d.hu     = &g_hu;
         d.engine = &g_engine;
@@ -1804,22 +1800,20 @@ void setup()
     {
         // `carminat`: the same object typed as CarminatDisplay (styled text,
         // message boxes, the 0x1F1 pane); null on an UpdateList panel. No RTTI
-        // here. From here on both are App::Panel's, reachable only from this
-        // task (setup() runs on the loop task, which is the panel task).
+        // here. From here on the object is App::Panel's (setup() runs on the
+        // loop task, which is the panel task) and PanelOps' for rendering.
         affa::CarminatDisplay* carminat = nullptr;
         affa::AffaDisplayBase* display =
             MegaOpen::createDisplay(dt.c_str(), g_affaTwaiLink, g_affaClock, &carminat);
-        g_affaBox.begin();
-        g_affaBox.attachCarminat(carminat);
-        g_affaBox.attachPane(&g_paneBufs);
+        g_panelOps.attach(display, carminat);
         // Callbacks before begin(), or the first poll()'s sync transition is
-        // missed: App::Panel counts the verdicts, and a tracked request's
-        // verdict goes on to the ui task's UiQ.
+        // missed: App::Panel counts the verdicts, and every ticket's verdict
+        // goes on to the ui task's UiQ.
         App::Panel::Setup ps;
         ps.display  = display;
         ps.carminat = carminat;
         ps.link     = &g_affaTwaiLink;
-        ps.box      = &g_affaBox;
+        ps.ops      = &g_panelOps;
         ps.hooks.onCompletion = App::Ui::postCompletion;
         App::Panel::begin(ps);
     }
@@ -2052,7 +2046,7 @@ void setup()
         g_web.attachUi(v);
     }
     // The panel through its snapshot only: httpd never calls the library.
-    g_web.attachDisplay(&App::Panel::statusSnapshot(), &g_canRx, &g_affaBox);
+    g_web.attachDisplay(&App::Panel::statusSnapshot(), &g_canRx, &g_panelOps);
     g_web.attachAffaKeys(&g_affaMap, &g_affaKeys, &g_keyLast);
 #if FEATURE_BLE
     g_web.attachPhone([]() { return Bluetooth::IsConnected(); }, &g_media);
@@ -2081,9 +2075,8 @@ void setup()
     g_web.attachHuRing(huLastFramesJson);
 #if FEATURE_DISPLAY_CAN
     g_web.attachPopupArm(App::Ui::armPopup);
-    // Clear is a mailbox op: it runs on the panel task, in order with the
-    // renders around it, and the ui task acts on its count.
-    g_web.attachNotify(App::Ui::queueNotification, []() { g_affaBox.postClear(); });
+    // Clear is only a count in PanelOps; the ui task acts on it.
+    g_web.attachNotify(App::Ui::queueNotification, []() { g_panelOps.postClear(); });
 #endif
     g_web.begin(g_cfg, g_engine, g_map, g_keySink);
     memMark("web");
@@ -2136,14 +2129,14 @@ void setup()
     }
 #endif
 
-    // The loop task is the panel task: the only caller of AffaDisplay and of
+    // The loop task is the panel task: the owner of AffaDisplay's poll() and of
     // the TWAI driver. It only pumps; what to draw is the ui task's. Priorities,
     // high to low (the table with the reasons is src/app/TaskPlan.h):
     //   7  keys (core 1)     — the one key dispatcher, microseconds a key
     //   6  hu (core 1)       — head-unit RX, acks, telemetry
     //   6  knobs, scan (core 1) — 1 kHz samplers, posting to the KeyBus
-    //   5  loop (this task)  — panel protocol: the mailbox, poll(), TX gate
-    //   2  ui (core 1)       — the render policy; posts to the mailbox only
+    //   5  loop (this task)  — panel protocol: poll(), TX gate
+    //   2  ui (core 1)       — the render policy; renders through PanelOps
     //   2  httpd, ble_svc (core 0) — web requests; BLE services and AMS writes
     //   1  net_svc (core 0)  — web, WiFi, heartbeat, the OTA verdict
     //   1  logbus            — log output
@@ -2268,7 +2261,7 @@ static void logLoopWindow(uint32_t now)
 // Not delay(2) any more: the loop sleeps in twai_receive(), so the frame that
 // carries a panel key wakes it at once and goes to poll() in the same pass
 // (TwaiBus::waitRx keeps it). How long it may sleep is the panel's answer: one
-// tick while the library is busy or the mailbox holds work, else 2 ms.
+// tick while the library is busy (a posted render counts), else 2 ms.
 //
 // Under a flood (an unanswered panel sends 4-10k frames/s) a frame is always
 // waiting, so the wait returns at once and the loop would never leave the CPU
@@ -2353,8 +2346,8 @@ void loop()
 #if FEATURE_DISPLAY_CAN
     // The display. poll() drains RX and delivers keys before pumping TX; all
     // its timing is wall-clock against IClock, so nothing here needs pacing.
-    // What gets drawn was decided on the ui task and is in the mailbox; its
-    // verdicts go back there from inside pump().
+    // What gets drawn was decided on the ui task and posted into the library;
+    // its verdicts go back there from inside pump().
     if (App::Panel::present()) {
         App::Panel::pump(now);
         lap("disp.poll");
