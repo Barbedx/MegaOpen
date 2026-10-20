@@ -1,0 +1,45 @@
+/* ---------- Плата ---------- */
+/* пояснення ролей BLE: текст сторінки за id ролі; нової ролі тут нема — лише назва */
+const BLEHINT={off:'BLE не запускається, +40 кБ пам’яті. Музика й час — від ГУ по UART.',
+ ams:'AMS: назва треку і керування плеєром. ANCS: сповіщення. CTS: годинник. Лише iPhone, один.',
+ keyboard:'Плата стає Bluetooth-пультом: play, next, prev, гучність. Для Android або ГУ без AMS. Тексту немає.',
+ both:'Одночасно iPhone (AMS, ANCS, CTS) і пульт HID для другого пристрою.'};
+const bars=r=>{const n=r>-55?4:r>-67?3:r>-78?2:1;return `<span class="sig">${[1,2,3,4].map(i=>`<i class="${i<=n?'on':''}" style="height:${i*4}px"></i>`).join('')}</span>`};
+SCR.board={title:'Плата',async render(m){
+ const B=has('ble');
+ const[st,se,lg]=await Promise.all([API.get('/api/status'),API.get('/api/settings'),getIf(has('logfs'),'/api/logs')]);
+ const ssid2=se.ssid2||'';
+ m.innerHTML=
+ card('WiFi',row('Зараз','<span id="wNow" class="chip off">…</span>','<span id="wNowW"></span>')+
+  '<div class="fr"><button class="btn pri" type="button" id="wScan">Знайти мережі</button></div><div id="wList"></div>'+
+  `<div id="wForm">${row('Мережа',txt('rb:/api/wifi|ssid',se.ssid,'SSID','in','text',rbA('rb:',se.ssid,'WiFi',true)))}${row('Пароль',txt('rb:/api/wifi|pass','','без змін','in','password',rbA('rb:','','Пароль WiFi')))}
+  ${row('Запасна мережа',txt('rb:/api/wifi|ssid2',ssid2,'напр. хотспот телефона','in','text',rbA('rb:',ssid2,'Запасна мережа',true)))}${row('Її пароль',txt('rb:/api/wifi|pass2','','без змін','in','password',rbA('rb:','','Пароль запасної')))}</div>`+
+  row('Якщо жодної нема',`<span class="mono">${esc(st.apName||'')}</span>`,'точка 192.168.4.1','Піднімається сама, якщо за 15 с не вдалося підключитись або зв’язок зник на 30 с. Кожні 60 с пробує мережі знову, поки до точки ніхто не підключений.')+
+  row('Пароль точки й оновлення',txt('rb:/api/settings|apPass','','без змін','in','password',rbA('rb:','','Пароль точки/OTA')+' minlength="8"'),'мін. 8 символів'),'cWifi')+
+ (B?card('Bluetooth',row('Роль',sel('rb:/api/settings|bleMode',CAT.bleModes.map(b=>[b.id,b.name]),se.bleMode,'data-str'+rbA('rb:',se.bleMode,'Роль Bluetooth')),`<span id="bHint">${esc(BLEHINT[se.bleMode]||'')}</span>`)+
+  `<div id="bLive"${se.bleMode==='off'?' hidden':''}>${row('Стан','<span id="bSt" class="chip off">…</span>','<span id="bName"></span>')}<div class="fr"><button class="btn dng" type="button" id="bForget">Забути телефон</button></div></div>`):'')+
+ card('Оновлення прошивки','<div class="kv"><div><small>Прошивка</small><b>'+esc(se.fw)+'</b></div><div><small>Збірка</small><b>'+esc(se.build)+'</b></div></div>'+
+  '<div class="fr"><input type="file" id="otaF" accept=".bin" class="in" style="flex:1"><button class="btn pri" type="button" id="otaGo">Оновити</button></div><div class="pad" id="otaP" hidden><div class="bar big"><i id="otaBar"></i></div></div>','cOta','custom')+
+ (has('logfs')?card('Журнал запусків',row('','','Ті самі рядки, що йдуть у серійний порт, але на флеші: файл на кожен запуск, 8 останніх. Живий потік — Сервіс › Лог. Після зависання чи зникнення живлення останні ~16 кБ можуть не потрапити.')+`<div id="logs">${(lg.files||[]).map(f=>row(f.n?'Запуск −'+f.n:'Цей запуск',`<button class="btn sm" type="button" data-n="${f.n}">Скачати</button>`,fmtB(f.size))).join('')}</div>`,'','custom'):'')+
+ card('Інтерфейс',row('Режим розробника',`<input type="checkbox" class="sw" id="devSw" data-nosave${DEV?' checked':''}>`,'показує вкладку Сервіс'),'','custom')+
+ card('Небезпечна зона','<div class="fr"><button class="btn" type="button" id="rbt">Перезавантажити</button><button class="btn dng" type="button" id="fac">Скинути до заводських</button></div>','','custom');
+ saver($('#cWifi'),genericSave,'[data-k]');
+ if(B){saver($('[data-k="rb:/api/settings|bleMode"]').closest('.card'),genericSave,'[data-k]');
+ $('[data-k="rb:/api/settings|bleMode"]').addEventListener('change',e=>{$('#bHint').textContent=BLEHINT[e.target.value]||''});
+ $('#bForget').onclick=e=>ask(e.target,'Забути всі пари? На iPhone теж: Bluetooth → MEGA → Забути.',()=>run(e.target,()=>API.post('/api/ble/unbond')).then(()=>this.tick()))}
+ $('#devSw').onchange=e=>{DEV=e.target.checked;try{localStorage.setItem('mo-dev',DEV?'1':'0')}catch(x){}devUi()};
+ $('#wScan').onclick=e=>run(e.target,async()=>{$('#wList').innerHTML='<div class="row muted">шукаю ~2 с…</div>';const r=await API.get('/api/wifi/scan');
+  $('#wList').innerHTML=r.networks.sort((a,b)=>b.rssi-a.rssi).map(n=>`<button class="net" type="button" data-ssid="${esc(n.ssid)}">${bars(n.rssi)}<b>${esc(n.ssid)}</b><span class="muted">${n.secure?'пароль':'відкрита'} · ${n.rssi}</span></button>`).join('');return {note:r.count+' мереж'}});
+ $('#wList').onclick=e=>{const b=e.target.closest('[data-ssid]');if(!b)return;const i=$('[data-k="rb:/api/wifi|ssid"]');i.value=b.dataset.ssid;i.dispatchEvent(new Event('input',{bubbles:true}));$('[data-k="rb:/api/wifi|pass"]').focus()};
+ $('#otaGo').onclick=async e=>{const f=$('#otaF').files[0];const b=e.target;if(!f){sv(svOf(b),'bad','вибери .bin');return}b.disabled=true;$('#otaP').hidden=false;const s=svOf(b);
+  const onP=p=>{$('#otaBar').style.width=p+'%';sv(s,'busy');s.textContent=p+'%'};
+  try{await reboot(()=>upload(f,onP),undefined,'нова прошивка '+f.name)}catch(err){sv(s,'bad',errT(err))}b.disabled=false};
+ if(has('logfs'))$('#logs').onclick=e=>{const b=e.target.closest('[data-n]');if(b)run(b,()=>download('/api/logs/file?n='+b.dataset.n,'boot-'+b.dataset.n+'.log'))};
+ $('#rbt').onclick=e=>ask(e.target,'Перезавантажити плату?',()=>reboot().catch(err=>sv(svOf(e.target),'bad',errT(err))));
+ $('#fac').onclick=e=>ask(e.target,'Стерти все, включно з WiFi. Плата підніме точку 192.168.4.1.',()=>reboot('/api/factory?confirm=factory',undefined,'заводські налаштування').catch(err=>sv(svOf(e.target),'bad',errT(err))),'factory');
+ this.bleOff=!B||se.bleMode==='off';await this.tick();
+},async tick(){const[st,ble]=await Promise.all([API.get('/api/status'),getIf(has('display')&&has('ble')&&!this.bleOff,'/api/ble')]);if(!$('#wNow'))return;
+ wifiChip($('#wNow'),$('#wNowW'),st,'мереж не знайдено');
+ if(this.bleOff||!ble)return;
+ setChip('#bSt',ble.connected?'ok':ble.bonded?'warn':'off',ble.connected?'на зв’язку':ble.bonded?'спарено, не на зв’язку':'немає пари');
+ $('#bName').textContent=ble.connected?ble.address||'':'видно як MEGA: iPhone → Параметри → Bluetooth';$('#bForget').disabled=!ble.bonded}};

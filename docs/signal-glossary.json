@@ -1,0 +1,188 @@
+{
+  "about": [
+    "Where each Vehicle::Sig most likely comes from on OUR Megane II (X84), and the pick to make it a default.",
+    "Hand-written: sig, pick, broadcast, diag[].ecu/req/item/to_sig, confidence, note. The diag[] encodings",
+    "(byte, shift, bits, le, signed, step, offset, div, unit) are FILLED from the DDT2000 definitions by",
+    "`tools/can_corr.py glossary --fill --ddt ../ddt-db/x84`, so this file stands alone without the database.",
+    "docs/signal-glossary.md is generated from this file (`glossary --md`). Read docs/signal-glossary.md first."
+  ],
+  "ecus": {
+    "S3000_A791_Can_1_X84": {"tx": "7E0", "rx": "7E8", "what": "injection (Sagem S3000)"},
+    "Climatisation_regulee_Redesign_P0_X84_SERIE": {"tx": "744", "rx": "764", "what": "climate"},
+    "UCH_84_J84_05_00": {"tx": "745", "rx": "765", "what": "body computer (UCH)"},
+    "Tdb_BCEKL84_serie_4emeRev": {"tx": "743", "rx": "763", "what": "cluster, approximate match (0905 vs 0812)"},
+    "Esp_X84_Bosch8.0_F05_Vdiag_0A": {"tx": "740", "rx": "760", "what": "ABS/ESP"},
+    "UPC_84_(v4.1)": {"tx": "74D", "rx": "76D", "what": "fuse box (UPC)"},
+    "DAE_X84_Serie_V1": {"tx": "742", "rx": "762", "what": "power steering, approximate match"}
+  },
+  "signals": [
+    {"sig": "SIG_SPEED", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x354", "row": "be16@0 x1 (km/h x100)", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "Esp_X84_Bosch8.0_F05_Vdiag_0A", "req": "2104", "item": "Vitesse véhicule", "to_sig": 100, "byte": 11, "shift": 0, "bits": 16, "le": false, "signed": false, "step": 1.0, "offset": 0.0, "div": 100.0, "unit": "Km/H"},
+       {"ecu": "Tdb_BCEKL84_serie_4emeRev", "req": "2110", "item": "Vitesse véhicule (km/h) CAN", "to_sig": 100, "byte": 10, "shift": 0, "bits": 16, "le": false, "signed": false, "step": 1.0, "offset": 0.0, "div": 100.0, "unit": ""}],
+     "note": "The cluster reports the speed it RECEIVES over CAN as a 16-bit /100, the same encoding as x0r's 0x354."},
+    {"sig": "SIG_RPM", "pick": "broadcast", "confidence": "high",
+     "broadcast": {"id": "0x181", "row": "be16@0 /8", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "S3000_A791_Can_1_X84", "req": "21A0", "item": "Régime moteur", "to_sig": 1, "byte": 9, "shift": 0, "bits": 16, "le": false, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": "tr/min"},
+       {"ecu": "Tdb_BCEKL84_serie_4emeRev", "req": "2110", "item": "Régime moteur (tr/mn) CAN", "to_sig": 1, "byte": 8, "shift": 0, "bits": 16, "le": false, "signed": false, "step": 1.0, "offset": 0.0, "div": 8.0, "unit": ""}],
+     "note": "The cluster's received-over-CAN rpm is 16-bit /8, exactly x0r's 0x181. Logged 2026-06-14 at idle: 747 rpm."},
+    {"sig": "SIG_STEERING", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x0C2", "row": "be16@0 -0x8000 (deg x10)", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "Esp_X84_Bosch8.0_F05_Vdiag_0A", "req": "2107", "item": "Angle volant (Min-720/Max720)", "to_sig": 10, "byte": 3, "shift": 0, "bits": 16, "le": false, "signed": false, "step": 1.0, "offset": -32767.0, "div": 10.0, "unit": "°"}],
+     "note": "ESP's diag angle is (raw-32767)/10. The broadcast bias may be 0x7FFF, not 0x8000: one LSB, 0.1 deg."},
+    {"sig": "SIG_ODOMETER", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x5FD", "row": "be24@0 km", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "Tdb_BCEKL84_serie_4emeRev", "req": "2195", "item": "Odomètre Total", "to_sig": 1, "byte": 3, "shift": 0, "bits": 24, "le": false, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": "Km"}]},
+    {"sig": "SIG_OUT_TEMP", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "u8@4 -40", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "Climatisation_regulee_Redesign_P0_X84_SERIE", "req": "21C1", "item": "Température extérieure", "to_sig": 1, "byte": 4, "shift": 0, "bits": 8, "le": false, "signed": false, "step": 1.0, "offset": -40.0, "div": 1.0, "unit": "°C"},
+       {"ecu": "UCH_84_J84_05_00", "req": "2119", "item": "Température extérieure (8 bits, °C)", "to_sig": 1, "byte": 3, "shift": 0, "bits": 8, "le": false, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": ""}],
+     "note": "The climate unit's copy is u8-40, the same as x0r. The UCH owns the sensor."},
+    {"sig": "SIG_ENG_TEMP", "pick": "broadcast", "confidence": "high",
+     "broadcast": {"id": "0x551", "row": "u8@0 -40", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "Climatisation_regulee_Redesign_P0_X84_SERIE", "req": "21C1", "item": "Température d'eau", "to_sig": 1, "byte": 6, "shift": 0, "bits": 8, "le": false, "signed": false, "step": 1.0, "offset": -40.0, "div": 1.0, "unit": "°C"},
+       {"ecu": "S3000_A791_Can_1_X84", "req": "21A0", "item": "Température eau mesurée", "to_sig": 1, "byte": 4, "shift": 0, "bits": 8, "le": false, "signed": false, "step": 0.625, "offset": -40.0, "div": 1.0, "unit": "°C"}],
+     "note": "The climate unit receives the coolant temperature from the ECM as u8-40 (x0r's encoding). The ECM's own diag value is 0.625/LSB, an internal scale."},
+    {"sig": "SIG_DOOR_FL", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "bit19 of be24@0", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "UCH_84_J84_05_00", "req": "2111", "item": "PORTE_CONDUCTEUR_OUVERTE", "to_sig": 1, "byte": 8, "shift": 0, "bits": 1, "le": true, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": ""}],
+     "note": "The 'conducteur' door is FL on a left-hand-drive car."},
+    {"sig": "SIG_DOOR_FR", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "bit20 of be24@0", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "UCH_84_J84_05_00", "req": "2111", "item": "PORTE_PASSAGER_AVANT_OUVERTE", "to_sig": 1, "byte": 8, "shift": 1, "bits": 1, "le": true, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": ""}]},
+    {"sig": "SIG_DOOR_RL", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "bit21 of be24@0", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "UCH_84_J84_05_00", "req": "2111", "item": "PORTE_ARRIERE_GAUCHE_OUVERTE", "to_sig": 1, "byte": 8, "shift": 2, "bits": 1, "le": true, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": ""}]},
+    {"sig": "SIG_DOOR_RR", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "bit22 of be24@0", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "UCH_84_J84_05_00", "req": "2111", "item": "PORTE_ARRIERE_DROITE_OUVERTE", "to_sig": 1, "byte": 8, "shift": 3, "bits": 1, "le": true, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": ""}]},
+    {"sig": "SIG_BOOT", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "bit23 of be24@0", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "UCH_84_J84_05_00", "req": "2111", "item": "C_HAYON", "to_sig": 1, "byte": 8, "shift": 4, "bits": 1, "le": true, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": ""}]},
+    {"sig": "SIG_REVERSE", "pick": "broadcast", "confidence": "low",
+     "broadcast": {"id": "0x60D", "row": "u8@6 bit4", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "UCH_84_J84_05_00", "req": "2111", "item": "MARCHE ARRIERE ENGAGEE", "to_sig": 1, "byte": 10, "shift": 5, "bits": 1, "le": true, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": ""}],
+     "note": "x0r calls this bit unclear. If the capture does not confirm it, the UCH diag is the source."},
+    {"sig": "SIG_HANDBRAKE", "pick": "diag", "confidence": "medium",
+     "broadcast": {"id": "0x5C5", "row": "u8@0 bit3 or bit2", "status": "CONFLICT, left out of decode_defaults"},
+     "diag": [
+       {"ecu": "Tdb_BCEKL84_serie_4emeRev", "req": "2110", "item": "Contact frein de parking", "to_sig": 1, "byte": 3, "shift": 5, "bits": 1, "le": false, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "frein desserré", "1": "frein serré"}}],
+     "note": "The cluster reads the switch itself. The correlator settles 0x5C5's bit against this one."},
+    {"sig": "SIG_BRAKE", "pick": "broadcast", "confidence": "low",
+     "broadcast": {"id": "0x181", "row": "u8@5 bit0", "status": "hypothesis (x0r); x0r also names 0x354 last byte bit4"},
+     "diag": [
+       {"ecu": "Esp_X84_Bosch8.0_F05_Vdiag_0A", "req": "2106", "item": "Etat de la pédale de frein", "to_sig": 1, "byte": 4, "shift": 6, "bits": 2, "le": false, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "Relachée", "1": "Enfoncée", "3": "Inalvide / En défaut"}}],
+     "note": "ESP value 3 means invalid or faulty, not pressed."},
+    {"sig": "SIG_KEY_ON", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "bit10 of be24@0", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "Tdb_BCEKL84_serie_4emeRev", "req": "2110", "item": "APC (CAN)", "to_sig": 1, "byte": 4, "shift": 4, "bits": 1, "le": false, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "APC absent", "1": "APC présent"}},
+       {"ecu": "UCH_84_J84_05_00", "req": "21AA", "item": "+APC_84", "to_sig": 1, "byte": 21, "shift": 5, "bits": 1, "le": true, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "APC OFF", "1": "APC ON"}}],
+     "note": "With the key off, the ECUs do not answer diagnostics at all."},
+    {"sig": "SIG_KEY_ACC", "pick": "broadcast", "confidence": "low",
+     "broadcast": {"id": "0x60D", "row": "bit9 of be24@0", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "UCH_84_J84_05_00", "req": "2182", "item": "Etat ACC sur réseau MUX", "to_sig": null, "byte": 13, "shift": 0, "bits": 8, "le": true, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": ""}],
+     "note": "The UCH item is a raw byte with no published values."},
+    {"sig": "SIG_BACKLIGHT", "pick": "broadcast", "confidence": "low",
+     "broadcast": {"id": "0x645", "row": "u8@1, 0xFF = off", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "Climatisation_regulee_Redesign_P0_X84_SERIE", "req": "21C2", "item": "Niveau éclairage Nuit", "to_sig": null, "byte": 8, "shift": 0, "bits": 8, "le": false, "signed": false, "step": 0.4, "offset": 0.0, "div": 1.0, "unit": "%"}],
+     "note": "The climate unit's received copy is 0.4 %/LSB (0..250 = 100 %), which does not fit x0r's 0..0xFE. Settle it from a capture."},
+    {"sig": "SIG_LIGHT_POS", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "bit18 of be24@0", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "Tdb_BCEKL84_serie_4emeRev", "req": "2110", "item": "+Lanterne (CAN)", "to_sig": 1, "byte": 4, "shift": 3, "bits": 1, "le": false, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "Absent", "1": "Présent"}},
+       {"ecu": "UCH_84_J84_05_00", "req": "2111", "item": "LANTERNE", "to_sig": 1, "byte": 5, "shift": 1, "bits": 1, "le": true, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": ""}]},
+    {"sig": "SIG_LIGHT_DIPPED", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "bit17 of be24@0", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "Tdb_BCEKL84_serie_4emeRev", "req": "2110", "item": "Feux croisement (CAN)", "to_sig": 1, "byte": 4, "shift": 2, "bits": 1, "le": false, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "Absent", "1": "Présent"}}]},
+    {"sig": "SIG_LIGHT_MAIN", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "bit11 of be24@0", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "Tdb_BCEKL84_serie_4emeRev", "req": "2110", "item": "Feux route (CAN)", "to_sig": 1, "byte": 4, "shift": 1, "bits": 1, "le": false, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "Absent", "1": "Présent"}}]},
+    {"sig": "SIG_FOG_FRONT", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "bit8 of be24@0", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "Tdb_BCEKL84_serie_4emeRev", "req": "2110", "item": "Feux brouillard AV (CAN)", "to_sig": 1, "byte": 4, "shift": 0, "bits": 1, "le": false, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "Absent", "1": "Présent"}},
+       {"ecu": "UCH_84_J84_05_00", "req": "2111", "item": "BROUILLARD_AV", "to_sig": 1, "byte": 5, "shift": 5, "bits": 1, "le": true, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": ""}]},
+    {"sig": "SIG_FOG_REAR", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "bit2 of be24@0", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "Tdb_BCEKL84_serie_4emeRev", "req": "2110", "item": "Feux brouillard AR (CAN)", "to_sig": 1, "byte": 5, "shift": 7, "bits": 1, "le": false, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "Absent", "1": "Présent"}},
+       {"ecu": "UCH_84_J84_05_00", "req": "2111", "item": "BROUILLARD_AR", "to_sig": 1, "byte": 5, "shift": 6, "bits": 1, "le": true, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": ""}]},
+    {"sig": "SIG_IND_LEFT", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "bit13 of be24@0, 500 ms latch", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "UCH_84_J84_05_00", "req": "2111", "item": "CLIGNOTANT G", "to_sig": 1, "byte": 6, "shift": 0, "bits": 1, "le": true, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": ""}],
+     "note": "Blink pulses: too fast for polling, so the broadcast is the only real source."},
+    {"sig": "SIG_IND_RIGHT", "pick": "broadcast", "confidence": "medium",
+     "broadcast": {"id": "0x60D", "row": "bit14 of be24@0, 500 ms latch", "status": "hypothesis (x0r)"},
+     "diag": [
+       {"ecu": "UCH_84_J84_05_00", "req": "2111", "item": "CLIGNOTANT D", "to_sig": 1, "byte": 6, "shift": 1, "bits": 1, "le": true, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": ""}]},
+    {"sig": "SIG_TRIP1", "pick": "diag", "confidence": "medium",
+     "diag": [
+       {"ecu": "Tdb_BCEKL84_serie_4emeRev", "req": "2195", "item": "Odomètre Partiel", "to_sig": 10, "byte": 8, "shift": 0, "bits": 24, "le": false, "signed": false, "step": 1.0, "offset": 0.0, "div": 10.0, "unit": "Km"}],
+     "note": "The cluster's own trip, already in 0.1 km. No broadcast is known."},
+    {"sig": "SIG_FUEL_INST", "pick": "derived", "confidence": "medium",
+     "broadcast": {"id": "0x551", "row": "u8@1 fuel used, 80 mm3/LSB (12 500 = 1 L)", "status": "hypothesis (x0r), encoding corroborated by the cluster"},
+     "diag": [
+       {"ecu": "S3000_A791_Can_1_X84", "req": "21A9", "item": "Consommation carburant instantanée", "to_sig": null, "byte": 3, "shift": 0, "bits": 16, "le": false, "signed": false, "step": 1.0, "offset": 0.0, "div": 100.0, "unit": "L/H"}],
+     "note": "Derive L/100 km x10 = L/h / (km/h) x 1000, from the 0x551 fuel counter's rate or S3000 21A9, plus the speed. The cluster's 2110 'carburant consommé (mm3) CAN' x80 confirms the counter's unit."},
+    {"sig": "SIG_RANGE", "pick": "derived", "confidence": "low",
+     "note": "Not in any definition. Compute it in MegaOpen from the fuel level and the average consumption. The fuel level source is still open."},
+    {"sig": "SIG_AVG_SPEED", "pick": "derived", "confidence": "low",
+     "note": "Computed in MegaOpen from SPEED over the trip."},
+    {"sig": "SIG_FUEL_AVG", "pick": "derived", "confidence": "low",
+     "note": "Computed in MegaOpen from the 0x551 fuel counter over the trip distance."},
+    {"sig": "SIG_TRIP_ELAPSED", "pick": "derived", "confidence": "high",
+     "note": "MegaOpen's own clock since key-on."},
+    {"sig": "SIG_AC_ON", "pick": "diag", "confidence": "medium",
+     "diag": [
+       {"ecu": "Climatisation_regulee_Redesign_P0_X84_SERIE", "req": "21C2", "item": "Demande AC", "to_sig": 1, "byte": 17, "shift": 6, "bits": 1, "le": false, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "OFF", "1": "ON"}}],
+     "note": "The climate panel may talk to the HVAC unit directly, off the CAN bus. Check the capture first: if nothing moves when the panel does, poll."},
+    {"sig": "SIG_AC_COMPRESSOR", "pick": "diag", "confidence": "medium",
+     "diag": [
+       {"ecu": "Climatisation_regulee_Redesign_P0_X84_SERIE", "req": "21C2", "item": "Recopie de l'état du compresseur", "to_sig": 1, "byte": 6, "shift": 4, "bits": 2, "le": false, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "OFF", "1": "ON", "3": "indisponible"}}],
+     "note": "3 = unavailable, so map it to 0. It is a copy of something the ECM broadcasts, so a broadcast row probably exists."},
+    {"sig": "SIG_AC_RECIRC", "pick": "diag", "confidence": "medium",
+     "diag": [
+       {"ecu": "Climatisation_regulee_Redesign_P0_X84_SERIE", "req": "21C2", "item": "Recyclage", "to_sig": 1, "byte": 21, "shift": 4, "bits": 2, "le": false, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "air externe", "1": "recy", "2": "volet en mouvement", "3": "indisponible"}}],
+     "note": "0 = outside air, 1 = recirculation, 2 = flap moving (hold the last value), 3 = unavailable."},
+    {"sig": "SIG_AC_FAN", "pick": "diag", "confidence": "low",
+     "diag": [
+       {"ecu": "Climatisation_regulee_Redesign_P0_X84_SERIE", "req": "21C2", "item": "Consigne PWM GMV habitacle", "to_sig": null, "byte": 15, "shift": 0, "bits": 8, "le": false, "signed": false, "step": 0.5, "offset": 0.0, "div": 1.0, "unit": "%"},
+       {"ecu": "Climatisation_regulee_Redesign_P0_X84_SERIE", "req": "21C2", "item": "Etat du ventilateur habitacle", "to_sig": null, "byte": 21, "shift": 6, "bits": 2, "le": false, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "OFF", "1": "ON", "3": " indisponible"}}],
+     "note": "PWM % into 0-7 steps, with the thresholds measured per panel position. The fan state gates 0."},
+    {"sig": "SIG_AC_VENT_FACE", "pick": "diag", "confidence": "low",
+     "diag": [
+       {"ecu": "Climatisation_regulee_Redesign_P0_X84_SERIE", "req": "21C2", "item": "Position volet distribution", "to_sig": null, "byte": 19, "shift": 0, "bits": 8, "le": false, "signed": false, "step": 1.0, "offset": 0.0, "div": 1.0, "unit": "%"}],
+     "note": "Distribution flap % into face/floor/up ranges, measured per panel position. The same item feeds VENT_FLOOR and VENT_UP."},
+    {"sig": "SIG_AC_TEMP_DRV", "pick": "none", "confidence": "low",
+     "diag": [
+       {"ecu": "Climatisation_regulee_Redesign_P0_X84_SERIE", "req": "21C2", "item": "Consigne de température air soufflé", "to_sig": null, "byte": 16, "shift": 0, "bits": 8, "le": false, "signed": false, "step": 1.0, "offset": -40.0, "div": 1.0, "unit": "°C"}],
+     "note": "Only the BLOWN-AIR setpoint exists, not the temperature the driver chose. The blend flap ('Position volet mixage') is the nearest proxy."},
+    {"sig": "SIG_AC_DEFOG", "pick": "diag", "confidence": "low",
+     "diag": [
+       {"ecu": "Climatisation_regulee_Redesign_P0_X84_SERIE", "req": "21C2", "item": "Etat de demande LARC manuel", "to_sig": 1, "byte": 4, "shift": 6, "bits": 2, "le": false, "signed": false, "step": 1, "offset": 0, "div": 1, "unit": "", "values": {"0": "OFF", "1": "ON", "3": "indisponible"}}],
+     "note": "LARC is the heated REAR window. Whether the RAV4 bit means that is open (raise-protocol.md)."},
+    {"sig": "SIG_TPMS_FL", "pick": "diag", "confidence": "low",
+     "diag": [
+       {"ecu": "UCH_84_J84_05_00", "req": "2166", "item": "SSPP Pression pneu mesuree roue 1", "to_sig": null, "byte": 3, "shift": 0, "bits": 8, "le": false, "signed": false, "step": 3500.0, "offset": 0.0, "div": 255.0, "unit": ""}],
+     "note": "Only if the car has TPMS (SSPP). The value is mbar = raw x 3500/255. Which wheel is 'roue 1'..4 is unknown, as is the encoding of SIG_TPMS_*. Wheels 2-4 sit at bytes 9/15/21."}
+  ],
+  "absent": ["SIG_AC_AUTO_HI", "SIG_AC_AUTO_LO", "SIG_AC_DUAL", "SIG_AC_MAX_FRONT", "SIG_AC_REAR", "SIG_AC_AQS", "SIG_AC_ECO", "SIG_SEAT_*", "SIG_RADAR_* (no parking aid found in the 2026-06-14 scan)", "SIG_TRIP2"]
+}

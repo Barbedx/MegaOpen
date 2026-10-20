@@ -1,0 +1,112 @@
+# MegaOpen
+
+Firmware that sits between a Renault Mégane II and an aftermarket Android head
+unit. It acts as the car's radio for the OEM Carminat/AFFA display, and it acts as
+a canbox for the head unit.
+
+* **Display (CAN B).** MegaOpen runs the AFFA registration handshake, draws on the
+  panel (now playing, clock, a 48×48 picture pane) and takes the steering-column
+  stalk's key presses from it. The panel driver is the
+  [AffaDisplay](https://github.com/Barbedx/AffaDisplay) library.
+* **Head unit (UART).** It speaks the Raise/canbox **Toyota RAV4** profile:
+  `0x20` key frames and the vehicle telemetry the profile defines, at 38400 8N1.
+  The head unit's own media text comes back the other way and is shown on the panel.
+* **Car (CAN A).** The car bus is read **listen-only** for the sniffer, the
+  capture recorder and the RAV4 telemetry map. Nothing is transmitted on it.
+* **Phone (BLE).** An iPhone pairs as a peripheral, and the firmware reads now
+  playing (AMS), notifications (ANCS) and the clock (CTS) from it.
+* **Knobs.** Two rotary encoders with WS2812 rings, on I2C through a PCF8574.
+* **WiFi.** A web app for setup, live logs, the CAN tools and OTA updates, opened
+  from a phone.
+
+Keys always win: the UART lanes give key frames priority over telemetry.
+
+## Hardware
+
+The board in the car is a **LilyGO T-2CAN** (ESP32-S3 N16R8, two isolated CAN
+ports). CAN B is the S3's own TWAI on GPIO7/6 and goes to the display. CAN A is an
+MCP2518FD on SPI and goes to the car. The head unit is on QWIIC 1 (GPIO43/44).
+Pins are named in one place only, `src/board/BoardProfile.h`. Wiring drawings:
+[docs/t2can-wiring.artifact.html](docs/t2can-wiring.artifact.html) and
+[docs/t2can-qwiic.artifact.html](docs/t2can-qwiic.artifact.html).
+
+An ESP32 DevKit V1 build is also kept (`env:devkit`). It drives the panel on its
+single TWAI port and gets the car's frames over a UART link from a second board
+(`env:boardv`, an ESP32-C3; see [docs/link.md](docs/link.md)).
+
+## Build
+
+[PlatformIO](https://platformio.org/). Every dependency is pinned to an exact
+version or commit in `platformio.ini`, including AffaDisplay, so a fresh clone
+builds the same image.
+
+```
+pio run                      # env:t2can, the default
+pio run -e t2can -t upload   # first flash over USB (hold BOOT if needed)
+pio test -e native           # host tests for the portable logic
+```
+
+| env | what |
+| --- | --- |
+| `t2can` | T-2CAN: panel + car + head unit + BLE + knobs |
+| `t2can_usbhid` | `t2can` with a USB HID keyboard to the head unit (compile check) |
+| `devkit` | ESP32 DevKit V1 with the panel; car frames from board V |
+| `boardv` | ESP32-C3 on OBD2 CAN, forwards raw frames to `devkit` |
+| `direct` | DevKit without a panel: 6-wire key matrix + KEY1/KEY2 resistor ladder ([docs/resistive-keys.md](docs/resistive-keys.md), [docs/wiring-direct.md](docs/wiring-direct.md)) |
+| `native` | host tests |
+
+The web app in `web/` is gzipped into the firmware by `tools/gen_pages.py`
+before every build. `py tools/build_sim.py` builds a browser simulator of it
+with mock data, in `build/`.
+
+## Flashing
+
+After the first USB flash, updates go over WiFi. OTA uses HTTP basic auth: the
+user is `megaopen` and the password is the AP password.
+
+```
+curl -u megaopen:<ap password> "http://<ip>/ota/start?mode=fr&hash=<md5>"
+curl -u megaopen:<ap password> -F "file=@.pio/build/t2can/firmware.bin" "http://<ip>/ota/upload"
+```
+
+A new image boots on trial and confirms itself only after its health checks pass.
+Otherwise the next reboot rolls back.
+
+## Web UI
+
+Without saved WiFi credentials the board starts an AP called `MegaOpen-XXXX`.
+Its password is `megaopen` until you change it, so **change it**. The app is
+served at `http://192.168.4.1/`, or at the board's IP on your network. It has six
+screens: overview (health of every chain), display, keys (mapping, knobs, macros),
+car (the RAV4 map, sniffer, capture), board (WiFi, BLE, flash log) and service
+(live log, the display and Raise consoles, CAN diagnostics). Every list in the UI
+comes from `GET /api/catalog`, so the firmware is the single source of truth.
+
+## Repository
+
+```
+src/        firmware (src/app: tasks; src/display: the AffaDisplay ports; src/proto: Raise)
+web/        the web app, and web/sim: mocks for the simulator
+test/       host tests (env:native)
+tools/      build scripts, CAN capture and correlation tools, rule checks
+docs/       protocol notes, wiring, design notes (docs/design), the backlog
+cloud/      an optional Cloudflare Worker for fleet OTA and logs (not deployed)
+```
+
+Further reading: [ARCHITECTURE.md](ARCHITECTURE.md),
+[docs/raise-protocol.md](docs/raise-protocol.md),
+[docs/megane-can-ids.md](docs/megane-can-ids.md),
+[docs/BACKLOG.md](docs/BACKLOG.md).
+
+## Status
+
+Installed and running in a Mégane II with a DUDU7 head unit. Mapping the car's
+CAN signals (and KWP diagnostic polling for the ones that are not broadcast) is
+ongoing. See the backlog.
+
+> Hobby project. It listens to the car's bus and never writes to it, but you wire
+> it into your own car at your own risk. Do not operate the menus while driving.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

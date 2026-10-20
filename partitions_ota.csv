@@ -1,0 +1,30 @@
+# 4MB flash, and the split is deliberate rather than inherited.
+#
+# The stock table gives 1.25MB app slots, which the display stack plus WiFi plus
+# the web UI already crowd and BLE does not fit into at all. This one used to
+# give 1.375MB each and keep a 1.125MB littlefs "for CAN captures".
+#
+# THAT FILESYSTEM WAS NEVER USED. `data/` is empty, and every web asset this
+# firmware serves is a C++ header under src/net/ (136 kB of them), compiled into
+# the image. So the table was spending a quarter of the chip on zero bytes while
+# the app slot sat at 95.1% and every feature decision was being argued against a
+# flash budget that did not need to be tight.
+#
+# 1.875MB each now, and littlefs keeps 128kB — enough for a capture file or a
+# config dump if one is ever wanted, and resizable again the day it is.
+#
+# STILL TWO OTA SLOTS, which is the one thing not worth trading away: a board in
+# a dashboard that cannot be recovered over the air is a board that comes back
+# out of the dashboard.
+#
+# CHANGING THIS TABLE COSTS ONE SERIAL FLASH. The offsets move, so a running
+# image cannot OTA itself onto the new layout — the first flash after this change
+# must go over USB, on every board. After that OTA works as before.
+#
+# Name      Type  SubType  Offset    Size      Flags
+nvs,        data, nvs,     0x9000,   0x5000,
+otadata,    data, ota,     0xe000,   0x2000,
+app0,       app,  ota_0,   0x10000,  0x1E0000,
+app1,       app,  ota_1,   0x1F0000, 0x1E0000,
+littlefs,   data, spiffs,  0x3D0000, 0x20000,
+coredump,   data, coredump,0x3F0000, 0x10000,

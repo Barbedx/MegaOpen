@@ -1,0 +1,22 @@
+# 16MB flash: the LilyGO T-2CAN (ESP32-S3-WROOM-1U N16R8).
+#
+# Same shape as partitions_ota.csv — two OTA slots, littlefs, coredump. The
+# split is the owner's (docs/design/event-tasks.md Step 5b, 2026-10-09): 3MB per
+# app slot (the t2can image is ~1.6MB) and ~9.9MB of littlefs for the flash log
+# (its fixed 2MB) and the CAN captures in /cap (the rest).
+#
+# CHANGING THIS TABLE NEEDS ONE USB FLASH. OTA writes an app slot and nothing
+# else; it cannot move a partition. Flash over the Type-C once (hold BOOT if it
+# will not enter download mode): `pio run -e t2can -t upload`. On that first
+# boot littlefs sits somewhere new and cannot mount, so LogFile::begin() sees
+# the size it last mounted change (NVS sys/logfsSize) and FORMATS it once: the
+# old /log files are lost. Download them first (/api/logs/file?n=..) if they
+# matter. Every later boot keeps a failed mount unformatted, as before.
+#
+# Name      Type  SubType  Offset    Size      Flags
+nvs,        data, nvs,     0x9000,   0x5000,
+otadata,    data, ota,     0xe000,   0x2000,
+app0,       app,  ota_0,   0x10000,  0x300000,
+app1,       app,  ota_1,   0x310000, 0x300000,
+littlefs,   data, spiffs,  0x610000, 0x9E0000,
+coredump,   data, coredump,0xFF0000, 0x10000,

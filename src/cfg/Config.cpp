@@ -1,0 +1,365 @@
+#include "../utils/LogBus.h"
+#include "Config.h"
+#include <nvs.h>
+
+namespace Cfg
+{
+    static constexpr const char* NS = "megaopen";
+
+    void Config::begin()
+    {
+        _p.begin(NS, false);
+
+        // Read first, seed afterwards. The seed calls save(), which writes every
+        // field; run before the reads it would blank values already in a
+        // namespace without a `seeded` key (AffaDisplay's examples share the
+        // `megaopen` namespace and the `ssid`/`pass` keys).
+        _s.ssid  = _p.getString("ssid", "");
+        _s.pass   = _p.getString("pass", "");
+        _s.apName = _p.getString("apName", "MegaOpen");
+
+        _s.mdnsName = _p.getString("mdns", "megaopen");
+        _s.mdnsOn   = _p.isKey("mdnsOn") ? _p.getBool("mdnsOn", true) : true;
+        _s.apPass = _p.getString("apPass", "megaopen");
+
+        _s.timing.debounceMs     = _p.getUShort("dbMs",   20);
+        _s.timing.fastDebounceMs = _p.getUShort("fdbMs",  2);
+        _s.timing.longMs         = _p.getUShort("lngMs",  600);
+        _s.timing.repeatMs       = _p.getUShort("repMs",  150);
+        _s.timing.repeatEnabled  = _p.getBool  ("rep",    true);
+        _s.encInverted           = _p.getBool  ("encInv", false);
+
+        _s.displayType = _p.getString("dispType", "carminat");
+        _s.funcReg     = _p.getBool  ("funcReg", true);
+        // Default follows the build; applyCanRole() forces `vehicle` on a
+        // display-less image anyway.
+#if FEATURE_DISPLAY_CAN
+        _s.canRole     = _p.getString("canRole", "display");
+#else
+        _s.canRole     = _p.getString("canRole", "vehicle");
+#endif
+        // Absent keys fall back to the compiled (hand-wired) pins.
+        _s.canRxPin    = _p.getUChar ("canRx", (uint8_t)Board::PIN_CAN_RX);
+        _s.canTxPin    = _p.getUChar ("canTx", (uint8_t)Board::PIN_CAN_TX);
+        // A stored pin this board refuses (an older build accepted it, or the
+        // T-2CAN, where only the wired 6/7 can work) is not started on: it
+        // could drive another peripheral's line. The compiled pins instead.
+        if (!Board::canPinReadable(_s.canRxPin) || !Board::canPinDrivable(_s.canTxPin)) {
+            LogBus::printf("[cfg] CAN pins rx=%u tx=%u not valid on this board; using %d/%d",
+                           (unsigned)_s.canRxPin, (unsigned)_s.canTxPin,
+                           (int)Board::PIN_CAN_RX, (int)Board::PIN_CAN_TX);
+            _s.canRxPin = (uint8_t)Board::PIN_CAN_RX;
+            _s.canTxPin = (uint8_t)Board::PIN_CAN_TX;
+        }
+
+        _s.bleMode     = _p.getString("bleMode", "ams");
+        _s.autoTime    = _p.getBool  ("autoTime", true);
+        _s.mediaScreen = _p.getBool  ("mediaScr", false);
+
+        _s.ancsPopup   = _p.getBool ("ancsPop", false);
+        _s.mediaLayout = _p.getString("medLay", "fullscreen");
+
+        _s.mediaStyle   = _p.getString("medSty", "classic");
+        _s.mediaPane    = _p.getString("medPane", "off");
+        // isKey first: an absent key costs an IDF error line per boot.
+        _s.paneSpeed     = _p.isKey("paneSpd")  ? _p.getUChar ("paneSpd", 1)     : 1;
+        _s.trackSplashMs = _p.isKey("splashMs") ? _p.getUShort("splashMs", 4000) : 4000;
+        _s.paneCycleS    = _p.isKey("paneCyc")  ? _p.getUShort("paneCyc", 30)    : 30;
+        _s.mediaSource  = _p.getString("medSrc", "ams");
+        _s.huTitleCmd   = _p.getUChar ("huTtlCmd", 0);
+        _s.huArtistCmd  = _p.getUChar ("huArtCmd", 0);
+        _s.huTitleFirst = _p.getBool  ("huTtlFst", false);
+
+        _s.keyPopup    = _p.getBool  ("keyPop",   true);
+        _s.keyPopupMs  = _p.getUShort("keyPopMs", 2000);
+
+        _s.routeUart   = _p.getUChar("rtUart", Keys::CLASS_ALL);
+        _s.routeAms    = _p.getUChar("rtAms",
+                                     Keys::CLASS_TRANSPORT | Keys::CLASS_PHONE);
+        _s.routeHid    = _p.getUChar("rtHid",  Keys::CLASS_VOLUME);
+        _s.routeRes    = _p.getUChar("rtRes",  Keys::CLASS_NONE);
+        _s.routeUsb    = _p.getUChar("rtUsb",  Keys::CLASS_TRANSPORT | Keys::CLASS_VOLUME);
+
+        _s.uartEnabled = _p.getBool ("uartEn", true);
+        _s.uartBaud    = _p.getULong("baud",   38400);
+        _s.pulseMs     = _p.getUShort("pulse", 60);
+        _s.resEnabled  = _p.getBool ("resEn",  false);
+
+        // isKey first: an absent key costs an IDF error line per boot.
+        _s.linkMode    = _p.isKey("lnkMode") ? _p.getUChar("lnkMode", 0) : 0;
+        _s.linkIdCount = 0;
+        if (_p.isKey("lnkIds")) {
+            uint32_t ids[7] = {0};
+            const size_t n = _p.getBytes("lnkIds", ids, sizeof(ids));
+            _s.linkIdCount = (uint8_t)(n / sizeof(uint32_t));
+            for (uint8_t i = 0; i < 7; ++i) _s.linkIds[i] = ids[i];
+        }
+
+        _s.can2Bitrate  = _p.isKey("can2Bps") ? _p.getULong("can2Bps", 0) : 0;
+        _s.can2Detected = _p.isKey("can2Det") ? _p.getULong("can2Det", 0) : 0;
+
+        // Seed: every absent key makes the IDF print an error line at boot.
+        // Everything above is stored or default, so this contradicts nothing.
+        if (!_p.isKey("seeded")) {
+            save();
+            _p.putBool("seeded", true);
+        }
+
+        migrate();
+    }
+
+    // A changed default never reaches a seeded board; it needs a migration step.
+    // Keep steps narrow: never touch network settings (SSID, password, AP name,
+    // mDNS) — a bad value there strands the board with no way in over the air.
+    void Config::migrate()
+    {
+        const uint8_t v = _p.getUChar("cfgVer", 0);
+        const uint8_t kCurrent = 3;
+        _verWas = v;
+        _ver = v;
+        // Printed every boot so "did the migration run" is always answerable.
+        LogBus::printf("[cfg] schema v%u (current v%u)%s\n", (unsigned)v,
+                      (unsigned)kCurrent, v >= kCurrent ? " — nothing to do" : " — migrating");
+        if (v >= kCurrent) return;
+
+        // v0 -> v1: the now-playing screen is on by default.
+        if (v < 1) {
+            _s.mediaScreen = true;
+            _p.putBool("mediaScr", true);
+        }
+
+        // v1 -> v2: notifications become a popup, now-playing becomes fullscreen.
+        if (v < 2) {
+            _s.ancsPopup = true;
+            _p.putBool("ancsPop", true);
+            _s.mediaLayout = "fullscreen";
+            _p.putString("medLay", "fullscreen");
+        }
+
+        // v2 -> v3: a stored CTX of GPIO19 (a temporary experiment) goes back to
+        // the BoardProfile.h pin; otherwise it transmits on an unwired pin and
+        // reads as a dead transceiver. Only exactly 19 is touched.
+        if (v < 3 && _s.canTxPin == 19) {
+            _s.canTxPin = (uint8_t)Board::PIN_CAN_TX;
+            _p.putUChar("canTx", _s.canTxPin);
+            LogBus::printf("[cfg] canTxPin 19 -> %u (the 2026-09-22 experiment, undone)\n",
+                          (unsigned)_s.canTxPin);
+        }
+
+        // An NVS write can fail (full namespace); Preferences reports it only
+        // in the return value.
+        const size_t wrote = _p.putUChar("cfgVer", kCurrent);
+        _ver = wrote ? kCurrent : v;
+        if (!wrote) LogBus::line("[cfg] SCHEMA WRITE FAILED — migration will re-run");
+    }
+
+    void Config::save()
+    {
+        _p.putString("ssid", _s.ssid);
+        _p.putString("pass", _s.pass);
+        _p.putString("apName", _s.apName);
+
+        _p.putString("mdns", _s.mdnsName);
+        _p.putBool  ("mdnsOn", _s.mdnsOn);
+        _p.putString("apPass", _s.apPass);
+
+        _p.putUShort("dbMs",  _s.timing.debounceMs);
+        _p.putUShort("fdbMs", _s.timing.fastDebounceMs);
+        _p.putUShort("lngMs", _s.timing.longMs);
+        _p.putUShort("repMs", _s.timing.repeatMs);
+        _p.putBool  ("rep",   _s.timing.repeatEnabled);
+        _p.putBool  ("encInv", _s.encInverted);
+
+        _p.putString("dispType", _s.displayType);
+        _p.putBool  ("funcReg",  _s.funcReg);
+        _p.putString("canRole",  _s.canRole);
+        _p.putUChar ("canRx",    _s.canRxPin);
+        _p.putUChar ("canTx",    _s.canTxPin);
+
+        _p.putString("bleMode",  _s.bleMode);
+        _p.putBool  ("autoTime", _s.autoTime);
+        _p.putBool  ("mediaScr", _s.mediaScreen);
+
+        _p.putBool  ("ancsPop", _s.ancsPopup);
+        _p.putString("medLay",  _s.mediaLayout);
+
+        _p.putString("medSty",   _s.mediaStyle);
+        _p.putString("medPane",  _s.mediaPane);
+        _p.putUChar ("paneSpd",  _s.paneSpeed);
+        _p.putUShort("splashMs", _s.trackSplashMs);
+        _p.putUShort("paneCyc",  _s.paneCycleS);
+        _p.putString("medSrc",   _s.mediaSource);
+        _p.putUChar ("huTtlCmd", _s.huTitleCmd);
+        _p.putUChar ("huArtCmd", _s.huArtistCmd);
+        _p.putBool  ("huTtlFst", _s.huTitleFirst);
+
+        _p.putBool  ("keyPop",   _s.keyPopup);
+        _p.putUShort("keyPopMs", _s.keyPopupMs);
+
+        _p.putUChar ("rtUart", _s.routeUart);
+        _p.putUChar ("rtAms",  _s.routeAms);
+        _p.putUChar ("rtHid",  _s.routeHid);
+        _p.putUChar ("rtRes",  _s.routeRes);
+        _p.putUChar ("rtUsb",  _s.routeUsb);
+
+        _p.putBool  ("uartEn", _s.uartEnabled);
+        _p.putULong ("baud",   _s.uartBaud);
+        _p.putUShort("pulse",  _s.pulseMs);
+        _p.putBool  ("resEn",  _s.resEnabled);
+        _p.putUChar ("lnkMode", _s.linkMode);
+        _p.putBytes ("lnkIds",  _s.linkIds, sizeof(uint32_t) * (_s.linkIdCount > 7 ? 7 : _s.linkIdCount));
+        _p.putULong ("can2Bps", _s.can2Bitrate);
+        _p.putULong ("can2Det", _s.can2Detected);
+    }
+
+    void Config::saveCan2Detected(uint32_t bps)
+    {
+        _s.can2Detected = bps;
+        _p.putULong("can2Det", bps);
+    }
+
+    void Config::saveKeyMap(const Keys::KeyMap& m)
+    {
+        uint8_t blob[Keys::KeyMap::BLOB_SIZE];
+        m.toBlob(blob);
+        _p.putBytes("keymap", blob, sizeof(blob));
+    }
+
+    void Config::loadKeyMap(Keys::KeyMap& m)
+    {
+        uint8_t blob[Keys::KeyMap::BLOB_SIZE];
+        size_t n = _p.getBytes("keymap", blob, sizeof(blob));
+        if (n != sizeof(blob) || !m.fromBlob(blob, sizeof(blob))) m.loadDefaults();
+    }
+
+#if FEATURE_DISPLAY_CAN
+    void Config::saveAffaMap(const Keys::AffaMap& m)
+    {
+        uint8_t blob[Keys::AffaMap::BLOB_SIZE];
+        m.toBlob(blob);
+        _p.putBytes("affamap", blob, sizeof(blob));
+    }
+
+    void Config::loadAffaMap(Keys::AffaMap& m)
+    {
+        uint8_t blob[Keys::AffaMap::BLOB_SIZE];
+        size_t n = _p.getBytes("affamap", blob, sizeof(blob));
+        if (n != sizeof(blob) || !m.fromBlob(blob, sizeof(blob))) m.loadDefaults();
+    }
+
+    bool Config::savePaneBits(const uint8_t* b, size_t n)
+    {
+        return _p.putBytes("paneBits", b, n) == n;
+    }
+
+    bool Config::loadPaneBits(uint8_t* b, size_t n)
+    {
+        // isKey first: getBytes on an absent key prints an IDF error per boot.
+        if (!_p.isKey("paneBits") || _p.getBytesLength("paneBits") != n) return false;
+        return _p.getBytes("paneBits", b, n) == n;
+    }
+#endif
+
+    void Config::saveTuning(const Canbox::Tuning& t)
+    {
+        uint8_t blob[Canbox::Tuning::BLOB_SIZE];
+        t.toBlob(blob);
+        _p.putBytes("rav4tune", blob, sizeof(blob));
+    }
+
+    void Config::loadTuning(Canbox::Tuning& t)
+    {
+        uint8_t blob[Canbox::Tuning::BLOB_SIZE];
+        size_t n = _p.getBytes("rav4tune", blob, sizeof(blob));
+        // Short read or unknown layout: keep the defaults.
+        if (n != sizeof(blob) || !t.fromBlob(blob, sizeof(blob))) t = Canbox::Tuning{};
+    }
+
+    bool Config::saveDecode(const uint8_t* b, size_t n)
+    {
+        return _p.putBytes("decode", b, n) == n;
+    }
+
+    size_t Config::loadDecode(uint8_t* b, size_t cap)
+    {
+        // isKey first: getBytes on an absent key prints an IDF error per boot.
+        if (!_p.isKey("decode")) return 0;
+        const size_t n = _p.getBytesLength("decode");
+        if (!n || n > cap) return 0;
+        return _p.getBytes("decode", b, n);
+    }
+
+    bool Config::eraseDecode()
+    {
+        return !_p.isKey("decode") || _p.remove("decode");
+    }
+
+    int Config::nvsFreeEntries()
+    {
+        nvs_stats_t st;
+        return nvs_get_stats(nullptr, &st) == ESP_OK ? (int)st.free_entries : -1;
+    }
+
+    void Config::saveMacros(const Keys::MacroEngine& m)
+    {
+        uint8_t blob[Keys::MacroEngine::BLOB_SIZE];
+        m.toBlob(blob);
+        _p.putBytes("macros", blob, sizeof(blob));
+    }
+
+    void Config::saveMacroBlob(const uint8_t (&blob)[Keys::MacroEngine::BLOB_SIZE])
+    {
+        _p.putBytes("macros", blob, sizeof(blob));
+    }
+
+    void Config::loadMacros(Keys::MacroEngine& m)
+    {
+        uint8_t blob[Keys::MacroEngine::BLOB_SIZE];
+        size_t n = _p.getBytes("macros", blob, sizeof(blob));
+        // Defaults (two disabled examples) on any doubt; a half-restored table
+        // would send frames nobody chose to the head unit.
+        if (n != sizeof(blob) || !m.fromBlob(blob, sizeof(blob))) m.loadDefaults();
+    }
+
+#if FEATURE_RESISTIVE_KEYS
+    void Config::saveResMap(const Sinks::ResistiveMap& m)
+    {
+        uint8_t blob[Sinks::ResistiveMap::BLOB_SIZE];
+        m.toBlob(blob);
+        _p.putBytes("resmap", blob, sizeof(blob));
+    }
+
+    void Config::loadResMap(Sinks::ResistiveMap& m)
+    {
+        uint8_t blob[Sinks::ResistiveMap::BLOB_SIZE];
+        size_t n = _p.getBytes("resmap", blob, sizeof(blob));
+        // Defaults (every rung unassigned) on any doubt.
+        if (n != sizeof(blob) || !m.fromBlob(blob, sizeof(blob))) m.loadDefaults();
+    }
+#endif
+
+#if FEATURE_KNOBS
+    void Config::saveKnobs(const Knobs::Config& k)
+    {
+        uint8_t blob[Knobs::Config::BLOB_SIZE];
+        k.toBlob(blob);
+        _p.putBytes("knobs", blob, sizeof(blob));
+    }
+
+    void Config::loadKnobs(Knobs::Config& k)
+    {
+        uint8_t blob[Knobs::Config::BLOB_SIZE];
+        // isKey first: getBytes on an absent key prints an IDF error per boot.
+        const size_t n = _p.isKey("knobs") ? _p.getBytes("knobs", blob, sizeof(blob)) : 0;
+        // Defaults (everything off) on any doubt. The length goes to
+        // fromBlob(): a v3 blob is shorter than v4 and still valid.
+        if (!n || n > sizeof(blob) || !k.fromBlob(blob, (uint8_t)n)) k = Knobs::Config{};
+    }
+#endif
+
+    void Config::factoryReset()
+    {
+        _p.clear();
+        _s = Settings{};
+    }
+}

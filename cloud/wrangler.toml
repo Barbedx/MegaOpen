@@ -1,0 +1,22 @@
+# MegaOpen cloud: log storage (D1) + OTA firmware (KV). Free tier only, no R2.
+name = "megaopen-cloud"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+# Daily cleanup: delete log batches older than 30 days.
+[triggers]
+crons = ["17 3 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "megaopen"
+# >>> PLACEHOLDER: replace with the id printed by `npx wrangler d1 create megaopen`
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[[kv_namespaces]]
+binding = "KV"
+# >>> PLACEHOLDER: replace with the id printed by `npx wrangler kv namespace create KV`
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Secrets (NOT in this file): npx wrangler secret put DEVICE_TOKEN / ADMIN_TOKEN
+# For local dev put them into cloud/.dev.vars (gitignored), see .dev.vars.example

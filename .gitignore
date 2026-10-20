@@ -1,0 +1,12 @@
+.pio/
+.vscode/
+.venv/
+.history/
+__pycache__/
+*.pyc
+*.log
+logs/
+.claude/
+
+# tools/build_sim.py output (the UI simulator) and test_catalog's catalog.json
+build/
