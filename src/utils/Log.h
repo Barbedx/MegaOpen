@@ -48,8 +48,8 @@ namespace Log {
 // ============================================================================
 // Leveled, categorized logger.
 //
-// Format: "<L> [<cat>] <message>", L = E/W/I/D/T. Log::emit -> WireProto ->
-// main.cpp's BusWireLink -> LogBus::line -> the LogBus ring, which fans out to
+// Format: "<L> [<cat>] <message>", L = E/W/I/D/T. Log::emit -> LogBus::line ->
+// the LogBus ring, which fans out to
 // Serial, the flash log and the cloud and keeps sent lines for the web log
 // (GET /api/logs?since=, LogRing.h).
 //
@@ -60,7 +60,6 @@ namespace Log {
 // is dead on the C3 USB-CDC). Not persisted: TRC costs the CAN path real time.
 // Gated-out lines return before formatting; guard costly payload builds with
 // Log::enabled(). Fixed stack buffer, no String: safe in the CAN callback.
-// @TX/@RX frames (WireProto::emitTx) are a separate channel, not level-gated.
 // ============================================================================
 
 namespace Log {
@@ -72,10 +71,8 @@ namespace Log {
     void emit(LogLevel lvl, const char *cat, const char *fmt, ...)
         __attribute__((format(printf, 3, 4)));
 
-    // Back-compat shims: printf() = INF with no category; dump()/clear() are no-ops.
+    // printf() = INF with no category.
     void   printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-    String dump();
-    void   clear();
 }
 
 // Category: short stable literal ("BT", "CAN", "AFFA", ...); used as a filter key.

@@ -9,8 +9,6 @@ struct Frame {
     enum Source : uint8_t {
         SRC_MM_CAN  = 0,   // multimedia CAN (this board's TWAI controller)
         SRC_VH_CAN  = 1,   // vehicle main CAN, relayed by the VH board
-        SRC_VIRTUAL = 2,   // in-firmware virtual display (EmuBridge)
-        SRC_INJECT  = 3,   // test/RE injection (@INJ / web)
     };
 
     uint32_t id = 0;

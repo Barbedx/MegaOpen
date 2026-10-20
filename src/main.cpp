@@ -18,8 +18,6 @@
 #include "net/WifiManager.h"
 #include <WiFi.h>          // the heartbeat reports SSID/BSSID/gateway directly
 #include "utils/Log.h"
-#include "utils/WireProto.h"
-#include "wire/WireLink.h"
 #include "utils/LogBus.h"
 #if FEATURE_LOGFS
 #include "utils/LogFile.h"
@@ -161,17 +159,6 @@ static OneShot<uint8_t>                 g_resAllOffReq;
 static Staged<Sinks::ResistiveMap>      g_resMapCfg;
 static OneShot<App::KeysTask::ResLearn> g_resLearnReq;
 #endif
-
-// Log::emit's only link: into the LogBus, which fans out from its own task to
-// Serial, the web log and the flash log (sinks registered in setup()). This
-// replaced a Serial link that wrote synchronously on the logging task — the
-// loop task included — and a WebSocket link that did not.
-struct BusWireLink : public WireLink {
-    void emitLine(const char* line) override { LogBus::line(line); }
-    void onCommand(CommandCb, void*) override {}   // inbound commands unused here
-    bool connected() const override { return true; }
-};
-static BusWireLink g_busLink;
 
 // The LogBus sinks. They run on the LogBus task, so blocking here is allowed.
 //
@@ -1702,7 +1689,6 @@ void setup()
     memMark("boot");
     // Tap the system log first, so boot output reaches the browser too.
     s_idfVprintf = esp_log_set_vprintf(logTapVprintf);
-    WireProto::addLink(&g_busLink);
     Log::setLevel(LogLevel::INF);
 
     g_cfg.begin();
@@ -1936,7 +1922,7 @@ void setup()
         const bool ok = TwaiBus::instance().begin((gpio_num_t)g_cfg.s().canTxPin,
                                                   (gpio_num_t)g_cfg.s().canRxPin,
                                                   500000, TWAI_MODE_NORMAL);
-        logf(ok ? "[can] display: TwaiBus @500k normal, rxq=64 (was CanCommonLink/esp32_can rxq=6)"
+        logf(ok ? "[can] display: TwaiBus @500k normal, rxq=64"
                 : "[can] display: TwaiBus::begin FAILED — no controller");
     }
 

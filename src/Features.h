@@ -38,10 +38,6 @@
 #define FEATURE_ANCS 0
 #endif
 
-#ifndef FEATURE_ELM
-#define FEATURE_ELM 0             // OBD2/ELM327 diagnostics pages on the display
-#endif
-
 #ifndef FEATURE_RESISTIVE_KEYS
 #define FEATURE_RESISTIVE_KEYS 0  // KEY1/KEY2 analog output (needs the I2C pot)
 #endif

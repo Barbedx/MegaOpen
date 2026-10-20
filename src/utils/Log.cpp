@@ -2,10 +2,10 @@
 
 #include <stdarg.h>
 #include <string.h>
-#include "WireProto.h"
+#include "LogBus.h"
 
 // Leveled logger. Formats "<L> [cat] msg" into a fixed stack buffer and hands it to
-// WireProto, which fans it out to every link (the LogBus). No String, no heap.
+// the LogBus. No String, no heap.
 namespace Log
 {
     namespace
@@ -13,8 +13,8 @@ namespace Log
         volatile LogLevel g_level = LogLevel::INF;
         const char        LVL_CH[5]   = {'E', 'W', 'I', 'D', 'T'};
 
-        // Strip trailing CR/LF so each WireProto record is exactly one line (many legacy
-        // call sites pass a trailing "\n"; SerialWireLink already appends one via println).
+        // Strip trailing CR/LF so each record is exactly one line (many legacy call
+        // sites pass a trailing newline).
         void rstripEol(char *s)
         {
             size_t n = strlen(s);
@@ -48,7 +48,7 @@ namespace Log
         vsnprintf(line + p, sizeof(line) - p, fmt, ap);
         va_end(ap);
         rstripEol(line);
-        WireProto::emitLine(line);
+        LogBus::line(line);
     }
 
     // --- back-compat shims --------------------------------------------------------
@@ -62,9 +62,7 @@ namespace Log
         vsnprintf(line, sizeof(line), fmt, ap);
         va_end(ap);
         rstripEol(line);
-        WireProto::emitLine(line);
+        LogBus::line(line);
     }
 
-    String dump() { return String("RAM log disabled — use pio monitor / /wire."); }
-    void clear() {}
 }
