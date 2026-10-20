@@ -209,12 +209,18 @@ const regDef=f=>f.type==='bool'?false:f.type==='int'?f.min:f.enum[0].v;
 /* cap.* реєстру живуть у S.cap.settings, як у прошивці — у рекордера (свій простір NVS) */
 const CAPK=['ring','fill','fileMB','autoProtect','mode','autostart'];
 const mRouteId=d=>'route'+d[0].toUpperCase()+d.slice(1);
+/* raise.* реєстру = S.tun (Canbox::Tuning): [ключ S.tun, у значення реєстру, назад] */
+const FUELID={2:'l100km',1:'kml',0:'mpg'},TRIPID={2:'km',1:'miles',0:'hide'},byVal=(o,v)=>+Object.keys(o).find(k=>o[k]===v);
+const RAISE={doorsLen:[x=>x,x=>x],cmd28:[x=>x?'ac':'temp',x=>x==='ac'?1:0],steerInvert:[x=>!!x,x=>x?1:0],steerDiv:[x=>x,x=>x],steerClamp:[x=>x,x=>x],
+ fuelUnit:[x=>FUELID[x],x=>byVal(FUELID,x)],tripUnit:[x=>TRIPID[x],x=>byVal(TRIPID,x)],tripFields:[x=>!!x,x=>x?1:0],histLen:[x=>x,x=>x],radarInvert:[x=>!!x,x=>x?1:0],
+ version:[x=>String(x).trimEnd(),x=>String(x).padEnd(16,' ').slice(0,16)]};
 g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type!=='table'&&!(f.id in S.set))S.set[f.id]=regDef(f);
  const st=S.staged,o={...S.set,alerts:S.alerts.map(a=>a.slice()),fw:S.fw,build:S.build,cfgVer:S.cfgVer,cfgVerWas:0,wifiSleep:false,ssid2:S.wifi2.ssid};   /* ssid2 — НОВЕ */
  for(const k of CAPK)o['cap.'+k]=S.cap.settings[k];
  o.logLevel=LVL[S.logLevel];   /* logLevel: лише в RAM, як у прошивці */
  for(const d of DESTS)o[mRouteId(d)]=S.routing[d]|0;   /* route*: маски призначень (S.routing, як destState) */
  o.huMessages=S.msgs.map(m=>[!!m.enabled]);   /* таблиця huMessages: лише в RAM */
+ for(const[k,[to]]of Object.entries(RAISE))o['raise.'+k]=to(S.tun[k]);
  if(st.bleMode)o.bleMode=st.bleMode;if(st.wifi)o.ssid=st.wifi.ssid;return o});
 /* НОВЕ (план, зріз 4): перезапуск не побічний ефект, а pendingReboot; apPass */
 po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass);
@@ -236,9 +242,11 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
  for(const f of C.settings||[]){if(f.type==='group'||f.type==='table'||q[f.id]===undefined||['bleMode','mediaSource','huTitleCmd','huArtistCmd'].includes(f.id))continue;
   if(f.ro)return fail(400,f.id+': read-only');
   if(f.type==='enum'&&!f.enum.some(o=>o.v===q[f.id]))return fail(400,f.id+': unknown value');
+  if(f.type==='str'&&!(typeof q[f.id]==='string'&&q[f.id].length<=f.max&&/^[ -~]*$/.test(q[f.id])))return fail(400,f.id+': printable ASCII text, too long, or not text');
   if(f.reboot&&q[f.id]!==s[f.id])rb=true;
   s[f.id]=f.type==='int'?Math.min(f.max,Math.max(f.min,+q[f.id])):q[f.id]}
  if(q.logLevel!==undefined){S.logLevel=LVL.indexOf(q.logLevel);delete s.logLevel}
+ for(const[k,[,back]]of Object.entries(RAISE))if(q['raise.'+k]!==undefined){S.tun[k]=back(s['raise.'+k]);delete s['raise.'+k]}
  for(const d of DESTS){const k=mRouteId(d);if(q[k]!==undefined){S.routing[d]=s[k]&0x0F;delete s[k]}}
  for(const k of CAPK)if(q['cap.'+k]!==undefined){S.cap.settings[k]=s['cap.'+k];delete s['cap.'+k];if(k==='mode')S.cap.mode=S.cap.settings.mode}
  if(typeof q.mediaSource==='string'&&['ams','hu','auto'].includes(q.mediaSource))s.mediaSource=q.mediaSource;
@@ -408,9 +416,6 @@ po('/api/map/test',q=>{const t=C.raise.find(x=>x.id===q.id);if(!t)return fail(40
  if(t.cmd==='28 A/C'&&!S.tun.cmd28)return fail(409,t.id+': 0x28 carries the outside temperature now: switch it in Service, Raise');
  const v=q.value;if(typeof v!=='number'||!(v>=t.min&&v<=t.max)||(t.kind==='b'&&v!==0&&v!==1))return fail(400,t.id+': value: '+t.min+'..'+t.max);
  S.tests[t.id]={v,until:now()+30000};const b=frameFor(t,v);uart('T',b);S.hu.txVeh++;emit(2,'HU','[map] test '+t.id+' = '+v+' -> '+b);return {ok:true,bytes:b}});
-g('/api/canbox/tuning',()=>({...S.tun}));
-po('/api/canbox/tuning',q=>{const t=q.reset?defTun():{...S.tun};for(const k of Object.keys(t))if(k!=='version'&&typeof q[k]==='number')t[k]=q[k];
- if(typeof q.version==='string')t.version=q.version.slice(0,16).padEnd(16);if(t.doorsLen!==1&&t.doorsLen!==2)t.doorsLen=1;S.tun=t;return ok});
 g('/api/canbox/last',q=>({total:S.hu.count,baud:S.set.uartBaud,frames:S.uartRing.slice().reverse().filter(e=>!(q&&q.in==='1')||e.dir==='R'||e.dir==='J').slice(0,14).map(e=>({...e,ageMs:now()-e.at}))}));
 po('/api/canbox/key',q=>{if(q.code===undefined)return fail(400,'code? (hex)');S.hu.txKey++;uart('T','2E 20 02 '+h2(parseInt(q.code,16)||0)+' 0'+(q.state||1)+' CS');return {__status:202,body:{ok:true,queued:true}}});
 po('/api/canbox/raw',q=>{if(q.cmd===undefined)return fail(400,'cmd? (hex)');const cmd=parseInt(q.cmd,16);if(!(cmd>=0&&cmd<=255))return fail(400,'cmd out of range');

@@ -22,7 +22,8 @@
 // A Table is a grid of such cells (the panel alerts: 16 rules x 5), read and
 // written a cell at a time; the table's own put() is the check, so a cell
 // whose range depends on another (a threshold on its row's signal) is
-// refused by the code that knows why. Tables are web-only.
+// refused by the code that knows why. A Str is short printable ASCII (the
+// canbox version string). Tables and Strs are web-only.
 namespace Cfg
 {
     // What a registry entry reads and writes. `k` is null on a board without
@@ -39,7 +40,7 @@ namespace Cfg
         bool*                msg = nullptr;
     };
 
-    enum class SType : uint8_t { Group, Bool, Int, Enum, Table };
+    enum class SType : uint8_t { Group, Bool, Int, Enum, Table, Str };
 
     // Where an entry is offered.
     enum : uint8_t {
@@ -96,6 +97,14 @@ namespace Cfg
         uint8_t (*decimals)(const Model&, uint8_t row, uint8_t col);
     };
 
+    // A Str's storage. get() writes the stored text, NUL-terminated, cut to
+    // cap; put() gets text setText() accepted (printable ASCII, <= maxLen).
+    struct SStr {
+        uint8_t maxLen;
+        void (*get)(const Model&, char* out, size_t cap);
+        void (*put)(Model&, const char* v);
+    };
+
     struct SEntry {
         const char*  id;       // stable API key (the /api/settings JSON key)
         const char*  label;    // Ukrainian, the web
@@ -111,6 +120,7 @@ namespace Cfg
         int32_t (*get)(const Model&);
         void    (*put)(Model&, int32_t);   // gets a value valid() accepted
         const STable* tab;     // Table only (get/put are then null)
+        const SStr*   str;     // Str only (get/put are then null)
     };
 
     namespace Registry
@@ -166,6 +176,14 @@ namespace Cfg
         int32_t colMin(const SColumn& c);
         int32_t colMax(const SColumn& c);
         int     colEnumIndex(const SColumn& c, const char* id);   // -1: unknown
+
+        // ---- Str (get()/set() of a Str read 0 and refuse) ---------------------
+        // The stored text ("" when unavailable). setText refuses (false,
+        // nothing written) what set() would, null, longer than maxLen or
+        // anything but printable ASCII; an unchanged text adds no apply bits.
+        void    getText(const Model& m, const SEntry& e, char* out, size_t cap);
+        bool    validText(const SEntry& e, const char* v);
+        bool    setText(Model& m, const SEntry& e, const char* v, uint8_t* apply = nullptr);
 
         // A scaled integer with its decimal point placed (1368, 2 -> "13.68"),
         // and a page's number back to one (false: not finite, or too big).

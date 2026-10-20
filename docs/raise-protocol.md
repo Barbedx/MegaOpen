@@ -56,7 +56,7 @@ We were emitting the zero-extended 12-bit form. **Sign-extending satisfies both 
 
 This document, the source of our only *confirmed* door icons, sends **len 1**. The vendor spec sends **len 2** and puts the ignition bit in D1 b1, and per that spec the IG bit gates the trip, fuel, history and TPMS panels from being drawn at all. The head unit guards on exact length, so this is not a degraded frame versus a good one — it is a frame versus a **dropped** frame, and the current code had silently switched to len 2, risking icons that already worked.
 
-`POST /api/canbox/tuning {"doorsLen":1|2}` flips it (Сервіс screen, "Двері: довжина кадру"), which turns bench experiment B below into one setting.
+`POST /api/settings {"raise.doorsLen":1|2}` flips it (Сервіс screen, "Двері: довжина кадру"), which turns bench experiment B below into one setting.
 
 ### 0.4 `0x1F` hybrid — layout fully recovered
 

@@ -19,7 +19,8 @@
 // reads State (single aligned words) and the sniffer's copies, nothing else.
 //
 // Replaces /api/signals, /api/signals/unpinall, /api/emitter, POST /api/canbox
-// and the scale fields of /api/canbox/tuning; those go with the old pages in
+// and the scale fields of the old /api/canbox/tuning (now raise.* in
+// /api/settings); those went with the old pages in
 // slice 8.
 
 using Canbox::TargetView;

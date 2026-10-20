@@ -250,7 +250,7 @@ namespace Catalog
         void settings(J& j)
         {
             using namespace Cfg;
-            static const char* const kType[] = {"group", "bool", "int", "enum", "table"};
+            static const char* const kType[] = {"group", "bool", "int", "enum", "table", "str"};
             j.k("settings").arr();
             for (size_t i = 0; i < Registry::count(); ++i) {
                 const SEntry& e = Registry::at(i);
@@ -268,6 +268,7 @@ namespace Catalog
                     if (e.unit) j.ks("unit", e.unit);
                 }
                 if (e.type == SType::Enum && e.en) enumRows(j, *e.en);
+                if (e.type == SType::Str && e.str) j.kn("max", e.str->maxLen);
                 if (e.type == SType::Table && e.tab) {
                     j.kn("rows", e.tab->rows()).k("cols").arr();
                     for (uint8_t c = 0; c < e.tab->cols; ++c) {

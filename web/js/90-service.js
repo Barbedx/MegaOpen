@@ -7,7 +7,7 @@ const regRange=id=>{const f=regOf(id);return f.type==='int'?`min="${f.min}" max=
 const regOpts=id=>(regOf(id).enum||[]).map(o=>[o.v,o.name]);
 SCR.service={title:'Сервіс',async render(m){
  const D=has('display'),V=has('vehicle'),CP=has('capture');
- const[me,tun,msgs,can,se]=await Promise.all([getIf(D,'/api/media'),API.get('/api/canbox/tuning'),API.get('/api/messages'),getIf(V,'/api/can'),API.get('/api/settings')]);
+ const[me,msgs,can,se]=await Promise.all([getIf(D,'/api/media'),API.get('/api/messages'),getIf(V,'/api/can'),API.get('/api/settings')]);
  const MS=msgs.messages||[];this.n=0;this.paused=false;this.lines=[];this.tagF='all';this.since=0;this.busy=false;this.boot=undefined;this.drop=undefined;
  const PK=CAT.panelKeys.filter(k=>k.src==='wheel'),con=()=>CAT.console.find(c=>c.cmd===$('#cK').value)||{name:'',fields:[]};
  m.innerHTML=
@@ -23,7 +23,7 @@ SCR.service={title:'Сервіс',async render(m){
  card('ГУ: текст',row('','','Коли ГУ шле текст без маркера, плата вчиться: перша команда з текстом — назва, друга — виконавець. Можна закріпити вручну.')+'<div class="kv"><div><small>Назва: cmd</small><b id="huT"></b></div><div><small>Виконавець: cmd</small><b id="huA"></b></div><div><small>Кадрів від ГУ</small><b id="huN"></b></div><div><small>Джерело зараз</small><b id="huS"></b></div></div>'+
   row('Закріпити назву',txt('/api/settings|huTitleCmd',se.huTitleCmd?h2(se.huTitleCmd):'','авто','in code','text','data-hex'))+row('Закріпити виконавця',txt('/api/settings|huArtistCmd',se.huArtistCmd?h2(se.huArtistCmd):'','авто','in code','text','data-hex'))+row('Назва першою в «А - Б»',sw('/api/settings|huTitleFirst',se.huTitleFirst))+
   '<div class="fr"><button class="btn dng" type="button" id="huF">Забути вивчене</button></div>'):'')+
- card('ГУ: протокол Raise',`<div id="tun">${row('Двері: довжина кадру',sel('#doorsLen',[[1,'1 (апка бачить відчинений капот)'],[2,'2']],tun.doorsLen))}${row('cmd 0x28 несе',sel('#cmd28',[[0,'t° зовні'],[1,'клімат']],tun.cmd28))}${row('Версія коробки',`<input class="in" data-f="version" value="${esc(String(tun.version||'').trim())}" maxlength="16">`)}</div>
+ card('ГУ: протокол Raise',`<div id="tun">${row('Двері: довжина кадру',sel('#doorsLen',[[1,'1 (апка бачить відчинений капот)'],[2,'2']],se['raise.doorsLen']))}${row('cmd 0x28 несе',sel('#cmd28',regOpts('raise.cmd28'),se['raise.cmd28'],'data-str'))}${row('Версія коробки',`<input class="in" data-f="version" value="${esc(se['raise.version']||'')}" maxlength="16">`)}</div>
   <details class="sub"><summary>Повідомлення · ${MS.length}</summary><div class="tw"><table><thead><tr><th>Назва</th><th>cmd</th><th>мс</th><th>вкл</th><th></th></tr></thead><tbody id="msgs">${MS.map(x=>`<tr data-id="${x.id}"><td>${esc(x.name)}</td><td class="mono">${h2(x.cmd)}</td><td class="num">${x.interval}</td><td><input type="checkbox" class="cb" data-en${x.enabled?' checked':''}></td><td><button class="btn sm" type="button" data-send${x.ready?'':' disabled'}>▶</button></td></tr>`).join('')}</tbody></table></div></details>
   <details class="sub"><summary>Код клавіші 0x20</summary><div class="fr"><input class="in code" id="kc" placeholder="16" maxlength="2">${sel('ks',[[1,'натиск'],[2,'довге']],1,'data-nosave id="ks"')}<button class="btn pri" type="button" id="kGo">Надіслати</button></div><div class="pad"><div class="seg wrap" id="cat">${CAT.huKeys.map(k=>`<button type="button" data-kc="${esc(k.code)}">${esc(k.code)} ${esc(k.name)}</button>`).join('')}</div></div></details>
   <details class="sub"><summary>Сирий кадр</summary><div class="fr"><input class="in code" id="rC" placeholder="cmd" maxlength="2"><input class="in" id="rD" placeholder="дані hex: 01 00"><button class="btn pri" type="button" id="rGo">Надіслати</button></div></details>
@@ -59,7 +59,8 @@ SCR.service={title:'Сервіс',async render(m){
  $('#iGo').onclick=e=>run(e.target,()=>API.post('/api/media',{title:$('#iT').value,artist:$('#iA').value,elapsed:+$('#iE').value,duration:+$('#iD').value}));
  $('#spGo').onclick=e=>run(e.target,()=>API.post('/api/media',{splashNow:true}));
  $('#huF').onclick=e=>ask(e.target,'Забути вивчені команди тексту ГУ?',()=>run(e.target,()=>API.post('/api/settings',{huForget:true}),'забуто'))}
- saver($('#tun'),()=>{const t={};$$('#tun [data-f]').forEach(el=>{const v=val(el);if(v!==undefined)t[el.dataset.f]=v});return API.post('/api/canbox/tuning',t)},'[data-f]');
+ /* налаштування Raise — записи реєстру raise.* (зберігаються в NVS) */
+ saver($('#tun'),()=>{const t={};$$('#tun [data-f]').forEach(el=>{const v=val(el);if(v!==undefined)t['raise.'+el.dataset.f]=v});return API.post('/api/settings',t)},'[data-f]');
  /* таблиця реєстру huMessages: рядок i = повідомлення i, [увімк]; лише в RAM, тож шлемо всі рядки */
  $('#msgs').addEventListener('change',e=>{if(e.target.dataset.en===undefined)return;
   run(e.target,()=>API.post('/api/settings',{huMessages:$$('#msgs tr').map(tr=>[$('[data-en]',tr).checked])}))});

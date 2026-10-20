@@ -38,8 +38,8 @@ namespace
         }
     };
 
-    // An entry with one value: everything but groups and tables.
-    bool scalar(const SEntry& e) { return e.type != SType::Group && e.type != SType::Table; }
+    // An entry with one int value: everything but groups, tables and texts.
+    bool scalar(const SEntry& e) { return e.type != SType::Group && e.type != SType::Table && e.type != SType::Str; }
 
     // The values worth trying for one entry: both ends, the middle on the
     // step grid, and every row of an enum.
@@ -491,6 +491,69 @@ void test_hu_messages_table()
     TEST_ASSERT_FALSE(Registry::available(m, *e));
 }
 
+// ---- texts: the canbox version string --------------------------------------------
+
+void test_texts_are_web_only_and_described()
+{
+    size_t texts = 0;
+    for (size_t i = 0; i < Registry::count(); ++i) {
+        const SEntry& e = Registry::at(i);
+        if (e.type != SType::Str) {
+            TEST_ASSERT_NULL_MESSAGE(e.str, e.id);
+            continue;
+        }
+        ++texts;
+        TEST_ASSERT_FALSE_MESSAGE(e.flags & F_MENU, e.id);
+        TEST_ASSERT_NOT_NULL_MESSAGE(e.str, e.id);
+        TEST_ASSERT_TRUE_MESSAGE(e.str->maxLen > 0 && e.str->maxLen < 64, e.id);
+    }
+    TEST_ASSERT_EQUAL(1, texts);   // raise.version
+}
+
+// Exactly 16 bytes on the wire, space-padded; read back trimmed.
+void test_version_text_pads_and_refuses()
+{
+    Fixture f;
+    const SEntry* e = Registry::find("raise.version");
+    TEST_ASSERT_NOT_NULL(e);
+    char b[32];
+    uint8_t ap = 0;
+    TEST_ASSERT_TRUE(Registry::setText(f.m, *e, "MO 1.2", &ap));
+    TEST_ASSERT_EQUAL(AP_HU, ap);
+    TEST_ASSERT_EQUAL_STRING("MO 1.2          ", f.t.version);
+    Registry::getText(f.m, *e, b, sizeof(b));
+    TEST_ASSERT_EQUAL_STRING("MO 1.2", b);
+    ap = 0;
+    TEST_ASSERT_TRUE(Registry::setText(f.m, *e, "MO 1.2", &ap));   // unchanged
+    TEST_ASSERT_EQUAL(0, ap);
+    TEST_ASSERT_TRUE(Registry::setText(f.m, *e, "0123456789ABCDEF"));
+    TEST_ASSERT_EQUAL_STRING("0123456789ABCDEF", f.t.version);
+    // Refused, nothing written: too long, not printable ASCII, null.
+    TEST_ASSERT_FALSE(Registry::setText(f.m, *e, "0123456789ABCDEFG"));
+    TEST_ASSERT_FALSE(Registry::setText(f.m, *e, "tab\there"));
+    TEST_ASSERT_FALSE(Registry::setText(f.m, *e, "\xD0\x92"));
+    TEST_ASSERT_FALSE(Registry::setText(f.m, *e, nullptr));
+    TEST_ASSERT_EQUAL_STRING("0123456789ABCDEF", f.t.version);
+    // The scalar calls refuse a text; a scalar refuses setText.
+    TEST_ASSERT_FALSE(Registry::set(f.m, *e, 0));
+    TEST_ASSERT_FALSE(Registry::setText(f.m, *Registry::find("keyPopup"), "x"));
+}
+
+// The unit rows store the emitter's own codes, not the row index.
+void test_unit_rows_store_the_wire_codes()
+{
+    Fixture f;
+    const SEntry* e = Registry::find("raise.fuelUnit");
+    TEST_ASSERT_TRUE(Registry::set(f.m, *e, Registry::enumIndex(*e, "mpg")));
+    TEST_ASSERT_EQUAL(0, f.t.fuelUnit);
+    TEST_ASSERT_TRUE(Registry::set(f.m, *e, Registry::enumIndex(*e, "l100km")));
+    TEST_ASSERT_EQUAL(2, f.t.fuelUnit);
+    const SEntry* tr = Registry::find("raise.tripUnit");
+    TEST_ASSERT_TRUE(Registry::set(f.m, *tr, Registry::enumIndex(*tr, "hide")));
+    TEST_ASSERT_EQUAL(0, f.t.tripUnit);
+    TEST_ASSERT_EQUAL_INT32(Registry::enumIndex(*tr, "hide"), Registry::get(f.m, *tr));
+}
+
 // ---- drift guard --------------------------------------------------------------------
 
 // Settings fields with no registry entry, on purpose: strings the panel
@@ -508,7 +571,7 @@ void test_settings_struct_unchanged()
     size_t n = 0;
     for (size_t i = 0; i < Registry::count(); ++i) {
         const SEntry& e = Registry::at(i);
-        if (scalar(e) && !(e.flags & F_VOLATILE) && !(e.apply & (AP_KNOBS | AP_CAR | AP_CAP))) ++n;
+        if (scalar(e) && !(e.flags & F_VOLATILE) && !(e.apply & (AP_KNOBS | AP_CAR | AP_CAP | AP_HU))) ++n;
     }
     // 40 scalar/enum fields in Settings (carSig counts three), all in the registry.
     TEST_ASSERT_EQUAL(40, n);
@@ -542,6 +605,9 @@ int main(int, char**)
     RUN_TEST(test_decimal_text_both_ways);
     RUN_TEST(test_log_level_is_ram_only);
     RUN_TEST(test_hu_messages_table);
+    RUN_TEST(test_texts_are_web_only_and_described);
+    RUN_TEST(test_version_text_pads_and_refuses);
+    RUN_TEST(test_unit_rows_store_the_wire_codes);
     RUN_TEST(test_settings_struct_unchanged);
     return UNITY_END();
 }

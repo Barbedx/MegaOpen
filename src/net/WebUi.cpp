@@ -495,6 +495,12 @@ void WebUi::routes()
                 }
                 continue;
             }
+            if (e.type == Cfg::SType::Str) {
+                char b[64];
+                Cfg::Registry::getText(m, e, b, sizeof(b));
+                d[e.id] = String(b);
+                continue;
+            }
             const int32_t v = Cfg::Registry::get(m, e);
             switch (e.type) {
                 case Cfg::SType::Bool: d[e.id] = v != 0; break;
@@ -533,6 +539,8 @@ void WebUi::routes()
         Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
         static App::Hu::EmitterCfg hu;
         const bool huOk = _emitter && App::Hu::emitterCfg().peek(hu);
+        static Canbox::Tuning huWas;
+        huWas = hu.tuning;
 #if FEATURE_CAPTURE
         Capture::Settings cs = Capture::settings();
         Capture::Settings* csp = &cs;
@@ -553,7 +561,8 @@ void WebUi::routes()
         // registry does not know (apPass, huForget) are not refused. An Int
         // out of range is brought into it, as the handlers before did; a
         // table's cell is not (the table's own check refuses it).
-        struct Change { const Cfg::SEntry* e; int32_t v; };
+        // A Str's text stays in `d`, which outlives the apply below.
+        struct Change { const Cfg::SEntry* e; int32_t v; const char* text; };
         // Static: httpd serves one request at a time, and 1 kB is not for its stack.
         static Change ch[64];
         uint8_t n = 0;
@@ -564,6 +573,7 @@ void WebUi::routes()
             const JsonVariantConst j = kv.value();
             const char* why = nullptr;
             int32_t v = 0;
+            const char* text = nullptr;
             if (e->flags & Cfg::F_RO)                    why = "read-only";
             else if (!Cfg::Registry::available(m, *e))
                 why = (e->apply & (Cfg::AP_CAR | Cfg::AP_HU)) ? "busy, or not on this board" : "not on this board";
@@ -607,6 +617,10 @@ void WebUi::routes()
                 }
                 continue;
             }
+            else if (e->type == Cfg::SType::Str) {
+                text = j.is<const char*>() ? j.as<const char*>() : nullptr;
+                if (!Cfg::Registry::validText(*e, text)) why = "printable ASCII text, too long, or not text";
+            }
             else if (e->type == Cfg::SType::Bool) {
                 if (j.is<bool>()) v = j.as<bool>() ? 1 : 0; else why = "true or false";
             } else if (e->type == Cfg::SType::Int) {
@@ -624,7 +638,7 @@ void WebUi::routes()
                 snprintf(err, sizeof(err), "%s: %s", e->id, why);
                 return r->reply(400, "text/plain", err);
             }
-            if (n < sizeof(ch) / sizeof(ch[0])) ch[n++] = Change{e, v};
+            if (n < sizeof(ch) / sizeof(ch[0])) ch[n++] = Change{e, v, text};
         }
 
         // The rules first: a busy hand-off is the last refusal, so a refused
@@ -644,16 +658,26 @@ void WebUi::routes()
         const Cfg::Str src = s.mediaSource;
 
         uint8_t ap = apT;
-        for (uint8_t i = 0; i < n; ++i) Cfg::Registry::set(m, *ch[i].e, ch[i].v, &ap);
+        for (uint8_t i = 0; i < n; ++i) {
+            if (ch[i].e->type == Cfg::SType::Str) Cfg::Registry::setText(m, *ch[i].e, ch[i].text, &ap);
+            else                                   Cfg::Registry::set(m, *ch[i].e, ch[i].v, &ap);
+        }
         bool restart = (ap & Cfg::AP_REBOOT) != 0;
 
-        // The emitter's message switches (RAM only), for the hu task.
+        // The emitter, for the hu task: the tuning as a whole block (replace,
+        // not merge, so a concurrent edit is never half-applied) and the
+        // message switches (RAM only). The tuning goes to NVS when it changed.
         bool huBusy = false;
         if (ap & Cfg::AP_HU) {
             huBusy = !App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& c) {
+                c.tuning = hu.tuning;
                 memcpy(c.msgOn, hu.msgOn, sizeof(c.msgOn));
             });
             if (huBusy) LogBus::line("settings: the head-unit emitter was busy, its part not applied");
+            else if (memcmp(&hu.tuning, &huWas, sizeof(huWas))) {
+                _cfg->saveTuning(hu.tuning);
+                LogBus::line("canbox tuning saved (survives a power cycle)");
+            }
         }
 
         // Staged for the tasks that own them: the debounce timing and the
@@ -2046,71 +2070,9 @@ void WebUi::routesCanbox()
         return replyJson(r, out);
     });
 
-    // Every value the sources disagree about, editable and persisted (they are
-    // resolved in the car, where every ignition cycle is a reboot).
-    route("/api/canbox/tuning", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_emitter) return r->reply(503, "text/plain", "no vehicle");
-        App::Hu::EmitterCfg cfg;
-        if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
-        const Canbox::Tuning& t = cfg.tuning;
-        JsonDocument d;
-        d["cmd28"]       = t.cmd28;        // 0 outside temp (12B), 1 A/C (5B)
-        d["doorsLen"]    = t.doorsLen;     // 1 or 2
-        d["steerInvert"] = t.steerInvert;
-        d["steerDiv"]    = t.steerDiv;     // 10 = whole degrees, 1 = the x10 value
-        d["steerClamp"]  = t.steerClamp;   // 380 / 500 / 540
-        d["fuelUnit"]    = t.fuelUnit;     // 0 MPG, 1 km/L, 2 L/100km
-        d["tripUnit"]    = t.tripUnit;     // 0 hide, 1 miles, 2 km
-        d["tripFields"]  = t.tripFields;   // 1 fill avg+elapsed, 0 zero padding
-        d["histLen"]     = t.histLen;      // 13 spec, 3 the widely copied form
-        d["radarInvert"] = t.radarInvert;
-        d["version"]     = t.version;
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    route("/api/canbox/tuning", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_emitter) return r->reply(503, "text/plain", "no vehicle");
-        JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
-
-        App::Hu::EmitterCfg cfg;
-        if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
-        Canbox::Tuning t = cfg.tuning;
-        if (d["reset"] | false) t = Canbox::Tuning{};   // back to the attested defaults
-
-        t.cmd28       = (uint8_t)(d["cmd28"]       | t.cmd28);
-        t.doorsLen    = (uint8_t)(d["doorsLen"]    | t.doorsLen);
-        t.steerInvert = (uint8_t)(d["steerInvert"] | t.steerInvert);
-        t.steerDiv    = (uint8_t)(d["steerDiv"]    | t.steerDiv);
-        t.steerClamp  = (int16_t)(d["steerClamp"]  | t.steerClamp);
-        t.fuelUnit    = (uint8_t)(d["fuelUnit"]    | t.fuelUnit);
-        t.tripUnit    = (uint8_t)(d["tripUnit"]    | t.tripUnit);
-        t.tripFields  = (uint8_t)(d["tripFields"]  | t.tripFields);
-        t.histLen     = (uint8_t)(d["histLen"]     | t.histLen);
-        t.radarInvert = (uint8_t)(d["radarInvert"] | t.radarInvert);
-        if (d["version"].is<const char*>()) {
-            const char* v = d["version"];
-            // Exactly 16 bytes reach the wire, space-padded. Find the end first:
-            // indexing v[i] past the terminator reads parser garbage.
-            uint8_t n = 0;
-            while (v && n < 16 && v[n]) ++n;
-            for (uint8_t i = 0; i < 16; ++i) t.version[i] = (i < n) ? v[i] : ' ';
-            t.version[16] = '\0';
-        }
-        // Guard the one that would build a frame the head unit silently drops.
-        // (doorsLen needs none: the emitter sends the 2-byte form only for 2.)
-        if (t.histLen < 3 || t.histLen > 13) t.histLen = 13;
-        if (!t.steerDiv) t.steerDiv = 10;
-
-        // A whole new tuning block: replace, not merge, so a concurrent edit
-        // of another field is not half-applied with this one.
-        if (!App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& c) { c.tuning = t; }))
-            return r->reply(503, "text/plain", "busy, try again");
-        _cfg->saveTuning(t);
-        LogBus::line("canbox tuning saved (survives a power cycle)");
-        return r->reply(200, "application/json", "{\"ok\":true}");
-    });
+    // The Raise tuning (every value the sources disagree about, persisted:
+    // they are resolved in the car, where every ignition cycle is a reboot)
+    // is the registry's raise.* entries: GET/POST /api/settings.
 
     // Send any Raise frame: cmd + payload; the framer adds the 0x2E header,
     // length and checksum. No allow-list, on purpose.

@@ -118,13 +118,17 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   loop-task-owned detach. Where: `apple_notification_service.cpp`.
 ### Web UI
 
-- **Fold the per-feature settings routes into the registry (slice 7),
-  deferred 2026-10-20.** `/api/settings` is registry-driven since 718c354, but
-  `/api/knobs` (settings half),
-  `/api/canbox/tuning` still
-  keep their own handlers; folding the safe ones would take 4-6 routes off the
-  112-route table (WebUi.h ROUTE_MAX). One route per commit, each page moved to
-  `/api/settings` in the same commit.
+- **`/api/knobs` stays out of the settings registry (decided 2026-10-21).**
+  Slice 7 folded `/api/cap/settings`, `/api/loglevel`, `/api/routing`,
+  `/api/messages/enable` and `/api/canbox/tuning` into `/api/settings` (9
+  routes off the 112-route table). `/api/knobs` was left on purpose: its GET
+  carries the board's pins, pull-ups and which knobs are fitted, and its POST
+  the key bindings (Keys::Binding per turn/click/hold) and eight colours per
+  LED zone, none of which is a registry shape (Bool/Int/Enum/Table/Str); the
+  scalar parts (lights on, brightness, react/idle/colour preset per knob) are
+  already registry entries. Folding the rest would free no route and would
+  need a binding type and a colour type first. Revisit only if the knob page
+  is redesigned.
 
 - **Settings export/import (/api/config) — UI card removed in ui-v2 slice 8
   until built.** The Плата screen had "Налаштування у файл" calling

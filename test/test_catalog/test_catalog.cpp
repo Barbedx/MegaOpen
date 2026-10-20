@@ -270,6 +270,8 @@ static void test_settings_list()
             TEST_ASSERT_TRUE_MESSAGE(e->get("min")->n <= e->get("max")->n, id.c_str());
         } else if (type == "enum") {
             TEST_ASSERT_TRUE_MESSAGE(e->get("enum") && !e->get("enum")->a.empty(), id.c_str());
+        } else if (type == "str") {
+            TEST_ASSERT_TRUE_MESSAGE(e->get("max") && e->get("max")->n > 0, id.c_str());
         } else if (type == "table") {
             TEST_ASSERT_TRUE_MESSAGE(e->get("rows") && e->get("rows")->n > 0, id.c_str());
             TEST_ASSERT_TRUE_MESSAGE(e->get("cols") && !e->get("cols")->a.empty(), id.c_str());
