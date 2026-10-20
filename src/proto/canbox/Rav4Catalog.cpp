@@ -109,6 +109,10 @@ namespace Canbox
         /* MSG_VERSION     */ {Conf::High,
             "The best end-to-end liveness proof there is: read it back in Factory Set -> "
             "Display CANBUS Info."},
+        /* MSG_COOLANT     */ {Conf::Low,
+            "Decoded by k0.a3 (D2 - 40 -> dashboard index 2), never seen in a capture: "
+            "scheduled only with the coolant experiment on. Whether anything shows is for "
+            "the tablet to say."},
     };
     static_assert(sizeof(kMsgs) / sizeof(kMsgs[0]) == Rav4Emitter::MSG_COUNT,
                   "Rav4Catalog message table is out of step with Rav4Emitter::Msg — it is "

@@ -1701,6 +1701,7 @@ void setup()
         App::Hu::EmitterCfg ec;
         g_cfg.loadTuning(ec.tuning);
         ec.enabled = g_cfg.loadHuSend() && g_cfg.s().uartEnabled;
+        ec.exp     = g_cfg.loadHuExp();
         App::Hu::Setup hs;
         hs.port    = &Serial1;
         hs.tx      = &g_tx;

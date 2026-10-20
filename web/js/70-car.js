@@ -46,6 +46,7 @@ SCR.car={title:'Авто',async render(m){
  card('RAV4 → ГУ',
   row('Слати дані авто в ГУ',sw('/api/map|send',mp.send),'запам’ятовується','Ліворуч — що вміє протокол RAV4 (0x2E …). ▶ шле тестове значення в ГУ одразу і тримає 30 с: так видно, що й де покаже Android. Потім «прив’язати» поле до ID машини. Нема в прошивці — апка це читає, але плата ще не шле.')+
   row('Одиниці',sel('#fuel',enumOpts('fuelUnits'),mp.units.fuel)+sel('#trip',enumOpts('tripUnits'),mp.units.trip),'','','mUnits')+
+  row('Експерименти ГУ','<span class="fr" id="mExp">'+[[1,'t° ОР'],[2,'пальне в 7D04'],[4,'розрах. витрата']].map(([b,t])=>'<label class="ck"><input type="checkbox" class="cb" data-b="'+b+'"'+((mp.exp|0)&b?' checked':'')+'> '+t+'</label>').join(' ')+'</span>','за замовчуванням вимкнені','Поля, які магнітола розбирає, але жоден запис їх не показав. t° ОР — 0x7D 09 з температурою охолодної рідини; пальне — літри ×10 у 0x7D 04 D4-D5 замість F2 08 (і одометр щитка, якщо 0x5FD мовчить); розрах. витрата — запас ходу й витрата з лічильника 0x551 у 0x21/0x22/0x23. Вмикай по одному і дивись, що зміниться на планшеті.')+
   `<div class="pad"><div class="seg wrap" id="mGrp" data-v="усі">${groups.map(g=>`<button type="button" data-val="${esc(g)}" class="${g==='усі'?'on':''}">${esc(g)}</button>`).join('')}</div></div>`+
   `<div class="fr"><button class="btn" type="button" id="mReset">Заводські прив’язки</button></div>`+
   `<div class="tw"><table class="mapt"><thead><tr><th>Поле</th><th>Зараз</th><th>Звідки</th><th>Тест</th></tr></thead><tbody id="map">${raiseRows(mp).map(mapRow).join('')}</tbody></table></div><datalist id="idl"></datalist>`,'cMap','custom full')+
@@ -67,6 +68,7 @@ SCR.car={title:'Авто',async render(m){
  // RAV4
  saver($('#cMap .row'),()=>API.post('/api/map',{send:$('[data-k="/api/map|send"]').checked}),'[data-k]');
  saver($('#mUnits'),()=>API.post('/api/map',{units:{fuel:val($('[data-f="fuel"]')),trip:val($('[data-f="trip"]'))}}),'[data-f]');
+$('#mExp').onchange=e=>{const m=$$('#mExp [data-b]').reduce((a,c)=>a|(c.checked?+c.dataset.b:0),0);run(e.target,()=>API.post('/api/map',{exp:m}),'експерименти: '+m)};
  $('#mReset').onclick=e=>ask(e.target,'Повернути заводські прив’язки? Твої зміни зникнуть.',()=>run(e.target,()=>API.post('/api/map',{reset:true}),'заводські').then(()=>this.map()));
  $('#mGrp').addEventListener('change',e=>{this.grp=e.currentTarget.dataset.v;$$('#map tr[data-id]').forEach(tr=>{const hide=this.grp!=='усі'&&tr.dataset.g!==this.grp;tr.hidden=hide;const ed=$(`#map tr[data-for="${tr.dataset.id}"]`);if(ed)ed.hidden=hide})});
  const mapT=$('#map');

@@ -27,7 +27,7 @@ Extraction convention: `raw = big-endian(numBytes at startByte)`, then
 | `0x181` | 5 bit0 | brake pedal | 0/1 | low |
 | `0x354` | 0-1 | road speed | km/h ×100 | medium |
 | `0x551` | 0 | coolant temperature | `raw - 40` °C | medium |
-| `0x5C5` | 0 bit3 | handbrake | 0/1 — another source says bit2 | low |
+| `0x5C5` | 0 bit2 | handbrake | 0/1 — x0r said bit3; the X84 matrix says bit2 (settled 2026-10-20) | medium |
 | `0x5FD` | 0-2 | odometer | km | medium |
 | `0x60D` | 0-2 | status bit field | see below | medium |
 | `0x60D` | 4 | **outdoor temperature** | `raw - 40` °C | medium |

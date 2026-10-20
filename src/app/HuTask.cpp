@@ -89,6 +89,7 @@ namespace App
             {
                 s_s.emitter->setEnabled(c.enabled);
                 s_s.emitter->setTuning(c.tuning);
+                s_s.emitter->setExperiments(c.exp);
                 for (uint8_t i = 0; i < Canbox::Rav4Emitter::MAX_MESSAGES; ++i)
                     s_s.emitter->setMsgEnabled(i, c.msgOn[i]);
             }
@@ -346,6 +347,7 @@ namespace App
             // A scratch emitter: the hu task's own is never read off its task.
             Canbox::Rav4Emitter e;
             e.setTuning(c.tuning);
+            e.setExperiments(c.exp);
             return e.preview(idx, *s_s.state, frame, len);
         }
 

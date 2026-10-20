@@ -352,7 +352,7 @@ function liveVal(n,t){const s=t/1000,w=(p,a,b)=>a+(b-a)*(.5+.5*Math.sin(s/p));
   fuel_counter:Math.floor(s*7)%256,oil_level:9,service_km:12500,locked:0,belt_drv:0,belt_pass:3,odo_cluster:184321,fuel_level_apv:30};
  const R5=[75,136,200,270,352];v.gear_ratio=Math.round(v.speed*100/v.rpm);let gi=0;R5.forEach((r,i)=>{if(Math.abs(v.gear_ratio-r)<Math.abs(v.gear_ratio-R5[gi]))gi=i});v.gear=v.speed<300?0:gi+1;
  return v[n]}
-const mapBase=()=>({send:S.emitter,uart:S.set.uartEnabled,units:{fuel:S.tun.fuelUnit,trip:S.tun.tripUnit}});
+const mapBase=()=>({send:S.emitter,uart:S.set.uartEnabled,units:{fuel:S.tun.fuelUnit,trip:S.tun.tripUnit},exp:S.huExp||0});
 g('/api/map',q=>{const o=mapBase();o.rows=q.live?[]:C.raise.map(t=>({id:t.id,...S.map[t.id],...mapVal(t)}));
  if(q.live){const t=Date.now();o.sigs=META.map(m=>{const v=liveVal(m[0],t),src=DERIVED.has(m[0])?'d':BOUND.has(m[0])?'c':'o';
   return [v===undefined?null:decStr(v,m[2]),v===undefined?null:Math.floor(Math.random()*300),src,['door_fl','door_fr','door_rl','door_rr','boot','light_pos','light_dip'].includes(m[0])?1:0]});
@@ -375,11 +375,14 @@ po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(
   if(r.src==='can'){if(!r.can||typeof r.can!=='object')return fail(400,r.id+': can: {id, byte, len, ...}');const w=canWhy(r.can);if(w)return fail(400,r.id+': '+w)}
   if(r.src==='const'&&!(typeof r.k==='number'&&toInt(r.k,t.dec)>=toInt(t.min,t.dec)&&toInt(r.k,t.dec)<=toInt(t.max,t.dec)))return fail(400,r.id+': k: '+t.min+'..'+t.max);
   E.push([r,t])}
+
+ if(q.exp!==undefined&&!(isInt(q.exp)&&q.exp>=0&&q.exp<=7))return fail(400,'exp: 0..7, the experiment bits');
  if(q.alerts){if(!Array.isArray(q.alerts)||q.alerts.length>16)return fail(400,'alerts: 16 rules at most');
   for(let i=0;i<q.alerts.length;i++){const a=q.alerts[i],id='alert '+(i+1)+': ',m=META.find(x=>x[0]===a.sig);
    if(a.sig&&!m)return fail(400,id+'sig: no such signal');if(!COND.some(c=>c[0]===(a.cond||'rises')))return fail(400,id+'cond: above, below, rises, falls or changes');
    if(m&&a.thr!=null&&(toInt(a.thr,m[2])<m[5]||toInt(a.thr,m[2])>m[6]))return fail(400,id+"thr: outside the signal's range");
    if(a.cooldownS!=null&&!(isInt(a.cooldownS)&&a.cooldownS>=0&&a.cooldownS<=65535))return fail(400,id+'cooldownS: 0..65535')}}
+ if(q.exp!==undefined){S.huExp=q.exp;emit(2,'HU','[map] head-unit experiments: '+q.exp)}
  if(q.send!==undefined){S.emitter=!!q.send;emit(2,'HU','[map] send to the head unit '+(S.emitter?'on':'off'))}
  if(q.units){if(q.units.fuel!=null)S.tun.fuelUnit=q.units.fuel;if(q.units.trip!=null)S.tun.tripUnit=q.units.trip}
  if(q.reset)S.map=defMap();

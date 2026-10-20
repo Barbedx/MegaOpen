@@ -94,6 +94,7 @@ namespace Canbox
             MSG_SEATS,       // 0x58        seat heat / ventilation
             MSG_HYBRID,      // 0x1F        hybrid energy status
             MSG_VERSION,     // 0x30        version string
+            MSG_COOLANT,     // 0x7D 09     coolant on the dashboard channel — EXP_COOLANT
             MSG_COUNT
         };
 
@@ -157,6 +158,20 @@ namespace Canbox
 
         static constexpr uint8_t MAX_MESSAGES = 24;
 
+        // Experiments on fields the head unit decodes but no capture has shown
+        // in use (docs/hu-decoder.md §2b, §6). Each is its own switch, all OFF
+        // by default (NVS "huExp"): only the tablet can say what they show.
+        // A test send from the map page ignores them, like the schedule.
+        enum Exp : uint8_t {
+            EXP_COOLANT  = 1 << 0,   // schedule 0x7D 09 [00][t+40] (1049 idx 2)
+            EXP_FUEL_7D04 = 1 << 1,  // 0x7D 04 D4-D5 = fuel litres x10, not F2 08 (1049 idx 5)
+            EXP_COMPUTED = 1 << 2,   // range / consumption from Derived when no
+                                     // range / fuel_inst / fuel_avg is bound
+            EXP_ALL      = 0x07,
+        };
+        void    setExperiments(uint8_t m) { _exp = m & EXP_ALL; }
+        uint8_t experiments() const { return _exp; }
+
         Rav4Emitter();
 
     private:
@@ -167,10 +182,14 @@ namespace Canbox
         bool build(uint8_t msgIndex, const Vehicle::State& s,
                    uint8_t& cmd, uint8_t* payload, uint8_t& len) const;
         uint8_t radar(int32_t v) const;   // distance + the polarity switch
+        // `sig` when it has a value; else, under EXP_COMPUTED, `computed`;
+        // else SIG_COUNT.
+        uint8_t pick(const Vehicle::State& s, uint8_t sig, uint8_t computed) const;
 
         WriteFn  _write = nullptr;
         void*    _ctx = nullptr;
         bool     _enabled = true;
+        uint8_t  _exp = 0;               // Exp bits
         Tuning   _t;                    // every value the sources disagree about
         uint32_t _framesSent = 0;
         bool     _msgOn[MAX_MESSAGES];

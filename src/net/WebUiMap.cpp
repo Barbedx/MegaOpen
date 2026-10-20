@@ -159,9 +159,9 @@ void WebUi::routesMap()
         const bool live = r->hasParam("live"), meta = r->hasParam("meta");
         ChunkOut out(r);
         char b[200], v[16], k[16];
-        out.put(b, fit(snprintf(b, sizeof(b), "{\"send\":%s,\"uart\":%s,\"units\":{\"fuel\":%u,\"trip\":%u},\"rows\":[",
+        out.put(b, fit(snprintf(b, sizeof(b), "{\"send\":%s,\"uart\":%s,\"units\":{\"fuel\":%u,\"trip\":%u},\"exp\":%u,\"rows\":[",
                             cfg.enabled ? "true" : "false", _cfg->s().uartEnabled ? "true" : "false",
-                            (unsigned)cfg.tuning.fuelUnit, (unsigned)cfg.tuning.tripUnit), sizeof(b)));
+                            (unsigned)cfg.tuning.fuelUnit, (unsigned)cfg.tuning.tripUnit, (unsigned)cfg.exp), sizeof(b)));
         for (uint8_t i = 0; !live && i < RT::count(); ++i) {
             const TargetView t = RT::at(i);
             // The binding, copied out under the staging mutex (the newest edit).
@@ -212,7 +212,7 @@ void WebUi::routesMap()
         return out.finish();
     });
 
-    // Any of: {send:bool}, {units:{fuel,trip}}, {rows:[{id,src,k,can}]},
+    // Any of: {send:bool}, {units:{fuel,trip}}, {exp:n}, {alerts:[...]}, {rows:[{id,src,k,can}]},
     // {reset:true} (back to decode_defaults.inc: the NVS blob is erased). Every
     // part is checked before any is applied. A row replaces whatever bound
     // that field; the map goes to the car task (no reboot) and to NVS (`decode`).
@@ -227,6 +227,12 @@ void WebUi::routesMap()
         const bool hasSend = d["send"].is<bool>();
         const bool send = d["send"] | false;
         if (hasSend && send && !_cfg->s().uartEnabled) return r->reply(409, "text/plain", "head-unit UART is off");
+
+        // {exp: n}: the head-unit experiments, Rav4Emitter::Exp bits.
+        const bool hasExp = !d["exp"].isNull();
+        const int exp = d["exp"] | -1;
+        if (hasExp && (!d["exp"].is<int>() || exp < 0 || exp > Canbox::Rav4Emitter::EXP_ALL))
+            return r->reply(400, "text/plain", "exp: 0..7, the experiment bits");
 
         const bool hasUnits = d["units"].is<JsonObject>();
         int fuel = cfg.tuning.fuelUnit, trip = cfg.tuning.tripUnit;
@@ -358,15 +364,23 @@ void WebUi::routesMap()
             if (!bound) return r->reply(500, "text/plain", "the map refused a binding: not saved");
         }
 
-        if (hasSend || hasUnits) {
+        if (hasSend || hasUnits || hasExp) {
             if (!App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& c) {
                     if (hasSend) c.enabled = send;
                     if (hasUnits) { c.tuning.fuelUnit = (uint8_t)fuel; c.tuning.tripUnit = (uint8_t)trip; }
+                    if (hasExp) c.exp = (uint8_t)exp;
                     cfg = c;
                 }))
                 return r->reply(503, "text/plain", "busy, try again");
             if (hasUnits) _cfg->saveTuning(cfg.tuning);
             if (hasSend) _cfg->saveHuSend(send);
+            if (hasExp) {
+                _cfg->saveHuExp((uint8_t)exp);
+                LogBus::printf("[map] head-unit experiments: coolant %s, fuel in 7D04 %s, computed %s",
+                               exp & Canbox::Rav4Emitter::EXP_COOLANT ? "on" : "off",
+                               exp & Canbox::Rav4Emitter::EXP_FUEL_7D04 ? "on" : "off",
+                               exp & Canbox::Rav4Emitter::EXP_COMPUTED ? "on" : "off");
+            }
             if (hasSend) LogBus::printf("[map] send to the head unit %s", send ? "on" : "off");
         }
 

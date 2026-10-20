@@ -416,7 +416,7 @@ All of the following are from **x0r.fr/blog/39, which decodes a Clio III**, same
 | `0x215` | b1 bit6 reverse gear | |
 | `0x354` | speed b0-1 ×0.01 km/h, distance b2-3 ×0.1, b4 bit4 brake pedal | ×0.01 matches `0x7D 03`'s wire scaling exactly — pass through with no arithmetic |
 | `0x551` | b0 engine temp −40, b1.. fuel used (12500 = 1 L) | |
-| `0x5C5` | b0 handbrake, mileage nibbles | **CONFLICT: x0r says bit3 = on; mikescotland's code tests bit2 == 0. Verify both on our car.** Irrelevant for now — see §8, do not emit handbrake. |
+| `0x5C5` | d0 bit2 handbrake (0x04), d0 bit5 low fuel, d1-d3 odometer km, d7 & 0x7F fuel litres | **Handbrake conflict settled by the X84 matrix: bit2** (mikescotland), not x0r's bit3; decoded since 2026-10-20 as a hypothesis row. |
 | `0x5FD` | b0-2 odometer, b3-5 vehicle age in minutes | feeds `0x7D 04` |
 | `0x60D` | b0-2 status bits: 23 boot, 22 RR door, 21 RL, 20 FR, 19 FL, 18 position lights, 17 dipped, 14 right ind, 13 left ind, 11 main beam, 10 key-on, 9 key-acc, 8 front fog, 5 doors locked, 4 boot locked, 2 rear fog; b4 outside temp −40; b5 engine temp −40; b6 bit4 reverse; b7 bits0-1 right stalk | **the single richest frame** — feeds `0x7D 01` lights, `0x24` doors, `0x28` temp, and the IG bit all at once |
 | `0x645` | b1 instrument backlight `0x00-0xFE` (**`0xFF` = off**), b3-4 speed | illumination source; note the polarity inversion vs Raise `0x14` |
@@ -434,7 +434,7 @@ All of the following are from **x0r.fr/blog/39, which decodes a Clio III**, same
 
 ### Refuted / dead ends on the car side
 
-- **Fuel level: no broadcast id is known on the Mégane II bus** (this line used to say "not broadcast at all", which is stronger than the evidence). The cluster reads the sender itself by wire and owns the value; AiM's Renault CAN sheet for Clio 3 / Mégane 2 lists an RN_FUEL_LEVEL channel with no id. Known path: diag 743 `2112` (fuel litres and battery volts in one reply). Consequence: `0x41 [02]` D12 and `0x41 [03]` b7 have no source on our car — and neither is in the Toyota profile anyway.
+- **Fuel level IS broadcast (2026-10-20, from Renault's X84 broadcast matrix; not yet measured on our car):** `0x5C5` d7 & 0x7F = litres (the cluster's), with the low-fuel warning in d0 bit5; `0x715` d4 >> 1 = litres (its after-sales backup copy). x0r's 0x5C5 sample gives 19 L. Decoded as `fuel_level`, `fuel_low`, `fuel_level_apv` (decode_defaults.inc, hypothesis rows). The fuel needle cannot be moved from the bus: the cluster drives it from the sender wire. On the Toyota profile `0x41` carries no fuel field (below), so the head unit has no place for it except the experiments in hu-decoder.md §2b.
 - **Pre-≈2005 analogue SWC/display path** — a real concern for early Mégane II, refuted for ours: the AFFA3 CAN firmware works, so our car is CAN-based.
 - **`0x186` as a stable ID** — see above.
 
@@ -475,7 +475,7 @@ All of the following are from **x0r.fr/blog/39, which decodes a Clio III**, same
 - **`0x51`, `0x52`, `0x58`** — Crown/Highlander-gated in the RZC Java; inert on a RAV4 profile.
 - **`0x26` as steering angle** — that is the *VW* mapping. On the Toyota profile `0x26` is the vehicle-settings block; sending angle there corrupts the settings menu.
 - **`0x14` illumination on the Toyota profile** — the command does not exist there. It is VW-only, and even in the VW RZC manager there is no handler case for it. smartgauges implements illumination as a GPIO output and never transmits it. (If we ever do use it: `0x00` = bright environment, and our `0x645` uses the opposite polarity.)
-- **`0x41` anything on the Toyota profile** — VW-only; zero occurrences in the Toyota spec.
+- **`0x41` anything on the Toyota profile** — absent from the Toyota spec; the head unit's k0.a3 does decode it, but into the same Toyota codes as `0x7D` (body bits, odometer/trips, 154/155), not the VW battery/fuel/belt fields (hu-decoder.md §2c). Nothing to gain.
 - **`0xA6` time sync** — not in any constant table in either direction, in either profile. The claim traces to an empty `case 0xa6: //set time` in smartgauges. Do not build clock sync on it.
 - **Expecting `0xC0`/`0xC2`/`0xC3`/`0xC4` from a Toyota-profile HU** — the entire HU→box set there is `0x81`/`0x83`/`0x84`/`0x90`. Volume comes from `0x84` idx 0x07.
 - ~~**Waiting for track title/artist over Raise**~~ — **THIS ROW IS WRONG, corrected by

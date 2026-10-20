@@ -48,6 +48,9 @@ namespace Cfg
         // and steering were checked in the car).
         void saveHuSend(bool on) { _p.putBool("huSend", on); }
         bool loadHuSend()        { return _p.getBool("huSend", false); }
+        // The head-unit experiments (Rav4Emitter::Exp), all off until switched.
+        void    saveHuExp(uint8_t m) { _p.putUChar("huExp", m); }
+        uint8_t loadHuExp()          { return _p.getUChar("huExp", 0); }
         // The user's decode map (Vehicle::DecodeTable::pack), key "decode".
         // load: its length, 0 when there is none or it does not fit `cap`.
         // erase: back to factory (decode_defaults.inc). False: not written.

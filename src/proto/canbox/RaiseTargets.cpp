@@ -18,7 +18,7 @@ namespace Canbox
         // The Raise command each message goes out as (Rav4Emitter::Msg order).
         const char* const kMsgCmd[] = {
             "24", "28", "28 A/C", "29", "7D 01", "7D 03", "7D 04", "7D 0A", "21", "22", "23",
-            "1E", "1D", "25", "26", "31", "32", "50", "52", "58", "1F", "30",
+            "1E", "1D", "25", "26", "31", "32", "50", "52", "58", "1F", "30", "7D 09",
         };
         static_assert(sizeof(kMsgCmd) / sizeof(kMsgCmd[0]) == M::MSG_COUNT, "kMsgCmd is out of step with Msg");
 
@@ -79,7 +79,7 @@ namespace Canbox
             T(SIG_FUEL_INST, MSG_FUEL_INST, G_FUEL, "Миттєва витрата"),
             T(SIG_FUEL_AVG, MSG_FUEL_HIST, G_FUEL, "Витрата за поїздку"),
 
-            X(SIG_ENG_TEMP, G_ENGINE, "t° охолодної рідини", NF_ENG_TEMP),
+            T(SIG_ENG_TEMP, MSG_COOLANT, G_ENGINE, "t° охолодної рідини (експеримент)"),
             X(SIG_COUNT, G_ENGINE, "Напруга АКБ", NF_BATT),
 
             T(SIG_OUT_TEMP, MSG_TEMP, G_CLIMATE, "t° зовні"),

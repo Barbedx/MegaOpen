@@ -898,8 +898,9 @@ void test_raise_targets_ids_are_unique_and_name_real_signals()
         else      TEST_ASSERT_EQUAL_UINT8_MESSAGE(Canbox::NO_MSG, t.msg, t.id);
     }
     TEST_ASSERT_EQUAL_INT(-1, RT::find("nope"));
-    // The four the app decodes that the firmware does not send yet.
-    for (const char* id : {"bonnet", "prnd", "eng_temp", "batt"}) {
+    // The three the app decodes that the firmware does not send yet (eng_temp
+    // goes as the coolant experiment, 0x7D 09).
+    for (const char* id : {"bonnet", "prnd", "batt"}) {
         const int i = RT::find(id);
         TEST_ASSERT_TRUE_MESSAGE(i >= 0, id);
         TEST_ASSERT_FALSE_MESSAGE(RT::at((uint8_t)i).fw, id);
@@ -957,9 +958,67 @@ void test_raise_values_place_the_decimal_point()
     TEST_ASSERT_FALSE(RT::toInt(1e12, 0, v));
 }
 
+// ---- head-unit experiments: each its own switch, all off by default --------------
+
+static int g_sub09, g_cmd21, g_cmd22, g_cmd23;
+static uint8_t g_odo[16];
+static void expCapture(const uint8_t* f, uint8_t n, void*)
+{
+    if (f[1] == 0x7D && f[3] == 0x09) ++g_sub09;
+    if (f[1] == 0x7D && f[3] == 0x04 && n <= sizeof(g_odo)) memcpy(g_odo, f, n);
+    g_cmd21 += f[1] == 0x21;
+    g_cmd22 += f[1] == 0x22;
+    g_cmd23 += f[1] == 0x23;
+}
+
+void test_experiments_are_off_by_default_and_each_switches_one_thing()
+{
+    State s;
+    s.set(SIG_ENG_TEMP, 90, 1);
+    s.set(SIG_FUEL_LEVEL, 31, 1);
+    s.set(SIG_ODO_CLUSTER, 123456, 1);
+    s.set(SIG_CONS_INST, 72, 1);
+    s.set(SIG_CONS_AVG, 65, 1);
+    s.set(SIG_RANGE_CALC, 477, 1);
+    E e;
+    e.begin(expCapture, nullptr);
+    TEST_ASSERT_EQUAL_UINT8(0, e.experiments());
+    auto run = [&](uint8_t exp) {
+        g_sub09 = g_cmd21 = g_cmd22 = g_cmd23 = 0;
+        memset(g_odo, 0, sizeof(g_odo));
+        e.setExperiments(exp);
+        for (uint32_t t = 0; t < 12000; t += 100) e.tick(s, 100000 * (exp + 1) + t);
+    };
+    run(0);                                         // nothing new reaches the head unit
+    TEST_ASSERT_EQUAL_INT(0, g_sub09);
+    TEST_ASSERT_EQUAL_INT(0, g_cmd21 + g_cmd22 + g_cmd23);
+    TEST_ASSERT_EQUAL_UINT8(0, g_odo[1]);           // no 0x5FD odometer: no 7D 04
+    run(E::EXP_COOLANT);
+    TEST_ASSERT_TRUE(g_sub09 > 0);
+    TEST_ASSERT_EQUAL_INT(0, g_cmd22);
+    run(E::EXP_FUEL_7D04);                          // the cluster's odometer, 31.0 L in D4-D5
+    TEST_ASSERT_EQUAL_INT(0, g_sub09);
+    const uint8_t odo[] = {0x2E, 0x7D, 0x0C, 0x04, 0x40, 0xE2, 0x01, 0x36, 0x01};
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(odo, g_odo, sizeof(odo));
+    run(E::EXP_COMPUTED);
+    TEST_ASSERT_TRUE(g_cmd21 > 0 && g_cmd22 > 0 && g_cmd23 > 0);
+    // A bound Raise signal still wins over the computed one.
+    uint8_t frame[64], len = 0;
+    TEST_ASSERT_TRUE(e.preview(E::MSG_FUEL_INST, s, frame, len));
+    TEST_ASSERT_EQUAL_HEX8(72, frame[5]);
+    s.pin(SIG_FUEL_INST, 99);
+    TEST_ASSERT_TRUE(e.preview(E::MSG_FUEL_INST, s, frame, len));
+    TEST_ASSERT_EQUAL_HEX8(99, frame[5]);
+    // The coolant frame itself: 0x7D 09 [00][90 + 40].
+    TEST_ASSERT_TRUE(e.preview(E::MSG_COOLANT, s, frame, len));
+    const uint8_t cool[] = {0x2E, 0x7D, 0x03, 0x09, 0x00, 130};
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(cool, frame, sizeof(cool));
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_experiments_are_off_by_default_and_each_switches_one_thing);
     RUN_TEST(test_raise_targets_ids_are_unique_and_name_real_signals);
     RUN_TEST(test_every_sent_raise_target_changes_its_message);
     RUN_TEST(test_raise_values_place_the_decimal_point);

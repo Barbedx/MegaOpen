@@ -19,7 +19,7 @@ namespace Canbox
         M_AMP = M::MSG_AMP,       M_SYSTEM = M::MSG_SYSTEM,
         M_ILLUM = M::MSG_ILLUM,   M_VSET = M::MSG_VSET,
         M_SEATS = M::MSG_SEATS,   M_HYBRID = M::MSG_HYBRID,
-        M_VERSION = M::MSG_VERSION,
+        M_VERSION = M::MSG_VERSION, M_COOLANT = M::MSG_COOLANT,
         M_COUNT = M::MSG_COUNT
     };
 
@@ -32,26 +32,26 @@ namespace Canbox
         "trip+range 0x21", "fuel_inst 0x22", "fuel_hist 0x23",
         "radar_rear 0x1E", "radar_front 0x1D", "tpms 0x25", "settings 0x26",
         "amplifier 0x31", "system 0x32", "illum_delay 0x50", "vset 0x52",
-        "seats 0x58", "hybrid 0x1F", "version 0x30",
+        "seats 0x58", "hybrid 0x1F", "version 0x30", "coolant 0x7D09",
     };
 
     static const uint8_t kCmd[M_COUNT] = {
         0x24, 0x28, 0x28, 0x29, 0x7D, 0x7D, 0x7D, 0x7D,
         0x21, 0x22, 0x23, 0x1E, 0x1D, 0x25, 0x26, 0x31,
-        0x32, 0x50, 0x52, 0x58, 0x1F, 0x30,
+        0x32, 0x50, 0x52, 0x58, 0x1F, 0x30, 0x7D,
     };
 
     static const uint32_t kInterval[M_COUNT] = {
         250, 5000, 1000, 200, 200, 500, 10000, 333,
         5000, 1000, 5000, 100, 100, 5000, 5000, 5000,
-        5000, 10000, 5000, 5000, 1000, 10000,
+        5000, 10000, 5000, 5000, 1000, 10000, 5000,
     };
 
     // On-change messages go out as soon as their payload changes, not on the timer.
     static const bool kOnChange[M_COUNT] = {
         true, false, true, false, true, false, false, false,
         false, false, false, true, true, false, true, true,
-        true, false, true, true, false, false,
+        true, false, true, true, false, false, true,
     };
 
     // 0x21/0x22/0x23 are big-endian, unlike the 0x7D family.
@@ -77,6 +77,13 @@ namespace Canbox
         const uint8_t d = nib(v, 4);
         if (!_t.radarInvert || d == 0) return d;
         return (uint8_t)(5 - d);
+    }
+
+    uint8_t Rav4Emitter::pick(const State& s, uint8_t sig, uint8_t computed) const
+    {
+        if (s.has(sig)) return sig;
+        if ((_exp & EXP_COMPUTED) && s.has(computed)) return computed;
+        return SIG_COUNT;
     }
 
     // ---- Tuning persistence -------------------------------------------------
@@ -300,14 +307,22 @@ namespace Canbox
                 return true;
             }
             case M_ODO: {
-                if (!s.has(SIG_ODOMETER)) return false;
-                uint32_t km = (uint32_t)s.get(SIG_ODOMETER);
+                // EXP_FUEL_7D04 also takes the cluster's odometer (0x5C5) when
+                // 0x5FD is silent: the X84 matrix has no 0x5FD.
+                const bool fuelExp = (_exp & EXP_FUEL_7D04) != 0;
+                const uint8_t odo = s.has(SIG_ODOMETER) ? SIG_ODOMETER : fuelExp && s.has(SIG_ODO_CLUSTER) ? SIG_ODO_CLUSTER : SIG_COUNT;
+                if (odo == SIG_COUNT) return false;
+                uint32_t km = (uint32_t)s.get(odo);
                 cmd = 0x7D; len = 12;
                 p[0] = 0x04;
                 p[1] = (uint8_t)(km & 0xFF);
                 p[2] = (uint8_t)((km >> 8) & 0xFF);
                 p[3] = (uint8_t)((km >> 16) & 0xFF);
-                p[4] = 0xF2; p[5] = 0x08;    // constant in every capture; meaning unknown
+                p[4] = 0xF2; p[5] = 0x08;    // in every capture: 2290, /10 -> 1049 idx 5, meaning unknown
+                if (fuelExp && s.has(SIG_FUEL_LEVEL)) {
+                    const uint16_t f = (uint16_t)(s.get(SIG_FUEL_LEVEL) * 10);   // litres x10, LE
+                    p[4] = (uint8_t)f; p[5] = (uint8_t)(f >> 8);
+                }
                 // trip1/trip2, LE u24 each, in 0.1 km.
                 uint32_t t1 = (uint32_t)s.get(SIG_TRIP1);
                 uint32_t t2 = (uint32_t)s.get(SIG_TRIP2);
@@ -329,7 +344,8 @@ namespace Canbox
                 return true;
             }
             case M_TRIP: {
-                if (!(s.has(SIG_AVG_SPEED) || s.has(SIG_TRIP_ELAPSED) || s.has(SIG_RANGE)))
+                const uint8_t range = pick(s, SIG_RANGE, SIG_RANGE_CALC);
+                if (!(s.has(SIG_AVG_SPEED) || s.has(SIG_TRIP_ELAPSED) || range != SIG_COUNT))
                     return false;
                 // Big-endian; elapsed is in minutes, not seconds.
                 // mikescotland: p[0..3] zero padding, p[4..5] range (BE16), p[6]
@@ -343,24 +359,26 @@ namespace Canbox
                     putBE16(p + 0, 0);
                     putBE16(p + 2, 0);
                 }
-                putBE16(p + 4, (uint16_t)s.get(SIG_RANGE));
+                putBE16(p + 4, (uint16_t)(range != SIG_COUNT ? s.get(range) : 0));
                 p[6] = _t.tripUnit;
                 return true;
             }
             case M_FUEL_INST: {
-                if (!s.has(SIG_FUEL_INST)) return false;
+                const uint8_t inst = pick(s, SIG_FUEL_INST, SIG_CONS_INST);
+                if (inst == SIG_COUNT) return false;
                 cmd = 0x22; len = 3;
                 p[0] = _t.fuelUnit;
-                putBE16(p + 1, (uint16_t)s.get(SIG_FUEL_INST));          // x10
+                putBE16(p + 1, (uint16_t)s.get(inst));          // x10
                 return true;
             }
             case M_FUEL_HIST: {
-                if (!s.has(SIG_FUEL_AVG)) return false;
+                const uint8_t avg = pick(s, SIG_FUEL_AVG, SIG_CONS_AVG);
+                if (avg == SIG_COUNT) return false;
                 // len 13, not 3: the unit's exact-length guard drops 3.
                 // Unused slots are 0xFFFF = invalid, filled from the end.
                 cmd = 0x23; len = _t.histLen ? _t.histLen : 13;
                 p[0] = _t.fuelUnit;
-                putBE16(p + 1, (uint16_t)s.get(SIG_FUEL_AVG));           // current trip
+                putBE16(p + 1, (uint16_t)s.get(avg));           // current trip
                 for (uint8_t i = 3; i + 1 < len; i += 2) putBE16(p + i, 0xFFFF);
                 return true;
             }
@@ -495,6 +513,17 @@ namespace Canbox
                 p[1] = (uint8_t)nib(s.get(SIG_HYBRID_FLOW), 63);
                 return true;
             }
+            case M_COOLANT: {
+                if (!s.has(SIG_ENG_TEMP)) return false;
+                // D1 unused, D2 = °C + 40 (docs/hu-decoder.md §2b): coolant is the
+                // obvious candidate for that dashboard temperature.
+                int32_t t = s.get(SIG_ENG_TEMP) + 40;
+                if (t < 0) t = 0;
+                if (t > 255) t = 255;
+                cmd = 0x7D; len = 3;
+                p[0] = 0x09; p[1] = 0x00; p[2] = (uint8_t)t;
+                return true;
+            }
             case M_VERSION: {
                 // Liveness: shown in the unit's "Display CANBUS Info" screen.
                 cmd = 0x30; len = 16;
@@ -547,6 +576,7 @@ namespace Canbox
             // The two 0x28 forms are mutually exclusive on the wire.
             if (i == M_TEMP && _t.cmd28 != 0) continue;
             if (i == M_AC   && _t.cmd28 == 0) continue;
+            if (i == M_COOLANT && !(_exp & EXP_COOLANT)) continue;
 
             uint8_t cmd = 0, len = 0, p[MAX_PAYLOAD];
             if (!build(i, s, cmd, p, len)) continue;

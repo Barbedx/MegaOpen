@@ -102,7 +102,7 @@ the only authority. This is that authority. Sub-command is D0, data starts at D1
 | `0x31` | amp, nibbles as in our §2a | agrees |
 | `0x32` | D0 `b2` → stored, `b3` → acts when `b2` set; `b0=1 && b6=0` → sends an MCU command | agrees on shape |
 | `0x33` | **direct action**: D0 `1/2/3/4/5` → actions 34/35/32/33/29 (press+release in one frame) | **new** — a key path with no release frame needed |
-| `0x41` | **decoded in this profile too**: sub 1 body bits, sub 2 odo/trips, sub 3 BE16 → 154 + 1032 | `raise-protocol.md` §8 says "`0x41` is VW-only" — not on this unit |
+| `0x41` | **decoded in this profile too**, into Toyota codes only: sub 1 D4-D7 body bits → 135-148 (the same codes as `7D 01`/`7D 0D`), sub 2 D1-D3/D6-D8/D9-D11 BE24 → 149/151/152, D4-D5 → 150, D12-D13 → 153 (speed), D14-D15 → 97; sub 3 D1-D2 BE16 → 154 + 1032, D7 → 155. **No battery, fuel or belt field** (the VW meaning does not apply) | `raise-protocol.md` §8 says "`0x41` is VW-only" — not on this unit |
 | `0x4A`, `0x4B`, `0x58`, `0x61`, `0x62`, `0x66`, `0x1A`, `0xF2` | Crown/CD/radio/settings/PM2.5 | skip |
 
 ### 2d. Climate — `0x28` and `0x58`, bit by bit
