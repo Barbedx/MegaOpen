@@ -60,7 +60,9 @@ SCR.service={title:'Сервіс',async render(m){
  $('#spGo').onclick=e=>run(e.target,()=>API.post('/api/media',{splashNow:true}));
  $('#huF').onclick=e=>ask(e.target,'Забути вивчені команди тексту ГУ?',()=>run(e.target,()=>API.post('/api/settings',{huForget:true}),'забуто'))}
  saver($('#tun'),()=>{const t={};$$('#tun [data-f]').forEach(el=>{const v=val(el);if(v!==undefined)t[el.dataset.f]=v});return API.post('/api/canbox/tuning',t)},'[data-f]');
- $('#msgs').addEventListener('change',e=>{if(e.target.dataset.en===undefined)return;const id=e.target.closest('tr').dataset.id;run(e.target,()=>API.post('/api/messages/enable?id='+id+'&on='+(e.target.checked?1:0)))});
+ /* таблиця реєстру huMessages: рядок i = повідомлення i, [увімк]; лише в RAM, тож шлемо всі рядки */
+ $('#msgs').addEventListener('change',e=>{if(e.target.dataset.en===undefined)return;
+  run(e.target,()=>API.post('/api/settings',{huMessages:$$('#msgs tr').map(tr=>[$('[data-en]',tr).checked])}))});
  $('#msgs').addEventListener('click',e=>{const b=e.target.closest('[data-send]');if(!b)return;const id=b.closest('tr').dataset.id;run(b,()=>API.post('/api/messages/send?id='+id),'надіслано')});
  $('#cat').onclick=e=>{const b=e.target.closest('[data-kc]');if(b)$('#kc').value=b.dataset.kc};
  $('#kGo').onclick=e=>run(e.target,()=>API.post('/api/canbox/key?code='+$('#kc').value+'&state='+$('#ks').value));

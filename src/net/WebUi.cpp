@@ -457,6 +457,9 @@ void WebUi::routes()
         // The newest rules, applied or not (the car task owns them).
         Vehicle::AlertRules al;
         Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
+        // The emitter's, likewise (the hu task owns it).
+        static App::Hu::EmitterCfg hu;
+        const bool huOk = _emitter && App::Hu::emitterCfg().peek(hu);
 #if FEATURE_CAPTURE
         Capture::Settings cs = Capture::settings();
         Capture::Settings* csp = &cs;
@@ -466,9 +469,10 @@ void WebUi::routes()
 #if FEATURE_KNOBS
         Knobs::Config kc;
         if (_knobs) kc = _knobs->config();
-        const Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp};
+        const Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp,
+                           huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
 #else
-        const Cfg::Model m{&s, nullptr, alp, csp};
+        const Cfg::Model m{&s, nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
 #endif
         for (size_t i = 0; i < Cfg::Registry::count(); ++i) {
             const Cfg::SEntry& e = Cfg::Registry::at(i);
@@ -477,7 +481,7 @@ void WebUi::routes()
             if (e.type == Cfg::SType::Table) {
                 JsonArray rows = d[e.id].to<JsonArray>();
                 char b[16];
-                for (uint8_t ri = 0; ri < e.tab->rows; ++ri) {
+                for (uint8_t ri = 0; ri < e.tab->rows(); ++ri) {
                     JsonArray row = rows.add<JsonArray>();
                     for (uint8_t c = 0; c < e.tab->cols; ++c) {
                         const Cfg::SColumn& col = e.tab->col[c];
@@ -521,12 +525,14 @@ void WebUi::routes()
         if (apPass.length() && (apPass.length() < 8 || apPass.length() > 63))
             return r->reply(400, "text/plain", "apPass: 8 to 63 characters");
 
-        // The alert rules are sent whole: written into an empty table (rows
-        // not sent stay empty), which replaces the car task's when accepted.
+        // The alert rules and the emitter's settings are edited on copies of
+        // what their tasks hold now (rows and cells not sent keep their
+        // values); a copy goes back only when something in it changed.
         // Static: httpd serves one request at a time.
         static Vehicle::AlertRules al;
-        al = Vehicle::AlertRules{};
-        bool alSent = false;
+        Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
+        static App::Hu::EmitterCfg hu;
+        const bool huOk = _emitter && App::Hu::emitterCfg().peek(hu);
 #if FEATURE_CAPTURE
         Capture::Settings cs = Capture::settings();
         Capture::Settings* csp = &cs;
@@ -536,10 +542,11 @@ void WebUi::routes()
 #if FEATURE_KNOBS
         Knobs::Config kc;
         if (_knobs) kc = _knobs->config();
-        Cfg::Model m{&s, _knobs ? &kc : nullptr, &al, csp};
+        Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
 #else
-        Cfg::Model m{&s, nullptr, &al, csp};
+        Cfg::Model m{&s, nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
 #endif
+        uint8_t apT = 0;     // what the tables' cells changed
 
         // Everything that can be refused is checked before anything is applied
         // (the /api/map rule): a 400 leaves the settings as they were. Keys the
@@ -558,12 +565,13 @@ void WebUi::routes()
             const char* why = nullptr;
             int32_t v = 0;
             if (e->flags & Cfg::F_RO)                    why = "read-only";
-            else if (!Cfg::Registry::available(m, *e))   why = "not on this board";
+            else if (!Cfg::Registry::available(m, *e))
+                why = (e->apply & (Cfg::AP_CAR | Cfg::AP_HU)) ? "busy, or not on this board" : "not on this board";
             else if (e->type == Cfg::SType::Table) {
-                // Row i = rule i; a row is its cells in column order, a
-                // missing or null cell keeps the empty row's.
-                if (!j.is<JsonArrayConst>() || j.size() > e->tab->rows) {
-                    snprintf(err, sizeof(err), "%s: a list of %u rows at most", e->id, (unsigned)e->tab->rows);
+                // Row i first; a row is its cells in column order. A row or
+                // cell not sent, or null, keeps its value.
+                if (!j.is<JsonArrayConst>() || j.size() > e->tab->rows()) {
+                    snprintf(err, sizeof(err), "%s: a list of %u rows at most", e->id, (unsigned)e->tab->rows());
                     return r->reply(400, "text/plain", err);
                 }
                 uint8_t ri = 0;
@@ -588,7 +596,7 @@ void WebUi::routes()
                                    !Cfg::Registry::decParse(jc.as<double>(), Cfg::Registry::cellDecimals(m, *e, ri, c), cv)) {
                             cw = "a number";
                         }
-                        if (!cw && !Cfg::Registry::setCell(m, *e, ri, c, cv)) cw = "out of range";
+                        if (!cw && !Cfg::Registry::setCell(m, *e, ri, c, cv, &apT)) cw = "out of range";
                         if (cw) {
                             snprintf(err, sizeof(err), "%s %u: %s: %s", e->id, (unsigned)(ri + 1), col.id, cw);
                             return r->reply(400, "text/plain", err);
@@ -597,7 +605,6 @@ void WebUi::routes()
                     }
                     ++ri;
                 }
-                alSent = true;
                 continue;
             }
             else if (e->type == Cfg::SType::Bool) {
@@ -623,7 +630,7 @@ void WebUi::routes()
         // The rules first: a busy hand-off is the last refusal, so a refused
         // request has changed nothing.
         bool alSaved = true;
-        if (alSent) {
+        if (apT & Cfg::AP_CAR) {
             if (!App::Car::alertRules().stage(al)) return r->reply(503, "text/plain", "busy, try again");
             uint8_t on = 0;
             for (const Vehicle::AlertRule& x : al.r) on += x.on;
@@ -636,9 +643,18 @@ void WebUi::routes()
         const bool huFirst = s.huTitleFirst;
         const Cfg::Str src = s.mediaSource;
 
-        uint8_t ap = 0;
+        uint8_t ap = apT;
         for (uint8_t i = 0; i < n; ++i) Cfg::Registry::set(m, *ch[i].e, ch[i].v, &ap);
         bool restart = (ap & Cfg::AP_REBOOT) != 0;
+
+        // The emitter's message switches (RAM only), for the hu task.
+        bool huBusy = false;
+        if (ap & Cfg::AP_HU) {
+            huBusy = !App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& c) {
+                memcpy(c.msgOn, hu.msgOn, sizeof(c.msgOn));
+            });
+            if (huBusy) LogBus::line("settings: the head-unit emitter was busy, its part not applied");
+        }
 
         // Staged for the tasks that own them: the debounce timing and the
         // encoder direction for the matrix sweep; the pulse, the links and
@@ -704,6 +720,7 @@ void WebUi::routes()
         _cfg->save();
         LogBus::printf("settings saved: %u value(s)%s", (unsigned)n, restart ? ", pending reboot" : "");
         if (!alSaved) return r->reply(500, "text/plain", "alerts: applied until the next boot only: NVS write failed");
+        if (huBusy) return r->reply(503, "text/plain", "head unit: busy, its part not applied; the rest saved");
         return r->reply(200, "application/json", restart ? "{\"ok\":true,\"pendingReboot\":true}"
                                                          : "{\"ok\":true}");
     });
@@ -2016,17 +2033,8 @@ void WebUi::routesCanbox()
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
 
-    route("/api/messages/enable", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_emitter) return r->reply(503, "text/plain", "no vehicle");
-        if (!r->hasParam("id")) return r->reply(400, "text/plain", "id?");
-        const uint8_t id = (uint8_t)atoi(paramStr(r, "id", "255").c_str());
-        const bool on = paramBool(r, "on", true);
-        if (!App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& c) {
-                if (id < Canbox::Rav4Emitter::MAX_MESSAGES) c.msgOn[id] = on;
-            }))
-            return r->reply(503, "text/plain", "busy, try again");
-        return r->reply(200, "application/json", "{\"ok\":true}");
-    });
+    // Switching a message on or off: the registry's `huMessages` table
+    // (RAM only), POST /api/settings.
 
     // The last frames on the head-unit UART, both directions, with ASCII.
     // 'J' rows are bytes outside any frame: a different dialect shows up there

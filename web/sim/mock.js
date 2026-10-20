@@ -214,19 +214,24 @@ g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type
  for(const k of CAPK)o['cap.'+k]=S.cap.settings[k];
  o.logLevel=LVL[S.logLevel];   /* logLevel: лише в RAM, як у прошивці */
  for(const d of DESTS)o[mRouteId(d)]=S.routing[d]|0;   /* route*: маски призначень (S.routing, як destState) */
+ o.huMessages=S.msgs.map(m=>[!!m.enabled]);   /* таблиця huMessages: лише в RAM */
  if(st.bleMode)o.bleMode=st.bleMode;if(st.wifi)o.ssid=st.wifi.ssid;return o});
 /* НОВЕ (план, зріз 4): перезапуск не побічний ефект, а pendingReboot; apPass */
 po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass);
  if(ap&&(ap.length<8||ap.length>63))return fail(400,'apPass: 8 to 63 characters');
  let rb=typeof q.mdnsOn==='boolean'&&q.mdnsOn!==s.mdnsOn;
- /* таблиця реєстру `alerts` (WebUi.cpp): рядок = клітинки в порядку колонок; ті самі тексти помилок */
+ /* таблиці реєстру (WebUi.cpp): рядок = клітинки в порядку колонок; рядок чи клітинка, яких не прислали
+    (або null), лишаються як були; ті самі тексти помилок */
  let AL=null;if(q.alerts!==undefined){if(!Array.isArray(q.alerts)||q.alerts.length>16)return fail(400,'alerts: a list of 16 rows at most');AL=[];
-  for(let i=0;i<q.alerts.length;i++){const a=q.alerts[i],id='alerts '+(i+1)+': ';if(!Array.isArray(a))return fail(400,id+'a list of cells');
-   const[sig='',cond='rises',thr=0,cd=0,on=false]=a.map(x=>x===null?undefined:x),m=META.find(x=>x[0]===sig);
+  for(let i=0;i<q.alerts.length;i++){const a=q.alerts[i],id='alerts '+(i+1)+': ',old=S.alerts[i];if(!Array.isArray(a))return fail(400,id+'a list of cells');
+   const[sig,cond,thr,cd,on]=old.map((x,k)=>a[k]==null?x:a[k]),m=META.find(x=>x[0]===sig);
    if(sig&&!m)return fail(400,id+'sig: unknown value');if(!COND.some(c=>c[0]===cond))return fail(400,id+'cond: unknown value');
    if(typeof thr!=='number')return fail(400,id+'thr: a number');if(m&&(toInt(thr,m[2])<m[5]||toInt(thr,m[2])>m[6]))return fail(400,id+'thr: out of range');
    if(!(isInt(cd)&&cd>=0&&cd<=65535))return fail(400,id+'cooldownS: '+(typeof cd==='number'?'out of range':'a number'));
    if(typeof on!=='boolean')return fail(400,id+'on: true or false');AL.push([sig,cond,thr,cd,!!on&&!!sig])}}
+ let MG=null;if(q.huMessages!==undefined){if(!Array.isArray(q.huMessages)||q.huMessages.length>S.msgs.length)return fail(400,'huMessages: a list of '+S.msgs.length+' rows at most');
+  MG=q.huMessages.map((a,i)=>Array.isArray(a)&&a[0]!=null?a[0]:S.msgs[i].enabled);
+  const bad=MG.findIndex(x=>typeof x!=='boolean');if(bad>=0)return fail(400,'huMessages '+(bad+1)+': on: true or false')}
  /* реєстр (catalog.settings): невідоме значення enum -> 400, число в межі, як прошивка */
  for(const f of C.settings||[]){if(f.type==='group'||f.type==='table'||q[f.id]===undefined||['bleMode','mediaSource','huTitleCmd','huArtistCmd'].includes(f.id))continue;
   if(f.ro)return fail(400,f.id+': read-only');
@@ -242,7 +247,8 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
  if(q.uartEnabled===false)S.emitter=false;
  if(typeof q.bleMode==='string'&&C.bleModes.some(b=>b.id===q.bleMode)){rb=rb||q.bleMode!==s.bleMode;S.staged.bleMode=q.bleMode}
  if(ap){rb=rb||ap!==(S.staged.apPass||S.wifi.apPass);S.staged.apPass=ap}
- if(AL){S.alerts=Array.from({length:16},(_,i)=>AL[i]||['','rises',0,0,false]);emit(2,'CAN','[alert] rules saved: '+S.alerts.filter(a=>a[4]).length+' on')}
+ if(AL){S.alerts=S.alerts.map((old,i)=>AL[i]||old);emit(2,'CAN','[alert] rules saved: '+S.alerts.filter(a=>a[4]).length+' on')}
+ if(MG)MG.forEach((x,i)=>S.msgs[i].enabled=x);
  emit(2,'NET',rb?'settings saved, pending reboot':'settings saved');return rb?{ok:true,pendingReboot:true}:ok});
 g('/api/display',()=>{const d=S.disp,car=d.type==='carminat';return {type:d.type,funcReg:d.funcReg,canRx:S.can.twaiRx,attached:true,sync:d.registered?15:1,synced:d.registered,registered:d.registered,passive:!d.funcReg,busy:false,queued:0,lastResult:'Ok',
  supports:{text:true,time:car,power:car,menu:car,popup:car,fullscreen:car,confirm:car,info:car},phase:d.phase,lastRendered:'text',lastRenderedMs:1200,glassHoldMs:10000,glassHeldMs:0,
@@ -411,7 +417,6 @@ po('/api/canbox/raw',q=>{if(q.cmd===undefined)return fail(400,'cmd? (hex)');cons
  const d=String(q.data||'').replace(/[\s,:-]/g,'');if(!/^([0-9a-f]{2})*$/i.test(d))return fail(400,'data must be hex bytes');
  const b='2E '+h2(cmd)+' '+h2(d.length/2)+(d?' '+d.match(/../g).join(' ').toUpperCase():'')+' CS';uart('T',b);return {__status:202,body:{ok:true,queued:true,bytes:b}}});
 g('/api/messages',()=>({messages:S.msgs.map(m=>({...m}))}));
-po('/api/messages/enable',q=>{if(q.id===undefined)return fail(400,'id?');const m=S.msgs[+q.id];if(m)m.enabled=q.on===undefined||B(q.on);return ok});
 po('/api/messages/send',q=>{if(q.id===undefined)return fail(400,'id?');const m=S.msgs[+q.id];if(!m||!m.ready)return fail(409,'no data for this message — pin its signals');uart('T',m.bytes);return ok});
 /* без since — як прошивка; since= — НОВЕ замість /ws */
 g('/api/logs',q=>q.since!==undefined?logsSince(+q.since||0):{lines:logSeq,dropped:0,ringSize:300,mounted:true,mountError:'',buffered:812,used:S.logs.used,total:S.logs.total,files:S.logs.files});

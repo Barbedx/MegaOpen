@@ -5,6 +5,7 @@
 #include "../knobs/KnobConfig.h"
 #include "../vehicle/AlertRules.h"
 #include "../capture/CanRecorder.h"
+#include "../proto/canbox/Rav4Emitter.h"
 
 // Every setting the user can change, described once: the web form and the
 // panel menu are both drawn from this table, so they cannot disagree on a
@@ -18,20 +19,24 @@
 // the field stores (a String id or an enum class), so the menu can step it.
 // Strings the panel cannot edit (SSID, passwords, mDNS name) are not here.
 //
-// A Table is a fixed grid of such cells (the panel alerts: 16 rules x 5),
-// read and written a cell at a time; the table's own put() is the check, so
-// a cell whose range depends on another (a threshold on its row's signal) is
+// A Table is a grid of such cells (the panel alerts: 16 rules x 5), read and
+// written a cell at a time; the table's own put() is the check, so a cell
+// whose range depends on another (a threshold on its row's signal) is
 // refused by the code that knows why. Tables are web-only.
 namespace Cfg
 {
     // What a registry entry reads and writes. `k` is null on a board without
     // knobs, `c` without the capture recorder, `a` where the caller has no
-    // alert rules at hand; their entries then report unavailable.
+    // alert rules at hand, `t`/`msg` (the head-unit emitter's tuning and its
+    // Rav4Emitter::MAX_MESSAGES switches, together) without the emitter;
+    // their entries then report unavailable.
     struct Model {
         Settings*            s = nullptr;
         Knobs::Config*       k = nullptr;
         Vehicle::AlertRules* a = nullptr;
         Capture::Settings*   c = nullptr;
+        Canbox::Tuning*      t = nullptr;
+        bool*                msg = nullptr;
     };
 
     enum class SType : uint8_t { Group, Bool, Int, Enum, Table };
@@ -55,6 +60,7 @@ namespace Cfg
         AP_MEDIA  = 0x08,  // media router / HU text learner
         AP_CAR    = 0x10,  // car task: the alert rules (own NVS key)
         AP_CAP    = 0x20,  // capture recorder (own NVS namespace "cap")
+        AP_HU     = 0x40,  // hu task: the emitter's tuning and message switches
         AP_REBOOT = 0x80,  // read once at boot: saved, applied by a reboot
     };
 
@@ -78,7 +84,8 @@ namespace Cfg
     };
 
     struct STable {
-        uint8_t        rows, cols;
+        uint8_t        (*rows)();   // fixed for a build
+        uint8_t        cols;
         const SColumn* col;
         int32_t (*get)(const Model&, uint8_t row, uint8_t col);
         // False: refused, the cell unchanged. Cells of a row are written in

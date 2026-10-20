@@ -28,8 +28,14 @@ namespace
         Knobs::Config       k;
         Vehicle::AlertRules a;
         Capture::Settings   c;
-        Model               m{&s, &k, &a, &c};
-        Fixture() { a.factory(); }
+        Canbox::Tuning      t;
+        bool                msg[Canbox::Rav4Emitter::MAX_MESSAGES];
+        Model               m{&s, &k, &a, &c, &t, msg};
+        Fixture()
+        {
+            a.factory();
+            for (bool& b : msg) b = true;   // EmitterCfg's default: every message on
+        }
     };
 
     // An entry with one value: everything but groups and tables.
@@ -329,7 +335,7 @@ void test_tables_are_web_only_and_described()
         // The panel has no way to edit a grid.
         TEST_ASSERT_FALSE_MESSAGE(e.flags & F_MENU, e.id);
         TEST_ASSERT_NOT_NULL_MESSAGE(e.tab, e.id);
-        TEST_ASSERT_TRUE_MESSAGE(e.tab->rows > 0 && e.tab->cols > 0, e.id);
+        TEST_ASSERT_TRUE_MESSAGE(e.tab->rows() > 0 && e.tab->cols > 0, e.id);
         std::set<std::string> ids;
         for (uint8_t c = 0; c < e.tab->cols; ++c) {
             const SColumn& col = e.tab->col[c];
@@ -340,7 +346,7 @@ void test_tables_are_web_only_and_described()
             TEST_ASSERT_TRUE_MESSAGE(Registry::colMin(col) <= Registry::colMax(col), col.id);
         }
     }
-    TEST_ASSERT_EQUAL(1, tables);
+    TEST_ASSERT_EQUAL(2, tables);   // alerts, huMessages
 }
 
 void test_alert_cells_read_the_rules()
@@ -461,6 +467,30 @@ void test_log_level_is_ram_only()
     }
 }
 
+// The head unit's message switches: one row per message the emitter has,
+// RAM only, handed to the hu task.
+void test_hu_messages_table()
+{
+    Fixture f;
+    const SEntry* e = Registry::find("huMessages");
+    TEST_ASSERT_NOT_NULL(e);
+    TEST_ASSERT_TRUE(e->flags & F_VOLATILE);
+    TEST_ASSERT_EQUAL(Canbox::Rav4Emitter::messageCount(), e->tab->rows());
+    TEST_ASSERT_TRUE(e->tab->rows() <= Canbox::Rav4Emitter::MAX_MESSAGES);
+    TEST_ASSERT_EQUAL_INT32(1, Registry::cell(f.m, *e, 2, 0));
+    uint8_t ap = 0;
+    TEST_ASSERT_TRUE(Registry::setCell(f.m, *e, 2, 0, 0, &ap));
+    TEST_ASSERT_FALSE(f.msg[2]);
+    TEST_ASSERT_TRUE(f.msg[1] && f.msg[3]);
+    TEST_ASSERT_EQUAL(AP_HU, ap);
+    TEST_ASSERT_FALSE(Registry::setCell(f.m, *e, 2, 0, 2));
+    TEST_ASSERT_FALSE(Registry::setCell(f.m, *e, e->tab->rows(), 0, 1));
+    // No emitter: unavailable.
+    Settings s;
+    Model m{&s, nullptr};
+    TEST_ASSERT_FALSE(Registry::available(m, *e));
+}
+
 // ---- drift guard --------------------------------------------------------------------
 
 // Settings fields with no registry entry, on purpose: strings the panel
@@ -511,6 +541,7 @@ int main(int, char**)
     RUN_TEST(test_tables_refuse_the_scalar_calls);
     RUN_TEST(test_decimal_text_both_ways);
     RUN_TEST(test_log_level_is_ram_only);
+    RUN_TEST(test_hu_messages_table);
     RUN_TEST(test_settings_struct_unchanged);
     return UNITY_END();
 }

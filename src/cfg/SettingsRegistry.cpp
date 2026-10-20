@@ -202,7 +202,7 @@ namespace Cfg
                       "kAlertCols is out of step with AlertRules::Col");
 
         const STable kAlerts = {
-            Vehicle::AlertRules::ROWS, Vehicle::AlertRules::COLS, kAlertCols,
+            [] { return Vehicle::AlertRules::ROWS; }, Vehicle::AlertRules::COLS, kAlertCols,
             [](const Model& m, uint8_t r, uint8_t c) { return m.a->get(r, c); },
             [](Model& m, uint8_t r, uint8_t c, int32_t v) {
                 // An empty rule is never on (the /api/map rule before).
@@ -214,6 +214,18 @@ namespace Cfg
                 return c == Vehicle::AlertRules::C_THR && sig < Vehicle::SIG_COUNT ? Vehicle::meta(sig).decimals : 0;
             },
         };
+
+        // ---- the head-unit emitter's messages: row i = message i, on/off ----
+        const SColumn kMsgCols[] = {
+            {"on", "Увімк", SType::Bool, 0, 1, nullptr},
+        };
+        const STable kMessages = {
+            Canbox::Rav4Emitter::messageCount, 1, kMsgCols,
+            [](const Model& m, uint8_t r, uint8_t) -> int32_t { return m.msg[r] ? 1 : 0; },
+            [](Model& m, uint8_t r, uint8_t, int32_t v) { m.msg[r] = v != 0; return true; },
+            nullptr,
+        };
+        static_assert(Canbox::Rav4Emitter::MAX_MESSAGES <= 255, "a table has at most 255 rows");
 
         // A String field stored by id, read and written as its row.
         int32_t rowOf(const SEnum& en, const Str& v)
@@ -410,6 +422,12 @@ namespace Cfg
             // Drawn by the live-car page, not the settings card.
             {"alerts", "Сповіщення на дисплей", "Alerts", nullptr, SType::Table, W, AP_CAR,
              0, 0, 0, nullptr, nullptr, nullptr, nullptr, &kAlerts},
+
+            // ---- which Raise messages go to the head unit: RAM only ---------
+            // A bench switch (every boot sends them all); drawn by the service
+            // page next to each message's live bytes (/api/messages).
+            {"huMessages", "Повідомлення в ГУ", "HU messages", nullptr, SType::Table, W | F_VOLATILE, AP_HU,
+             0, 0, 0, nullptr, nullptr, nullptr, nullptr, &kMessages},
         };
 #undef S_GET
 #undef S_PUT
@@ -443,6 +461,7 @@ namespace Cfg
             if (e.type == SType::Group) return true;
             if (e.apply & AP_CAR) return m.a != nullptr;
             if (e.apply & AP_CAP) return m.c != nullptr;
+            if (e.apply & AP_HU)  return m.t != nullptr && m.msg != nullptr;
             return (e.apply & AP_KNOBS) ? m.k != nullptr : m.s != nullptr;
         }
 
@@ -569,7 +588,7 @@ namespace Cfg
         {
             bool inTable(const Model& m, const SEntry& e, uint8_t row, uint8_t col)
             {
-                return e.type == SType::Table && e.tab && row < e.tab->rows && col < e.tab->cols &&
+                return e.type == SType::Table && e.tab && row < e.tab->rows() && col < e.tab->cols &&
                        available(m, e);
             }
         }

@@ -269,7 +269,7 @@ namespace Catalog
                 }
                 if (e.type == SType::Enum && e.en) enumRows(j, *e.en);
                 if (e.type == SType::Table && e.tab) {
-                    j.kn("rows", e.tab->rows).k("cols").arr();
+                    j.kn("rows", e.tab->rows()).k("cols").arr();
                     for (uint8_t c = 0; c < e.tab->cols; ++c) {
                         const SColumn& col = e.tab->col[c];
                         j.obj().ks("id", col.id).ks("label", col.label).ks("type", kType[(uint8_t)col.type]);
