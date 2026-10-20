@@ -2,8 +2,8 @@
 #include <soc/io_mux_reg.h>
 
 // Install lines go through the LogBus, which never blocks: install() runs on
-// the task that owns the bus (the loop; the web's /api/can/mode and friends
-// are Diag::CanBench ops run there), and a Serial write would wait on the
+// the task that owns the bus (the loop; the web's /api/can/loop is a
+// Diag::CanBench op run there), and a Serial write would wait on the
 // console — up to its whole TX timeout on a USB-CDC nobody reads.
 #include "../utils/LogBus.h"
 #define TWAI_LOGF(...) LogBus::printf(__VA_ARGS__)
@@ -26,19 +26,6 @@ bool TwaiBus::install()
         case 100000:  t = TWAI_TIMING_CONFIG_100KBITS(); break;
         case 50000:   t = TWAI_TIMING_CONFIG_50KBITS();  break;
         default:      t = TWAI_TIMING_CONFIG_500KBITS(); break;
-    }
-
-    // Timing override, validated here: an out-of-range triple makes
-    // twai_driver_install() fail with a bare ESP_ERR_INVALID_ARG.
-    if (_timing.brp >= 2 && _timing.brp <= 128 && (_timing.brp % 2) == 0 &&
-        _timing.tseg1 >= 1 && _timing.tseg1 <= 16 &&
-        _timing.tseg2 >= 1 && _timing.tseg2 <= 8 &&
-        _timing.sjw   >= 1 && _timing.sjw   <= 4) {
-        t.brp         = _timing.brp;
-        t.tseg_1      = _timing.tseg1;
-        t.tseg_2      = _timing.tseg2;
-        t.sjw         = _timing.sjw;
-        t.triple_sampling = false;
     }
 
     // Macro argument order is (tx, rx, mode), unlike setCANPins(rx, tx).
@@ -76,24 +63,6 @@ bool TwaiBus::install()
     _installed = true;
     ++_installs;
     return true;
-}
-
-// Computed from the timing actually applied, not the requested one.
-uint16_t TwaiBus::samplePointTenths() const
-{
-    uint16_t t1 = 15, t2 = 4;
-    if (_timing.brp >= 2 && _timing.tseg1 && _timing.tseg2) {
-        t1 = _timing.tseg1; t2 = _timing.tseg2;
-    }
-    const uint16_t total = (uint16_t)(1 + t1 + t2);
-    return (uint16_t)(((uint32_t)(1 + t1) * 1000u) / total);
-}
-
-uint32_t TwaiBus::effectiveBitrate() const
-{
-    if (_timing.brp < 2 || !_timing.tseg1 || !_timing.tseg2) return _bitrate;
-    const uint32_t tq = 1u + _timing.tseg1 + _timing.tseg2;
-    return 80000000u / (_timing.brp * tq);
 }
 
 bool TwaiBus::begin(gpio_num_t txPin, gpio_num_t rxPin, uint32_t bitrate, twai_mode_t mode)
@@ -178,12 +147,6 @@ bool TwaiBus::restart()
 {
     end();
     return install();
-}
-
-bool TwaiBus::setMode(twai_mode_t mode)
-{
-    _mode = mode;
-    return restart();
 }
 
 bool TwaiBus::running() const

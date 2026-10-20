@@ -18,24 +18,6 @@ public:
     bool begin(gpio_num_t txPin, gpio_num_t rxPin, uint32_t bitrate, twai_mode_t mode);
     void end();
     bool restart();                       // stop + start, same config
-    bool setMode(twai_mode_t mode);       // full reinstall, on purpose and visible
-
-    // ---- bit timing, overridable ------------------------------------------
-    // The sample point can be right for receiving (resync on every edge) and
-    // wrong for ACKing (one bit driven into another node's window): symptom is
-    // clean listen-only reception and total failure once ACKing is required.
-    // ESP32 limits: brp even 2..128, tseg_1 1..16, tseg_2 1..8, sjw 1..4.
-    // Bitrate = 80 MHz / (brp * (1 + tseg_1 + tseg_2)).
-    // Standard 500k is brp 8, tseg_1 15, tseg_2 4 -> 20 TQ, sample point 80%.
-    // 87.5% (the CiA recommendation, and what many OEM stacks use) is not
-    // reachable at 20 TQ: it needs brp 10, tseg_1 13, tseg_2 2 -> 16 TQ.
-    struct Timing { uint32_t brp; uint8_t tseg1, tseg2, sjw; };
-    // brp 0 restores the IDF macro for the configured bitrate.
-    void setTiming(const Timing& t) { _timing = t; }
-    const Timing& timing() const { return _timing; }
-    // (1 + tseg_1) / (1 + tseg_1 + tseg_2), in tenths of a percent.
-    uint16_t samplePointTenths() const;
-    uint32_t effectiveBitrate() const;
 
     // Drain everything to the onReceive() handler. Re-entry guarded: it is called
     // from inside the display's ACK wait, and an RX handler may send.
@@ -94,7 +76,7 @@ public:
     // Not a failure: climbing txBusy with txFail 0 means the queue, not the bus.
     uint32_t txBusy() const { return _txBusy; }
     // Driver installs since boot; every one after the first is a reinstall
-    // (a mode or timing change, a bench op, a STOPPED controller restarted).
+    // (the loopback test, a STOPPED controller restarted).
     uint32_t installs() const { return _installs; }
 
 private:
@@ -106,7 +88,6 @@ private:
     gpio_num_t  _tx = GPIO_NUM_NC, _rxPin = GPIO_NUM_NC;
     uint32_t    _bitrate = 500000;
     twai_mode_t _mode = TWAI_MODE_NORMAL;
-    Timing      _timing = {0, 0, 0, 0};   // brp 0 = the IDF macro
     // Atomic: one task installs and removes the driver (the loop, which owns
     // the bus), but httpd and the cloud read isLive() for their pages.
     std::atomic<bool> _installed{false};

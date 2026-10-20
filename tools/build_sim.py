@@ -11,8 +11,7 @@ ORDER MATTERS, and the file names cannot say it, so it is said here:
   - web/sim/mock.js goes BEFORE the app. It sets window.SIM, and 10-api.js
     checks for that on every call() — the app must find it from the first one.
   - every other web/sim/*.js goes AFTER the app, in name order. Those are
-    extensions (audit.js adds the Аудит screen to SCR) and need the app's
-    globals to exist when they run.
+    extensions (none today) and need the app's globals to exist when they run.
 The board build never reads web/sim/, so none of this reaches the flash.
 
 THE CATALOG is not in web/sim/: it is build/catalog.json, written by the

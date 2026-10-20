@@ -380,7 +380,7 @@ po('/api/loglevel',q=>{if(q.n===undefined||q.n==='')return fail(400,'n=0..4 requ
 /* без since — як прошивка; since= — НОВЕ замість /ws */
 g('/api/logs',q=>q.since!==undefined?logsSince(+q.since||0):{lines:logSeq,dropped:0,ringSize:300,mounted:true,mountError:'',buffered:812,used:S.logs.used,total:S.logs.total,files:S.logs.files});
 g('/api/logs/file',q=>{const f=S.logs.files[+q.n||0];return f?{bytes:f.size}:fail(404,'no such log')});
-g('/api/can',()=>({role:'display',txEnabled:true,txGated:false,txGates:0,listenOnly:false,loopRecessive:-1,loopDominant:-1,txPath:'broken',
+g('/api/can',()=>({role:'display',txEnabled:true,txGated:false,txGates:0,listenOnly:false,
  state:S.can.state,txErr:S.can.txErr,rxErr:S.can.rxErr,txFailed:0,rxMissed:0,busErr:S.can.busErr,arbLost:0,txQueued:0,twaiTxOk:S.can.twaiTxOk,twaiTxFail:S.can.twaiTxFail,twaiRx:S.can.twaiRx,twaiMode:'normal',
  rxFrames:S.can.twaiRx,ids:Object.keys(S.ids).length,frames:S.can.twaiRx,overflow:0,sniff:S.sniff,rxPin:6,txPin:7}));
 g('/api/can/ecc',()=>({seen:[{raw:0x6a,count:2,type:'stuff',dir:'while RECEIVING',where:'data'},{raw:0x78,count:1,type:'form',dir:'while RECEIVING',where:'CRC delimiter'}]}));

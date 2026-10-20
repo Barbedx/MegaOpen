@@ -178,11 +178,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 
 ### Bench / tooling
 
-- **`/api/can/level` detaches the TWAI transmitter.** It `pinMode`s the TX pad
-  and claims to "leave no state"; on this core that re-muxes the pad to GPIO
-  until the driver is reinstalled, faking a dead CTX. Use the pad's input
-  buffer only, as `txwatch` does, or reinstall. Where: `WebUi.cpp` `/api/can/level`.
-
 - **Opening COM5 resets the brain.** The old DevKit's CP2102 is damaged: it
   still enumerates, corrupts ESP->PC bit 0, and DTR/RTS reset the board on open.
   Never open it; read the board over HTTP.

@@ -46,7 +46,8 @@ T 3AF   B9 00 00 00 00 00 00 00        "I am alive"
 
 `0xB9` is the alive byte. The seven bytes after it are filler that happens to be zero.
 
-**Verify:** `GET /api/can/last` shows `3AF B900000000000000` at roughly 1/s. If it appears
+**Verify:** the AFFA frame trace (`POST /api/loglevel?n=4`, then the web log) shows
+`[affa] … TX> 3AF [8] B9 00 00 00 00 00 00 00` at roughly 1/s. If it appears
 hundreds of times a second, the pacing is broken — that was the original 2026-07-27 bug.
 
 ---
@@ -230,9 +231,10 @@ Match the symptom to the step rather than guessing.
 
 Nothing here needs the panel to display anything — each step is confirmable on the wire.
 
-1. `GET /api/can` — `state: running`, `busErr` not climbing, `pins` = `rx 4 / tx 3`.
-2. `GET /api/can/last` — `3AF B9…` at ~1/s, and `3CF 69…` coming back at ~1/s. That proves
-   both directions before any screen is involved.
+1. `GET /api/can` — `state: running`, `busErr` not climbing, `rxPin`/`txPin` = 6/7 on the T-2CAN.
+2. The AFFA frame trace (`POST /api/loglevel?n=4`) — `TX> 3AF … B9 …` at ~1/s, and
+   `<RX 3CF … 69 …` coming back at ~1/s. That proves both directions before any
+   screen is involved.
 3. `GET /api/display` — `registered: true`. If false, look for §7's `T 151 70` row.
 4. `POST /api/display/text?text=SUCCESS` — then read the glass. This is the one step that
    needs a human.

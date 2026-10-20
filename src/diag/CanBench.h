@@ -7,16 +7,16 @@
 #include "../bus/ICanBus.h"
 #include "../bus/TwaiBus.h"
 
-// The CAN controller's bench operations and its status, run by the one task
+// The CAN controller's loopback test and its status, run by the one task
 // that owns the TWAI driver: the loop (the panel task in the display role)
 // (docs/design/event-tasks.md, Step 3).
 //
-// The web used to uninstall and reinstall the driver itself — /api/can/mode,
-// listen, timing, selftest, loop — while the loop sat inside twai_receive()
-// or twai_transmit() on the other core. Now each is a Request/Reply op: httpd
-// posts it and waits up to 2 s, the loop runs it between two poll()s, and the
-// answer comes back in the slot. Nothing else calls twai_* in this firmware
-// except through this module and TwaiBus on that task.
+// The loopback test takes the pins off the driver, so it must not run while
+// the loop sits inside twai_receive() or twai_transmit() on the other core. It
+// is a Request/Reply op: httpd posts it and waits up to 2 s, the loop runs it
+// between two poll()s, and the answer comes back in the slot. Nothing else
+// calls twai_* in this firmware except through this module and TwaiBus on that
+// task.
 //
 // The controller's counters are sampled here every 100 ms and published as a
 // snapshot, so /api/can and the heartbeat read a copy. The
@@ -46,7 +46,7 @@ namespace Diag
             Bus::Role          role = Bus::Role::Display;
             // What a reinstall wires back up (twaiRestartInRole in main.cpp
             // before this moved): the vehicle role's receive handler and the
-            // transmit tap that feeds /api/can/last.
+            // transmit tap that feeds the raw frame ring.
             RxHandler          rx    = nullptr;
             TwaiBus::TxTap     txTap = nullptr;
             bool               listenOnly = true;
@@ -69,27 +69,9 @@ namespace Diag
         CanStatus status();
         // Whether the node is meant to stay off the bus (one writer: the owner).
         bool listenOnly();
-        // The last transceiver self-test: CRX with CTX high, and with CTX low.
-        // -1 = never run.
-        void lastSelfTest(int& recessive, int& dominant);
 
         // ---- httpd: each runs on the owner; false = no answer within 2 s --------
-        bool setMode(twai_mode_t mode, bool& ok);
-        bool setListen(bool listenOnly, bool& ok);
-        bool setTiming(const TwaiBus::Timing& t, bool& ok,
-                       uint16_t& samplePointTenths, uint32_t& bitrate);
-        bool selfTest(bool& ok, int& recessive, int& dominant);
         bool loopTest(uint32_t& cycles, uint32_t& followed);
-
-        // The pad diagnostics (/api/can/level, pintest, pads). pinMode() on a
-        // pad the controller transmits on hands it back to plain GPIO, and the
-        // driver would go on sending into nothing. So they run here too: the
-        // TX ones take the pins off the driver and give them back in the
-        // role's mode, like selfTest(); the CRX one only reads and pulls RX.
-        // ok = false: no pins configured.
-        bool txPulls(bool& ok, int& floating, int& pullup, int& pulldown);
-        bool pinTest(bool& ok, bool& rxPadOk, bool& txPadOk);
-        bool crxPulls(int& raw, int& up, int& down, int& ctxRaw);
     }
 }
 #endif

@@ -548,7 +548,7 @@ static constexpr Bus::Role g_canRole = Bus::ROLE;
 static uint32_t  g_canRx = 0;
 
 // Listen-only (never transmits or ACKs, so never bus-off; forced on in the
-// Vehicle role) and the transceiver tests are Diag::CanBench's: they run on
+// Vehicle role) and the loopback test are Diag::CanBench's: they run on
 // this loop, which owns the driver, and the web asks for them.
 #endif
 
@@ -593,16 +593,14 @@ static int logTapVprintf(const char* fmt, va_list ap)
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
 
-// Ring of the most recent raw frames, both directions (the per-ID table keeps
-// only the last payload per ID).
+// Ring of the most recent raw frames, both directions: the heartbeat names a
+// flood's id from it.
 struct RawFrame { uint32_t id; uint8_t len; uint8_t data[8]; char dir; };
 static constexpr uint8_t kLastFrames = 24;
 static RawFrame g_lastFrames[kLastFrames];
 static volatile uint8_t g_lastHead = 0;
-static volatile uint32_t g_lastCount = 0;
-// The writers run on the panel task, the reader (/api/can/last) on httpd on
-// the other core: an entry is copied in and out under this lock, a few dozen
-// bytes, so the JSON never shows a torn frame.
+// The writers run on the panel and car tasks: an entry is copied in under
+// this lock, a few dozen bytes, so no writer leaves a torn frame.
 static portMUX_TYPE g_lastMux = portMUX_INITIALIZER_UNLOCKED;
 
 // Writers: carTap (the car task), noteTxFrame, affaTap. Length clamped to
@@ -617,7 +615,6 @@ static void ringPut(char dir, uint32_t id, const uint8_t* data, uint8_t len)
     portENTER_CRITICAL(&g_lastMux);
     g_lastFrames[g_lastHead] = f;
     g_lastHead = (uint8_t)((g_lastHead + 1) % kLastFrames);
-    ++g_lastCount;
     portEXIT_CRITICAL(&g_lastMux);
 }
 
@@ -638,44 +635,11 @@ static void noteTxFrame(const Frame& f)
     ringPut('T', f.id, f.data, f.len);
 }
 
-// Newest first.
-static String canLastFramesJson()
-{
-    // One copy of the whole ring under the lock (24 x 16 bytes), formatted
-    // outside it: String work never runs with interrupts masked.
-    RawFrame snap[kLastFrames];
-    uint32_t total;
-    uint8_t head;
-    portENTER_CRITICAL(&g_lastMux);
-    memcpy(snap, g_lastFrames, sizeof(snap));
-    head  = g_lastHead;
-    total = g_lastCount;
-    portEXIT_CRITICAL(&g_lastMux);
-
-    String out = "{\"total\":";
-    out += total;
-    out += ",\"frames\":[";
-    for (uint8_t i = 0; i < kLastFrames; ++i) {
-        const RawFrame& f = snap[(head + kLastFrames - 1 - i) % kLastFrames];
-        if (!f.len) continue;
-        char b[80];
-        int n = snprintf(b, sizeof(b), "%s{\"dir\":\"%c\",\"id\":\"%03X\",\"len\":%u,\"data\":\"",
-                         out.endsWith("[") ? "" : ",", f.dir ? f.dir : (char)0x52, (unsigned)f.id, (unsigned)f.len);
-        for (uint8_t k = 0; k < f.len && k < 8; ++k)
-            n += snprintf(b + n, sizeof(b) - n, "%02X", f.data[k]);
-        snprintf(b + n, sizeof(b) - n, "\"}");
-        out += b;
-    }
-    out += "]}";
-    return out;
-}
-
 #endif
 
 // ---- head-unit UART ---------------------------------------------------------
 // A ring of recent head-unit frames, so traffic is kept without a page open
-// (track-change text, 0x90 "send me command X" requests). 24 entries, like
-// /api/can/last.
+// (track-change text, 0x90 "send me command X" requests). 24 entries.
 namespace {
     struct HuEntry {
         char     dir;            // 'T' ours, 'R' a framed reply, 'J' junk
@@ -1111,7 +1075,7 @@ static uint32_t          g_affaTracePrinted = 0;
 
 static void affaTap(const affa::Frame& f, affa::Direction d, void*)
 {
-    // Feed /api/can/last: the panel bus is not a car source.
+    // Feed the raw frame ring: the panel bus is not a car source.
     ringPut((d == affa::Direction::Tx) ? 'T' : 'R', f.id, f.data, f.len);
 
     // Feed the per-ID table too: it keeps a single sighting (e.g. the panel's
@@ -1937,7 +1901,7 @@ void setup()
 #endif
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-    // The web's CAN bench ops and the controller's status, served by this
+    // The web's loopback test and the controller's status, served by this
     // task between two passes. Before httpd: its routes call straight in.
     {
         Diag::CanBench::Setup cb;
@@ -2164,7 +2128,7 @@ void setup()
 #endif
 #if FEATURE_VEHICLE_CAN
     static bool s_isVehicle = (g_canRole == Bus::Role::Vehicle);
-    g_web.attachCan(&g_sniffer, &s_isVehicle, canLastFramesJson);
+    g_web.attachCan(&g_sniffer, &s_isVehicle);
 #endif
     g_web.attachVehicle(g_state, g_emitter, g_tx, g_keySink, g_huRx);
     g_web.attachHuRing(huLastFramesJson);
@@ -2456,8 +2420,8 @@ void loop()
     lap("trace");
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-    // The web's CAN bench ops (mode, listen, timing, self-test, loopback) run
-    // here, between two polls, and the controller is sampled every 100 ms.
+    // The web's loopback test runs here, between two polls, and the
+    // controller is sampled every 100 ms.
     Diag::CanBench::service(now);
 #endif
     lap("can");

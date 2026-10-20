@@ -205,13 +205,10 @@ public:
 #endif
 
 #if FEATURE_VEHICLE_CAN
-    // The loop task owns the controller. Its bench ops (listen, mode, timing,
-    // self-test, loopback) are Request/Reply calls into Diag::CanBench, and its
-    // counters a snapshot from there; this only gets the flags it may set.
-    using RawDumpFn   = String (*)();
-
-    void attachCan(Vehicle::CanSniffer* sniffer, const bool* isVehicle, RawDumpFn rawDump) {
-        _sniffer = sniffer; _isVehicle = isVehicle; _rawDump = rawDump;
+    // The loop task owns the controller. Its loopback test is a Request/Reply
+    // call into Diag::CanBench, and its counters a snapshot from there.
+    void attachCan(Vehicle::CanSniffer* sniffer, const bool* isVehicle) {
+        _sniffer = sniffer; _isVehicle = isVehicle;
     }
 #endif
 
@@ -394,7 +391,6 @@ private:
 #if FEATURE_VEHICLE_CAN
     Vehicle::CanSniffer*   _sniffer = nullptr;
     const bool*            _isVehicle = nullptr;
-    RawDumpFn              _rawDump = nullptr;
 #endif
 #if FEATURE_CAN2
     const Snapshot<Mcp2518Source::Status>* _can2 = nullptr;

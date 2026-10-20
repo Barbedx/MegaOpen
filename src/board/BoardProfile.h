@@ -46,8 +46,7 @@ namespace Board
     // --- CAN B, the display's multimedia bus --------------------------------
     // TX GPIO7 -> the transceiver's TXD (via a level shifter), RX GPIO6 <- RXD.
     // pin_config.h: CAN_TX 7, CAN_RX 6. The isolator adds loop delay: if the
-    // panel will not register, look at the sample point (TwaiBus::setTiming)
-    // before the wiring.
+    // panel will not register, look at the sample point before the wiring.
     inline constexpr int8_t PIN_CAN_RX = 6;
     inline constexpr int8_t PIN_CAN_TX = 7;
 

@@ -8,8 +8,6 @@
 #include <WiFi.h>
 #include <driver/twai.h>
 #include <soc/twai_struct.h>   // TWAI.error_code_capture_reg, for /api/can/ecc
-#include <soc/gpio_struct.h>   // GPIO.in, for /api/can/txwatch
-#include <soc/io_mux_reg.h>
 #include <driver/gpio.h>
 #include "../bus/TwaiBus.h"
 #include "../diag/CanBench.h"
@@ -1702,13 +1700,6 @@ void WebUi::routesCan()
 #endif
         d["listenOnly"] = Diag::CanBench::listenOnly();
 
-        {
-            int rec = -1, dom = -1;
-            Diag::CanBench::lastSelfTest(rec, dom);
-            d["loopRecessive"] = rec;
-            d["loopDominant"]  = dom;
-            d["txPath"] = (rec == 1 && dom == 0) ? "ok" : "broken";
-        }
         // Controller state: tells "no frames" from "frames but undecodable".
         // The loop's 100 ms sample: httpd does not call the driver.
         const Diag::CanStatus st = Diag::CanBench::status();
@@ -1751,178 +1742,6 @@ void WebUi::routesCan()
         d["rxPin"] = (int)Board::PIN_CAN_RX;
         d["txPin"] = (int)Board::PIN_CAN_TX;
         String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    // Listen-only vs normal, nothing else changed: if reception dies in normal,
-    // this node cannot ACK on this bus. Vehicle role only: in the display role
-    // it would stop our ACKs and drop the panel session.
-    route("/api/can/listen", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_isVehicle)
-            return r->reply(503, "text/plain", "no vehicle CAN in this build");
-        if (!*_isVehicle)
-            return r->reply(409, "application/json",
-                            "{\"ok\":false,\"note\":\"display role: listen-only would drop the "
-                            "panel session\"}");
-        const bool on = paramBool(r, "on", true);
-        // A driver reinstall: the loop runs it, between two passes.
-        bool ok = false;
-        if (!Diag::CanBench::setListen(on, ok))
-            return r->reply(503, "text/plain", "the CAN owner did not answer in 2 s");
-        JsonDocument d;
-        d["ok"] = ok;
-        d["listenOnly"] = on;
-        d["note"] = on ? "listen-only: never transmits, never ACKs"
-                       : "NORMAL: this node now ACKs every frame it receives";
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    // Bit timing, live. POST is vehicle role only: it reinstalls the IDF driver.
-    route("/api/can/timing", HTTP_GET, [](PsychicRequest* r) {
-        const TwaiBus::Timing& t = TwaiBus::instance().timing();
-        JsonDocument d;
-        d["brp"] = t.brp; d["tseg1"] = t.tseg1; d["tseg2"] = t.tseg2; d["sjw"] = t.sjw;
-        d["override"] = t.brp >= 2;
-        d["samplePct"] = TwaiBus::instance().samplePointTenths() / 10.0;
-        d["bitrate"] = TwaiBus::instance().effectiveBitrate();
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    route("/api/can/timing", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_isVehicle || !*_isVehicle)
-            return r->reply(409, "text/plain", "vehicle role only: a driver reinstall would "
-                                               "drop the panel session in the display role");
-        TwaiBus::Timing t{};
-        t.brp   = (uint32_t)atoi(paramStr(r, "brp",   "0").c_str());
-        t.tseg1 = (uint8_t) atoi(paramStr(r, "tseg1", "0").c_str());
-        t.tseg2 = (uint8_t) atoi(paramStr(r, "tseg2", "0").c_str());
-        t.sjw   = (uint8_t) atoi(paramStr(r, "sjw",   "3").c_str());
-        // Applied and reinstalled by the loop, which owns the driver.
-        bool ok = false;
-        uint16_t sp = 0;
-        uint32_t bitrate = 0;
-        if (!Diag::CanBench::setTiming(t, ok, sp, bitrate))
-            return r->reply(503, "text/plain", "the CAN owner did not answer in 2 s");
-        JsonDocument d;
-        d["ok"] = ok;
-        d["samplePct"] = sp / 10.0;
-        d["bitrate"] = bitrate;
-        if (!ok) d["note"] = "driver refused the triple — reverted nothing, bus is DOWN";
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    // listen / normal / noack. NO_ACK transmits without needing an ACK: if
-    // twaiTxOk grows, the transmitter works and the fault is in the ACK slot.
-    route("/api/can/mode", HTTP_POST, [this](PsychicRequest* r) {
-        // No role guard: TwaiBus owns the controller in both roles. The
-        // reinstall runs on the loop, between two polls, never under one.
-        const String m = paramStr(r, "m", "listen");
-        twai_mode_t mode = TWAI_MODE_LISTEN_ONLY;
-        if      (m == "normal") mode = TWAI_MODE_NORMAL;
-        else if (m == "noack")  mode = TWAI_MODE_NO_ACK;
-        bool ok = false;
-        if (!Diag::CanBench::setMode(mode, ok))
-            return r->reply(503, "text/plain", "the CAN owner did not answer in 2 s");
-        JsonDocument d; d["ok"] = ok; d["mode"] = m;
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    // The pad diagnostics below reconfigure the CAN pads as plain GPIO. The
-    // part that does runs on the loop (Diag::CanBench), which owns the driver
-    // and gives the pads back to it afterwards. They still run only when asked
-    // for with ?arm=bench, and never while the panel holds a session (it would
-    // lose it mid-test) or the knobs are sampling (the CAN pins are a setting,
-    // and can land on a knob's line).
-    auto benchRefusal = [this](PsychicRequest* r) -> const char* {
-        if (paramStr(r, "arm") != "bench")
-            return "bench diagnostic: add ?arm=bench (it drives the CAN pads as GPIO)";
-#if FEATURE_DISPLAY_CAN
-        if (_panel && _panel->read().registered)
-            return "refused: the panel is registered - unplug it or switch to the vehicle role";
-#endif
-#if FEATURE_KNOBS
-        if (_knobs) {
-            const Knobs::Config k = _knobs->config();
-            bool live = k.ledEnabled || k.potMode != Knobs::PotMode::Off;
-            for (uint8_t i = 0; i < Knobs::ENCODERS; ++i) live = live || k.enc[i].enabled;
-            if (live) return "refused: the knobs are live - switch them off first";
-        }
-#endif
-        return nullptr;
-    };
-
-    // Is the bus held dominant? Samples RX: idle CAN is recessive (1), so a pad
-    // stuck at 0 means something clamps the bus. Read-only on RX.
-    route("/api/can/level", HTTP_GET, [this, benchRefusal](PsychicRequest* r) {
-        if (!_cfg) return r->reply(503, "text/plain", "no config");
-        if (const char* why = benchRefusal(r)) return r->reply(409, "text/plain", why);
-        const int rx = Board::PIN_CAN_RX;
-        uint32_t high = 0;
-        constexpr uint32_t N = 4000;
-        for (uint32_t i = 0; i < N; ++i) {
-            if (digitalRead(rx)) ++high;
-            delayMicroseconds(20);          // ~80 ms total, tens of frame times
-            // httpd now lives on core 0 beside IDLE0, which the task watchdog
-            // checks with panic on: hand it a tick every 50 ms of spinning.
-            if (i % 2500 == 2499) vTaskDelay(1);
-        }
-        // TX pad under float / pull-up / pull-down. Pull-up reads 0: something
-        // holds it low against ~45k. On the loop, off the driver, which gets
-        // the pad back in the role's mode afterwards.
-        const int tx = Board::PIN_CAN_TX;
-        bool pullsOk = false;
-        int txFloat = -1, txPullup = -1, txPulldown = -1;
-        if (!Diag::CanBench::txPulls(pullsOk, txFloat, txPullup, txPulldown))
-            return r->reply(503, "text/plain", "the CAN owner did not answer in 2 s");
-
-        JsonDocument d;
-        d["rxPin"] = rx;
-        d["txPin"] = tx;
-        d["txFloat"] = txFloat;
-        d["txPullup"] = txPullup;
-        d["txPulldown"] = txPulldown;
-        d["txVerdict"] = !pullsOk ? "no CAN pins configured"
-                       : txPullup ? "pad is free — the low was not driven"
-                                  : "HELD LOW against the internal pull-up";
-        d["samples"] = N;
-        d["recessivePct"] = (high * 100.0) / N;
-        d["verdict"] = high == 0        ? "BUS HELD DOMINANT — something is clamping it"
-                     : high >= N * 99 / 100 ? "idle/quiet — almost no traffic"
-                                            : "alive — recessive idle with dominant traffic";
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    // Drive each CAN pad high and low as a GPIO and read it back: a pad that
-    // can't reach a level is damaged or held by what it is wired to.
-    route("/api/can/pintest", HTTP_POST, [this, benchRefusal](PsychicRequest* r) {
-        if (const char* why = benchRefusal(r)) return r->reply(409, "text/plain", why);
-        // On the loop: it takes the pins from the controller, drives each one
-        // high and low, leaves it recessive and gives it back.
-        bool ok = false, rxOk = false, txOk = false;
-        if (!Diag::CanBench::pinTest(ok, rxOk, txOk))
-            return r->reply(503, "text/plain", "the CAN owner did not answer in 2 s");
-        const int rxPin = Board::PIN_CAN_RX;
-        const int txPin = Board::PIN_CAN_TX;
-        JsonDocument d;
-        d["rxPin"] = rxPin;
-        d["txPin"] = txPin;
-        d["rx_pad_ok"] = ok && rxOk;
-        d["tx_pad_ok"] = ok && txOk;
-        d["note"] = "true = the pad drives both levels and reads them back";
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    // The last raw frames, both directions (the per-ID table keeps only the
-    // newest payload per id).
-    route("/api/can/last", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_rawDump) return r->reply(503, "text/plain", "no can");
-        const String out = _rawDump();
         return replyJson(r, out);
     });
 
@@ -1971,74 +1790,6 @@ void WebUi::routesCan()
         return replyJson(r, out);
     });
 
-    // Samples both pads from GPIO_IN while the controller runs:
-    //   txLow == 0              controller never pulls TX low: chip/pin setup.
-    //   txLow > 0, bothLow ~ 0  TX pulses, bus doesn't follow: wire/transceiver.
-    //   bothLow ~ txLow         ACK goes out and comes back: timing, not continuity.
-    // Only sets the TX pad's IE bit; pinMode/gpio_set_direction would detach
-    // the pad from the TWAI transmitter.
-    route("/api/can/txwatch", HTTP_GET, [this, benchRefusal](PsychicRequest* r) {
-        if (!_cfg) return r->reply(503, "text/plain", "no config");
-        if (const char* why = benchRefusal(r)) return r->reply(409, "text/plain", why);
-        const int tx = Board::PIN_CAN_TX, rx = Board::PIN_CAN_RX;
-        if (tx > 31 || rx > 31) return r->reply(409, "text/plain", "pins above 31 not supported here");
-        PIN_INPUT_ENABLE(GPIO_PIN_MUX_REG[tx]);
-
-        uint32_t n = 0, txLow = 0, rxLow = 0, bothLow = 0, txPulses = 0;
-        uint32_t prevTx = 1;
-        for (uint8_t burst = 0; burst < 10; ++burst) {
-            for (uint32_t i = 0; i < 40000; ++i) {
-                // Register, not `GPIO.in`: that is a union on the C3.
-                const uint32_t in = REG_READ(GPIO_IN_REG);
-                const uint32_t t = (in >> tx) & 1u, x = (in >> rx) & 1u;
-                ++n;
-                if (!t) { ++txLow; if (!x) ++bothLow; if (prevTx) ++txPulses; }
-                if (!x) ++rxLow;
-                prevTx = t;
-            }
-            delay(1);
-        }
-        JsonDocument d;
-        d["txPin"] = tx; d["rxPin"] = rx;
-        d["samples"]  = n;
-        d["txLow"]    = txLow;      // samples with OUR transmit pad low
-        d["txPulses"] = txPulses;   // how many separate times it went low
-        d["bothLow"]  = bothLow;    // ...of the txLow samples, how many had the bus low too
-        d["rxLow"]    = rxLow;      // the bus low at all (the panel's traffic, mostly)
-        d["verdict"] = !txLow ? "the controller never pulls the TX pad low — inside the chip, not the wiring"
-                     : (bothLow * 4 < txLow) ? "the pad pulses and the bus does NOT follow — wire, transceiver driver, or its supply"
-                                             : "the pulses go out AND come back — continuity is fine, look at timing";
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    // Read-only pad check, never drives CTX. A powered transceiver drives RXD
-    // hard; if the ~45k internal pulls can move CRX, it is floating (wire off or
-    // transceiver unpowered), which the raw level alone can't show.
-    route("/api/can/pads", HTTP_GET, [this, benchRefusal](PsychicRequest* r) {
-        if (const char* why = benchRefusal(r)) return r->reply(409, "text/plain", why);
-        const int rxPin = Board::PIN_CAN_RX;
-        // On the loop, between two polls: it pulls the pad the controller
-        // receives on.
-        int raw = -1, up = -1, down = -1, ctxRaw = -1;
-        if (!Diag::CanBench::crxPulls(raw, up, down, ctxRaw))
-            return r->reply(503, "text/plain", "the CAN owner did not answer in 2 s");
-
-        JsonDocument d;
-        d["rxPin"]   = rxPin;
-        d["crxRaw"]  = raw;
-        d["crxUp"]   = up;
-        d["crxDown"] = down;
-        d["ctxRaw"]  = ctxRaw;
-        d["crxDriven"] = (up == down);        // driven means the pull resistors lose
-        d["verdict"]   = (up == down)
-            ? (up ? "driven recessive (bus idle, transceiver alive)"
-                  : "driven dominant (something holds the bus low)")
-            : "FLOATING - nothing is driving CRX: wire off, or transceiver unpowered";
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
     // Wiggle page (WiggleAssets.h): /api/can/loop ten times a second with a tone when good, for
     // pressing on joints hands-free. The controller is off the pins 40 ms in
     // every 100 while it runs, so the panel will not register.
@@ -2060,21 +1811,6 @@ void WebUi::routesCan()
                       : (followed * 10 >= cycles * 9) ? "CRX follows CTX — the transceiver drives the bus"
                       : followed ? "CRX follows only sometimes — marginal"
                                  : "CRX NEVER follows CTX — the driver does not reach the bus";
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    // Transceiver self-check. Briefly holds the bus dominant, so manual only;
-    // run on the loop (Diag::CanBench), which owns the driver it uninstalls.
-    route("/api/can/selftest", HTTP_POST, [this](PsychicRequest* r) {
-        bool ok = false;
-        int rec = -1, dom = -1;
-        if (!Diag::CanBench::selfTest(ok, rec, dom))
-            return r->reply(503, "text/plain", "the CAN owner did not answer in 2 s");
-        JsonDocument d;
-        d["txPath"]        = ok ? "ok" : "broken";
-        d["loopRecessive"] = rec;
-        d["loopDominant"]  = dom;
         String out; serializeJson(d, out);
         return replyJson(r, out);
     });
