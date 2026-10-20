@@ -157,6 +157,7 @@ namespace App
             publish();
         }
 
+        // library gap: AffaTask sleeps a fixed period, not in TwaiLink::waitRx(), so this task polls.
         void wait()
         {
             uint32_t ms = 2;

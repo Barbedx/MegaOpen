@@ -10,9 +10,9 @@
 // only sniffer, straight on the IDF driver. Where there is a panel the TWAI is
 // the panel's, and its driver is AffaDisplay's affa::TwaiLink.
 //
-// Not TwaiLink here: the library cannot be linked into a build with no panel.
-// AffaConfig.h stops a build that names no panel family, so linking it would
-// compile a panel's protocol into the one image that has none.
+// library gap: affa::TwaiLink cannot be linked without a panel family (AffaConfig.h #errors).
+// Linking it here would compile a panel's protocol into the one image that has
+// none, so this build keeps its own listen-only driver.
 //
 //   TWAI_GENERAL_CONFIG_DEFAULT(tx, rx, mode)   // TX first in this macro
 //   rx_queue_len 64: the default 5 overruns silently at ~1000 frames/s.
