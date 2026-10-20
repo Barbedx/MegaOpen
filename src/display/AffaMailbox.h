@@ -202,7 +202,7 @@ namespace MegaOpen
     private:
         // One request: the library call, its id bookkeeping, the report.
         void apply(affa::AffaDisplayBase& d, const Req& r);
-        affa::Result render(affa::AffaDisplayBase& d, const Req& r);
+        affa::Submitted render(affa::AffaDisplayBase& d, const Req& r);
         void complete(const MailboxIds::Completion& c);
 
         QueueHandle_t _q = nullptr;
@@ -241,7 +241,7 @@ namespace MegaOpen
     // Rows are 0x0D-terminated; an empty row is skipped. b5 = 0 derives it from
     // declLen; other values are for sweeping.
     static constexpr uint8_t FS_COLS = 22;
-    affa::Result sendFullscreen(affa::CarminatDisplay& d, const char* l1, const char* l2,
-                                const char* l3, uint8_t declLen = 0x69,
-                                uint8_t b5 = 0, uint8_t start = 32);
+    affa::Submitted sendFullscreen(affa::CarminatDisplay& d, const char* l1, const char* l2,
+                                   const char* l3, uint8_t declLen = 0x69,
+                                   uint8_t b5 = 0, uint8_t start = 32);
 }

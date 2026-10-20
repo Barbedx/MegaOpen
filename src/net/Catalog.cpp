@@ -56,9 +56,6 @@ namespace Catalog
 #if AFFA_PANEL_UPDATELIST
         {"updatelist",      "Update List",     kUpdateListCaps, 1},
 #endif
-#if AFFA_PANEL_UPDATELIST_MENU
-        {"updatelist_menu", "Update List LCD", kUpdateListCaps, 1},
-#endif
     };
 
     bool panelKnown(const char* id)

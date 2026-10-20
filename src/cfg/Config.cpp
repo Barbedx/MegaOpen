@@ -31,6 +31,8 @@ namespace Cfg
         _s.encInverted           = _p.getBool  ("encInv", false);
 
         _s.displayType = _p.getString("dispType", "carminat");
+        // AffaDisplay 2.0 has one UpdateList encoding; the "LCD" variant is gone.
+        if (_s.displayType == "updatelist_menu") _s.displayType = "updatelist";
         _s.funcReg     = _p.getBool  ("funcReg", true);
         _s.bleMode     = _p.getString("bleMode", "ams");
         _s.autoTime    = _p.getBool  ("autoTime", true);

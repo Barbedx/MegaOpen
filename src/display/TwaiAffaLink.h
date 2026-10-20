@@ -18,10 +18,6 @@ namespace MegaOpen
     class TwaiAffaLink : public affa::ICanLink {
     public:
         // No begin(): main.cpp opens the controller and owns the role decision.
-        bool send(const affa::Frame& f) override {
-            return trySend(f) == affa::TxDisposition::Accepted;
-        }
-
         // Busy = momentarily full driver queue (a 96-byte screen is 13 frames vs
         // 8 TX slots); the FSM retries it without spending payload or retry budget.
         // Reporting Rejected instead would abort the transfer.

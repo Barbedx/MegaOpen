@@ -39,7 +39,7 @@ namespace Cfg
         bool     encInverted = false;
 
         // OEM display
-        String   displayType = "carminat";   // carminat | updatelist | updatelist_menu
+        String   displayType = "carminat";   // carminat | updatelist
         bool     funcReg     = true;         // we are the master: run FUNCSREG ourselves
 
         // BLE role: off | ams (phone: now-playing + clock) | keyboard (HID to the

@@ -138,12 +138,12 @@ namespace MegaOpen
         return post(r) != MailboxIds::NO_REQ;
     }
 
-    affa::Result sendFullscreen(affa::CarminatDisplay& d, const char* l1, const char* l2,
-                                const char* l3, uint8_t declLen, uint8_t b5, uint8_t start)
+    affa::Submitted sendFullscreen(affa::CarminatDisplay& d, const char* l1, const char* l2,
+                                   const char* l3, uint8_t declLen, uint8_t b5, uint8_t start)
     {
         uint8_t p[2 + 0x70];
         if (declLen < 34 || declLen > sizeof(p) - 2 || start < 32 || start >= declLen)
-            return affa::Result::BadArgument;
+            return affa::Submitted::refused(affa::Result::BadArgument);
         memset(p, 0x00, sizeof(p));
         p[0] = 0x10;                  // ISO-TP first frame
         p[1] = declLen;
@@ -166,8 +166,7 @@ namespace MegaOpen
 
         affa::TxOptions opt;
         opt.coalesce = false;
-        return (d.enqueue(0x151, p, (uint8_t)end, opt) == affa::kNoTicket) ? d.lastResult()
-                                                                           : affa::Result::Ok;
+        return d.enqueue(0x151, p, (uint8_t)end, opt);
     }
 
     bool AffaMailbox::postPopup(const char* text, uint8_t icon, uint8_t srcIcon, uint8_t fmt)
@@ -260,9 +259,10 @@ namespace MegaOpen
         return q + (_rowsFull ? 1u : 0u);
     }
 
-    affa::Result AffaMailbox::render(affa::AffaDisplayBase& d, const Req& r)
+    affa::Submitted AffaMailbox::render(affa::AffaDisplayBase& d, const Req& r)
     {
-        affa::Result res = affa::Result::Ok;
+        // The ops that are not renders have no ticket, only a result.
+        affa::Submitted res{affa::kNoTicket, affa::Result::Ok};
         switch (r.op) {
             case Op::Text:           res = d.setText(r.a); break;
             case Op::Time:           res = d.setTime(r.a); break;
@@ -274,7 +274,7 @@ namespace MegaOpen
             case Op::FullscreenGeom:
                 res = _carminat ? sendFullscreen(*_carminat, r.a, r.b, r.c,
                                                  r.p[0], r.p[1], r.p[2])
-                                : affa::Result::NotSupported;
+                                : affa::Submitted::refused(affa::Result::NotSupported);
                 break;
             case Op::Fullscreen:     res = d.showFullscreenText(r.a, r.b, r.c); break;
             case Op::ConfirmBox:     res = d.showConfirmBox(r.a, r.b, r.c); break;
@@ -286,7 +286,7 @@ namespace MegaOpen
             case Op::MessageBox:
             case Op::SelectButton: {
                 affa::CarminatDisplay* const c = _carminat;
-                if (!c) { res = affa::Result::NotSupported; break; }
+                if (!c) { res = affa::Submitted::refused(affa::Result::NotSupported); break; }
                 if (r.op == Op::TextStyled) {
                     res = c->setTextStyled(r.a, r.p[0], r.p[1], r.p[2], r.p[3]);
                     break;
@@ -315,30 +315,28 @@ namespace MegaOpen
             case Op::NavBitmap:
                 res = (_carminat && _pane && r.slot < PaneBuffers::SLOTS)
                           ? _carminat->showNavBitmap(_pane->data(r.slot))
-                          : affa::Result::NotSupported;
+                          : affa::Submitted::refused(affa::Result::NotSupported);
                 break;
             case Op::Key:
                 // Local by default: in the radio role we receive key frames,
                 // and Local takes the same path as a key decoded off the bus.
                 // p[0] asks for Wire: the frame itself, onto the bus.
-                res = d.pressKey((affa::Key)r.u16,
+                res.result = d.pressKey((affa::Key)r.u16,
                                  r.flag ? affa::KeyEdge::Hold : affa::KeyEdge::Click,
                                  r.p[0] ? affa::KeySource::Wire : affa::KeySource::Local);
                 break;
             case Op::Abort:
-                d.abortPending();
-                res = affa::Result::Ok;
+                (void)d.abortPending();
                 break;
             // Resets both FSMs and cancels the queue: whatever was posted
             // before it and is still queued completes Cancelled (the tracked
             // ones come back to the ui through libComplete, slots released).
             case Op::Resync:
-                res = d.begin() ? affa::Result::Ok : affa::Result::LinkDown;
+                res.result = d.begin() ? affa::Result::Ok : affa::Result::LinkDown;
                 ++_resyncs;
                 break;
             // Nothing for the library: the ui task acts on the count.
             case Op::Clear:
-                res = affa::Result::Ok;
                 ++_clears;
                 break;
         }
@@ -364,20 +362,19 @@ namespace MegaOpen
             if (r.track) complete(MailboxIds::TicketMap::dropped(r.id, r.slot, (uint8_t)res));
             else if (_pane && r.slot != MailboxIds::NO_SLOT) _pane->release(r.slot);
         } else if (r.track) {
-            // Read lastEnqueued() on both sides of the call: a new ticket is
-            // this request's; none means refused or nothing to send, and the
-            // verdict is synthesised now. A coalesced predecessor completes
-            // Aborted from inside the call, under its own, older ticket.
+            // The call's ticket is this request's; none means refused or
+            // nothing to send, and the verdict is synthesised now. A coalesced
+            // predecessor completes Aborted from inside the call, under its
+            // own, older ticket.
             _map.beforeRender();
-            const affa::TxTicket before = d.lastEnqueued();
-            res = render(d, r);
-            const affa::TxTicket after = d.lastEnqueued();
+            const affa::Submitted s = render(d, r);
+            res = s.result;
             MailboxIds::Completion c;
-            if (_map.afterRender(r.id, r.slot, res == affa::Result::Ok, (uint8_t)res,
-                                 before, after, c))
+            if (_map.afterRender(r.id, r.slot, s.ok(), (uint8_t)res,
+                                 MailboxIds::NO_TICKET, s.ticket, c))
                 complete(c);
         } else {
-            res = render(d, r);
+            res = render(d, r).result;
             // Only NavBitmap borrows, and it is always tracked: an untracked
             // borrow has no verdict to wait for, so a refusal gives it back.
             if (_pane && r.slot != MailboxIds::NO_SLOT && res != affa::Result::Ok)

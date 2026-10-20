@@ -1,6 +1,6 @@
 /* ---------- Екран ---------- */
 /* пояснення до типів панелі: текст сторінки за id; нема пояснення — лише назва */
-const PANEL_HINT={carminat:'меню, картинка, попапи',updatelist:'лише текст',updatelist_menu:'лише текст'};
+const PANEL_HINT={carminat:'меню, картинка, попапи',updatelist:'лише текст'};
 const CLK_SRC={hu:'від ГУ',cts:'з iPhone',manual:'вручну'};
 const mk=f=>$(`[data-k="/api/media|${f}"]`);
 /* параметри розкладки — поля з каталогу (layouts[].params), той самий рендер, що й консоль */

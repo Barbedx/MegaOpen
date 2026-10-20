@@ -24,7 +24,8 @@ namespace MegaOpen
             if (carminat) *carminat = c;
             return c;
         }
-        if (!strcmp(type, "updatelist_menu")) return new affa::UpdateListMenuDisplay(link, clock);
+        // Anything else, including a stored "updatelist_menu" (the library has
+        // one UpdateList encoding since 2.0), is an UpdateList.
         return new affa::UpdateListDisplay(link, clock);
     }
 
@@ -42,9 +43,6 @@ namespace MegaOpen
             case affa::Result::BadArgument:  return "bad-argument";
             case affa::Result::LinkDown:     return "link-down";
             case affa::Result::Cancelled:    return "cancelled";
-            // 11 was Busy — the sendBlocking() re-entry refusal. Both are gone
-            // from the library, and the number is deliberately not reused, so a
-            // log line that once said "busy" now says "?" rather than a lie.
             case affa::Result::Aborted:      return "aborted";
         }
         return "?";
