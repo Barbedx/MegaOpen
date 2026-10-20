@@ -317,30 +317,8 @@ void WebUi::routes()
         return out.finish();
     });
 
-    // Log threshold. Gated on the board, not in the page, so filtered lines
-    // never cost socket bandwidth.
-    route("/api/loglevel", HTTP_GET, [](PsychicRequest* r) {
-        JsonDocument d;
-        d["level"] = (int)Log::level();
-        d["name"]  = Log::levelName(Log::level());
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-
-    // Not persisted: TRC costs the CAN path real time. Boot is always INF.
-    route("/api/loglevel", HTTP_POST, [](PsychicRequest* r) {
-        const String v = paramStr(r, "n");
-        if (!v.length()) return r->reply(400, "text/plain", "n=0..4 required");
-        const int n = v.toInt();
-        if (n < 0 || n >= Log::LEVELS) return r->reply(400, "text/plain", "n must be 0..4");
-        Log::setLevel((LogLevel)n);
-        LOGI("web", "log level -> %s", Log::levelName((LogLevel)n));
-        JsonDocument d;
-        d["level"] = n;
-        d["name"]  = Log::levelName((LogLevel)n);
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
+    // The log threshold is the registry's `logLevel` (RAM only, boot is INF):
+    // GET/POST /api/settings, and the panel menu's Service group.
 
     // ?since=N: the live log (logLines). Without it, the log pipeline: ring
     // counters always; the flash files where they exist.

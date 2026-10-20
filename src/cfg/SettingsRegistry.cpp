@@ -10,6 +10,7 @@
 #endif
 #include "../bus/Autobaud.h"
 #include "../capture/CapFormat.h"
+#include "../utils/Log.h"
 #include "../net/Catalog.h"
 
 namespace Cfg
@@ -166,6 +167,13 @@ namespace Cfg
         const SEnum kAnim  = UI_NAMES_ENUM(Knobs::ANIM_NAMES);
         const SEnum kConds = UI_NAMES_ENUM(Vehicle::ALERT_COND);
         const SEnum kCapModes = UI_NAMES_ENUM(CapFormat::MODE_NAMES);
+
+        // Log levels: row i = LogLevel i, the id is also the name.
+        const SEnum kLogLevels = {
+            [] { return Log::LEVELS; },
+            [](uint8_t i) { return Log::LEVEL_NAMES[i < Log::LEVELS ? i : 0]; },
+            [](uint8_t i) { return Log::LEVEL_NAMES[i < Log::LEVELS ? i : 0]; },
+        };
 #undef UI_NAMES_ENUM
 
         // ---- the panel alerts (Vehicle::AlertRules) -------------------------
@@ -373,6 +381,14 @@ namespace Cfg
             {"can2Detected", "Знайдена швидкість CAN A", "CAN A found", "system", SType::Enum, W | F_RO, AP_NONE,
              0, 0, 0, nullptr, &kRates, S_GET(rateIndex(s.can2Detected)),
              S_PUT(s.can2Detected = rateRow((uint8_t)v))},
+
+            // ---- service: RAM only ------------------------------------------
+            // TRC costs the CAN path real time, so the level is never saved:
+            // every boot starts at INF.
+            G("service", "Сервіс", "Service", nullptr, WM),
+            {"logLevel", "Рівень логу", "Log level", "service", SType::Enum, WM | F_VOLATILE, AP_NONE,
+             0, 0, 0, nullptr, &kLogLevels, [](const Model&) -> int32_t { return (int32_t)Log::level(); },
+             [](Model&, int32_t v) { Log::setLevel((LogLevel)v); }},
 
             // ---- the CAN capture recorder (its own NVS namespace) -------------
             // Ranges are Capture::setSettings()'s clamps.

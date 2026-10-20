@@ -4,7 +4,8 @@
 enum class LogLevel : uint8_t { ERR = 0, WRN = 1, INF = 2, DBG = 3, TRC = 4 };
 
 namespace Log {
-    // Row i = LogLevel i; /api/loglevel and /api/catalog (logLevels) read it.
+    // Row i = LogLevel i; the settings registry (logLevel) and /api/catalog
+    // (logLevels) read it.
     inline constexpr uint8_t LEVELS = 5;
     inline constexpr const char* LEVEL_NAMES[LEVELS] = {"ERR", "WRN", "INF", "DBG", "TRC"};
     // The web log's tag groups (/api/catalog logTags, /api/logs `tag`): the
@@ -30,8 +31,10 @@ namespace Log {
 // without the firmware logger.
 #ifdef NATIVE
 namespace Log {
-    inline void        setLevel(LogLevel) {}
-    inline LogLevel    level() { return LogLevel::INF; }
+    // Kept, so the settings registry's log level reads back what it set.
+    inline LogLevel&   levelRef() { static LogLevel l = LogLevel::INF; return l; }
+    inline void        setLevel(LogLevel lvl) { levelRef() = lvl; }
+    inline LogLevel    level() { return levelRef(); }
     inline bool        enabled(LogLevel) { return false; }
     inline const char *levelName(LogLevel) { return ""; }
     inline void        emit(LogLevel, const char *, const char *, ...) {}
@@ -56,8 +59,9 @@ namespace Log {
 //   ERR  failure; WRN  unexpected but handled; INF  state transitions;
 //   DBG  per-operation narration; TRC  per-frame firehose.
 //
-// Runtime threshold (default INF) via HTTP /api/loglevel?n=<0..4> (nothing reads
-// serial input). Not persisted: TRC costs the CAN path real time.
+// Runtime threshold (default INF) via the settings registry's logLevel
+// (/api/settings, the panel menu; nothing reads serial input). Not
+// persisted: TRC costs the CAN path real time.
 // Gated-out lines return before formatting; guard costly payload builds with
 // Log::enabled(). Fixed stack buffer, no String: safe in the CAN callback.
 // ============================================================================

@@ -2,15 +2,17 @@
 /* поле консолі з каталогу — той самий рендер, що й параметри розкладки (fieldCtrl) */
 const cField=f=>`<label>${fieldLabel(f)}${fieldCtrl(f,'#'+f.n)}</label>`;
 /* межі числа з реєстру налаштувань (CAT.settings): ті самі, що перевіряє прошивка */
-const regRange=id=>{const f=(CAT.settings||[]).find(x=>x.id===id)||{};return f.type==='int'?`min="${f.min}" max="${f.max}"${f.step?` step="${f.step}"`:''}`:''};
+const regOf=id=>(CAT.settings||[]).find(x=>x.id===id)||{};
+const regRange=id=>{const f=regOf(id);return f.type==='int'?`min="${f.min}" max="${f.max}"${f.step?` step="${f.step}"`:''}`:''};
+const regOpts=id=>(regOf(id).enum||[]).map(o=>[o.v,o.name]);
 SCR.service={title:'Сервіс',async render(m){
  const D=has('display'),V=has('vehicle'),CP=has('capture');
- const[ll,me,tun,msgs,can,se]=await Promise.all([API.get('/api/loglevel'),getIf(D,'/api/media'),API.get('/api/canbox/tuning'),API.get('/api/messages'),getIf(V,'/api/can'),API.get('/api/settings')]);
+ const[me,tun,msgs,can,se]=await Promise.all([getIf(D,'/api/media'),API.get('/api/canbox/tuning'),API.get('/api/messages'),getIf(V,'/api/can'),API.get('/api/settings')]);
  const MS=msgs.messages||[];this.n=0;this.paused=false;this.lines=[];this.tagF='all';this.since=0;this.busy=false;this.boot=undefined;this.drop=undefined;
  const PK=CAT.panelKeys.filter(k=>k.src==='wheel'),con=()=>CAT.console.find(c=>c.cmd===$('#cK').value)||{name:'',fields:[]};
  m.innerHTML=
  card('Лог',`<div class="pad"><div class="seg wrap" id="lgTag" data-v="all">${['all',...CAT.logTags].map(t=>`<button type="button" class="${t==='all'?'on':''}" data-val="${esc(t)}">${t==='all'?'усе':esc(t)}</button>`).join('')}</div></div>`+
-  row('Рівень',sel('/api/loglevel|n',enumOpts('logLevels'),ll.level),'до перезапуску')+
+  row('Рівень',sel('/api/settings|logLevel',regOpts('logLevel'),se.logLevel,'data-str'),'до перезапуску; є і в меню на щитку')+
   '<div class="fr"><button class="btn" type="button" id="lgP">Пауза</button><button class="btn" type="button" id="lgC">Очистити</button><button class="btn" type="button" id="lgD">Скачати</button></div><div class="log" id="lg"></div>','','full')+
  (D?card('Панель: консоль',row('Живлення','<button class="btn sm" type="button" data-pw="1">Увімк</button><button class="btn sm" type="button" data-pw="0">Вимк</button>')+
   '<div class="fr">'+`<select class="in" id="cK" style="flex:1">${CAT.console.map(c=>`<option value="${esc(c.cmd)}">${esc(c.name)}</option>`).join('')}</select>`+'</div><div class="pad"><div class="mg" id="cF"></div></div><div class="fr"><button class="btn pri" type="button" id="cGo">Надіслати</button></div>'+

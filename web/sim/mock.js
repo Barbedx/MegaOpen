@@ -211,6 +211,7 @@ const CAPK=['ring','fill','fileMB','autoProtect','mode','autostart'];
 g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type!=='table'&&!(f.id in S.set))S.set[f.id]=regDef(f);
  const st=S.staged,o={...S.set,alerts:S.alerts.map(a=>a.slice()),fw:S.fw,build:S.build,cfgVer:S.cfgVer,cfgVerWas:0,wifiSleep:false,ssid2:S.wifi2.ssid};   /* ssid2 — НОВЕ */
  for(const k of CAPK)o['cap.'+k]=S.cap.settings[k];
+ o.logLevel=LVL[S.logLevel];   /* logLevel: лише в RAM, як у прошивці */
  if(st.bleMode)o.bleMode=st.bleMode;if(st.wifi)o.ssid=st.wifi.ssid;return o});
 /* НОВЕ (план, зріз 4): перезапуск не побічний ефект, а pendingReboot; apPass */
 po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass);
@@ -230,6 +231,7 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
   if(f.type==='enum'&&!f.enum.some(o=>o.v===q[f.id]))return fail(400,f.id+': unknown value');
   if(f.reboot&&q[f.id]!==s[f.id])rb=true;
   s[f.id]=f.type==='int'?Math.min(f.max,Math.max(f.min,+q[f.id])):q[f.id]}
+ if(q.logLevel!==undefined){S.logLevel=LVL.indexOf(q.logLevel);delete s.logLevel}
  for(const k of CAPK)if(q['cap.'+k]!==undefined){S.cap.settings[k]=s['cap.'+k];delete s['cap.'+k];if(k==='mode')S.cap.mode=S.cap.settings.mode}
  if(typeof q.mediaSource==='string'&&['ams','hu','auto'].includes(q.mediaSource))s.mediaSource=q.mediaSource;
  if(typeof q.huTitleCmd==='number'||typeof q.huArtistCmd==='number'){if(typeof q.huTitleCmd==='number')s.huTitleCmd=q.huTitleCmd;if(typeof q.huArtistCmd==='number')s.huArtistCmd=q.huArtistCmd}
@@ -411,8 +413,6 @@ po('/api/canbox/raw',q=>{if(q.cmd===undefined)return fail(400,'cmd? (hex)');cons
 g('/api/messages',()=>({messages:S.msgs.map(m=>({...m}))}));
 po('/api/messages/enable',q=>{if(q.id===undefined)return fail(400,'id?');const m=S.msgs[+q.id];if(m)m.enabled=q.on===undefined||B(q.on);return ok});
 po('/api/messages/send',q=>{if(q.id===undefined)return fail(400,'id?');const m=S.msgs[+q.id];if(!m||!m.ready)return fail(409,'no data for this message — pin its signals');uart('T',m.bytes);return ok});
-g('/api/loglevel',()=>({level:S.logLevel,name:LVL[S.logLevel]}));
-po('/api/loglevel',q=>{if(q.n===undefined||q.n==='')return fail(400,'n=0..4 required');const n=parseInt(q.n,10);if(!(n>=0&&n<=4))return fail(400,'n must be 0..4');S.logLevel=n;return {level:n,name:LVL[n]}});
 /* без since — як прошивка; since= — НОВЕ замість /ws */
 g('/api/logs',q=>q.since!==undefined?logsSince(+q.since||0):{lines:logSeq,dropped:0,ringSize:300,mounted:true,mountError:'',buffered:812,used:S.logs.used,total:S.logs.total,files:S.logs.files});
 g('/api/logs/file',q=>{const f=S.logs.files[+q.n||0];return f?{bytes:f.size}:fail(404,'no such log')});

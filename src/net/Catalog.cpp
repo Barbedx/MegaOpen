@@ -260,6 +260,7 @@ namespace Catalog
                 if (e.parent) j.ks("parent", e.parent);
                 if (e.flags & F_MENU) j.kb("menu", true);
                 if (e.flags & F_RO) j.kb("ro", true);
+                if (e.flags & F_VOLATILE) j.kb("volatile", true);
                 if (e.apply & AP_REBOOT) j.kb("reboot", true);
                 if (e.type == SType::Int) {
                     j.kn("min", e.min).kn("max", e.max);

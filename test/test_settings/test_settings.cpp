@@ -3,6 +3,7 @@
 #include <string>
 #include <set>
 #include "cfg/SettingsRegistry.h"
+#include "utils/Log.h"
 
 // The registry is what the settings form and the panel menu both draw, so a
 // wrong row here is a wrong value in two places. These tests hold the table to
@@ -437,6 +438,29 @@ void test_decimal_text_both_ways()
     TEST_ASSERT_FALSE(Registry::decParse(1e12, 0, v));
 }
 
+// ---- RAM-only entries ---------------------------------------------------------------
+
+// The log level is set at once and never saved: no apply bit asks anyone to
+// write NVS, and it is never a reboot setting.
+void test_log_level_is_ram_only()
+{
+    Fixture f;
+    const SEntry* e = Registry::find("logLevel");
+    TEST_ASSERT_NOT_NULL(e);
+    TEST_ASSERT_TRUE(e->flags & F_VOLATILE);
+    TEST_ASSERT_TRUE(e->flags & F_MENU);
+    uint8_t ap = 0;
+    TEST_ASSERT_TRUE(Registry::set(f.m, *e, Registry::enumIndex(*e, "TRC"), &ap));
+    TEST_ASSERT_EQUAL((int)LogLevel::TRC, (int)Log::level());
+    TEST_ASSERT_EQUAL(0, ap);
+    TEST_ASSERT_TRUE(Registry::set(f.m, *e, Registry::enumIndex(*e, "INF")));
+    TEST_ASSERT_EQUAL((int)LogLevel::INF, (int)Log::level());
+    for (size_t i = 0; i < Registry::count(); ++i) {
+        const SEntry& x = Registry::at(i);
+        if (x.flags & F_VOLATILE) TEST_ASSERT_EQUAL_MESSAGE(0, x.apply & AP_REBOOT, x.id);
+    }
+}
+
 // ---- drift guard --------------------------------------------------------------------
 
 // Settings fields with no registry entry, on purpose: strings the panel
@@ -454,7 +478,7 @@ void test_settings_struct_unchanged()
     size_t n = 0;
     for (size_t i = 0; i < Registry::count(); ++i) {
         const SEntry& e = Registry::at(i);
-        if (scalar(e) && !(e.apply & (AP_KNOBS | AP_CAR | AP_CAP))) ++n;
+        if (scalar(e) && !(e.flags & F_VOLATILE) && !(e.apply & (AP_KNOBS | AP_CAR | AP_CAP))) ++n;
     }
     // 40 scalar/enum fields in Settings (carSig counts three), all in the registry.
     TEST_ASSERT_EQUAL(40, n);
@@ -486,6 +510,7 @@ int main(int, char**)
     RUN_TEST(test_an_empty_alert_is_never_on);
     RUN_TEST(test_tables_refuse_the_scalar_calls);
     RUN_TEST(test_decimal_text_both_ways);
+    RUN_TEST(test_log_level_is_ram_only);
     RUN_TEST(test_settings_struct_unchanged);
     return UNITY_END();
 }

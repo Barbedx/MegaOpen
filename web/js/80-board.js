@@ -16,7 +16,7 @@ const allSettings=(se,have)=>{let h='';for(const f of CAT.settings||[]){
  else if(f.type==='bool')c=sw(k,v,ex);
  else if(f.type==='enum')c=sel(k,f.enum.map(o=>[o.v,o.name]),v,'data-str'+ex);
  else c=num(k,v,`min="${f.min}" max="${f.max}"${f.step?` step="${f.step}"`:''}${ex}`);
- h+=row(esc(f.label)+(f.unit&&!f.ro?', '+esc(f.unit):''),c,f.menu?'є і в меню на щитку':'')}
+ h+=row(esc(f.label)+(f.unit&&!f.ro?', '+esc(f.unit):''),c,[f.volatile?'до перезапуску':'',f.menu?'є і в меню на щитку':''].filter(Boolean).join('; '))}
  return h};
 SCR.board={title:'Плата',async render(m){
  const B=has('ble');

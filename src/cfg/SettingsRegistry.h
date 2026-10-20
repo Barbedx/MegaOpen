@@ -41,6 +41,7 @@ namespace Cfg
         F_WEB  = 0x01,     // the settings form
         F_MENU = 0x02,     // the panel menu
         F_RO   = 0x04,     // shown, never written from outside (net_svc owns it)
+        F_VOLATILE = 0x08, // RAM only: applied at once, never saved, gone at a reboot
     };
 
     // Who must hear about a change. The registry only edits the model; the

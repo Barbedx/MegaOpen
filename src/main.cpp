@@ -1091,7 +1091,7 @@ static AffaTrace       g_affaTrace[64];
 static volatile uint8_t  g_affaTraceHead = 0;
 static volatile uint32_t g_affaTraceCount = 0;
 static uint32_t          g_affaTracePrinted = 0;
-// Printing is gated on log level TRC (/api/loglevel): 115200 baud is ~280 lines/s,
+// Printing is gated on log level TRC (logLevel, /api/settings): 115200 baud is ~280 lines/s,
 // a live bus is far more, and a blocked loop stops draining the display link
 // (RX FIFO overrun, registration never latches).
 #define AFFA_TRACE_ON() Log::enabled(LogLevel::TRC)
@@ -1902,7 +1902,7 @@ void setup()
 
     // Every AFFA frame to USB serial, gated on log level TRC.
     g_twai.onRaw(affaTap, nullptr);
-    logf("[affa] frame trace follows the log level - raise it to TRC (/api/loglevel?n=4); it will slow the loop");
+    logf("[affa] frame trace follows the log level - raise it to TRC (logLevel: the Service page or the panel menu); it will slow the loop");
 
     // begin() transmits nothing; the first heartbeat leaves on the first poll().
     panel.begin();
