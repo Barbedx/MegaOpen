@@ -5,7 +5,6 @@
 #include "Rt.h"
 #include "../cfg/Config.h"
 #include "../diag/CanBench.h"
-#include "../display/AffaPort.h"
 #include "../display/PanelOps.h"
 #include "../display/TextFold.h"
 #include "../keys/KeyEngine.h"
@@ -675,7 +674,7 @@ namespace App
                                 s_lastComplaintMs = now;
                                 LogBus::printf("[media] repaint %s: %s",
                                                synth ? "refused" : "failed",
-                                               MegaOpen::resultName(res));
+                                               affa::resultName(res));
                             }
                         }
                         break;
@@ -706,7 +705,7 @@ namespace App
                         // Acceptance is what the probe asks about.
                         const bool accepted = !synth || ok;
                         LogBus::printf("[disp] try %u setText(\"SUCCESS\") -> %s%s", s_tries,
-                                       MegaOpen::resultName(res), synth ? " (refused)" : "");
+                                       affa::resultName(res), synth ? " (refused)" : "");
                         if (accepted && res != affa::Result::Timeout && !s_ok) {
                             s_ok = true;
                             LogBus::printf("[disp] REGISTERED AND TEXT ACCEPTED");

@@ -1,6 +1,5 @@
 #include "PanelOps.h"
 #include <string.h>
-#include "AffaPort.h"
 #include "../utils/LogBus.h"
 
 namespace MegaOpen
@@ -239,7 +238,7 @@ namespace MegaOpen
             // The ui task says what matters about its own, rate-limited:
             // logging each refused repaint here would flood the log.
             if (!r.quiet)
-                LogBus::printf("[disp] %s -> %s", opName(r.op), MegaOpen::resultName(s.result));
+                LogBus::printf("[disp] %s -> %s", opName(r.op), affa::resultName(s.result));
         }
         return s;
     }

@@ -1,7 +1,6 @@
 #include "PanelOwner.h"
 #if FEATURE_DISPLAY_CAN
 #include "../diag/CanBench.h"
-#include "../display/AffaPort.h"
 #include "../utils/LogBus.h"
 
 namespace App

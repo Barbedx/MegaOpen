@@ -2,8 +2,9 @@
 #include <AffaDisplay.h>
 #include <Arduino.h>
 
-// The firmware's side of the OEM display: clock, log sink, panel factory and
-// Result names. The protocol itself is AffaDisplay's.
+// The firmware's side of the OEM display: clock, log sink and panel factory.
+// The protocol itself is AffaDisplay's, and so are the Result names
+// (affa::resultName).
 namespace MegaOpen
 {
     // No delayMs(): the library must never sleep.
@@ -30,7 +31,4 @@ namespace MegaOpen
     affa::AffaDisplayBase* createDisplay(const char* type,
                                          affa::ICanLink& link, affa::IClock& clock,
                                          affa::CarminatDisplay** carminat = nullptr);
-
-    // Human-readable affa::Result (0..5 keep the legacy AffaError values).
-    const char* resultName(affa::Result r);
 }

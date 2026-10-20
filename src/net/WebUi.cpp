@@ -1420,7 +1420,7 @@ void WebUi::routesMedia()
             d["txDelivered"]  = ps.delivered;
             d["txSuperseded"] = ps.superseded;
             d["txFailed"]     = ps.failed;
-            d["txLast"]       = MegaOpen::resultName((affa::Result)ps.lastDelivery);
+            d["txLast"]       = affa::resultName((affa::Result)ps.lastDelivery);
         }
 
         // Where the metadata comes from ("no title" and "no phone" look the same).
@@ -2107,7 +2107,7 @@ void WebUi::fillDisplay(JsonObject d)
             d["passive"]    = ps.passive;
             d["busy"]       = ps.busy;
             d["queued"]     = ps.queued;
-            d["lastResult"] = MegaOpen::resultName((affa::Result)ps.lastResult);
+            d["lastResult"] = affa::resultName((affa::Result)ps.lastResult);
             JsonObject f = d["supports"].to<JsonObject>();
             f["text"]       = (ps.features & MegaOpen::PF_TEXT) != 0;
             f["time"]       = (ps.features & MegaOpen::PF_TIME) != 0;

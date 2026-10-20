@@ -28,23 +28,4 @@ namespace MegaOpen
         // one UpdateList encoding since 2.0), is an UpdateList.
         return new affa::UpdateListDisplay(link, clock);
     }
-
-    const char* resultName(affa::Result r)
-    {
-        switch (r) {
-            case affa::Result::Ok:           return "ok";
-            case affa::Result::NoSync:       return "no-sync";
-            case affa::Result::UnknownFunc:  return "unknown-func";
-            case affa::Result::SendFailed:   return "send-failed";
-            case affa::Result::Timeout:      return "timeout";
-            case affa::Result::TooLong:      return "too-long";
-            case affa::Result::QueueFull:    return "queue-full";
-            case affa::Result::NotSupported: return "not-supported";
-            case affa::Result::BadArgument:  return "bad-argument";
-            case affa::Result::LinkDown:     return "link-down";
-            case affa::Result::Cancelled:    return "cancelled";
-            case affa::Result::Aborted:      return "aborted";
-        }
-        return "?";
-    }
 }
