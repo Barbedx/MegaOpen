@@ -121,7 +121,7 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 - **Fold the per-feature settings routes into the registry (slice 7),
   deferred 2026-10-20.** `/api/settings` is registry-driven since 718c354, but
   `/api/knobs` (settings half), `/api/loglevel`, `/api/routing`,
-  `/api/canbox/tuning`, `/api/cap/settings` and `/api/messages/enable` still
+  `/api/canbox/tuning` and `/api/messages/enable` still
   keep their own handlers; folding the safe ones would take 4-6 routes off the
   112-route table (WebUi.h ROUTE_MAX). One route per commit, each page moved to
   `/api/settings` in the same commit.

@@ -40,8 +40,8 @@ SCR.car={title:'Авто',async render(m){
   `<div class="pad"><div class="seg wrap" id="quick">${QUICK.map(q=>`<button type="button" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></div>`+
   '<div class="kv"><div><small>Записано</small><b id="pFr"></b></div><div><small>Втрачено</small><b id="pDr"></b></div><div><small>Міток</small><b id="pMk"></b></div><div><small>ID</small><b id="pId"></b></div><div><small>Файл</small><b id="pFile"></b></div><div><small>Сховище</small><b id="pSt"></b></div></div>'+
   '<div class="pad"><div class="bar big"><i id="pBar"></i></div></div>'+
-  row('Автостарт',sw('/api/cap/settings|autostart',cp.settings.autostart),'','Запис стартує, щойно після запуску з’являються кадри.')+
-  row('Що писати',seg('/api/cap/settings|mode',enumOpts('capModes'),cp.settings.mode)))+
+  row('Автостарт',sw('/api/settings|cap.autostart',cp.settings.autostart),'','Запис стартує, щойно після запуску з’являються кадри.')+
+  row('Що писати',seg('/api/settings|cap.mode',enumOpts('capModes'),cp.settings.mode)))+
  card('Файли',row('','','Коли місце закінчується, найстаріші файли видаляються самі. 🔒 — не видаляти. Мітка ставить 🔒 на свою сесію сама.')+`<div id="files"></div><div class="fr"><button class="btn dng" type="button" id="fUnp">Видалити всі без 🔒</button></div>`,'cFiles','custom'):C2?notBuilt('Запис','запису'):'')+
  card('RAV4 → ГУ',
   row('Слати дані авто в ГУ',sw('/api/map|send',mp.send),'запам’ятовується','Ліворуч — що вміє протокол RAV4 (0x2E …). ▶ шле тестове значення в ГУ одразу і тримає 30 с: так видно, що й де покаже Android. Потім «прив’язати» поле до ID машини. Нема в прошивці — апка це читає, але плата ще не шле.')+
@@ -106,7 +106,7 @@ async tick(force){this.n++;const[c2,cp]=await Promise.all([getIf(has('can2'),'/a
  if(cp){recBtn($('#cRec'),cp);
  $('#pFr').textContent=fmtN(cp.frames);$('#pDr').textContent=cp.dropped;$('#pMk').textContent=cp.markers;$('#pId').textContent=cp.ids;$('#pFile').textContent=cp.file?String(cp.file).padStart(4,'0'):DASH;
  $('#pSt').textContent=fmtB(cp.capBytes)+' / '+fmtB(cp.budget);const pb=$('#pBar');pb.style.width=(cp.capBytes/cp.budget*100)+'%';pb.style.background=cp.capBytes/cp.budget>cp.settings.fill/100*.95?'var(--warn)':'var(--acc)';
- put($('[data-k="/api/cap/settings|autostart"]'),cp.settings.autostart);put($('[data-k="/api/cap/settings|mode"]'),cp.settings.mode)}
+ put($('[data-k="/api/settings|cap.autostart"]'),cp.settings.autostart);put($('[data-k="/api/settings|cap.mode"]'),cp.settings.mode)}
  await this.map();if(cp&&(this.n%10===0||force))await this.files();
  const hl=$('#cHu');if(hl&&hl.open){const r=await API.get('/api/canbox/last?in='+$('#huIn').dataset.v);const tb=$('#huLog');if(tb)tb.innerHTML=(r.frames||[]).map(huRow).join('')||'<tr><td colspan="4" class="muted">порожньо</td></tr>'}
  const ids=$('#cIds');if(ids&&ids.open&&$('[data-k="/api/can/sniff|on"]').checked){const r=await API.get('/api/can/ids');const tb=$('#ids');if(tb)tb.innerHTML=r.ids.map(idRow).map(x=>`<tr><td class="mono">${x.id}</td><td class="num">${fmtN(x.count)}</td><td class="mono">${x.bytes.map((b,i)=>x.ch[i]?`<span class="ch">${b}</span>`:b).join(' ')}</td></tr>`).join('')||'<tr><td colspan="3" class="muted">порожньо</td></tr>'}

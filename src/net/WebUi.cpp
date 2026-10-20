@@ -479,12 +479,18 @@ void WebUi::routes()
         // The newest rules, applied or not (the car task owns them).
         Vehicle::AlertRules al;
         Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
+#if FEATURE_CAPTURE
+        Capture::Settings cs = Capture::settings();
+        Capture::Settings* csp = &cs;
+#else
+        Capture::Settings* csp = nullptr;
+#endif
 #if FEATURE_KNOBS
         Knobs::Config kc;
         if (_knobs) kc = _knobs->config();
-        const Cfg::Model m{&s, _knobs ? &kc : nullptr, alp};
+        const Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp};
 #else
-        const Cfg::Model m{&s, nullptr, alp};
+        const Cfg::Model m{&s, nullptr, alp, csp};
 #endif
         for (size_t i = 0; i < Cfg::Registry::count(); ++i) {
             const Cfg::SEntry& e = Cfg::Registry::at(i);
@@ -543,12 +549,18 @@ void WebUi::routes()
         static Vehicle::AlertRules al;
         al = Vehicle::AlertRules{};
         bool alSent = false;
+#if FEATURE_CAPTURE
+        Capture::Settings cs = Capture::settings();
+        Capture::Settings* csp = &cs;
+#else
+        Capture::Settings* csp = nullptr;
+#endif
 #if FEATURE_KNOBS
         Knobs::Config kc;
         if (_knobs) kc = _knobs->config();
-        Cfg::Model m{&s, _knobs ? &kc : nullptr, &al};
+        Cfg::Model m{&s, _knobs ? &kc : nullptr, &al, csp};
 #else
-        Cfg::Model m{&s, nullptr, &al};
+        Cfg::Model m{&s, nullptr, &al, csp};
 #endif
 
         // Everything that can be refused is checked before anything is applied
@@ -699,6 +711,11 @@ void WebUi::routes()
             _knobs->setConfig(kc);
             _cfg->saveKnobs(kc);
         }
+#endif
+
+#if FEATURE_CAPTURE
+        // Clamped and saved to its own NVS namespace by the recorder.
+        if (ap & Cfg::AP_CAP) Capture::setSettings(cs);
 #endif
 
         if (apPass.length()) { restart = restart || apPass != s.apPass; s.apPass = apPass; }

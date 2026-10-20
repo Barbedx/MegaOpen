@@ -9,6 +9,7 @@
 #include "../media/MediaRouter.h"
 #endif
 #include "../bus/Autobaud.h"
+#include "../capture/CapFormat.h"
 #include "../net/Catalog.h"
 
 namespace Cfg
@@ -164,6 +165,7 @@ namespace Cfg
         const SEnum kReact = UI_NAMES_ENUM(Knobs::REACT_NAMES);
         const SEnum kAnim  = UI_NAMES_ENUM(Knobs::ANIM_NAMES);
         const SEnum kConds = UI_NAMES_ENUM(Vehicle::ALERT_COND);
+        const SEnum kCapModes = UI_NAMES_ENUM(CapFormat::MODE_NAMES);
 #undef UI_NAMES_ENUM
 
         // ---- the panel alerts (Vehicle::AlertRules) -------------------------
@@ -229,6 +231,8 @@ namespace Cfg
 #define S_PUT(stmt) [](Model& m, int32_t v) { Settings& s = *m.s; (void)v; stmt; }
 #define K_GET(expr) [](const Model& m) -> int32_t { const Knobs::Config& k = *m.k; return (int32_t)(expr); }
 #define K_PUT(stmt) [](Model& m, int32_t v) { Knobs::Config& k = *m.k; (void)v; stmt; }
+#define C_GET(expr) [](const Model& m) -> int32_t { const Capture::Settings& c = *m.c; return (int32_t)(expr); }
+#define C_PUT(stmt) [](Model& m, int32_t v) { Capture::Settings& c = *m.c; (void)v; stmt; }
 
         const SEntry kTable[] = {
 #if FEATURE_DISPLAY_CAN    // the screen: nothing to set on a build without the panel
@@ -370,6 +374,22 @@ namespace Cfg
              0, 0, 0, nullptr, &kRates, S_GET(rateIndex(s.can2Detected)),
              S_PUT(s.can2Detected = rateRow((uint8_t)v))},
 
+            // ---- the CAN capture recorder (its own NVS namespace) -------------
+            // Ranges are Capture::setSettings()'s clamps.
+            G("cap", "Запис CAN", "Capture", nullptr, W),
+            {"cap.autostart", "Автостарт", "Autostart", "cap", SType::Bool, W, AP_CAP,
+             0, 1, 0, nullptr, nullptr, C_GET(c.autostart), C_PUT(c.autostart = v != 0)},
+            {"cap.mode", "Що писати", "Mode", "cap", SType::Enum, W, AP_CAP,
+             0, 0, 0, nullptr, &kCapModes, C_GET(c.mode), C_PUT(c.mode = (uint8_t)v)},
+            {"cap.ring", "Стирати найстаріші", "Ring", "cap", SType::Bool, W, AP_CAP,
+             0, 1, 0, nullptr, nullptr, C_GET(c.ring), C_PUT(c.ring = v != 0)},
+            {"cap.fill", "Заповнювати сховище до, %", "Fill", "cap", SType::Int, W, AP_CAP,
+             10, 95, 5, "%", nullptr, C_GET(c.fillPct), C_PUT(c.fillPct = (uint8_t)v)},
+            {"cap.fileMB", "Розмір файлу, МБ", "File size", "cap", SType::Int, W, AP_CAP,
+             1, 8, 1, "MB", nullptr, C_GET(c.fileMB), C_PUT(c.fileMB = (uint8_t)v)},
+            {"cap.autoProtect", "Мітка ставить 🔒", "Mark protects", "cap", SType::Bool, W, AP_CAP,
+             0, 1, 0, nullptr, nullptr, C_GET(c.autoProtect), C_PUT(c.autoProtect = v != 0)},
+
             // ---- the panel alerts: the whole table, row i = rule i ----------
             // Drawn by the live-car page, not the settings card.
             {"alerts", "Сповіщення на дисплей", "Alerts", nullptr, SType::Table, W, AP_CAR,
@@ -379,6 +399,8 @@ namespace Cfg
 #undef S_PUT
 #undef K_GET
 #undef K_PUT
+#undef C_GET
+#undef C_PUT
 
         constexpr size_t N = sizeof(kTable) / sizeof(kTable[0]);
     }
@@ -404,6 +426,7 @@ namespace Cfg
         {
             if (e.type == SType::Group) return true;
             if (e.apply & AP_CAR) return m.a != nullptr;
+            if (e.apply & AP_CAP) return m.c != nullptr;
             return (e.apply & AP_KNOBS) ? m.k != nullptr : m.s != nullptr;
         }
 

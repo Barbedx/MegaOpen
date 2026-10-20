@@ -44,6 +44,18 @@ namespace Capture
 {
     enum Bus : uint8_t { CAR = 0, PANEL = 1 };
 
+    // The recorder's settings. Outside the feature gate: the settings
+    // registry describes them on every build (native tests included).
+    // setSettings() clamps: fillPct 10..95, fileMB 1..8.
+    struct Settings {
+        bool    ring = true;          // delete the oldest when over the fill
+        uint8_t fillPct = 85;         // of the space left to captures
+        uint8_t fileMB = 4;           // a file closes at this size
+        bool    autoProtect = true;   // a marker protects its session
+        uint8_t mode = 0;             // CapFormat::Mode: 0 change-only, 1 full
+        bool    autostart = true;     // record from boot
+    };
+
 #if FEATURE_CAPTURE
     // After LogFile::begin() (the recorder shares its littlefs mount). Loads
     // the settings, allocates the ring once, scans /cap, starts capwr, and
@@ -60,14 +72,6 @@ namespace Capture
     void statusLine(char* buf, size_t n);
 
     // ---- control (the web; any task) -----------------------------------------
-    struct Settings {
-        bool    ring = true;          // delete the oldest when over the fill
-        uint8_t fillPct = 85;         // of the space left to captures
-        uint8_t fileMB = 4;           // a file closes at this size
-        bool    autoProtect = true;   // a marker protects its session
-        uint8_t mode = 0;             // CapFormat::Mode: 0 change-only, 1 full
-        bool    autostart = true;     // record from boot
-    };
     Settings settings();
     // Clamped and saved to NVS; mode applies at once, the rest at the next chunk.
     void setSettings(const Settings& s);

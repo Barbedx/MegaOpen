@@ -4,6 +4,7 @@
 #include "Settings.h"
 #include "../knobs/KnobConfig.h"
 #include "../vehicle/AlertRules.h"
+#include "../capture/CanRecorder.h"
 
 // Every setting the user can change, described once: the web form and the
 // panel menu are both drawn from this table, so they cannot disagree on a
@@ -24,12 +25,13 @@
 namespace Cfg
 {
     // What a registry entry reads and writes. `k` is null on a board without
-    // knobs, `a` where the caller has no alert rules at hand; their entries
-    // then report unavailable.
+    // knobs, `c` without the capture recorder, `a` where the caller has no
+    // alert rules at hand; their entries then report unavailable.
     struct Model {
         Settings*            s = nullptr;
         Knobs::Config*       k = nullptr;
         Vehicle::AlertRules* a = nullptr;
+        Capture::Settings*   c = nullptr;
     };
 
     enum class SType : uint8_t { Group, Bool, Int, Enum, Table };
@@ -51,6 +53,7 @@ namespace Cfg
         AP_KNOBS  = 0x04,  // knob service: lights, encoders (knobs blob)
         AP_MEDIA  = 0x08,  // media router / HU text learner
         AP_CAR    = 0x10,  // car task: the alert rules (own NVS key)
+        AP_CAP    = 0x20,  // capture recorder (own NVS namespace "cap")
         AP_REBOOT = 0x80,  // read once at boot: saved, applied by a reboot
     };
 

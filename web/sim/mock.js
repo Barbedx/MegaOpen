@@ -206,8 +206,11 @@ g('/api/health',health);
 /* прошивка зберігає в cfg одразу, тож GET бачить збережене; діє воно після перезавантаження */
 /* кожен id реєстру, якого нема в defSet, — з першого значення (enum) або min (int) */
 const regDef=f=>f.type==='bool'?false:f.type==='int'?f.min:f.enum[0].v;
+/* cap.* реєстру живуть у S.cap.settings, як у прошивці — у рекордера (свій простір NVS) */
+const CAPK=['ring','fill','fileMB','autoProtect','mode','autostart'];
 g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type!=='table'&&!(f.id in S.set))S.set[f.id]=regDef(f);
  const st=S.staged,o={...S.set,alerts:S.alerts.map(a=>a.slice()),fw:S.fw,build:S.build,cfgVer:S.cfgVer,cfgVerWas:0,wifiSleep:false,ssid2:S.wifi2.ssid};   /* ssid2 — НОВЕ */
+ for(const k of CAPK)o['cap.'+k]=S.cap.settings[k];
  if(st.bleMode)o.bleMode=st.bleMode;if(st.wifi)o.ssid=st.wifi.ssid;return o});
 /* НОВЕ (план, зріз 4): перезапуск не побічний ефект, а pendingReboot; apPass */
 po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass);
@@ -227,6 +230,7 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
   if(f.type==='enum'&&!f.enum.some(o=>o.v===q[f.id]))return fail(400,f.id+': unknown value');
   if(f.reboot&&q[f.id]!==s[f.id])rb=true;
   s[f.id]=f.type==='int'?Math.min(f.max,Math.max(f.min,+q[f.id])):q[f.id]}
+ for(const k of CAPK)if(q['cap.'+k]!==undefined){S.cap.settings[k]=s['cap.'+k];delete s['cap.'+k];if(k==='mode')S.cap.mode=S.cap.settings.mode}
  if(typeof q.mediaSource==='string'&&['ams','hu','auto'].includes(q.mediaSource))s.mediaSource=q.mediaSource;
  if(typeof q.huTitleCmd==='number'||typeof q.huArtistCmd==='number'){if(typeof q.huTitleCmd==='number')s.huTitleCmd=q.huTitleCmd;if(typeof q.huArtistCmd==='number')s.huArtistCmd=q.huArtistCmd}
  if(q.huForget){S.hu.learnedTitle=0;S.hu.learnedArtist=0}
@@ -339,10 +343,6 @@ po('/api/cap/delete',q=>{if(!parseInt(q.f,10))return fail(400,'f=NNNN');const f=
 po('/api/cap/delete_unprotected',()=>{const n=S.files.length;S.files=S.files.filter(f=>f.protected||f.current);return {ok:true,deleted:n-S.files.length}});
 po('/api/cap/protect',q=>{if(!parseInt(q.f,10))return fail(400,'f=NNNN&on=0|1');const f=fileOf(q);if(!f)return fail(404,'no such capture file');S.files.filter(x=>x.session===f.session).forEach(x=>x.protected=q.on===undefined||B(q.on));return ok});
 po('/api/cap/format',q=>{if(q.confirm!=='cap')return fail(400,'deletes every capture, protected too: add confirm=cap');S.cap.recording=false;const n=S.files.length;S.files=[];return {ok:true,deleted:n}});
-g('/api/cap/settings',()=>({...S.cap.settings}));
-po('/api/cap/settings',q=>{const s=S.cap.settings;for(const k of ['ring','autoProtect','autostart'])if(q[k]!==undefined)s[k]=B(q[k]);
- for(const k of ['fill','fileMB'])if(q[k]!==undefined)s[k]=Math.min(255,parseInt(q[k],10)||0);
- if(q.mode!==undefined){if(q.mode!=='change'&&q.mode!=='full')return fail(400,'mode=change|full');s.mode=q.mode;S.cap.mode=q.mode}return {ok:true,settings:{...s}}});
 /* ---- НОВЕ: мапа RAV4 замість /api/signals, /api/signals/unpinall, /api/emitter і масштабів у /api/canbox/tuning ---- */
 const LV={speed:47,rpm:1850,steering:-1.2,out_temp:9,door_fl:0,door_fr:0,light_pos:1,light_dip:1,fuel_inst:7.2,odometer:182345};
 const CANB={};const canBytes=id=>CANB[id]||(CANB[id]=Array.from({length:8},()=>Math.floor(rnd(0,256))));

@@ -1,9 +1,11 @@
 /* ---------- Сервіс ---------- */
 /* поле консолі з каталогу — той самий рендер, що й параметри розкладки (fieldCtrl) */
 const cField=f=>`<label>${fieldLabel(f)}${fieldCtrl(f,'#'+f.n)}</label>`;
+/* межі числа з реєстру налаштувань (CAT.settings): ті самі, що перевіряє прошивка */
+const regRange=id=>{const f=(CAT.settings||[]).find(x=>x.id===id)||{};return f.type==='int'?`min="${f.min}" max="${f.max}"${f.step?` step="${f.step}"`:''}`:''};
 SCR.service={title:'Сервіс',async render(m){
  const D=has('display'),V=has('vehicle'),CP=has('capture');
- const[ll,me,tun,msgs,can,cp,se]=await Promise.all([API.get('/api/loglevel'),getIf(D,'/api/media'),API.get('/api/canbox/tuning'),API.get('/api/messages'),getIf(V,'/api/can'),getIf(CP,'/api/cap/settings'),API.get('/api/settings')]);
+ const[ll,me,tun,msgs,can,se]=await Promise.all([API.get('/api/loglevel'),getIf(D,'/api/media'),API.get('/api/canbox/tuning'),API.get('/api/messages'),getIf(V,'/api/can'),API.get('/api/settings')]);
  const MS=msgs.messages||[];this.n=0;this.paused=false;this.lines=[];this.tagF='all';this.since=0;this.busy=false;this.boot=undefined;this.drop=undefined;
  const PK=CAT.panelKeys.filter(k=>k.src==='wheel'),con=()=>CAT.console.find(c=>c.cmd===$('#cK').value)||{name:'',fields:[]};
  m.innerHTML=
@@ -26,7 +28,7 @@ SCR.service={title:'Сервіс',async render(m){
   <details class="sub" id="ringD"><summary>Останні кадри UART</summary><pre class="json" id="ring"></pre></details>`,'','custom')+
  (V?card('Шина панелі (CAN B)','<div class="kv" id="cb"></div>'+
   row('Помилки шини за типом','<button class="btn sm" type="button" id="eccGo">Зняти</button>','','Регістр ECC контролера TWAI: 3000 вибірок, які помилки (bit, form, stuff) і в якому місці кадру. Допомагає знайти погану пайку чи термінатор.')+'<pre class="json" id="ecc" hidden></pre>'):'')+
- (CP?card('Запис: розширене',row('Коли місце скінчилось, стирати найстаріші',sw('/api/cap/settings|ring',cp.ring),'вимк: запис зупиниться')+row('Заповнювати сховище до, %',num('/api/cap/settings|fill',cp.fill,'min="50" max="98"'))+row('Розмір файлу, МБ',num('/api/cap/settings|fileMB',cp.fileMB,'min="1" max="8"'))+row('Мітка ставить 🔒',sw('/api/cap/settings|autoProtect',cp.autoProtect))+
+ (CP?card('Запис: розширене',row('Коли місце скінчилось, стирати найстаріші',sw('/api/settings|cap.ring',se['cap.ring']),'вимк: запис зупиниться')+row('Заповнювати сховище до, %',num('/api/settings|cap.fill',se['cap.fill'],regRange('cap.fill')))+row('Розмір файлу, МБ',num('/api/settings|cap.fileMB',se['cap.fileMB'],regRange('cap.fileMB')))+row('Мітка ставить 🔒',sw('/api/settings|cap.autoProtect',se['cap.autoProtect']))+
   '<div class="fr"><button class="btn dng" type="button" id="capFmt">Стерти всі записи</button></div>'):'');
  $$('.card:not(.custom)',m).forEach(c=>saver(c,genericSave,'[data-k]'));
  // лог: опитування /api/logs?since= раз на секунду замість WebSocket; more — плата

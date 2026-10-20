@@ -177,39 +177,6 @@ void WebUi::routesCap()
         return capOk(r, "deleted", Capture::formatArea());
     });
 
-    // ---- settings --------------------------------------------------------------------
-    route("/api/cap/settings", HTTP_GET, [](PsychicRequest* r) {
-        JsonDocument d;
-        capSettingsOut(d.to<JsonObject>(), Capture::settings());
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
-    // Any subset of ring, fill, fileMB, autoProtect, mode=change|full,
-    // autostart, as parameters; the rest keep their values. Saved to NVS.
-    route("/api/cap/settings", HTTP_POST, [](PsychicRequest* r) {
-        Capture::Settings s = Capture::settings();
-        s.ring        = capFlag(r, "ring", s.ring);
-        s.autoProtect = capFlag(r, "autoProtect", s.autoProtect);
-        s.autostart   = capFlag(r, "autostart", s.autostart);
-        // Clamped by the recorder; capped at 255 here so a big number cannot wrap.
-        auto u8 = [r](const char* k) {
-            const unsigned long v = strtoul(capParam(r, k).c_str(), nullptr, 10);
-            return (uint8_t)(v > 255 ? 255 : v);
-        };
-        if (r->hasParam("fill"))   s.fillPct = u8("fill");
-        if (r->hasParam("fileMB")) s.fileMB  = u8("fileMB");
-        if (r->hasParam("mode")) {
-            const String m = capParam(r, "mode");
-            const int mode = uiFind(CapFormat::MODE_NAMES, m.c_str());
-            if (mode < 0) return r->reply(400, "text/plain", "mode=change|full");
-            s.mode = (uint8_t)mode;
-        }
-        Capture::setSettings(s);
-        JsonDocument d;
-        d["ok"] = true;
-        capSettingsOut(d["settings"].to<JsonObject>(), Capture::settings());
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
-    });
+    // The settings are registry entries (cap.*): GET/POST /api/settings.
 }
 #endif

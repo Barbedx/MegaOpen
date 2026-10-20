@@ -26,7 +26,8 @@ namespace
         Settings            s;
         Knobs::Config       k;
         Vehicle::AlertRules a;
-        Model               m{&s, &k, &a};
+        Capture::Settings   c;
+        Model               m{&s, &k, &a, &c};
         Fixture() { a.factory(); }
     };
 
@@ -453,7 +454,7 @@ void test_settings_struct_unchanged()
     size_t n = 0;
     for (size_t i = 0; i < Registry::count(); ++i) {
         const SEntry& e = Registry::at(i);
-        if (scalar(e) && !(e.apply & (AP_KNOBS | AP_CAR))) ++n;
+        if (scalar(e) && !(e.apply & (AP_KNOBS | AP_CAR | AP_CAP))) ++n;
     }
     // 40 scalar/enum fields in Settings (carSig counts three), all in the registry.
     TEST_ASSERT_EQUAL(40, n);
