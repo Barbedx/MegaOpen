@@ -25,6 +25,9 @@ namespace Keys
         EncPhaseA,
         EncPhaseB,
         EncPhaseC,
+        // Appended: values are stored. Opens and closes the panel menu; the
+        // keys task acts on it and no sink does (CLASS_NONE).
+        Menu,
         _Count
     };
 

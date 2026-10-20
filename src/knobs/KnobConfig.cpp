@@ -19,7 +19,9 @@ namespace Knobs
         enc[ENC_RIGHT].cw    = Binding{Keys::Action::EncCw,   0};
         enc[ENC_RIGHT].ccw   = Binding{Keys::Action::EncCcw,  0};
         enc[ENC_RIGHT].click = Binding{Keys::Action::Ok,      0};
-        enc[ENC_LEFT].cw     = Binding{Keys::Action::VolUp,   0};
+        // Holding the right knob opens the panel menu (App::PanelMenu).
+        enc[ENC_RIGHT].hold  = Binding{Keys::Action::Menu,    0};
+        enc[ENC_LEFT].cw    = Binding{Keys::Action::VolUp,   0};
         enc[ENC_LEFT].ccw    = Binding{Keys::Action::VolDown, 0};
         enc[ENC_LEFT].click  = Binding{Keys::Action::Mute,    0};
 
@@ -136,9 +138,9 @@ namespace Knobs
 
     bool Config::fromBlob(const uint8_t* in, uint8_t len)
     {
-        // v3 (one encoder, 103 bytes) is still accepted.
+        // v3 (one encoder, 103 bytes) is still accepted, and v4 (the v5 layout).
         const bool v3 = in && len == BLOB_SIZE_V3 && in[0] == 3;
-        if (!in || (!v3 && (len != BLOB_SIZE || in[0] != VERSION))) return false;
+        if (!in || (!v3 && (len != BLOB_SIZE || (in[0] != VERSION && in[0] != 4)))) return false;
         Reader r{in};
         Config c;
         r.u8();
@@ -177,6 +179,10 @@ namespace Knobs
             c.enc[1].cw = r.bind(); c.enc[1].ccw = r.bind(); c.enc[1].click = r.bind(); c.enc[1].hold = r.bind();
             c.enc[1].holdMs = r.u16();
         }
+        // Before v5 the right knob's hold had no job: it opens the menu now.
+        // A hold someone bound on purpose is kept.
+        if (in[0] < 5 && c.enc[ENC_RIGHT].hold.action == Keys::Action::None)
+            c.enc[ENC_RIGHT].hold = Binding{Keys::Action::Menu, 0};
         c.sanitize();
         *this = c;
         return true;

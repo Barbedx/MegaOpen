@@ -1,6 +1,7 @@
 #include "UiTask.h"
 #if FEATURE_DISPLAY_CAN
 #include "PanelOwner.h"
+#include "PanelMenu.h"
 #include "OneShot.h"
 #include "Rt.h"
 #include "../cfg/Config.h"
@@ -139,8 +140,11 @@ namespace App
             uint32_t g_glassHoldMs = 10000;
             uint16_t s_holdSeq = 0;
             // True while a posted screen owns the glass. False on a fresh boot.
+            // The panel menu holds it while open, and nothing repaints a panel
+            // switched off from the menu.
             inline bool glassHeld(uint32_t now)
             {
+                if (PanelMenu::isOpen() || PanelMenu::panelOff()) return true;
                 if (!g_glassHeldUntilMs) return false;
                 if (!g_glassHoldMs) return true;            // held until explicitly released
                 return (int32_t)(now - g_glassHeldUntilMs) < 0;
@@ -766,8 +770,10 @@ namespace App
                 serviceMediaScreen(now);
 
                 // ---- a notification, ahead of everything automatic --------------------
-                // Not gated on glassHeld(). Owed until accepted.
-                if (g_notifyDue && !s_notifyReq && ps.synced && !listenOnly && !busy()) {
+                // Not gated on glassHeld(), except by the panel menu and a panel
+                // switched off: owed until accepted, so it shows after them.
+                if (g_notifyDue && !s_notifyReq && ps.synced && !listenOnly && !busy() &&
+                    !PanelMenu::isOpen() && !PanelMenu::panelOff()) {
                     char rows[3][MegaOpen::MediaScreen::ROW_MAX];
                     portENTER_CRITICAL(&g_notifyMux);
                     memcpy(rows, g_notifyRows, sizeof(rows));
@@ -961,8 +967,10 @@ namespace App
                     s_hideReq = submitTracked(r, T_HIDE, now);
                 }
 
-                // The bring-up probe runs only with the media screen off.
+                // The bring-up probe runs only with the media screen off, and
+                // never over the panel menu.
                 if (!s_ok && !s_probeReq && !g_mediaAuto && !listenOnly && ps.synced &&
+                    !PanelMenu::isOpen() && !PanelMenu::panelOff() &&
                     now >= s_nextTryMs && s_tries < 12) {
                     s_nextTryMs = now + 5000;
                     ++s_tries;
@@ -1074,6 +1082,9 @@ namespace App
                     const MegaOpen::PanelStatus ps = Panel::status();
                     watchPanel(ps, now);
                     policy(ps, now);
+                    // After the policy, which stood down for it (glassHeld).
+                    PanelMenu::service(now, ps.synced && !Diag::CanBench::listenOnly(),
+                                       g_popupUntilMs != 0);
                     servicePhoneClock(now);
                     publish();
 

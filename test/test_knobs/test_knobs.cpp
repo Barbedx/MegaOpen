@@ -376,7 +376,9 @@ static void hold(Source& s, bool down, uint32_t& now, uint32_t ms)
 void test_button_without_hold_clicks_on_the_way_down()
 {
     Tape t; Source s; s.begin(Tape::emit, &t);
-    s.configure(liveConfig());                        // hold = None
+    Config c = liveConfig();
+    c.enc[0].hold = Binding{};                        // the default is Menu now
+    s.configure(c);
     uint32_t now = 0;
     hold(s, false, now, 5);
     hold(s, true, now, 25);                           // past the 20 ms debounce
@@ -955,9 +957,37 @@ void test_lights_both_zones_react_to_their_own_encoder()
     TEST_ASSERT_EQUAL_UINT8(255, l.pixels()[2 * 3 + 2]);   // right zone untouched: white
 }
 
+// v5: an older blob's unbound right hold opens the panel menu; a hold bound on
+// purpose, and an unbound one saved as v5, stay as they are.
+void test_v4_blob_gets_the_menu_on_the_right_hold()
+{
+    TEST_ASSERT_TRUE(Config().enc[ENC_RIGHT].hold.action == Keys::Action::Menu);
+
+    Config a;
+    a.enc[ENC_RIGHT].hold = Binding{};
+    uint8_t blob[Config::BLOB_SIZE];
+    a.toBlob(blob);
+    TEST_ASSERT_EQUAL_UINT8(5, blob[0]);
+    Config b;
+    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
+    TEST_ASSERT_TRUE(b.enc[ENC_RIGHT].hold.action == Keys::Action::None);
+
+    blob[0] = 4;
+    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
+    TEST_ASSERT_TRUE(b.enc[ENC_RIGHT].hold.action == Keys::Action::Menu);
+    TEST_ASSERT_TRUE(b.enc[ENC_LEFT].hold.action == Keys::Action::None);
+
+    a.enc[ENC_RIGHT].hold = Binding{Keys::Action::Voice, 0};
+    a.toBlob(blob);
+    blob[0] = 4;
+    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
+    TEST_ASSERT_TRUE(b.enc[ENC_RIGHT].hold.action == Keys::Action::Voice);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_v4_blob_gets_the_menu_on_the_right_hold);
     RUN_TEST(test_quad_one_click_is_one_step);
     RUN_TEST(test_quad_first_sample_is_a_position_not_a_step);
     RUN_TEST(test_quad_bounce_cancels);

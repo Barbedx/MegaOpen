@@ -104,7 +104,9 @@ namespace Cfg
         const char* enumId(const SEntry& e, int32_t v);
         const char* enumName(const SEntry& e, int32_t v);
 
-        // The value as the panel shows it, ASCII, NUL-terminated, cut to cap.
+        // The value as the panel shows it, ASCII, NUL-terminated, cut to cap:
+        // the stored one ("--" when unavailable), or any value of the entry.
         void    format(const Model& m, const SEntry& e, char* out, size_t cap);
+        void    formatValue(const SEntry& e, int32_t v, char* out, size_t cap);
     }
 }

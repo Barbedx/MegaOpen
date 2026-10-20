@@ -91,6 +91,7 @@ static Sinks::UsbHidKeySink g_usbKeys;
 #include "keys/KeyDests.h"
 #include "app/PanelOwner.h"
 #include "app/UiTask.h"
+#include "app/PanelMenu.h"
 #endif
 
 #if FEATURE_DISPLAY_CAN || FEATURE_BLE
@@ -357,6 +358,7 @@ static void onAffaKeyReport(const Keys::AffaKeySource::Report& r, void*)
     // Track keys get no popup when the track splash will follow.
     const bool trackKey = r.action == Keys::Action::SrcNext || r.action == Keys::Action::SrcPrev ||
                           r.action == Keys::Action::EncCw   || r.action == Keys::Action::EncCcw;
+    if (!App::PanelMenu::popupAllowed(r.action)) return;
     if (!App::Ui::keyPopupWanted(trackKey)) return;
     // Armed only on a successful post: never hide a popup we did not show.
     if (g_panelOps.postPopup(line)) App::Ui::keyPopupShown();
@@ -465,6 +467,10 @@ static void hkWeb(uint32_t now)
 {
     (void)now;
     g_web.loop();
+#if FEATURE_DISPLAY_CAN
+    // Values chosen in the panel menu: stored here, with every other setting.
+    App::PanelMenu::applyPending();
+#endif
 }
 
 #if FEATURE_BLE
@@ -973,7 +979,49 @@ static Keys::MacroEngine  g_macros;
 // not see its own output.
 static void macroEmit(const Keys::Event& e, void*) { g_engine.dispatchRaw(e); }
 
-static bool macroFilter(const Keys::Event& e, void*) { return g_macros.observe(e); }
+#if FEATURE_DISPLAY_CAN
+// A screen setting changed in the panel menu, into the ui task the way
+// POST /api/media and /api/settings stage it. Runs on net_svc.
+static void menuStageUi(const Cfg::Settings& s)
+{
+    using MegaOpen::MediaScreen;
+    using MegaOpen::MediaPane;
+    const MediaScreen::Layout layout = MediaScreen::layoutFromName(s.mediaLayout.c_str());
+    const bool paneAuto = s.mediaPane == "auto";
+    const MediaPane::Scene scene = paneAuto ? MediaPane::Scene::Off
+                                            : MediaPane::sceneFromName(s.mediaPane.c_str());
+    const bool ok = App::Ui::settings().edit([&](App::Ui::MediaSettings& m) {
+        m.mediaAuto = s.mediaScreen;
+        // Width follows the layout, as on the web.
+        if (m.layout != layout) { m.layout = layout; m.cols = MediaScreen::colsFor(layout); }
+        m.style = MediaScreen::styleFromName(s.mediaStyle.c_str());
+        // A pane choice is applied once (sceneSeq); an unchanged one would
+        // restart the carousel.
+        if (m.paneAuto != paneAuto || (!paneAuto && m.paneScene != scene)) {
+            m.paneAuto = paneAuto;
+            if (!paneAuto) m.paneScene = scene;
+            ++m.sceneSeq;
+        }
+        m.paneCycleS = s.paneCycleS;
+        m.paneSpeed  = s.paneSpeed;
+        m.splashMs   = s.trackSplashMs;
+        m.autoTime   = s.autoTime;
+    });
+    if (!ok) logf("[menu] ui settings busy: applied at the next change or reboot");
+    const App::Ui::Words w = App::Ui::words();
+    if (w.keyPopup)   *w.keyPopup = s.keyPopup;
+    if (w.keyPopupMs) *w.keyPopupMs = s.keyPopupMs;
+}
+#endif
+
+// The panel menu first (App::PanelMenu): a key the menu takes is no macro's.
+static bool macroFilter(const Keys::Event& e, void*)
+{
+#if FEATURE_DISPLAY_CAN
+    if (App::PanelMenu::filter(e)) return true;
+#endif
+    return g_macros.observe(e);
+}
 
 #if FEATURE_DISPLAY_CAN
 // `arg` carries up to three panel rows separated by '|'.
@@ -1615,6 +1663,23 @@ void setup()
         d.phoneTimeSet   = []() { return Bluetooth::IsTimeSet(); };
 #endif
         App::Ui::begin(g_cfg, d);
+    }
+    // The panel menu: reads the settings and the car, hands its changes to
+    // net_svc (hkWeb), which stores them like any other setting.
+    {
+        App::PanelMenu::Deps m;
+        m.ops = &g_panelOps;
+        m.cfg = &g_cfg;
+        m.car = &g_state;
+#if FEATURE_KNOBS
+        m.knobsGet = [](Knobs::Config& out) { out = g_knobs.config(); return true; };
+        m.knobsSet = [](const Knobs::Config& c) { g_knobs.setConfig(c); g_cfg.saveKnobs(c); };
+#endif
+        m.stageUi = menuStageUi;
+        m.stageMedia = [](const Cfg::Settings& s) {
+            g_media.setMode(MediaRouter::modeFromStr(s.mediaSource.c_str()));
+        };
+        App::PanelMenu::begin(m);
     }
 #endif
 #if FEATURE_DISPLAY_CAN

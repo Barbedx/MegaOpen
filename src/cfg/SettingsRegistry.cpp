@@ -410,7 +410,13 @@ namespace Cfg
             if (!cap) return;
             out[0] = 0;
             if (!available(m, e)) { snprintf(out, cap, "--"); return; }
-            const int32_t v = get(m, e);
+            formatValue(e, get(m, e), out, cap);
+        }
+
+        void formatValue(const SEntry& e, int32_t v, char* out, size_t cap)
+        {
+            if (!cap) return;
+            out[0] = 0;
             switch (e.type) {
                 case SType::Bool: snprintf(out, cap, "%s", v ? "On" : "Off"); break;
                 case SType::Enum: snprintf(out, cap, "%s", enumId(e, v)); break;

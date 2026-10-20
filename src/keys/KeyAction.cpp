@@ -23,6 +23,7 @@ namespace Keys
         {"EncPhaseA", ""},
         {"EncPhaseB", ""},
         {"EncPhaseC", ""},
+        {"Menu",      "Меню на щитку"},
     };
     static_assert(sizeof(kNames) / sizeof(kNames[0]) == (size_t)Action::_Count,
                   "an Action has no row in kNames");

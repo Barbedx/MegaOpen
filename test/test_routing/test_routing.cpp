@@ -51,12 +51,14 @@ void test_encoder_phases_belong_to_no_class()
 
 // Every dispatchable action must land in exactly one class. A new action added
 // to the enum without a case in classOf() falls to the default and silently
-// stops being routable anywhere — this is the test that notices.
+// stops being routable anywhere — this is the test that notices. Menu is the
+// one exception on purpose: the keys task's menu filter takes it, no sink.
 void test_every_real_action_has_exactly_one_class()
 {
+    TEST_ASSERT_EQUAL_UINT8(CLASS_NONE, classOf(Action::Menu));
     for (uint8_t i = 1; i < (uint8_t)Action::_Count; ++i) {
         const Action a = (Action)i;
-        if (isEncoderPhase(a)) continue;
+        if (isEncoderPhase(a) || a == Action::Menu) continue;
         const uint8_t c = classOf(a);
         TEST_ASSERT_NOT_EQUAL_MESSAGE(CLASS_NONE, c, name(a));
         // Exactly one bit set.

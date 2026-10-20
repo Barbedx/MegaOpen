@@ -148,7 +148,9 @@ namespace Knobs
         // Flat NVS blob, versioned; another layout is refused whole.
         // v4: the second encoder. A v3 blob is still read: its encoder lands in
         // enc[ENC_RIGHT] and the left comes up disabled.
-        static constexpr uint8_t VERSION   = 4;
+        // v5: the same layout; a v3/v4 blob whose right hold is unbound gets
+        // Action::Menu there (the panel menu).
+        static constexpr uint8_t VERSION   = 5;
         static constexpr uint8_t BLOB_SIZE = 116;
         static constexpr uint8_t BLOB_SIZE_V3 = 103;
         void toBlob(uint8_t* out) const;
