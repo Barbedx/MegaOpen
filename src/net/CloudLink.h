@@ -12,17 +12,12 @@
 //     by sector, and the reboot drops the panel and the keys: neither may
 //     happen while someone is driving. An installed build waits; the reboot
 //     into it happens when the car is idle again, or at the next power-up.
-//   * rollback: APP_ROLLBACK is on, so an OTA image boots PENDING_VERIFY and is
-//     marked valid once it has been healthy for CONFIRM_MS without a break (no
-//     crash, WiFi up at least once so the next OTA can arrive, heap above
-//     HEALTH_HEAP_MIN, and every critical task in the registry running —
-//     main.cpp builds that). TRIAL_MS without that reverts, and the version is
-//     never fetched again. A trial cut short by a reset reverts too (the
-//     bootloader's rule), but the version is blacklisted only when that reset
-//     was the image's fault (panic or watchdog); a power cut or brownout —
-//     ignition off, cranking — only lets it be fetched again. The display is
-//     deliberately not a condition: a bench without the panel must not roll
-//     good builds back.
+//   * rollback: the trial itself is App::OtaTrial's (src/app/OtaTrial.h); it
+//     tells verdict() the outcome. A reverted version is never fetched again.
+//     A trial cut short by a reset reverts too (the bootloader's rule), but
+//     the version is blacklisted only when that reset was the image's fault
+//     (panic or watchdog); a power cut or brownout — ignition off, cranking —
+//     only lets it be fetched again.
 //
 // TLS wants ~40 kB on a board idling at ~80 kB (dips to ~22 kB), so a request
 // starts only with FREE_MIN free and a LARGEST_MIN block, one at a time, on
@@ -49,10 +44,9 @@ public:
     // into it. Called on the cloud task. Unset = never idle: nothing installs.
     using IdleFn = bool (*)(uint32_t nowMs);
     static void setIdle(IdleFn f);
-    // From loop(): drives the rollback verdict for a freshly installed image.
-    // `healthy`: the caller's basic health check, evaluated every call.
-    void loop(uint32_t nowMs, bool healthy);
-    static constexpr uint32_t HEALTH_HEAP_MIN = 20000;   // bytes free for "healthy"
+    // App::OtaTrial's verdict on the running image: true = confirmed, false =
+    // rolling back (the reboot follows). Records which version is which.
+    void verdict(bool confirmed);
 
     void status(JsonObject out) const;
     // {url, token, on} — persisted. Returns false on a malformed request.
@@ -65,8 +59,6 @@ private:
     static constexpr uint32_t FIRST_MS     = 15000;
     static constexpr uint32_t INGEST_MS    = 60000;
     static constexpr uint32_t MANIFEST_MS  = 300000;
-    static constexpr uint32_t TRIAL_MS     = 180000;
-    static constexpr uint32_t CONFIRM_MS   = 60000;
     static constexpr uint32_t FREE_MIN     = 65000;
     static constexpr uint32_t LARGEST_MIN  = 48000;
     static constexpr int      RING         = 4096;
@@ -109,8 +101,6 @@ private:
 
     // ---- trial / rollback ----------------------------------------------------
     bool     _trial = false;       // running image is PENDING_VERIFY
-    bool     _verdict = false;
-    uint32_t _healthySince = 0;    // 0 = not healthy at the last sample
     // Installed into the other slot, reboot owed: no more manifests, and the
     // restart waits for the car to be idle (or the next power-up boots it).
     bool     _installed = false;

@@ -101,6 +101,7 @@ static Sinks::UsbHidKeySink g_usbKeys;
 #include "media/HuMediaSource.h"
 #include <ArduinoJson.h>
 #include "net/CloudLink.h"
+#include "app/OtaTrial.h"
 
 // Wiring only — every decision lives in the objects below.
 
@@ -2150,6 +2151,9 @@ void setup()
         o["wifi"]     = g_wifi.curSsid();
     });
     memMark("cloud");
+    // The OTA trial's verdict comes from net_svc (Housekeeping); the cloud
+    // only records which version passed.
+    App::OtaTrial::begin([](bool ok) { g_cloud.verdict(ok); });
 
     const char* mdns = g_wifi.mdnsHost().length() ? g_wifi.mdnsHost().c_str() : "(mdns FAILED)";
     if (g_wifi.connecting())
@@ -2173,8 +2177,6 @@ void setup()
         h.web      = hkWeb;
         h.wifi     = [](uint32_t now) { g_wifi.loop(now); };
         h.wifiSeen = hkWifiSeen;
-        h.cloud    = [](uint32_t now, bool healthy) { g_cloud.loop(now, healthy); };
-        h.heapMin  = CloudLink::HEALTH_HEAP_MIN;
         h.beat     = hkBeat;
         h.beatSlow = hkBeatSlow;
         // net_svc checks every critical task's age from its first pass, and

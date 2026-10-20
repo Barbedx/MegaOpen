@@ -13,10 +13,6 @@ extern "C" esp_err_t esp_crt_bundle_attach(void* conf);
 #include <esp_heap_caps.h>
 #include <string.h>
 
-// Stops the core marking every image valid at boot (esp32-hal-misc.c); the
-// verdict is CloudLink::loop()'s. USB-flashed images are never PENDING_VERIFY.
-extern "C" bool verifyRollbackLater() { return true; }
-
 static void (*s_log)(const char*) = nullptr;
 static CloudLink::IdleFn s_idle = nullptr;
 void CloudLink::setIdle(IdleFn f) { s_idle = f; }
@@ -111,8 +107,7 @@ void CloudLink::begin(StateFn state)
     if (_trial) {
         // On probation: report the version we were installed as.
         copyStr(_fw, sizeof(_fw), String(_pend[0] ? _pend : "local-ota"));
-        note("[cloud] build %s on trial: confirmed after %us healthy, rolled back after %us",
-             _fw, (unsigned)(CONFIRM_MS / 1000), (unsigned)(TRIAL_MS / 1000));
+        note("[cloud] build %s on trial", _fw);
     } else {
         if (_pend[0]) {
             // Pending but not running: the bootloader rolled back, because the
@@ -175,36 +170,20 @@ void CloudLink::tap(const char* s, int n)
 }
 
 // ---- trial verdict -------------------------------------------------------------
-void CloudLink::loop(uint32_t nowMs, bool healthy)
+void CloudLink::verdict(bool confirmed)
 {
-    if (!_trial || _verdict) return;
-    // Healthy for CONFIRM_MS without a break, not one good sample after it.
-    if (!healthy)              _healthySince = 0;
-    else if (!_healthySince)   _healthySince = nowMs ? nowMs : 1;
-    if (_healthySince && (uint32_t)(nowMs - _healthySince) >= CONFIRM_MS) {
-        _verdict = true;
-        esp_ota_mark_app_valid_cancel_rollback();
-        Preferences p;
-        p.begin("cloud", false);
+    Preferences p;
+    p.begin("cloud", false);
+    if (confirmed) {
         if (_pend[0]) p.putString("cur", _pend);
-        p.putString("pend", "");
-        p.end();
         _pend[0] = 0;
         _trial = false;
-        note("[cloud] build %s CONFIRMED (healthy %us)", _fw, (unsigned)(CONFIRM_MS / 1000));
-        return;
-    }
-    if (nowMs > TRIAL_MS) {
-        _verdict = true;
-        note("[cloud] build %s never became healthy - rolling back", _fw);
-        Preferences p;
-        p.begin("cloud", false);
+        note("[cloud] build %s confirmed", _fw);
+    } else {
         p.putString("rej", _fw);
-        p.putString("pend", "");
-        p.end();
-        delay(300);
-        esp_ota_mark_app_invalid_rollback_and_reboot();
     }
+    p.putString("pend", "");
+    p.end();
 }
 
 // ---- config ----------------------------------------------------------------------

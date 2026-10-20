@@ -54,7 +54,7 @@ The rules behind this layout (the ownership and blocking rules are checked by
 
 | dir | what |
 | --- | --- |
-| `app/` | tasks (`*Task`), the KeyBus, the panel owner, request/reply slots |
+| `app/` | tasks (`*Task`), the KeyBus, the panel owner, request/reply slots, the OTA trial |
 | `board/` | `BoardProfile.h`, the only file that names a pin |
 | `bus/` | TWAI and MCP2518FD drivers, the vehicle-frame sources, autobaud |
 | `display/` | AffaDisplay ports (CAN link, clock, log), the mailbox, screen/pane composers |

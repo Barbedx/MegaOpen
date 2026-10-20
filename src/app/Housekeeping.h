@@ -7,7 +7,7 @@
 //
 // It used to be the second half of loop(): the WiFi state machine, the
 // heartbeat (whose WiFi.SSID() and String work allocate), the cloud and the
-// OTA verdict all ran on the task that owns the panel, between two poll()s.
+// OTA verdict (App::OtaTrial) all ran on the task that owns the panel, between two poll()s.
 // Here a slow WiFi call costs a late heartbeat line, not a late panel frame.
 //
 // The verdict moved with it, which is what makes it honest: it now runs on a
@@ -30,10 +30,6 @@ namespace App
             // WiFi has been usable at least once since boot (STA joined, or our
             // own AP up): the next OTA can arrive.
             bool (*wifiSeen)() = nullptr;
-            // Every pass: CloudLink, with the OTA trial's verdict.
-            void (*cloud)(uint32_t nowMs, bool healthy) = nullptr;
-            // Free heap the verdict wants (CloudLink::HEALTH_HEAP_MIN).
-            uint32_t heapMin = 0;
             // Every 10 s, after [win] and [task]: the heartbeat lines that have
             // no other owner.
             void (*beat)(uint32_t nowMs) = nullptr;

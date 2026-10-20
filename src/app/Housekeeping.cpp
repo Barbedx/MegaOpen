@@ -1,5 +1,6 @@
 #include "Housekeeping.h"
 #include "Rt.h"
+#include "OtaTrial.h"
 #include "../utils/LogBus.h"
 #include <esp_heap_caps.h>
 
@@ -81,7 +82,7 @@ namespace App
                     else        LogBus::printf("[task] every critical task is running again");
                 }
                 const bool wifi = s_h.wifiSeen ? s_h.wifiSeen() : true;
-                return wifi && alive && ESP.getFreeHeap() > s_h.heapMin;
+                return wifi && alive && ESP.getFreeHeap() > OtaTrial::HEALTH_HEAP_MIN;
             }
 
             void run(void*)
@@ -93,7 +94,7 @@ namespace App
                     const uint32_t now = millis();
                     if (s_h.web)  s_h.web(now);
                     if (s_h.wifi) s_h.wifi(now);
-                    if (s_h.cloud) s_h.cloud(now, healthy(now));
+                    OtaTrial::tick(now, healthy(now));
                     sampleHeap();
 
                     if ((uint32_t)(now - beatAt) >= BEAT_MS) {
