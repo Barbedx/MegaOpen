@@ -5,6 +5,7 @@
 #include "Secrets.h"
 #include "../input/KeyDebouncer.h"
 #include "../keys/KeyAction.h"
+#include "../vehicle/Signals.h"
 #ifdef NATIVE
 #include <string>
 #else
@@ -53,6 +54,12 @@ namespace Cfg
         // Show the now-playing screen. Persisted; Config::migrate() turns it on
         // once for boards seeded before it defaulted on.
         bool     mediaScreen = true;
+
+        // The car screen: three signals instead of now-playing, one per row
+        // of a fullscreen. carSig holds Vehicle::Sig ids, SIG_COUNT = an empty
+        // row; ids are stored, which is safe because signals are only appended.
+        bool     carScreen = false;
+        uint8_t  carSig[3] = {Vehicle::SIG_ENG_TEMP, Vehicle::SIG_BATT_V, Vehicle::SIG_FUEL_LEVEL};
 
         // Three-row primitive for now-playing: "fullscreen" (0x21 mode 0x05) or
         // "menu" (mode 0x01). Persisted because leaving fullscreen needs an

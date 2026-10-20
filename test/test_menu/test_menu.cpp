@@ -4,6 +4,7 @@
 #include <string>
 #include "ui/MenuEngine.h"
 #include "ui/MenuInput.h"
+#include "ui/SignalText.h"
 
 // The panel menu without a panel: the tree it builds from the registry and a
 // fake car, the cursor, editing, commits, and which keys it takes.
@@ -384,9 +385,68 @@ void test_panel_off_knob_press_only_powers_on()
     TEST_ASSERT_FALSE(in.on(ev(Keys::Action::Ok, Keys::State::Press, 3), Mode::PanelOff).consumed());
 }
 
+// ---- one signal as text (the Car data rows and the car screen) ----------------------
+
+void test_signal_value_forms()
+{
+    char b[24];
+    const Vehicle::Meta t{"eng_temp", "C", -40, 215, 0, false, 0};
+    MenuUi::signalValue(b, sizeof(b), t, 92, true, true);
+    TEST_ASSERT_EQUAL_STRING("92C", b);
+    MenuUi::signalValue(b, sizeof(b), t, -7, true, false);
+    TEST_ASSERT_EQUAL_STRING("-7C?", b);
+    MenuUi::signalValue(b, sizeof(b), t, 92, false, true);
+    TEST_ASSERT_EQUAL_STRING("--", b);
+
+    const Vehicle::Meta v{"batt_v", "V", 0, 2000, 2, false, 0};
+    MenuUi::signalValue(b, sizeof(b), v, 1412, true, true);
+    TEST_ASSERT_EQUAL_STRING("14.12V", b);
+    MenuUi::signalValue(b, sizeof(b), v, -5, true, true);
+    TEST_ASSERT_EQUAL_STRING("-0.05V", b);
+
+    const Vehicle::Meta d{"door_fl", "", 0, 1, 0, true, 0};
+    MenuUi::signalValue(b, sizeof(b), d, 1, true, true);
+    TEST_ASSERT_EQUAL_STRING("on", b);
+}
+
+void test_signal_row_is_exactly_the_width()
+{
+    char b[33];
+    const Vehicle::Meta t{"eng_temp", "C", -40, 215, 0, false, 0};
+    MenuUi::signalRow(b, sizeof(b), 22, t, 92, true, true);
+    TEST_ASSERT_EQUAL(22, strlen(b));
+    TEST_ASSERT_EQUAL(0, strncmp(b, "eng_temp", 8));
+    TEST_ASSERT_EQUAL_STRING("92C", b + 19);
+    // A name too long for the value gives way; the value is never cut.
+    const Vehicle::Meta l{"a_very_long_signal_name_x", "km", 0, 999999, 0, false, 0};
+    MenuUi::signalRow(b, sizeof(b), 22, l, 123456, true, false);
+    TEST_ASSERT_EQUAL(22, strlen(b));
+    TEST_ASSERT_EQUAL_STRING("123456km?", b + 13);
+}
+
+// The car screen's rows: "none" is row 0, a signal is its id + 1, by name.
+void test_car_rows_in_the_registry()
+{
+    Cfg::Settings s;
+    Cfg::Model m{&s, nullptr};
+    const Cfg::SEntry* e = find("carSig2");
+    TEST_ASSERT_NOT_NULL(e);
+    TEST_ASSERT_EQUAL_STRING(Vehicle::meta(Vehicle::SIG_BATT_V).name,
+                             Cfg::Registry::enumId(*e, Cfg::Registry::get(m, *e)));
+    TEST_ASSERT_TRUE(Cfg::Registry::set(m, *e, 0));
+    TEST_ASSERT_EQUAL(Vehicle::SIG_COUNT, s.carSig[1]);
+    TEST_ASSERT_EQUAL_STRING("none", Cfg::Registry::enumId(*e, 0));
+    const int fuel = Cfg::Registry::enumIndex(*e, "fuel_level");
+    TEST_ASSERT_TRUE(Cfg::Registry::set(m, *e, fuel));
+    TEST_ASSERT_EQUAL(Vehicle::SIG_FUEL_LEVEL, s.carSig[1]);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_signal_value_forms);
+    RUN_TEST(test_signal_row_is_exactly_the_width);
+    RUN_TEST(test_car_rows_in_the_registry);
     RUN_TEST(test_root_rows);
     RUN_TEST(test_lights_hidden_without_knobs);
     RUN_TEST(test_web_only_settings_stay_out);

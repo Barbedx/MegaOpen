@@ -62,6 +62,20 @@ namespace Cfg
             [](uint8_t i) { return pickRow(i).id; },
             [](uint8_t i) { return pickRow(i).name; },
         };
+
+        // A car screen row: row 0 is "none" (SIG_COUNT), row i the signal i-1.
+        // The id is the signal's ASCII name; the page shows its Ukrainian label.
+        const SEnum kSignals = {
+            [] { return (uint8_t)(Vehicle::SIG_COUNT + 1); },
+            [](uint8_t i) { return i ? Vehicle::meta((uint8_t)(i - 1)).name : "none"; },
+            [](uint8_t i) {
+                if (!i) return "нічого";
+                const char* l = Vehicle::label((uint8_t)(i - 1));
+                return *l ? l : Vehicle::meta((uint8_t)(i - 1)).name;
+            },
+        };
+        int32_t sigRowOf(uint8_t sig) { return sig < Vehicle::SIG_COUNT ? sig + 1 : 0; }
+        uint8_t sigOfRow(int32_t v)   { return v > 0 ? (uint8_t)(v - 1) : (uint8_t)Vehicle::SIG_COUNT; }
 #endif
 
         const SEnum kBleModes = { Catalog::bleModeCount, Catalog::bleModeId, Catalog::bleModeName };
@@ -181,6 +195,14 @@ namespace Cfg
             G("display", "Екран", "Display", nullptr, WM),
             {"mediaScreen", "Екран «зараз грає»", "Audio screen", "display", SType::Bool, WM, AP_UI,
              0, 1, 0, nullptr, nullptr, S_GET(s.mediaScreen), S_PUT(s.mediaScreen = v != 0)},
+            {"carScreen", "Екран авто замість аудіо", "Car screen", "display", SType::Bool, WM, AP_UI,
+             0, 1, 0, nullptr, nullptr, S_GET(s.carScreen), S_PUT(s.carScreen = v != 0)},
+            {"carSig1", "Екран авто: рядок 1", "Car row 1", "display", SType::Enum, WM, AP_UI,
+             0, 0, 0, nullptr, &kSignals, S_GET(sigRowOf(s.carSig[0])), S_PUT(s.carSig[0] = sigOfRow(v))},
+            {"carSig2", "Екран авто: рядок 2", "Car row 2", "display", SType::Enum, WM, AP_UI,
+             0, 0, 0, nullptr, &kSignals, S_GET(sigRowOf(s.carSig[1])), S_PUT(s.carSig[1] = sigOfRow(v))},
+            {"carSig3", "Екран авто: рядок 3", "Car row 3", "display", SType::Enum, WM, AP_UI,
+             0, 0, 0, nullptr, &kSignals, S_GET(sigRowOf(s.carSig[2])), S_PUT(s.carSig[2] = sigOfRow(v))},
             {"mediaLayout", "Розкладка", "Layout", "display", SType::Enum, WM, AP_UI,
              0, 0, 0, nullptr, &kLayouts, S_GET(rowOf(kLayouts, s.mediaLayout)),
              S_PUT(s.mediaLayout = kLayouts.id((uint8_t)v))},

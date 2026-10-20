@@ -12,6 +12,8 @@
 #include "../media/MediaRouter.h"
 #include "../media/HuMediaSource.h"
 #include "../utils/LogBus.h"
+#include "../ui/SignalText.h"
+#include "../vehicle/VehicleState.h"
 #include "freertos/queue.h"
 #include <time.h>
 
@@ -65,6 +67,12 @@ namespace App
             // ---- the now-playing screen. Off until asked ----------------------
             MegaOpen::MediaScreen g_media3;
             bool                  g_mediaAuto = false;
+
+            // ---- the car screen: three signals, instead of now-playing --------
+            bool     g_carScreen = false;
+            uint8_t  g_carSig[3] = {Vehicle::SIG_COUNT, Vehicle::SIG_COUNT, Vehicle::SIG_COUNT};
+            char     s_carSent[3][MegaOpen::PanelOps::STR_MAX] = {};
+            uint32_t s_carPaintMs = 0, s_carFullMs = 0;
 
             // Scroll indicator beside the rows. Default none: now-playing is not a list.
             uint8_t g_mediaScroll = 0x00;   // carminat::kScrollNone
@@ -438,6 +446,9 @@ namespace App
                 g_paneSpeed  = m.paneSpeed ? m.paneSpeed : 1;
                 g_splashMs   = m.splashMs;
                 g_autoTime   = m.autoTime;
+                if (m.carScreen != g_carScreen) { s_carSent[0][0] = 0; g_media3.invalidate(); }
+                g_carScreen  = m.carScreen;
+                memcpy(g_carSig, m.carSig, sizeof(g_carSig));
 
                 // A pane choice, once: "auto" starts the carousel without moving
                 // the live scene (from Media if the pane was off); a scene stops it.
@@ -833,7 +844,8 @@ namespace App
                 // breaker has tripped), glassHeld(). synced(), not registered():
                 // registration is lazy and rides on a render, so gating on it deadlocks.
                 // The marquee position derives from the clock, so skipped ticks cost nothing.
-                if (g_mediaAuto && ps.synced && !listenOnly && !busy() &&
+                // The car screen, when on, takes its place (below).
+                if (g_mediaAuto && !g_carScreen && ps.synced && !listenOnly && !busy() &&
                     !glassHeld(now) && !splashUp(now)) {
                     static constexpr uint32_t MIN_PAINT_MS = 200;
                     static constexpr uint32_t POPUP_PAINT_MS = 1000;
@@ -880,6 +892,42 @@ namespace App
                     }
                 }
 
+                // ---- the car screen -------------------------------------------------
+                // Three signals as a fullscreen (src/ui/SignalText.h), in place of
+                // now-playing. Same gates; a 1 s floor (the values do not move faster
+                // on this glass), sent when a row changed, and every 10 s regardless,
+                // which also covers a session the panel lost.
+                if (g_carScreen && s_d.car && ps.synced && !listenOnly && !busy() &&
+                    !glassHeld(now) && !splashUp(now) && failStreak < kFailStreakTrip &&
+                    (uint32_t)(now - s_carPaintMs) >= 1000) {
+                    s_carPaintMs = now;
+                    PanelOps::Req r;
+                    r.op = PanelOps::Op::Fullscreen;
+                    char* rows[3] = {r.a, r.b, r.c};
+                    for (uint8_t i = 0; i < 3; ++i) {
+                        const uint8_t sg = g_carSig[i];
+                        if (sg >= Vehicle::SIG_COUNT) { rows[i][0] = 0; continue; }
+                        const bool fresh = s_d.car->has(sg) &&
+                                           s_d.car->ageMs(sg, now) <= MenuUi::STALE_MS;
+                        MenuUi::signalRow(rows[i], PanelOps::STR_MAX, MegaOpen::FS_COLS,
+                                          Vehicle::meta(sg), s_d.car->get(sg), fresh, Vehicle::verified(sg));
+                    }
+                    const bool changed = strcmp(r.a, s_carSent[0]) || strcmp(r.b, s_carSent[1]) ||
+                                         strcmp(r.c, s_carSent[2]);
+                    if (changed || (uint32_t)(now - s_carFullMs) >= 10000) {
+                        r.deliberate = false;
+                        r.yields = true;
+                        r.epoch  = s_holdSeq;
+                        r.quiet  = true;
+                        // A refusal leaves s_carSent as it was: the next pass tries again.
+                        if (s_d.ops->submit(r)) {
+                            for (uint8_t i = 0; i < 3; ++i)
+                                snprintf(s_carSent[i], sizeof(s_carSent[i]), "%s", rows[i]);
+                            s_carFullMs = now;
+                        }
+                    }
+                }
+
                 // ---- the graphic layer ----------------------------------------------
                 // After the text block, so text wins ties for the idle wire (a pane is 44
                 // frames). One image in flight at a time is the rate limit. The breaker
@@ -898,7 +946,8 @@ namespace App
                     s_lastKeyMs = now;
                 }
                 const bool keyQuiet = !s_lastKeyMs || (uint32_t)(now - s_lastKeyMs) >= KEY_QUIET_MS;
-                if (ps.carminat && ps.synced && !listenOnly && keyQuiet &&
+                // Not under the car screen: its fullscreen covers the layer.
+                if (ps.carminat && ps.synced && !listenOnly && keyQuiet && !g_carScreen &&
                     failStreak < kFailStreakTrip && !glassHeld(now) && !splashUp(now) &&
                     g_paneReq == NO_TICKET && !busy()) {
 
@@ -1108,6 +1157,8 @@ namespace App
             const Cfg::Settings& s = cfg.s();
             g_autoTime  = s.autoTime;
             g_mediaAuto = s.mediaScreen;
+            g_carScreen = s.carScreen;
+            memcpy(g_carSig, s.carSig, sizeof(g_carSig));
             g_media3.setLayout(MegaOpen::MediaScreen::layoutFromName(s.mediaLayout.c_str()));
             // Width follows the layout (8 columns beside the pane).
             g_media3.setCols(MegaOpen::MediaScreen::colsFor(g_media3.layout()));
@@ -1148,6 +1199,8 @@ namespace App
             m.paneSpeed      = g_paneSpeed;
             m.splashMs       = g_splashMs;
             m.autoTime       = g_autoTime;
+            m.carScreen      = g_carScreen;
+            memcpy(m.carSig, g_carSig, sizeof(m.carSig));
             s_settings.init(m);
             publish();
         }
@@ -1272,6 +1325,8 @@ namespace App
                 m.paneSpeed  = s.paneSpeed;
                 m.splashMs   = s.trackSplashMs;
                 m.autoTime   = s.autoTime;
+                m.carScreen  = s.carScreen;
+                memcpy(m.carSig, s.carSig, sizeof(m.carSig));
             });
             g_keyPopup   = s.keyPopup;
             g_keyPopupMs = s.keyPopupMs;

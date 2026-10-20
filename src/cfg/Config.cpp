@@ -37,6 +37,16 @@ namespace Cfg
         _s.bleMode     = _p.getString("bleMode", "ams");
         _s.autoTime    = _p.getBool  ("autoTime", true);
         _s.mediaScreen = _p.getBool  ("mediaScr", false);
+        // isKey first: added after boards were seeded, and an absent key costs
+        // an IDF error line per boot.
+        _s.carScreen = _p.isKey("carScr") ? _p.getBool("carScr", false) : false;
+        {
+            static const char* const kSig[3] = {"carSig0", "carSig1", "carSig2"};
+            for (uint8_t i = 0; i < 3; ++i) {
+                const uint8_t v = _p.isKey(kSig[i]) ? _p.getUChar(kSig[i], _s.carSig[i]) : _s.carSig[i];
+                _s.carSig[i] = v <= Vehicle::SIG_COUNT ? v : (uint8_t)Vehicle::SIG_COUNT;
+            }
+        }
 
         _s.ancsPopup   = _p.getBool ("ancsPop", false);
         _s.mediaLayout = _p.getString("medLay", "fullscreen");
@@ -141,6 +151,10 @@ namespace Cfg
         _p.putString("bleMode",  _s.bleMode);
         _p.putBool  ("autoTime", _s.autoTime);
         _p.putBool  ("mediaScr", _s.mediaScreen);
+        _p.putBool  ("carScr",   _s.carScreen);
+        _p.putUChar ("carSig0",  _s.carSig[0]);
+        _p.putUChar ("carSig1",  _s.carSig[1]);
+        _p.putUChar ("carSig2",  _s.carSig[2]);
 
         _p.putBool  ("ancsPop", _s.ancsPopup);
         _p.putString("medLay",  _s.mediaLayout);

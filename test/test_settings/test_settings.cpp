@@ -318,8 +318,8 @@ void test_settings_struct_unchanged()
         const SEntry& e = Registry::at(i);
         if (e.type != SType::Group && !(e.apply & AP_KNOBS)) ++n;
     }
-    // 36 scalar/enum fields in Settings, all in the registry.
-    TEST_ASSERT_EQUAL(36, n);
+    // 40 scalar/enum fields in Settings (carSig counts three), all in the registry.
+    TEST_ASSERT_EQUAL(40, n);
     (void)kNotInRegistry;
 }
 

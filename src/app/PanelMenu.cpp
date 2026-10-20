@@ -8,6 +8,7 @@
 #include "../display/PanelOps.h"
 #include "../ui/MenuEngine.h"
 #include "../ui/MenuInput.h"
+#include "../ui/SignalText.h"
 #include "../utils/LogBus.h"
 #include "../vehicle/VehicleState.h"
 
@@ -118,37 +119,11 @@ namespace App
                 return n;
             }
 
-            // "eng_temp" ... "92C": the value as the signal's decimals say; "?"
-            // after it while no car has confirmed the decode, and "--" for a
-            // value older than STALE_MS.
-            constexpr uint32_t STALE_MS = 5000;
+            // "eng_temp" ... "92C" (src/ui/SignalText.h); "--" past STALE_MS.
             void sigRow(void*, uint8_t s, char* out, size_t cap)
             {
-                const Vehicle::Meta& m = Vehicle::meta(s);
-                const int32_t v = s_d.car->get(s);
-                char val[20];
-                if (s_d.car->ageMs(s, millis()) > STALE_MS) {
-                    snprintf(val, sizeof(val), "--");
-                } else if (m.boolean) {
-                    snprintf(val, sizeof(val), "%s", v ? "on" : "off");
-                } else if (m.decimals) {
-                    int32_t div = 1;
-                    for (uint8_t i = 0; i < m.decimals; ++i) div *= 10;
-                    const int32_t a = v < 0 ? -v : v;
-                    snprintf(val, sizeof(val), "%s%ld.%0*ld%s", v < 0 ? "-" : "", (long)(a / div),
-                             (int)m.decimals, (long)(a % div), m.unit);
-                } else {
-                    snprintf(val, sizeof(val), "%ld%s", (long)v, m.unit);
-                }
-                if (!Vehicle::verified(s)) strncat(val, "?", sizeof(val) - strlen(val) - 1);
-                const size_t w = cap - 1 < MenuUi::COLS - 1 ? cap - 1 : MenuUi::COLS - 1;
-                const size_t vl = strlen(val) < w ? strlen(val) : w;
-                size_t nl = strlen(m.name);
-                if (nl + vl + 1 > w) nl = w > vl + 1 ? w - vl - 1 : 0;
-                memset(out, ' ', w);
-                memcpy(out, m.name, nl);
-                memcpy(out + (w - vl), val, vl);
-                out[w] = 0;
+                MenuUi::signalRow(out, cap, MenuUi::COLS - 1, Vehicle::meta(s), s_d.car->get(s),
+                                  s_d.car->ageMs(s, millis()) <= MenuUi::STALE_MS, Vehicle::verified(s));
             }
 
             MenuUi::CarView s_carView;

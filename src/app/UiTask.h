@@ -13,6 +13,7 @@ class MediaRouter;
 class HuMediaSource;
 namespace Cfg { class Config; struct Settings; }
 namespace Keys { class KeyEngine; }
+namespace Vehicle { class State; }
 namespace MegaOpen { class PanelOps; }
 
 // The ui task: what goes on the glass, and when (docs/design/event-tasks.md,
@@ -73,6 +74,10 @@ namespace App
             uint8_t  paneSpeed = 1;
             uint16_t splashMs = 4000;       // 0 = no track splash
             bool     autoTime = true;       // push the clock to the panel
+            // The car screen instead of now-playing: three Vehicle::Sig ids,
+            // SIG_COUNT = an empty row (Cfg::Settings::carSig).
+            bool     carScreen = false;
+            uint8_t  carSig[3] = {0, 0, 0};
             MediaPoke poke;
             uint16_t pokeSeq = 0;           // moves with each poke
         };
@@ -106,6 +111,7 @@ namespace App
             MediaRouter*            router = nullptr;
             HuMediaSource*          hu     = nullptr;
             const Keys::KeyEngine*  engine = nullptr;     // events(): the pane's key-quiet gate
+            const Vehicle::State*   car    = nullptr;     // the car screen's values; null: none
             // The phone, without the BLE headers. Null in an image with no radio.
             bool (*amsActive)()      = nullptr;
             bool (*phoneConnected)() = nullptr;

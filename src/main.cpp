@@ -1622,6 +1622,7 @@ void setup()
         d.router = &g_media;
         d.hu     = &g_hu;
         d.engine = &g_engine;
+        d.car    = &g_state;
 #if FEATURE_BLE
         d.amsActive      = []() { return BleHub::amsActive(); };
         d.phoneConnected = []() { return Bluetooth::IsConnected(); };
