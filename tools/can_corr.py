@@ -620,7 +620,7 @@ def glossary_md(g):
          "**Generated from `docs/signal-glossary.json` by `tools/can_corr.py glossary --md`. Edit the JSON, not this file.**",
          "What this is, the findings and the plan order: `docs/signal-glossary-README.md`.", "",
          "For OUR Mégane II (X84), whose ECUs the DDT4all scan of 2026-06-14 identified",
-         "(`../MeganeCAN/notes/dt4all log`). `pick` is the source to make the default:",
+         "(its log is not in this repository). `pick` is the source to make the default:",
          "`broadcast` decodes a frame the car sends anyway (decode_defaults.inc, all still",
          "DF_HYPOTHESIS), `diag` polls a read on the car bus (MegaOpen does not do this yet),",
          "and `derived` is computed in MegaOpen. Confidence is a judgement until the",

@@ -3,7 +3,7 @@
     "Where each Vehicle::Sig most likely comes from on OUR Megane II (X84), and the pick to make it a default.",
     "Hand-written: sig, pick, broadcast, diag[].ecu/req/item/to_sig, confidence, note. The diag[] encodings",
     "(byte, shift, bits, le, signed, step, offset, div, unit) are FILLED from the DDT2000 definitions by",
-    "`tools/can_corr.py glossary --fill --ddt ../ddt-db/x84`, so this file stands alone without the database.",
+    "`tools/can_corr.py glossary --fill --ddt <x84 folder>`, so this file stands alone without the database.",
     "docs/signal-glossary.md is generated from this file (`glossary --md`). Read docs/signal-glossary.md first."
   ],
   "ecus": {

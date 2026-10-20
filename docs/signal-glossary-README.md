@@ -20,7 +20,7 @@ a judgement from definitions and documents, and a capture is still owed.
 - `derived`: computed in MegaOpen (trip average, range, elapsed time).
 
 ```
-py -3.12 tools/can_corr.py glossary --fill                     # encodings from ../ddt-db/x84 into the JSON
+py -3.12 tools/can_corr.py glossary --fill --ddt <x84 folder>  # encodings from the DDT JSON into ours
 py -3.12 tools/can_corr.py glossary --md docs/signal-glossary.md
 py -3.12 tools/can_corr.py corr 0007.bin 0008.bin              # a capture -> candidates + decode rows
 py -3.12 tools/can_corr.py selftest
@@ -29,11 +29,11 @@ py -3.12 tools/can_corr.py selftest
 ### Where the data comes from
 
 - **The DDT2000 definitions** (the DDT4all database, `ecu.zip`) are Renault's data, so
-  they live OUTSIDE git, in `../ddt-db/`: `x84/*.json`, `X84.md` (every Mégane II
-  ECU, one page each), `decode.js` (decodes one logged reply). `X84` is the Mégane II
-  project code.
-- **Which file is OUR car's** came from a DDT4all scan of 2026-06-14,
-  `../MeganeCAN/notes/dt4all log`. The injection is `S3000_A791_Can_1_X84`, the climate
+  they are not in this repository: unpack the `X84` ECU files (`*.json`) into a folder
+  of your own and pass it with `--ddt` (the default is `../ddt-db/x84`). `X84` is the
+  Mégane II project code.
+- **Which file is OUR car's** came from the owner's DDT4all scan of 2026-06-14
+  (its log is not in this repository). The injection is `S3000_A791_Can_1_X84`, the climate
   is `Climatisation_regulee_Redesign_P0_X84_SERIE`, and the UCH is `UCH_84_J84_05_00`.
   Every ECU is listed in the JSON's `ecus`. The S3000 replies in that log decode sanely
   with A791 (idle 747 rpm against a 752 target, 78.75 °C, 13.75 V), so the match is

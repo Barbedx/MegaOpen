@@ -119,10 +119,11 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   `GET`/`POST /api/config`, which the firmware never had (404). The plan lists
   it as the one route that replaces nothing. Where: `src/net/WebUi.cpp`,
   `web/js/80-board.js`, `web/sim/mock.js`.
-- **Resistive ladder config has no UI since ui-v2 slice 8.** The old `/res`
-  page went with the cutover; `/api/res`, `/api/res/live`, `/api/res/map`,
-  `/api/res/auto` and `/api/res/learn` remain (FEATURE_RESISTIVE_KEYS, on only
-  in `direct`). Same for the 3x3 matrix map: `/api/keymap*` (FEATURE_MATRIX).
+- **The direct tier has no web screens for the matrix keymap or the KEY1/KEY2
+  ladder.** The old `/res` page went with the ui-v2 cutover; only the API is
+  left: `/api/keymap*` (FEATURE_MATRIX) and `/api/res`, `/api/res/live`,
+  `/api/res/map`, `/api/res/auto`, `/api/res/learn` (FEATURE_RESISTIVE_KEYS),
+  both on only in `direct`. The owner plans an OLED for that tier.
   Where: `web/js/60-keys.js`, `src/net/WebUiRes.cpp`, `WebUi.cpp` keymap.
 - **New UI (owner, 2026-10-16): show the board's IP on the display when WiFi
   connects.** mDNS fails on the T-2CAN, so after joining a home network the
@@ -150,8 +151,8 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   heap fits (~40 kB; on the T-2CAN put mbedTLS in PSRAM).
 - **BLE pairing vs a phone on the board's AP, on the S3 (2026-10-16).** On the
   T-2CAN the iPhone could not pair while it was joined to `MegaOpen-4580`; off
-  that WiFi it connected. Same symptom as the 2026-08-07 DevKit bug fixed in
-  `5e69a1e` (coex prefer-BT, conn params after auth). Not yet confirmed with a
+  that WiFi it connected. Same symptom as the 2026-08-07 DevKit bug, fixed then
+  by coex prefer-BT and conn params after auth. Not yet confirmed with a
   log: three of the failed tries overlapped board resets caused by opening COM4.
   Re-test with the log over WiFi (no COM4), read `disconnected reason=`.
 
@@ -160,9 +161,10 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   Where: `cfg/Config.cpp`, `WebUi.cpp` settings POST.
 
 ### Build / code health
-- **AffaDisplay is pinned by commit, not by tag.** `platformio.ini` uses
-  `2e40bb9` (v1.0.0 + the bounded `1C1 70` wait and the repeated-`61 11` re-arm,
-  branch `carminat-peerchannel-probe`). Release it as a tag and pin the tag.
+- **AffaDisplay is pinned by commit, not by tag.** `platformio.ini` uses the
+  library's commit `2e40bb9` (v1.0.0 + the bounded `1C1 70` wait and the
+  repeated-`61 11` re-arm, branch `carminat-peerchannel-probe`). Release it as a
+  tag and pin the tag.
 - **`AFFA_ENABLE_TASK=1` is blocked on the app, not the flag.** ~16 direct
   renders/state reads on the loop task (`synced()`, `busy()`,
   `lastEnqueued()` used as wire arbitration) must go through `AffaTask`, and
@@ -173,6 +175,10 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   `Esp32CanLink`, §4.1 RX topology, TX queue depth 6 not 4, payload 119 not
   113, the missing `examples/19_owned_task`...). Ticket upstream, with the L1
   debug callback guard.
+- **Renault DDT data in the repo: a licence question before it goes public.**
+  `docs/signal-glossary.*` and `tools/can_corr.py` carry data derived from the
+  Renault DDT database (ECU file names, field encodings, French parameter
+  names). Settle whether that may be published, or strip it, first.
 
 ### Bench / tooling
 
