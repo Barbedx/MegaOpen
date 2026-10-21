@@ -5,11 +5,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-21
+
 ### Added
 - `tools/car_report.sh <board>`: after a drive, one folder and `.tar.gz` with status, health, settings, the settings file, the live map, the logs (ring, this boot, the boot before), the update state and the capture list, plus `summary.txt`. GETs only.
+- «Авто — наживо»: «✓ підтвердити» / «↺ скасувати» on a hypothesis row. A confirmed signal loses its «?» everywhere (menu, car screen, alerts, the G-meter ring); «Заводські прив'язки» brings the hypotheses back. `/api/map` `{confirm:{sig,on}}`.
+- «Авто — наживо»: a recorder for the car test (record/pause, markers, CSV), with no extra requests to the board.
+- RAV4 page: the bonnet goes to the head unit (`0x24` D1 b7). The X84 broadcast has no bonnet contact, so it has no factory binding.
+
+### Changed
+- `/api/map`: the map part of a request is all or nothing. A refused confirm or a table that would overflow leaves the saved map as it was; «↺» restores each row's factory flag.
+- RAV4 page: the battery row shows the live volts and says protocol 112 has no field for them, with a link to the head-unit battery experiment.
 
 ### Fixed
 - `/api/health` `clock`: the head unit's clock (`0x9D`, once a minute) counts as a source. It used to say `clock_no_phone` while the head unit kept the panel's clock right. New codes `clock_phone`, `clock_hu`, `clock_no_source` (replace `clock_ok`, `clock_no_phone`), and `src`. With no phone the pane's clock face runs from the head unit's time (it stayed blank).
+- CI: the phone-width audit no longer hangs on the live page (the recorder's leave-page warning is attached only while a recording is unsaved); a hung page now fails by name.
 
 ## [1.3.0] - 2026-10-21
 
