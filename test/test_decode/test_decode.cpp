@@ -357,9 +357,14 @@ void test_steering_bias_gives_a_signed_angle()
     CanDecode dec;
     TEST_ASSERT_TRUE(dec.loadDefaults());
     State s;
-    // 0x8000 - 100 = 10.0 degrees left, in tenths: -100.
-    dec.apply(frame(0x0C2, {0x7F, 0x9C, 0, 0}), s, 10);
+    // The matrix centres the wheel on 0x7FFF (offset -3276.7 deg): 0x7FFF - 100
+    // = 10.0 degrees left, in tenths: -100.
+    dec.apply(frame(0x0C2, {0x7F, 0x9B, 0, 0}), s, 10);
     TEST_ASSERT_EQUAL_INT32(-100, s.get(SIG_STEERING));
+    dec.apply(frame(0x0C2, {0x7F, 0xFF, 0, 0}), s, 20);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_STEERING));
+    dec.apply(frame(0x0C2, {0x80, 0x63, 0, 0}), s, 30);
+    TEST_ASSERT_EQUAL_INT32(100, s.get(SIG_STEERING));
 }
 
 void test_unknown_id_touches_nothing_and_is_counted()
@@ -534,7 +539,7 @@ void test_the_blob_round_trips_the_factory_table_and_constants()
     // The indicator latch and the steering bias survive the trip.
     const int li = b.rowOf(SIG_IND_LEFT);
     TEST_ASSERT_TRUE(li >= 0 && (b.row[li].flags & DF_LATCH) && b.row[li].holdMs == 500);
-    TEST_ASSERT_EQUAL_INT32(-32768, b.row[b.rowOf(SIG_STEERING)].add);
+    TEST_ASSERT_EQUAL_INT32(-32767, b.row[b.rowOf(SIG_STEERING)].add);
     CanDecode dec;
     TEST_ASSERT_TRUE(dec.load(b.row, b.nRows));
 }

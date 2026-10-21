@@ -22,7 +22,7 @@ Extraction convention: `raw = big-endian(numBytes at startByte)`, then
 
 | CAN ID | Byte(s) | Signal | Encoding | Confidence |
 | --- | --- | --- | --- | --- |
-| `0x0C2` | 0-1 | steering angle | `raw - 0x8000`, 0.1°/LSB | medium |
+| `0x0C2` | 0-1 | steering angle | `raw - 0x7FFF`, 0.1°/LSB (X84 matrix: offset -3276.7; x0r had 0x8000) | medium |
 | `0x181` | 0-1 | engine rpm | `raw / 8` | medium |
 | `0x181` | 5 bit0 | brake pedal | 0/1 | low |
 | `0x354` | 0-1 | road speed | km/h ×100 | medium |

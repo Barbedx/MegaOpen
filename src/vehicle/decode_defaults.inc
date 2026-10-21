@@ -16,7 +16,7 @@
 //   0x60D b5         a second engine temperature; 0x551 b0 is the one used.
 //
 //  id      start n  shift mask        mul div add       signal              flags                      holdMs
-{ 0x0C2,   0, 2,  0, 0xFFFFu,     1, 1, -32768, SIG_STEERING,   DF_HYPOTHESIS,               0 },  // 0.1 deg/LSB, 0x8000 bias
+{ 0x0C2,   0, 2,  0, 0xFFFFu,     1, 1, -32767, SIG_STEERING,   DF_HYPOTHESIS,               0 },  // b1.0/16: 0.1 deg/LSB, -3276.7, so 0x7FFF is centre
 { 0x181,   0, 2,  0, 0xFFFFu,     1, 8,      0, SIG_RPM,        DF_HYPOTHESIS,               0 },  // raw / 8
 { 0x181,   3, 1,  0, 0xFFu,     423, 100,  -68, SIG_THROTTLE,   DF_HYPOTHESIS,               0 },  // pedal: % = raw x 0.423 - 6.768; 0x10 released
 { 0x181,   5, 1,  0, 0x1u,        1, 1,      0, SIG_BRAKE,      DF_HYPOTHESIS,               0 },  // b6.6/2
