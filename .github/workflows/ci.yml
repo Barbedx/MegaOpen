@@ -139,6 +139,8 @@ jobs:
         with:
           name: ui-sim
           path: build/
+      - name: Chrome
+        run: google-chrome --version
       - name: ui_audit
         env:
           CHROME: google-chrome

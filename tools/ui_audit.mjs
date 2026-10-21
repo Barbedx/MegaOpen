@@ -15,7 +15,7 @@
 //     without X-MegaOpen as one).
 // Screenshots of failing pages go to outdir. Node 22+ (WebSocket, fetch).
 import { spawn } from 'node:child_process';
-import { writeFileSync, appendFileSync, mkdirSync, rmSync } from 'node:fs';
+import { writeFileSync, appendFileSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -46,10 +46,16 @@ const CHROME = process.env.CHROME || (process.platform === 'win32'
   ? 'C:/Program Files/Google/Chrome/Application/chrome.exe'
   : process.platform === 'darwin' ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   : 'google-chrome');
-const port = 9300 + Math.floor(Math.random() * 600);
-const profile = join(tmpdir(), 'mo-ui-audit-' + port);
-const chrome = spawn(CHROME, ['--headless=new', '--disable-gpu', '--no-sandbox', `--remote-debugging-port=${port}`,
-  '--user-data-dir=' + profile, 'about:blank'], { stdio: 'ignore' });
+// Port 0: Chrome picks a free port and writes it to DevToolsActivePort in the
+// profile, so a port someone else holds cannot stop it. Its stderr is kept
+// for the error if it never comes up (a cold runner takes several seconds).
+const profile = join(tmpdir(), 'mo-ui-audit-' + process.pid + '-' + Date.now());
+const chrome = spawn(CHROME, ['--headless=new', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage', '--remote-debugging-port=0',
+  '--user-data-dir=' + profile, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+let chromeErr = '', chromeExit = null;
+chrome.stderr.on('data', b => { chromeErr = (chromeErr + b).slice(-2000); });
+chrome.on('exit', c => { chromeExit = c; });
+chrome.on('error', e => { chromeErr += String(e); chromeExit = -1; });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // On GitHub Actions a failure is also an annotation and a line in the step
@@ -66,15 +72,16 @@ function ghError(title, lines) {
 let ws, nextId = 0;
 const pending = new Map(), listeners = [];
 async function connect() {
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 300 && chromeExit === null; i++) {
     try {
+      const port = readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split('\n')[0].trim();
       const t = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
       const pg = t.find(x => x.type === 'page');
       if (pg) { ws = new WebSocket(pg.webSocketDebuggerUrl); break; }
     } catch (e) {}
     await sleep(100);
   }
-  if (!ws) throw new Error('Chrome did not start: ' + CHROME);
+  if (!ws) throw new Error(`Chrome did not start in 30 s: ${CHROME} (exit ${chromeExit})\n${chromeErr.trim()}`);
   await new Promise(r => ws.onopen = r);
   ws.onmessage = m => {
     const d = JSON.parse(m.data);
