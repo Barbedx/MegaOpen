@@ -152,3 +152,30 @@ jobs:
         with:
           name: ui-audit
           path: build/ui-audit/
+
+  # tools/rc_smoke.sh against the simulator's mock (tools/sim_http.mjs serves
+  # it over HTTP from headless Chrome): the replies the smoke test expects and
+  # the ones the mock gives must agree, so a renamed code or a dropped field
+  # fails here and not on the rc's board. --sim skips, by name, the checks only
+  # the firmware can pass; anything else fails the job.
+  smoke:
+    name: rc_smoke against the mock
+    needs: sim
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v8
+        with:
+          name: ui-sim
+          path: build/
+      - name: rc_smoke --sim
+        env:
+          CHROME: google-chrome
+        run: |
+          node tools/sim_http.mjs build/ui-sim.html 8077 t2can &
+          for i in $(seq 1 60); do curl -s -m 2 http://127.0.0.1:8077/api/status > /dev/null && break; sleep 1; done
+          bash tools/rc_smoke.sh --sim http://127.0.0.1:8077

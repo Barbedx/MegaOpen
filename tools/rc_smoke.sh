@@ -6,15 +6,18 @@
 # list, never an install).
 #
 #   tools/rc_smoke.sh http://192.168.1.50 [mdns-name]
+#   tools/rc_smoke.sh --sim http://127.0.0.1:8077
 #
-# Against the simulator's mock, no board: `node tools/sim_http.mjs build/ui-sim.html`
-# then `tools/rc_smoke.sh http://127.0.0.1:8077`. Six checks are the firmware's
-# alone there and fail (the Host check x3, /update x2, the log ring's size).
+# --sim: against the simulator's mock (`node tools/sim_http.mjs build/ui-sim.html`),
+# no board. The checks only the firmware can pass (the Host check, /update, the
+# log ring's size) print SKIP by name; every other check counts as on a board.
 #
 # Needs bash and curl. ASCII output, one line a check; exit 1 when any fails.
 set -u
 
-BASE="${1:?usage: rc_smoke.sh http://<board-ip> [mdns-name]}"
+SIM=0
+if [ "${1:-}" = "--sim" ]; then SIM=1; shift; fi
+BASE="${1:?usage: rc_smoke.sh [--sim] http://<board-ip> [mdns-name]}"
 BASE="${BASE%/}"
 NAME="${2:-megaopen}"
 HOSTPORT="${BASE#*://}"
@@ -38,6 +41,10 @@ req() {
 expect_code() {   # NAME WANT
     if [ "$CODE" = "$2" ]; then pass "$1 ($CODE)"; else fail "$1" "want $2, got $CODE: $(head -c 160 "$BODY" | tr '\n' ' ')"; fi
 }
+
+# fw_only NAME: true on a board; with --sim prints SKIP and is false, so the
+# check after `fw_only ... &&` does not run.
+fw_only() { if [ "$SIM" = 1 ]; then echo "SKIP  $1 (firmware only, --sim)"; return 1; fi; return 0; }
 
 has() {           # NAME PATTERN (in BODY)
     if grep -q -- "$2" "$BODY"; then pass "$1"; else fail "$1" "no '$2' in $(head -c 160 "$BODY" | tr '\n' ' ')"; fi
@@ -81,12 +88,16 @@ case "$CODE" in 403|404|405) pass "GET /api/wifi/scan is not a scan ($CODE)" ;; 
 req scan_nohdr POST /api/wifi/scan
 expect_code "POST /api/wifi/scan without the header refused" 403
 
-req host_evil GET /api/status -H 'Host: evil.example'
-expect_code "Host evil.example refused (rebinding)" 403
-has "  403 is gate_host with where to go" "^gate_host http://"
+if fw_only "Host evil.example refused (rebinding)"; then
+    req host_evil GET /api/status -H 'Host: evil.example'
+    expect_code "Host evil.example refused (rebinding)" 403
+    has "  403 is gate_host with where to go" "^gate_host http://"
+fi
 
-req host_router GET /api/status -H "Host: $NAME.fritz.box"
-expect_code "a router's name refused" 403
+if fw_only "a router's name refused"; then
+    req host_router GET /api/status -H "Host: $NAME.fritz.box"
+    expect_code "a router's name refused" 403
+fi
 
 req host_local GET /api/status -H "Host: $NAME.local"
 expect_code "Host $NAME.local accepted" 200
@@ -99,9 +110,11 @@ req options OPTIONS /api/settings -H 'Origin: http://evil.example' \
 case "$CODE" in 2*) fail "CORS preflight" "answered $CODE" ;; *) pass "CORS preflight refused ($CODE)" ;; esac
 if grep -qi '^access-control-allow' "$HDRS"; then fail "no CORS headers" "$(grep -i '^access-control' "$HDRS" | tr -d '\r')"; else pass "no Access-Control-Allow-* header"; fi
 
-req update GET /update
-expect_code "GET /update redirects" 302
-if grep -qi '^location: /#board' "$HDRS"; then pass "  to /#board"; else fail "/update Location" "$(grep -i '^location' "$HDRS" | tr -d '\r')"; fi
+if fw_only "GET /update redirects"; then
+    req update GET /update
+    expect_code "GET /update redirects" 302
+    if grep -qi '^location: /#board' "$HDRS"; then pass "  to /#board"; else fail "/update Location" "$(grep -i '^location' "$HDRS" | tr -d '\r')"; fi
+fi
 
 # ---- settings and the settings file (dry runs only) ----------------------------
 req settings GET /api/settings
@@ -169,7 +182,9 @@ req logs GET /api/logs
 expect_code "GET /api/logs" 200
 RING=$(grep -o '"ringSize": *[0-9]*' "$BODY" | head -1)
 echo "      $RING"
-case "$RING" in *32768) pass "  log ring 32 kB (t2can)" ;; *4096) echo "NOTE  log ring 4 kB (a build without the t2can ring)" ;; *) fail "log ring" "$RING" ;; esac
+if fw_only "log ring size"; then
+    case "$RING" in *32768) pass "  log ring 32 kB (t2can)" ;; *4096) echo "NOTE  log ring 4 kB (a build without the t2can ring)" ;; *) fail "log ring" "$RING" ;; esac
+fi
 req logs_since GET '/api/logs?since=0'
 expect_code "GET /api/logs?since=0" 200
 if grep -q 'psram=' "$BODY"; then
