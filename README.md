@@ -91,6 +91,9 @@ network.
 
 ## Docs
 
+**Using it:** [docs/USER-GUIDE.md](docs/USER-GUIDE.md): first boot, the panel menu,
+the live car page and alerts, media, keys, updates, troubleshooting.
+
 [ARCHITECTURE.md](ARCHITECTURE.md) · [CHANGELOG.md](CHANGELOG.md) ·
 [docs/raise-protocol.md](docs/raise-protocol.md) ·
 [docs/megane-can-ids.md](docs/megane-can-ids.md) ·
