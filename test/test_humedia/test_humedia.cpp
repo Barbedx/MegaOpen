@@ -10,6 +10,7 @@
 #include <stdio.h>
 
 #include "media/HuMediaSource.h"
+#include "proto/canbox/HuDialect.h"
 #include "sinks/CanboxUartSink.h"
 #include "proto/canbox/Rav4Profile.h"
 #include "keys/KeyAction.h"
@@ -585,6 +586,51 @@ static void test_a_full_stash_keeps_the_newest_and_counts_the_rest()
     TEST_ASSERT_EQUAL(4u, s.textFrames() + s.stashDropped());
 }
 
+// ---- which canbox profile the head unit speaks (proto/canbox/HuDialect.h) ----
+
+// The DUDU on the Toyota profile, as captured: text, clock, requests and its
+// 0xC7 UI frames. Toyota, and 0xC7/0x90 count for neither side.
+static void test_a_toyota_head_unit_reads_as_toyota()
+{
+    Canbox::HuDialect d;
+    TEST_ASSERT_TRUE(d.kind() == Canbox::HuDialect::Kind::Unknown);
+    const uint8_t frames[] = {0x90, 0xC7, 0x99, 0x99, 0x9D, 0xC7, 0x84};
+    for (uint8_t c : frames) d.onFrame(c);
+    TEST_ASSERT_TRUE(d.kind() == Canbox::HuDialect::Kind::Toyota);
+    TEST_ASSERT_EQUAL_UINT32(4, d.toyota());
+    TEST_ASSERT_EQUAL_UINT32(0, d.vw());
+    TEST_ASSERT_EQUAL_STRING("toyota", Canbox::HuDialect::name(d.kind()));
+}
+
+// A unit set to the VW profile: source, radio, volume, media frames (our own
+// capture: C0, C2, C4). Two are not enough for a verdict; three are.
+static void test_a_vw_head_unit_reads_as_vw_after_three_frames()
+{
+    Canbox::HuDialect d;
+    d.onFrame(0xC0);
+    d.onFrame(0x90);
+    d.onFrame(0xC2);
+    TEST_ASSERT_TRUE(d.kind() == Canbox::HuDialect::Kind::Unknown);
+    d.onFrame(0xC4);
+    TEST_ASSERT_TRUE(d.kind() == Canbox::HuDialect::Kind::Vw);
+    TEST_ASSERT_EQUAL_STRING("vw", Canbox::HuDialect::name(d.kind()));
+    // Toyota frames outnumbering them win back: a switched profile.
+    for (int i = 0; i < 4; ++i) d.onFrame(0x99);
+    TEST_ASSERT_TRUE(d.kind() == Canbox::HuDialect::Kind::Toyota);
+}
+
+// 0xF3 between frames is the unit's "not supported" NACK; other bytes are not.
+static void test_not_supported_nacks_are_counted()
+{
+    Canbox::HuDialect d;
+    d.onJunk(0xFF);
+    d.onJunk(0xF3);
+    d.onJunk(0xF0);
+    d.onJunk(0xF3);
+    TEST_ASSERT_EQUAL_UINT32(2, d.notSupported());
+    TEST_ASSERT_TRUE(d.kind() == Canbox::HuDialect::Kind::Unknown);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -611,6 +657,9 @@ int main(int, char**)
     RUN_TEST(test_frames_without_text_report_a_live_link_with_nothing_to_say);
     RUN_TEST(test_status_frames_keep_the_link_alive_between_tracks);
     RUN_TEST(test_silence_expires_the_link);
+    RUN_TEST(test_a_toyota_head_unit_reads_as_toyota);
+    RUN_TEST(test_a_vw_head_unit_reads_as_vw_after_three_frames);
+    RUN_TEST(test_not_supported_nacks_are_counted);
     RUN_TEST(test_explain_names_the_byte_that_is_actually_sent);
     RUN_TEST(test_explain_reports_a_class_that_is_not_routed);
     RUN_TEST(test_explain_reports_the_link_being_off);

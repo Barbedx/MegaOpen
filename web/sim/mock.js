@@ -203,7 +203,7 @@ function health(){
  if(!F.ancs)ch.push({id:'ancs',state:'off',code:'ancs_off',why:'FEATURE_ANCS is off in this build'});
  else chain('ancs',S.ntf.length&&phone()?'ok':'idle',S.ntf.length&&phone()?0:!phone()?1:2,{count:S.ntf.length,popup:S.set.ancsPopup});
  const hi=!S.set.uartEnabled?0:!F.display?(S.hu.rx?4:1):!S.hu.connected?(S.hu.rx?2:1):3;
- chain('hu',hi===0?'off':hi===3?'ok':'idle',hi,{rxFrames:S.hu.rx,junk:0,badCs:0});
+ chain('hu',hi===0?'off':hi===3?'ok':'idle',hi,{rxFrames:S.hu.rx,junk:0,badCs:0,dialect:S.hu.rx?'toyota':'unknown',notSupported:0});
  if(F.knobs){const kl=S.knl||{},e=kl.enc||{},e2=kl.enc2||{};
   ch.push({id:'knobs',state:'ok',code:'knobs_ok',addr:0x3F,i2cErrors:0,right:e.pos||0,left:e2.pos||0,clicks:(e.clicks||0)+(e2.clicks||0),lineErrors:0});
   const on=S.kn.led&&S.kn.led.enabled;ch.push(on?{id:'lights',state:'ok',code:'lights_ok',leds:10,frames:0}:{id:'lights',state:'off',code:'lights_off',why:'led.enabled is off'})}

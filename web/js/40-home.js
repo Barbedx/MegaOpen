@@ -7,6 +7,7 @@ const WHY_T={panel_off:'панелі нема в цій збірці',panel_unre
  clock_off:'автоматичний час вимкнено',clock_no_phone:'нема телефона, а час іде лише з нього (CTS)',clock_waiting:'телефон підключено, часу ще не надіслав',
  keys_none:'жодного натискання з запуску',ancs_off:'сповіщень нема в цій збірці',ancs_no_phone:'телефон не підключено',ancs_waiting:'підключено, сповіщень ще не було',
  hu_off:'UART до ГУ вимкнено',hu_silent:'від ГУ жодного кадру з запуску',hu_quiet:'ГУ замовкло',hu_seen:'від ГУ були кадри, але ця збірка не знає, як давно',
+ hu_dialect_vw:'ГУ говорить профілем VW, а плата — Toyota RAV4: у налаштуваннях авто на ГУ вибери Toyota RAV4',
  phone_ble_off:'Bluetooth вимкнено',phone_advertising:'видно, але не підключено',
  knobs_no_expander:'PCF8574 не знайдено: кабель QWIIC 2, живлення перехідника',lights_off:'вимкнено: Кнопки → Підсвітка',lights_fail:'драйвер стрічки не запустився'};
 const whyT=c=>WHY_T[c.code]||c.why||'';
@@ -50,7 +51,7 @@ SCR.home={title:'Огляд',async render(m){
  const hu=ch('hu'),hn=hu.rxFrames||0,hj=hu.junk||0;
  if(hu.state!=='off'&&!hn&&hj){setChip('#hHu','bad','сміття');$('#hHuW').textContent=`байти є (${fmtN(hj)}), кадрів нема: дроти живі, не та швидкість чи протокол ГУ`}
  else if(hu.state!=='off'&&!hn){chip('#hHu',hu,'тиша');$('#hHuW').textContent='від ГУ нічого: дріт C8 (жовтий, RX), маса; або поміняй C7/C8 · відправлено '+fmtN(st.framesSent||0)}
- else{chip('#hHu',hu);$('#hHuW').textContent=[whyT(hu),'кадрів від ГУ '+fmtN(hn),hu.badCs?'збій суми '+fmtN(hu.badCs):'','відправлено '+fmtN(st.framesSent||0)].filter(Boolean).join(' · ')}
+ else{chip('#hHu',hu,hu.code==='hu_dialect_vw'?'профіль VW':'');$('#hHuW').textContent=[whyT(hu),'кадрів від ГУ '+fmtN(hn),hu.notSupported?'«не підтримується» '+fmtN(hu.notSupported):'',hu.badCs?'збій суми '+fmtN(hu.badCs):'','відправлено '+fmtN(st.framesSent||0)].filter(Boolean).join(' · ')}
  if(has('knobs')){const k=ch('knobs'),l=ch('lights');
   chip('#hKnob',k,k.state==='ok'?'0x'+(k.addr||0).toString(16).toUpperCase():'');
   $('#hKnobW').textContent=k.state==='ok'?`ліва ${k.left} · права ${k.right} · клацань ${k.clicks}`+(k.i2cErrors?` · збоїв I2C ${fmtN(k.i2cErrors)}`:'')+' — крути, числа мають мінятись':whyT(k);

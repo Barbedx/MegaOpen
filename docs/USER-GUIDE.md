@@ -172,6 +172,7 @@ JSON from `http://<board>/api/health`: one entry per part with a `code`.
 | `hu_off` | head-unit UART switched off | **Кнопки → ГУ по UART** |
 | `hu_silent` | no frame from the head unit since boot | check the UART wiring and the head unit's canbox profile (Toyota RAV4, 38400) |
 | `hu_quiet` | the head unit stopped talking | head unit asleep or a loose wire |
+| `hu_dialect_vw` | the head unit is wired and talking, but in the VW canbox profile | in the head unit's car settings, choose the Toyota RAV4 canbox |
 | `keys_none` | no key since boot | press one; check the panel and knob wiring |
 | `knobs_no_expander` | the knob board is not found | QWIIC cable to the PCF8574 |
 | `lights_off`, `lights_fail` | knob rings off / not starting | **Кнопки** light settings; ring wiring |

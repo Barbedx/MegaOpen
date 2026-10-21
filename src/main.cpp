@@ -11,6 +11,7 @@
 #include "sinks/CanboxUartSink.h"
 #include "sinks/UartTx.h"
 #include "proto/canbox/RaiseFramer.h"
+#include "proto/canbox/HuDialect.h"
 #include "proto/canbox/Rav4Emitter.h"
 // Knob codes: the second byte is a detent count, not a press state — no release.
 #include "proto/canbox/Rav4Profile.h"
@@ -126,6 +127,8 @@ static Canbox::Rav4Emitter   g_emitter;
 static WebUi                 g_web;
 static WifiManager           g_wifi;
 static Canbox::RxParser      g_huRx;
+// Which canbox profile the head unit speaks (proto/canbox/HuDialect.h).
+static Canbox::HuDialect     g_huDialect;
 
 static uint32_t g_ghosts = 0;
 static uint32_t g_encSteps = 0;
@@ -1176,6 +1179,7 @@ static void onHuClock(const uint8_t* payload, uint8_t len)
 // Every head-unit frame, on the hu task, after its ack went out.
 static void onHuFrame(uint8_t cmd, const uint8_t* payload, uint8_t len, void*)
 {
+    g_huDialect.onFrame(cmd);
     if (cmd == 0x9D) onHuClock(payload, len);
     // Static: the hu task is the only caller, and its stack is 3 kB. Web only
     // (the [hur] tag): the [hu] echo already logs every frame once.
@@ -1231,6 +1235,7 @@ static uint32_t g_junkAtMs = 0;
 // and the ring's echo shows it on Serial and the web.
 static void onHuJunk(uint8_t b, void*)
 {
+    g_huDialect.onJunk(b);
     g_junk[g_junkLen++] = b;
     g_junkAtMs = millis();
     if (g_junkLen >= sizeof(g_junk)) {
@@ -2189,6 +2194,7 @@ void setup()
 #if FEATURE_BLE
     g_web.attachPhone([]() { return Bluetooth::IsConnected(); }, &g_media);
     g_web.attachHuMedia(&g_hu);
+    g_web.attachHuDialect(&g_huDialect);
     g_web.attachBle([]() { return Bluetooth::GetStatusJson(); },
                     []() { Bluetooth::ClearBonds(); });
     // Null for a sink not in the chain, so /api/health (keys.dest) can report it as not live.
@@ -2204,6 +2210,7 @@ void setup()
     g_web.attachPhone([]() { return false; }, &g_media);
     // The head-unit source is attached in both branches.
     g_web.attachHuMedia(&g_hu);
+    g_web.attachHuDialect(&g_huDialect);
 #endif
 #endif
 #if FEATURE_VEHICLE_CAN

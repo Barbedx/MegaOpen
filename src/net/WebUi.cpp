@@ -1076,16 +1076,26 @@ void WebUi::routes()
                 {"hu_silent", "no frame from the head unit since boot"},
                 {"hu_quiet", "head unit has gone quiet (link timeout)"},
                 {"hu_ok", ""},
-                {"hu_seen", "frames since boot; this build cannot tell how recent"}};
+                {"hu_seen", "frames since boot; this build cannot tell how recent"},
+                {"hu_dialect_vw", "the head unit speaks the VW canbox profile; this firmware speaks Toyota RAV4"}};
             const uint32_t n = _huRx ? _huRx->frames() : 0;
 #if FEATURE_DISPLAY_CAN
             const uint8_t live = !_hu ? 4 : _hu->heard(millis()) ? 3 : 2;
 #else
             const uint8_t live = 4;
 #endif
-            const uint8_t i = !_cfg->s().uartEnabled ? 0 : !n ? 1 : live;
-            JsonObject o = chain("hu", i == 0 ? "off" : i == 3 ? "ok" : "idle", W[i]);
+            // Wired and talking, but in the other profile: nothing it sends is
+            // understood and nothing we send is shown. Set its canbox profile
+            // to Toyota RAV4 (the head unit's car settings).
+            const bool vw = _huDialect && _huDialect->kind() == Canbox::HuDialect::Kind::Vw;
+            const uint8_t i = !_cfg->s().uartEnabled ? 0 : !n ? 1 : vw ? 5 : live;
+            JsonObject o = chain("hu", i == 0 ? "off" : i == 3 ? "ok" : i == 5 ? "broken" : "idle", W[i]);
             o["rxFrames"] = n;
+            if (_huDialect) {
+                o["dialect"] = Canbox::HuDialect::name(_huDialect->kind());
+                // 0xF3 NACKs: frames of ours the unit says it does not support.
+                o["notSupported"] = _huDialect->notSupported();
+            }
             // Wiring check: nothing at all = wrong pin or no ground; junk and
             // no frames = wired, wrong speed or dialect; bad checksums = noise.
             o["junk"]   = _huRx ? _huRx->junkBytes() : 0;
