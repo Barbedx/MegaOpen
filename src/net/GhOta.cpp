@@ -5,6 +5,7 @@
 #include <Update.h>
 #include <esp_http_client.h>
 #include <esp_heap_caps.h>
+#include <esp_ota_ops.h>
 #include <mbedtls/md.h>
 #include <mbedtls/platform.h>
 #include "GhRelease.h"
@@ -25,7 +26,11 @@ namespace GhOta
         constexpr const char* LATEST_URL = "https://api.github.com/repos/" GH_OTA_REPO "/releases/latest";
         constexpr int      HOPS       = 5;       // github.com -> the asset CDN is one
         constexpr int      TIMEOUT_MS = 15000;
-        constexpr size_t   CHUNK      = 4096;
+        // The download's read and flash-write unit, in INTERNAL RAM: a source in
+        // internal RAM is written straight to flash, one in PSRAM is bounced
+        // through small stack copies. 1 kB, where Arduino's Update would hold
+        // a 4 kB sector buffer internal for the whole download.
+        constexpr size_t   CHUNK      = 1024;
         constexpr size_t   SUMS_MAX   = 4096;    // three envs x two images: ~600 bytes
         constexpr uint32_t PAGE_SEES_REBOOT_MS = 1500;
         constexpr uint32_t WAIT_POLL_MS = 500;     // Written: how often the gates are read
@@ -303,14 +308,24 @@ namespace GhOta
                 fail("the image is %lld bytes, the release says %u", (long long)len, (unsigned)s_rel.size);
                 return;
             }
-            // PSRAM is fine: Update copies it into its own sector buffer before
-            // the flash write.
-            uint8_t* buf = (uint8_t*)psMalloc(CHUNK);
+            // esp_ota_* and not Arduino's Update (which the page's upload
+            // keeps): no 4 kB internal sector buffer. Sequential writes erase
+            // one sector as the image reaches it, as Update does, never the
+            // whole slot up front with the cache off for seconds.
+            const esp_partition_t* part = esp_ota_get_next_update_partition(nullptr);
+            if (!part || (uint64_t)len > part->size) {
+                done(c);
+                fail(part ? "the image does not fit the OTA slot" : "no OTA slot");
+                return;
+            }
+            uint8_t* buf = (uint8_t*)heap_caps_malloc(CHUNK, CAP_IN);
             if (!buf) { done(c); fail("no memory for the download"); return; }
-            if (!Update.begin((size_t)len)) {
+            esp_ota_handle_t ota = 0;
+            const esp_err_t be = esp_ota_begin(part, OTA_WITH_SEQUENTIAL_WRITES, &ota);
+            if (be != ESP_OK) {
                 heap_caps_free(buf);
                 done(c);
-                fail("no OTA slot: %s", Update.errorString());
+                fail("cannot open the OTA slot (%s)", esp_err_to_name(be));
                 return;
             }
             portENTER_CRITICAL(&s_mux);
@@ -331,7 +346,8 @@ namespace GhOta
                 const int k = esp_http_client_read(c, (char*)buf, CHUNK);
                 if (k <= 0) { broke = "the download broke off"; break; }
                 mbedtls_md_update(&md, buf, (size_t)k);
-                if (Update.write(buf, (size_t)k) != (size_t)k) { broke = Update.errorString(); break; }
+                const esp_err_t we = esp_ota_write(ota, buf, (size_t)k);
+                if (we != ESP_OK) { broke = esp_err_to_name(we); break; }
                 got += (uint32_t)k;
                 sampleHeap();
                 portENTER_CRITICAL(&s_mux);
@@ -350,13 +366,17 @@ namespace GhOta
             heap_caps_free(buf);
             done(c);
 
-            if (broke) { Update.abort(); fail("%s at %u of %u bytes", broke, (unsigned)got, (unsigned)len); return; }
+            if (broke) { esp_ota_abort(ota); fail("%s at %u of %u bytes", broke, (unsigned)got, (unsigned)len); return; }
             if (memcmp(have, want, 32) != 0) {
-                Update.abort();
+                esp_ota_abort(ota);
                 fail("SHA-256 does not match SHA256SUMS: nothing was changed");
                 return;
             }
-            if (!Update.end()) { fail("the image did not verify: %s", Update.errorString()); return; }
+            // end() checks the image itself (header, chip, its own hash).
+            const esp_err_t ee = esp_ota_end(ota);
+            if (ee != ESP_OK) { fail("the image did not verify (%s)", esp_err_to_name(ee)); return; }
+            const esp_err_t se = esp_ota_set_boot_partition(part);
+            if (se != ESP_OK) { fail("cannot set the boot partition (%s)", esp_err_to_name(se)); return; }
 
             // The done line never comes after a good install: the stack's
             // headroom is reported here, at the deepest point it will reach.
@@ -370,6 +390,9 @@ namespace GhOta
                            "stack %u of %u unused; reboot when parked or from the page",
                            s_rel.tag, (unsigned)s_v.heapMin, (unsigned)s_v.heapStart,
                            (unsigned)stackFree, (unsigned)App::Plan::GHOTA_STACK);
+            // Into the flash log now, not at the reboot: the car turned off
+            // while waiting boots the new image with no shutdown handler run.
+            LogBus::flushAndWait(500);
         }
 
         // After a good install, with mbedTLS back on its own allocator: never a
