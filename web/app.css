@@ -71,7 +71,7 @@ input.in[type=color]{width:52px;padding:3px}
 /* a link beside a row ("Плата →"): a 40 px target, not a 20 px line of text */
 .row .c>a{display:inline-flex;align-items:center;min-height:40px}
 input.in.code{width:62px;font-family:var(--mono);text-transform:uppercase}
-input.in.grow{flex:1}
+input.in.grow{flex:1;min-width:0}
 textarea.in{width:100%;min-height:96px;padding:8px 10px;font-family:var(--mono);font-size:13px}
 input[type=range]{width:150px;accent-color:var(--acc)}
 .sw{appearance:none;-webkit-appearance:none;width:54px;height:32px;border-radius:16px;background:var(--offB);border:1px solid var(--line);position:relative;cursor:pointer;flex:none;margin:0}
@@ -127,7 +127,7 @@ td.num{font-family:var(--mono);text-align:right}
 .sub{border-top:1px solid var(--line)}
 .subh{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;font-weight:800;background:var(--panel2)}
 details.sub>summary{padding:12px;cursor:pointer;font-weight:700;color:var(--mute);min-height:44px}
-.mac{border-top:1px solid var(--line);padding:10px 12px;display:grid;gap:8px}
+.mac{border-top:1px solid var(--line);padding:10px 12px;display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
 .mac.bad{box-shadow:inset 4px 0 0 var(--bad)}
 .mh{display:flex;gap:8px;align-items:center}
 .mg{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
