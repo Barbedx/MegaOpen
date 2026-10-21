@@ -35,10 +35,10 @@ Each step is the same as a web request, for a laptop instead of the page:
 
 ```
 B=http://192.168.4.1
-curl -X POST "$B/api/display/fullscreen?l1=123456789A123456789B123456789C"
-curl -X POST "$B/api/display/menu?header=123456789A123456789B123456789C&row0=...&row1=..."
-curl -X POST "$B/api/display/info?l1=12345678&l2=WWWWWWWW&l3=abcdefgh"
-curl -X POST "$B/api/display/clear"
+curl -X POST -H "X-MegaOpen: 1" "$B/api/display/fullscreen?l1=123456789A123456789B123456789C"
+curl -X POST -H "X-MegaOpen: 1" "$B/api/display/menu?header=123456789A123456789B123456789C&row0=...&row1=..."
+curl -X POST -H "X-MegaOpen: 1" "$B/api/display/info?l1=12345678&l2=WWWWWWWW&l3=abcdefgh"
+curl -X POST -H "X-MegaOpen: 1" "$B/api/display/clear"
 ```
 
 ## What the numbers set

@@ -61,12 +61,14 @@ That is esptool 5 (what pip installs today). esptool 4 is `esptool.py` and
 port when it is not found by itself. For `direct` use `--chip esp32` (the
 file starts with 4 kB of padding, so it still goes to `0x0`).
 
-**Updates (OTA).** Open `http://<board>/update` and upload `megaopen-<env>-<ver>.bin`,
-or:
+**Updates (OTA).** On the board page (Плата → Оновлення прошивки) upload
+`megaopen-<env>-<ver>.bin`, or press «З GitHub». ElegantOTA's own `/update`
+page is off (it leads to the board page). From a laptop every change needs
+the header `X-MegaOpen: 1` (SECURITY.md):
 
 ```
-curl "http://<board>/ota/start?mode=fr&hash=$(md5sum fw.bin | cut -d' ' -f1)"
-curl -F "file=@fw.bin;filename=firmware.bin" "http://<board>/ota/upload"
+curl -H "X-MegaOpen: 1" "http://<board>/ota/start?mode=fr&hash=$(md5sum fw.bin | cut -d' ' -f1)"
+curl -H "X-MegaOpen: 1" -F "file=@fw.bin;filename=firmware.bin" "http://<board>/ota/upload"
 ```
 
 A new image boots on trial: it confirms itself after 60 s healthy; one that

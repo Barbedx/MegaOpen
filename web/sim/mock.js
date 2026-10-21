@@ -11,9 +11,9 @@
    config, affamap.last, key?wire, media bits, status fw/build/apName, health hu,
    macros "<index>: <why>") позначено НОВЕ. */
 window.SIM={nextErr:0,offline:false,
- call(m,p,q){if(!SIM._call)simBoot();return SIM._call(m,p,q)},
+ call(m,p,q,h){if(!SIM._call)simBoot();return SIM._call(m,p,q,h)},
  /* прошивка: показ поступу, потім ті самі /ota/start і /ota/upload, що й на платі */
- async upload(file,onP){await SIM.call('GET','/ota/start?mode=fr');for(let p=0;p<=100;p+=4){onP(p);await sleep(80)}return SIM.call('POST','/ota/upload',{name:file.name,size:file.size})}};
+ async upload(file,onP){const h={'X-MegaOpen':'1'};await SIM.call('GET','/ota/start?mode=fr',null,h);for(let p=0;p<=100;p+=4){onP(p);await sleep(80)}return SIM.call('POST','/ota/upload',{name:file.name,size:file.size},h)}};
 function simBoot(){
 const rnd=(a,b)=>a+Math.random()*(b-a);
 const h2=n=>(n&255).toString(16).toUpperCase().padStart(2,'0');
@@ -565,12 +565,14 @@ for(let i=0;i<20;i++)emit(i%5?2:1,['KEY','BLE','PNL','CAN','CAP','HU','SYS'][i%7
 
 /* ---- виклик: затримка як у мережі, помилки на замовлення, журнал API ---- */
 const JR=[];
-SIM._call=async function(m,path,params){
+SIM._call=async function(m,path,params,hdr){
  const [p,qs]=path.split('?');const q=Object.assign(Object.fromEntries(new URLSearchParams(qs||'')),params||{});
  const t0=now();await sleep(p==='/api/wifi/scan'?1800:p==='/ota/upload'?400:60+Math.random()*160);
  if(SIM.offline){JR.unshift({m,p:path,st:0,ms:now()-t0});jrDraw();throw new Error('немає зв’язку з платою')}
  let st=200,body;const fn=R[m+' '+p];
  if(m==='POST'&&SIM.nextErr){st=SIM.nextErr;SIM.nextErr=0;simErrUi();body={409:'conflict',503:'busy, try again'}[st]}
+ /* src/net/RequestGate.h: зміна без X-MegaOpen — 403, як на платі */
+ else if((m!=='GET'||p==='/ota/start')&&!(hdr&&hdr['X-MegaOpen']==='1')){st=403;body="a change needs the header X-MegaOpen: 1 (the board's own page sends it)"}
  else if(!fn||!routeBuilt(p)){st=404;body='not found'}
  else{try{const r=fn(q);if(r&&r.__status){st=r.__status;body=r.body}else body=r}catch(e){st=500;body=e.message}}
  JR.unshift({m,p:path,st,ms:now()-t0});if(JR.length>60)JR.pop();jrDraw();

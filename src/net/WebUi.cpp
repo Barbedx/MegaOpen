@@ -6,6 +6,7 @@
 #include "../cfg/SettingsRegistry.h"
 #include "../keys/KeyDests.h"
 #include "../display/InfoRaw.h"
+#include "GhOta.h"
 #include <ArduinoJson.h>
 #include <ElegantOTA.h>
 #include <WiFi.h>
@@ -202,15 +203,57 @@ void WebUi::begin(Cfg::Config& cfg, KeyEngine& engine, KeyMap& map,
     startHeapHunt();
 #endif
     mem("routes");
-    // No OTA password: the web API that sets every password has none either,
-    // so the WiFi password is the only real gate.
+    // No OTA password: the web API that sets every password has none either.
+    // Its endpoints pass the same gate as every route (RequestGate.h).
     ElegantOTA.begin(&_server);
+    gateOta();
 #if FEATURE_GH_OTA
     gateLocalOta();
 #endif
     mem("ota");
     if (_routesLost)
         LogBus::printf("[web] %u route(s) did not fit the table — raise ROUTE_MAX\n", _routesLost);
+}
+
+// PsychicHttpServer keeps its endpoints protected; a pointer to that member,
+// formed through a class derived from it, reads them without a cast.
+namespace
+{
+    struct EndpointList : PsychicHttpServer {
+        static constexpr std::list<PsychicEndpoint*> PsychicHttpServer::*list() { return &EndpointList::_endpoints; }
+    };
+}
+
+RequestGate::Why WebUi::gateWhy(PsychicRequest* r)
+{
+    // mdnsName is a Settings String: read under the settings lock (recursive,
+    // so dispatch() holding it already is fine).
+    Cfg::Config::Guard g(*_cfg);
+    const http_method m = r->method();
+    return RequestGate::check(r->host().c_str(), _cfg->s().mdnsName.c_str(),
+                              m == HTTP_GET || m == HTTP_HEAD, r->path().c_str(),
+                              r->header(RequestGate::HEADER).c_str());
+}
+
+// ElegantOTA registers its own handlers: /ota/start and /ota/upload pass the
+// gate (and stand down while a GitHub job owns OTA); its /update page cannot
+// send the header, so it is off and /update leads to the Плата page. A
+// refused request falls to onNotFound, where dispatch() says why.
+void WebUi::gateOta()
+{
+    for (PsychicEndpoint* e : _server.*EndpointList::list()) {
+        const String u = e->uri();
+        if (u == "/ota/start" || u == "/ota/upload") {
+            e->setFilter([this](PsychicRequest* r) {
+#if FEATURE_GH_OTA
+                if (GhOta::busy()) return false;
+#endif
+                return gateWhy(r) == RequestGate::Why::Ok;
+            });
+        } else if (u == "/update") {
+            e->setFilter([](PsychicRequest*) { return false; });
+        }
+    }
 }
 
 void WebUi::route(const char* path, http_method method, PsychicHttpRequestCallback fn)
@@ -258,6 +301,13 @@ esp_err_t WebUi::dispatch(PsychicRequest* r)
     // here while it does is a use-after-free. ElegantOTA's upload is not a
     // table route, so a long upload never holds it.
     Cfg::Config::Guard cfgLock(*_cfg);
+    // Before any route: the Host, and the header on a change (RequestGate.h).
+    const RequestGate::Why why = gateWhy(r);
+    if (why != RequestGate::Why::Ok) {
+        LogBus::printf("[web] refused %s %s: %s", http_method_str(m), path.c_str(),
+                       why == RequestGate::Why::Host ? "host" : "no X-MegaOpen");
+        return r->reply(403, "text/plain", RequestGate::whyText(why));
+    }
 #if HEAP_HUNT
     huntCheck("before", path.c_str());
     ++s_huntReqs;
@@ -830,6 +880,14 @@ void WebUi::routes()
         out = "";
         serializeJson(o, out);
         return replyJson(r, out);
+    });
+
+    // ElegantOTA's own update page cannot send X-MegaOpen, so it is off
+    // (gateOta()); its address leads to the Плата page, which updates.
+    route("/update", HTTP_GET, [](PsychicRequest* r) {
+        return r->reply(200, "text/html",
+                        "<!doctype html><meta http-equiv=\"refresh\" content=\"0;url=/#board\">"
+                        "<a href=\"/#board\">Плата › Оновлення прошивки</a>");
     });
 
     route("/api/reboot", HTTP_POST, [](PsychicRequest* r) {

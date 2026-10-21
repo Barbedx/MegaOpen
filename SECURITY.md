@@ -15,12 +15,15 @@ exposes and how to report a problem.
 * **Firmware.** An image flashed over WiFi is not signature-checked. Our
   firmware keeps the car's CAN bus (CAN A) listen-only, but that is enforced
   in software: a foreign image could transmit on it.
+* **Other web sites.** The board answers only to its IP or its own `.local`
+  name, and every change needs the header `X-MegaOpen: 1`, which a page on
+  another site cannot send. So a page you open while on the board's network
+  cannot reboot, reset or flash it. Tools: `curl -H "X-MegaOpen: 1" ...`.
 * **Not exposed:** no route returns a WiFi or AP password; the settings file
   never contains them.
 
-Work in progress (docs/BACKLOG.md): requests from other web sites refused,
-a per-board AP password shown only on the car's display, a physical
-"allow update" step, signed images, and a hardware mod that makes CAN A
+Work in progress (docs/BACKLOG.md): a per-board AP password shown only on
+the car's display, a physical "allow update" step, signed images, and a hardware mod that makes CAN A
 receive-only (the TX line broken, docs/BACKLOG.md "Hardware").
 
 ## Reporting

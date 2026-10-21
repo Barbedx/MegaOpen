@@ -84,25 +84,11 @@ void WebUi::routesGhOta()
     route("/ota/upload", HTTP_POST, refused);
 }
 
-// PsychicHttpServer keeps its endpoints protected; a pointer to that member,
-// formed through a class derived from it, reads them without a cast.
-namespace
-{
-    struct EndpointList : PsychicHttpServer {
-        static constexpr std::list<PsychicEndpoint*> PsychicHttpServer::*list() { return &EndpointList::_endpoints; }
-    };
-}
-
 void WebUi::gateLocalOta()
 {
     // One OTA owner: ElegantOTA's routes stand down while a GitHub job runs or
-    // waits to reboot into its image.
-    for (PsychicEndpoint* e : _server.*EndpointList::list()) {
-        const String u = e->uri();
-        if (u == "/ota/start" || u == "/ota/upload")
-            e->setFilter([](PsychicRequest*) { return !GhOta::busy(); });
-    }
-    // ...and a GitHub install asks whether a local session is alive.
+    // waits to reboot into its image (their filter, WebUi::gateOta()), and a
+    // GitHub install asks whether a local session is alive.
     ElegantOTA.onStart([]() { GhOta::localStart(); });
     ElegantOTA.onProgress([](size_t, size_t) { GhOta::localChunk(); });
     ElegantOTA.onEnd([](bool) { GhOta::localEnd(); });

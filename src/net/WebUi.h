@@ -2,6 +2,7 @@
 #include <PsychicHttp.h>
 #include <ArduinoJson.h>
 #include "../Features.h"
+#include "RequestGate.h"
 #include "gen/PageGz.h"      // the pages, gzipped at build time by tools/gen_pages.py
 
 // Every JSON handler answers through this. A String whose allocation failed has
@@ -340,6 +341,9 @@ private:
     void routesGhOta();          // WebUiGhOta.cpp
     void gateLocalOta();         // after ElegantOTA.begin(): one OTA owner
 #endif
+    // Host and X-MegaOpen (RequestGate.h), for dispatch() and the OTA filter.
+    RequestGate::Why gateWhy(PsychicRequest* r);
+    void gateOta();              // after ElegantOTA.begin(): its endpoints gated too
 
     PsychicHttpServer      _server;
     Cfg::Config*           _cfg = nullptr;

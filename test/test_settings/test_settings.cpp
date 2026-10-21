@@ -1,3 +1,4 @@
+#include "net/RequestGate.h"
 #include <unity.h>
 #include <string.h>
 #include <string>
@@ -838,9 +839,58 @@ void test_too_many_is_said_once()
     TEST_ASSERT_EQUAL_UINT8(1, err.n);
 }
 
+// ---- the request gate (src/net/RequestGate.h) -----------------------------------
+
+void test_gate_host_ip_and_own_name_only()
+{
+    using RequestGate::hostAllowed;
+    TEST_ASSERT_TRUE(hostAllowed("192.168.4.1", "megaopen"));
+    TEST_ASSERT_TRUE(hostAllowed("192.168.4.1:80", "megaopen"));
+    TEST_ASSERT_TRUE(hostAllowed("10.0.0.7", ""));
+    TEST_ASSERT_TRUE(hostAllowed("megaopen.local", "megaopen"));
+    TEST_ASSERT_TRUE(hostAllowed("MegaOpen.Local.", "megaopen"));
+    TEST_ASSERT_TRUE(hostAllowed("megaopen", ""));                    // empty name = the default
+    TEST_ASSERT_TRUE(hostAllowed("car.local:8080", "car"));
+    TEST_ASSERT_TRUE(hostAllowed("[fe80::1]:80", "megaopen"));
+    // A rebinding page's own domain, a router's name, look-alikes, junk.
+    TEST_ASSERT_FALSE(hostAllowed("evil.example", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed("megaopen.fritz.box", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed("megaopen.local.evil.example", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed("xmegaopen.local", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed("192.168.4.256", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed("192.168.4", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed("1.2.3.4.5", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed("", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed(nullptr, "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed(":80", "megaopen"));
+}
+
+void test_gate_header_on_every_change_and_ota_start()
+{
+    using RequestGate::check;
+    using RequestGate::Why;
+    const char* h = "192.168.4.1";
+    TEST_ASSERT_EQUAL(Why::Ok, check(h, "megaopen", true, "/api/settings", ""));     // a read
+    TEST_ASSERT_EQUAL(Why::Ok, check(h, "megaopen", true, "/", nullptr));
+    TEST_ASSERT_EQUAL(Why::Header, check(h, "megaopen", false, "/api/settings", ""));
+    TEST_ASSERT_EQUAL(Why::Header, check(h, "megaopen", false, "/api/reboot", "0"));
+    TEST_ASSERT_EQUAL(Why::Ok, check(h, "megaopen", false, "/api/factory", "1"));
+    // GET /ota/start starts an update: it is a change.
+    TEST_ASSERT_EQUAL(Why::Header, check(h, "megaopen", true, "/ota/start", ""));
+    TEST_ASSERT_EQUAL(Why::Ok, check(h, "megaopen", true, "/ota/start", "1"));
+    TEST_ASSERT_EQUAL(Why::Header, check(h, "megaopen", false, "/ota/upload", nullptr));
+    // The host is checked first, header or not.
+    TEST_ASSERT_EQUAL(Why::Host, check("evil.example", "megaopen", false, "/api/fw/install", "1"));
+    TEST_ASSERT_EQUAL(Why::Host, check("evil.example", "megaopen", true, "/api/config", nullptr));
+    TEST_ASSERT_TRUE(*RequestGate::whyText(Why::Header));
+    TEST_ASSERT_TRUE(*RequestGate::whyText(Why::Host));
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_gate_host_ip_and_own_name_only);
+    RUN_TEST(test_gate_header_on_every_change_and_ota_start);
     RUN_TEST(test_ids_unique_and_findable);
     RUN_TEST(test_one_request_can_change_every_setting);
     RUN_TEST(test_tags_fit_the_panel);
