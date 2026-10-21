@@ -94,8 +94,17 @@ namespace Cfg
         // The candidate becomes the password (from the next start). False:
         // nothing pending.
         bool adoptApPass();
-        // An own password from the web: Pending ends. `p` is acceptable().
+        // The owner has seen the made-up password (the menu row): it stops
+        // being shown at every boot. False: nothing to acknowledge.
+        bool ackApPass();
+        // An own password from the web: Pending and Fresh end. `p` is acceptable().
         void setOwnApPass(const Str& p);
+        // Recovery (BOOT held while WiFi starts, main.cpp): this boot's AP
+        // uses the public default; nothing is saved.
+        void setApRecovery() { _apRecovery = true; }
+        bool apRecovery() const { return _apRecovery; }
+        // What the AP starts with (WifiManager::begin).
+        Str apPassForAp() const { return _apRecovery ? Str(ApPass::PUBLIC_DEFAULT) : _s.apPass; }
 
         // net_svc: the detected CAN A rate, only that key. Not save(): one NVS
         // write, and nothing else in Settings is touched from that task.
@@ -140,6 +149,7 @@ namespace Cfg
 
         uint8_t     _ver = 0;      // what is stored now, after migrate()
         ApPass::State _apState = ApPass::State::Own;
+        bool          _apRecovery = false;
         void loadApPass();
         uint8_t     _verWas = 0;   // what was stored when this boot started
         Preferences _p;

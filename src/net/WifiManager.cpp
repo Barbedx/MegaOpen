@@ -13,7 +13,7 @@ void WifiManager::begin(Cfg::Config& cfg)
     // String in cfg is read here except mdnsName, which nothing writes.
     _ssid1 = cfg.s().ssid;
     _pass1 = cfg.s().pass;
-    _apPass = cfg.s().apPass;
+    _apPass = cfg.apPassForAp();      // the public default on a recovery boot
     _btOn = cfg.s().bleMode != "off";
     {
         char name[32];

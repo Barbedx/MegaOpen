@@ -143,6 +143,11 @@ namespace App
         void noteManualClock(uint16_t hm);
         // Sender on row 1, body wrapped over rows 2-3; drawn as a fullscreen.
         void queueNotification(const char* sender, const char* text);
+        // The same, for the AP password (cfg/ApPass.h): while it is on the
+        // glass the panel's TX frames stay out of the trace and the raw frame
+        // ring, which the web can read. secretOnGlass(): any task.
+        void queueSecretNotification(const char* sender, const char* text);
+        bool secretOnGlass();
         // The active media source changed; the screen refills on the next pass.
         void mediaChanged();
         // Fire the track splash now, for the current title (the media page).

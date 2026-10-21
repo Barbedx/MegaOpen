@@ -1,6 +1,7 @@
 #include "../utils/LogBus.h"
 #include "Config.h"
 #include <nvs.h>
+#include "bootloader_random.h"
 
 namespace Cfg
 {
@@ -364,36 +365,56 @@ namespace Cfg
     {
         const bool has = _p.isKey("apPass");
         const String stored = has ? _p.getString("apPass", "") : String();
-        _apState = ApPass::decide(has ? stored.c_str() : nullptr, MO_AP_PASS);
+        _apState = ApPass::decide(has ? stored.c_str() : nullptr, MO_AP_PASS, _p.isKey("apUnack"));
 #if !FEATURE_DISPLAY_CAN
         // No panel to show a made-up password on: the old behaviour, and the
         // owner is told to change it (README, SECURITY.md).
         if (_apState == ApPass::State::Fresh) _apState = ApPass::State::Own;
 #endif
         char gen[ApPass::LEN + 1];
+        // Before WiFi and BLE are up, esp_random() has no RF noise behind it:
+        // the bootloader's entropy source is switched on for the draw.
+        auto draw = [&gen] {
+            bootloader_random_enable();
+            ApPass::generate(gen, [] { return esp_random(); });
+            bootloader_random_disable();
+        };
         switch (_apState) {
             case ApPass::State::Own:
                 _s.apPass = has ? stored : String(MO_AP_PASS);
                 break;
             case ApPass::State::Fresh:
-                ApPass::generate(gen, [] { return esp_random(); });
-                _s.apPass = gen;
-                _p.putString("apPass", _s.apPass);
+                // Made up once; shown at every boot until acknowledged.
+                if (has && stored.length()) {
+                    _s.apPass = stored;
+                } else {
+                    draw();
+                    _s.apPass = gen;
+                    _p.putString("apPass", _s.apPass);
+                    _p.putBool("apUnack", true);
+                }
                 break;
             case ApPass::State::Pending:
                 _s.apPass = stored;
                 _s.apPassNext = _p.getString("apPassNx", "");
                 if (!ApPass::acceptable(_s.apPassNext.c_str())) {
-                    ApPass::generate(gen, [] { return esp_random(); });
+                    draw();
                     _s.apPassNext = gen;
                     _p.putString("apPassNx", _s.apPassNext);
                 }
                 break;
         }
-        // Never the value: LogBus is readable from the web.
-        LogBus::printf("[wifi] AP password: %s", _apState == ApPass::State::Fresh   ? "made up at this boot, on the panel"
-                                               : _apState == ApPass::State::Pending ? "PUBLIC DEFAULT, a new one waits on the panel"
+        // Never the value in LogBus (readable from the web). The USB console
+        // gets it directly while it is not yet acknowledged: whoever is on
+        // the board's USB can flash it anyway.
+        LogBus::printf("[wifi] AP password: %s", _apState == ApPass::State::Fresh   ? "made up, not yet acknowledged: on the panel and USB"
+                                               : _apState == ApPass::State::Pending ? "PUBLIC DEFAULT, a new one waits on the panel and USB"
                                                                                     : "own");
+        if (_apState == ApPass::State::Fresh)
+            Serial.printf("[wifi] AP password: %s (panel menu: WiFi pass to acknowledge)\n", _s.apPass.c_str());
+        else if (_apState == ApPass::State::Pending)
+            Serial.printf("[wifi] AP password is still the public default; new one: %s (panel menu: WiFi pass)\n",
+                          _s.apPassNext.c_str());
     }
 
     bool Config::adoptApPass()
@@ -409,11 +430,21 @@ namespace Cfg
         return true;
     }
 
+    bool Config::ackApPass()
+    {
+        Guard g(*this);
+        if (_apState != ApPass::State::Fresh) return false;
+        _p.remove("apUnack");
+        _apState = ApPass::State::Own;
+        return true;
+    }
+
     void Config::setOwnApPass(const Str& p)
     {
         Guard g(*this);
         _s.apPass = p;
         if (_apState == ApPass::State::Pending) { _s.apPassNext = ""; _p.remove("apPassNx"); }
+        _p.remove("apUnack");
         _apState = ApPass::State::Own;
     }
 

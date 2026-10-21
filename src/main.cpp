@@ -1121,6 +1121,9 @@ static void affaTap(const affa::Frame& f, affa::Direction d, void*)
 {
     // Received frames only: what the rest of the bus says, never our own.
     if (d != affa::Direction::Tx) g_panelWatch.onRx(f.id, f.len, f.data, millis());
+    // The AP password on the glass: its text frames go nowhere a web client
+    // can read (the raw ring, the trace).
+    if (d == affa::Direction::Tx && App::Ui::secretOnGlass()) return;
     // Feed the raw frame ring: the panel bus is not a car source.
     ringPut((d == affa::Direction::Tx) ? 'T' : 'R', f.id, f.data, f.len);
 
@@ -1728,7 +1731,7 @@ void setup()
         };
         // The "WiFi pass" row: the AP password on the glass (cfg/ApPass.h).
         m.apSsid = []() { return g_wifi.apSsid().c_str(); };
-        m.notify = App::Ui::queueNotification;
+        m.notify = App::Ui::queueSecretNotification;
         App::PanelMenu::begin(m);
     }
 #endif
@@ -2109,6 +2112,15 @@ void setup()
     }
 #endif
 
+    // Recovery (cfg/ApPass.h): BOOT (IO0) held while the WiFi starts makes
+    // this boot's AP use the public default. Not at power-up itself: IO0 low
+    // at reset is the ROM's download mode.
+    pinMode(0, INPUT_PULLUP);
+    if (digitalRead(0) == LOW) {
+        g_cfg.setApRecovery();
+        LogBus::printf("[wifi] BOOT held: this start's AP uses the PUBLIC DEFAULT password (recovery)");
+        Serial.println("[wifi] BOOT held: this start's AP password is the public default");
+    }
     g_wifi.begin(g_cfg);
     memMark("wifi");
     g_web.attachWifi(&g_wifi);
@@ -2261,15 +2273,17 @@ void setup()
     // The AP password on the glass (cfg/ApPass.h): a made-up one at the boot
     // that made it; a waiting one at every boot until the menu adopts it.
     // Owed until the panel is synced, like any notification. Never logged.
-    if (App::Panel::present() && g_cfg.apPassState() != ApPass::State::Own) {
+    if (App::Panel::present() && (g_cfg.apPassState() != ApPass::State::Own || g_cfg.apRecovery())) {
         Cfg::Config::Guard g(g_cfg);
         char title[32], text[48];
         snprintf(title, sizeof(title), "WiFi %s", g_wifi.apSsid().c_str());
-        if (g_cfg.apPassState() == ApPass::State::Fresh)
-            snprintf(text, sizeof(text), "pass %s", g_cfg.s().apPass.c_str());
+        if (g_cfg.apRecovery())
+            snprintf(text, sizeof(text), "recovery: pass %s this start", ApPass::PUBLIC_DEFAULT);
+        else if (g_cfg.apPassState() == ApPass::State::Fresh)
+            snprintf(text, sizeof(text), "pass %s: menu, WiFi pass", g_cfg.s().apPass.c_str());
         else
             snprintf(text, sizeof(text), "new pass %s: menu, WiFi pass", g_cfg.s().apPassNext.c_str());
-        App::Ui::queueNotification(title, text);
+        App::Ui::queueSecretNotification(title, text);
     }
 #endif
     // The OTA trial's verdict comes from net_svc (Housekeeping).

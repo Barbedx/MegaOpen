@@ -76,7 +76,8 @@ namespace App
             // net_svc -> ui task: a commit was applied (or refused): once the
             // queue is through, re-read the knobs and the settings.
             std::atomic<bool>    s_applied{false};
-            // ui task -> net_svc: adopt the waiting AP password (Config::adoptApPass).
+            // ui task -> net_svc: the WiFi pass row was pressed: adopt the waiting
+            // AP password, or acknowledge a made-up one (Config, under the lock).
             std::atomic<bool>    s_adoptReq{false};
             // The menu's copies carry its own commits ahead of net_svc
             // (MenuEngine::begin); while any is still queued they are newer
@@ -290,6 +291,9 @@ namespace App
                             s_adoptReq.store(true, std::memory_order_release);
                         } else {
                             snprintf(text, sizeof(text), "pass %s", s_snap.apPass.c_str());
+                            // Seen: a made-up one stops being shown at every boot.
+                            if (s_d.cfg->apPassState() == ApPass::State::Fresh)
+                                s_adoptReq.store(true, std::memory_order_release);
                         }
                         s_d.notify(title, text);
                         LogBus::line("[menu] WiFi password shown on the panel");
@@ -410,9 +414,12 @@ namespace App
             // the AP's from the next start (WifiManager reads it at begin).
             if (s_adoptReq.load(std::memory_order_acquire) && s_d.cfg->tryLock()) {
                 s_adoptReq.store(false, std::memory_order_relaxed);
-                const bool ok = s_d.cfg->adoptApPass();
+                const bool adopted = s_d.cfg->adoptApPass();
+                const bool acked = !adopted && s_d.cfg->ackApPass();
                 s_d.cfg->unlock();
-                LogBus::printf("[wifi] AP password: %s", ok ? "the board's own, from the next start" : "nothing waiting");
+                LogBus::printf("[wifi] AP password: %s", adopted ? "the board's own, from the next start"
+                                                        : acked  ? "acknowledged on the panel"
+                                                                 : "nothing waiting");
                 s_applied.store(true, std::memory_order_release);
             }
             for (;;) {

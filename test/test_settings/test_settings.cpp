@@ -916,7 +916,7 @@ void test_ap_pass_acceptable_and_generated()
     uint32_t n = 0;
     ApPass::generate(p, [&] { return n++; });                    // 0, 1, 2 ...
     TEST_ASSERT_EQUAL_UINT32(ApPass::LEN, strlen(p));
-    TEST_ASSERT_EQUAL_STRING("abcdefghjk", p);
+    TEST_ASSERT_EQUAL_STRING("abcdefghjkmn", p);
     TEST_ASSERT_TRUE(ApPass::acceptable(p));
     // No look-alikes, ever; a draw past the even limit is drawn again.
     for (const char* c = ApPass::ALPHABET; *c; ++c) TEST_ASSERT_NULL(strchr("0o1lI", *c));
@@ -935,6 +935,10 @@ void test_ap_pass_decide()
     TEST_ASSERT_EQUAL(State::Pending, ApPass::decide("megaopen", "megaopen"));
     TEST_ASSERT_EQUAL(State::Pending, ApPass::decide("megaopen", "devpreset1"));
     TEST_ASSERT_EQUAL(State::Own, ApPass::decide("myownpass", "megaopen"));
+    // A made-up one stays Fresh (shown every boot) until acknowledged.
+    TEST_ASSERT_EQUAL(State::Fresh, ApPass::decide("k7hq2mxr9bwz", "megaopen", true));
+    TEST_ASSERT_EQUAL(State::Own, ApPass::decide("k7hq2mxr9bwz", "megaopen", false));
+    TEST_ASSERT_EQUAL(State::Pending, ApPass::decide("megaopen", "megaopen", true));
 }
 
 int main(int, char**)

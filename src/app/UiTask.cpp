@@ -1,4 +1,5 @@
 #include "UiTask.h"
+#include <atomic>
 #if FEATURE_DISPLAY_CAN
 #include "PanelOwner.h"
 #include "PanelMenu.h"
@@ -136,6 +137,11 @@ namespace App
             bool     g_notifyDue = false;
             uint32_t g_notifySeq = 0;
             char     g_notifyRows[3][MegaOpen::MediaScreen::ROW_MAX] = {};
+            bool     g_notifySecret = false;   // the AP password (queueSecretNotification)
+            // While a secret notice is on the glass, the panel's TX frames are
+            // kept out of the trace and the raw ring (main.cpp affaTap):
+            // millis() until then, 0 = none.
+            std::atomic<uint32_t> g_secretUntilMs{0};
             Ticket   s_notifyReq = NO_TICKET;
 
             // ---- who owns the glass right now ----------------------------------
@@ -789,7 +795,10 @@ namespace App
                     portENTER_CRITICAL(&g_notifyMux);
                     memcpy(rows, g_notifyRows, sizeof(rows));
                     const uint32_t seq = g_notifySeq;
+                    const bool secret = g_notifySecret;
                     portEXIT_CRITICAL(&g_notifyMux);
+                    // Muted before the render, for its frames and a margin after.
+                    if (secret) g_secretUntilMs.store((now + NOTIFY_MS + 1000) | 1, std::memory_order_release);
                     PanelOps::Req r;
                     fullscreenReq(r, rows[0], rows[1], rows[2]);
                     const Ticket id = submitTracked(r, T_NOTIFY, now);
@@ -1248,7 +1257,18 @@ namespace App
         // Sender on row 1, body wrapped over rows 2-3, folded to ASCII; drawn by
         // the ui task as a fullscreen. Any task: the rows cross under
         // g_notifyMux. A newer notification replaces the rows of one still owed.
-        void queueNotification(const char* sender, const char* text)
+        static void queueRows(const char* sender, const char* text, bool secret);
+
+        void queueNotification(const char* sender, const char* text) { queueRows(sender, text, false); }
+        void queueSecretNotification(const char* sender, const char* text) { queueRows(sender, text, true); }
+
+        bool secretOnGlass()
+        {
+            const uint32_t until = g_secretUntilMs.load(std::memory_order_acquire);
+            return until && (int32_t)(millis() - until) < 0;
+        }
+
+        static void queueRows(const char* sender, const char* text, bool secret)
         {
             using MegaOpen::MediaScreen;
             const uint8_t cols = MegaOpen::FS_COLS;
@@ -1264,6 +1284,7 @@ namespace App
             wrapTwoEllipsis(body, cols, rows[1], rows[2]);
             portENTER_CRITICAL(&g_notifyMux);
             memcpy(g_notifyRows, rows, sizeof(rows));
+            g_notifySecret = secret;
             ++g_notifySeq;
             g_notifyDue = true;
             portEXIT_CRITICAL(&g_notifyMux);

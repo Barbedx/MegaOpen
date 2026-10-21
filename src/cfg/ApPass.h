@@ -9,9 +9,13 @@
 // so anyone in range of a parked car could join and flash the board. Now:
 //
 //   * A fresh or factory-reset board makes up its own password (LEN letters
-//     and digits, no look-alikes) and shows it on the car's display at that
-//     boot; the panel menu's "WiFi pass" row shows it again. It never goes
-//     to the web or the web log: being in the car is the proof.
+//     and digits, no look-alikes) and shows it on the car's display, and on
+//     the USB console, at EVERY boot until the owner acknowledges it (the
+//     panel menu's "WiFi pass" row, or an own password set on the web); the
+//     row shows it again any time. Never through a web route or the web log:
+//     being in the car (or on its USB) is the proof.
+//   * Recovery: BOOT (IO0) held while the board starts its WiFi makes the AP
+//     use the public default for that boot only (main.cpp, logged).
 //   * A board still on the public default keeps it (no lock-out) and gets a
 //     candidate, shown on the panel at every boot until the owner adopts it
 //     from the menu, or sets an own password on the web.
@@ -23,7 +27,7 @@
 namespace ApPass
 {
     inline constexpr const char* PUBLIC_DEFAULT = "megaopen";
-    inline constexpr uint8_t     LEN = 10;
+    inline constexpr uint8_t     LEN = 12;     // ~59 bits from 31 symbols
     // No 0/o, 1/l/i: read off a car's display and typed into a phone.
     inline constexpr char ALPHABET[] = "abcdefghjkmnpqrstuvwxyz23456789";
     inline constexpr uint8_t ALPHABET_N = sizeof(ALPHABET) - 1;
@@ -52,15 +56,19 @@ namespace ApPass
 
     enum class State : uint8_t {
         Own,        // an own password (stored, or a dev preset): nothing to show
-        Fresh,      // made up at this boot: show it on the panel
+        Fresh,      // made up and not yet acknowledged: show it at every boot
         Pending,    // still the public default: a candidate waits to be adopted
     };
 
     // What Config::begin() does with what NVS holds. `stored` is the NVS
     // value or nullptr when there is none; `preset` is MO_AP_PASS.
-    inline State decide(const char* stored, const char* preset)
+    // `unacked`: NVS says a made-up password was never acknowledged.
+    inline State decide(const char* stored, const char* preset, bool unacked = false)
     {
-        if (stored && *stored) return strcmp(stored, PUBLIC_DEFAULT) == 0 ? State::Pending : State::Own;
+        if (stored && *stored) {
+            if (strcmp(stored, PUBLIC_DEFAULT) == 0) return State::Pending;
+            return unacked ? State::Fresh : State::Own;
+        }
         return acceptable(preset) ? State::Own : State::Fresh;
     }
 }
