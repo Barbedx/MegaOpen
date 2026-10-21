@@ -72,7 +72,7 @@ cfgBind(){
   try{doc=JSON.parse(await f.text())}catch(x){sv(svOf(e.target),'bad','це не JSON');return}
   sv(svOf(e.target),'busy');let p;
   try{p=await API.post('/api/config?dry=1',doc)}catch(x){sv(svOf(e.target),'bad','файл не підходить');
-   prev.innerHTML=row('Нічого не змінено','',(x.message||'').split('\n').map(esc).join('<br>'));return}
+   prev.innerHTML=row('Нічого не змінено','',errLines(x.message).map(esc).join('<br>'));return}
   sv(svOf(e.target),'ok','перевірено');
   const ch=p.changes||[],fw=p.fileFw&&p.fileFw!==this.fw?row('Файл з іншої прошивки',chipH('warn',p.fileFw),'ключі, яких ця не знає, пропущено'):'';
   prev.innerHTML=fw+row(ch.length?'Зміниться: '+ch.length:'Нічого не зміниться',p.reboot?chipH('warn','потрібен перезапуск'):'',ch.map(lbl).map(esc).join(' · '))+
@@ -83,7 +83,7 @@ cfgBind(){
   $('#cfgNo').onclick=()=>{prev.innerHTML='';e.target.value=''};
   $('#cfgGo').onclick=b=>run(b.target,async()=>{const r=await API.post('/api/config',doc);prev.innerHTML='';e.target.value='';
    const part=(r&&r.partial)||[];
-   if(part.length)prev.innerHTML=row('Застосовано не все',chipH('warn',String(part.length)),part.map(esc).join('<br>'));
+   if(part.length)prev.innerHTML=row('Застосовано не все',chipH('warn',String(part.length)),part.map(errLine).map(esc).join('<br>'));
    if(r&&r.pendingReboot){prev.innerHTML+=row('Застосовано','<button class="btn" type="button" id="cfgRb">Перезавантажити</button>','частина — після перезапуску');$('#cfgRb').onclick=x=>reboot().catch(err=>sv(svOf(x.target),'bad',errT(err)))}
    return {note:part.length?'застосовано частково':'застосовано'}})}},
 /* GhOta: стан з /api/fw; phase -> чип, підпис, кнопка, смуга. rebooting -> та сама заставка, що й після файлу */

@@ -56,10 +56,10 @@ void WebUi::routesRes()
 {
     // ---- the whole configuration ------------------------------------------
     route("/api/res", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_res || !_st.resMap) return r->reply(503, "text/plain", "no resistive sink");
+        if (!_res || !_st.resMap) return r->reply(503, "text/plain", "not_built resistive_sink");
         // The newest edit, applied or not: what the page just saved.
         Sinks::ResistiveMap m;
-        if (!_st.resMap->peek(m)) return r->reply(503, "text/plain", "busy, try again");
+        if (!_st.resMap->peek(m)) return r->reply(503, "text/plain", "busy");
         JsonDocument d;
         d["enabled"]    = _res->enabled();
         d["activeHigh"] = m.activeHigh();
@@ -158,11 +158,11 @@ void WebUi::routesRes()
 
     // ---- what is on the wire, polled --------------------------------------
     route("/api/res/live", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_res || !_st.resMap) return r->reply(503, "text/plain", "no resistive sink");
+        if (!_res || !_st.resMap) return r->reply(503, "text/plain", "not_built resistive_sink");
         // Ohms from the staged map, not liveOhms(): that reads the keys task's
         // own copy, which it may be replacing right now.
         Sinks::ResistiveMap m;
-        if (!_st.resMap->peek(m)) return r->reply(503, "text/plain", "busy, try again");
+        if (!_st.resMap->peek(m)) return r->reply(503, "text/plain", "busy");
         JsonDocument d;
         JsonArray chs = d["ch"].to<JsonArray>();
         for (uint8_t c = 0; c < Sinks::ResistiveMap::CHANNELS; ++c) {
@@ -189,9 +189,9 @@ void WebUi::routesRes()
     // every rung as it does. The copy saved to NVS is taken out of the edit,
     // so the flash write never runs under the staging mutex.
     route("/api/res", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_res || !_st.resMap) return r->reply(503, "text/plain", "no resistive sink");
+        if (!_res || !_st.resMap) return r->reply(503, "text/plain", "not_built resistive_sink");
         JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
 
         Sinks::ResistiveMap saved;
         Sinks::ResistiveMap::Timing t;
@@ -231,7 +231,7 @@ void WebUi::routesRes()
             m.timing() = t;
             saved = m;
         });
-        if (!ok) return r->reply(503, "text/plain", "busy, try again");
+        if (!ok) return r->reply(503, "text/plain", "busy");
 
         if (d["enabled"].is<bool>()) {
             _cfg->s().resEnabled = d["enabled"].as<bool>();
@@ -252,11 +252,11 @@ void WebUi::routesRes()
 
     // ---- one action's rungs -------------------------------------------------
     route("/api/res/map", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_res || !_st.resMap) return r->reply(503, "text/plain", "no resistive sink");
+        if (!_res || !_st.resMap) return r->reply(503, "text/plain", "not_built resistive_sink");
         JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         const Keys::Action a = Keys::fromName(d["action"] | "");
-        if (a == Keys::Action::None) return r->reply(400, "text/plain", "unknown action");
+        if (a == Keys::Action::None) return r->reply(400, "text/plain", "param action");
 
         // Remapping under a held key would strand the old rung (its Release
         // resolves against the new one): the keys task lets go of every rung
@@ -270,7 +270,7 @@ void WebUi::routesRes()
             m.setSlot(a, s);
             saved = m;
         });
-        if (!ok) return r->reply(503, "text/plain", "busy, try again");
+        if (!ok) return r->reply(503, "text/plain", "busy");
         App::KeyBus::kick();
         _cfg->saveResMap(saved);
         return r->reply(200, "application/json", "{\"ok\":true}");
@@ -278,7 +278,7 @@ void WebUi::routesRes()
 
     // ---- give every button a rung -------------------------------------------
     route("/api/res/auto", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_res || !_st.resMap) return r->reply(503, "text/plain", "no resistive sink");
+        if (!_res || !_st.resMap) return r->reply(503, "text/plain", "not_built resistive_sink");
         JsonDocument d;
         deserializeJson(d, r->body());
         const uint8_t ch = (uint8_t)(d["ch"] | 0);
@@ -291,7 +291,7 @@ void WebUi::routesRes()
             placed = m.autoAssign(ch, want, n);
             saved = m;
         });
-        if (!ok) return r->reply(503, "text/plain", "busy, try again");
+        if (!ok) return r->reply(503, "text/plain", "busy");
         App::KeyBus::kick();
         _cfg->saveResMap(saved);
 
@@ -311,7 +311,7 @@ void WebUi::routesRes()
     // fire a spare rung once. The rung is checked here against the staged map,
     // so the page still gets its 409; the hold itself is the keys task's.
     route("/api/res/learn", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_res || !_st.resMap || !_st.resLearn) return r->reply(503, "text/plain", "no resistive sink");
+        if (!_res || !_st.resMap || !_st.resLearn) return r->reply(503, "text/plain", "not_built resistive_sink");
         JsonDocument d;
         deserializeJson(d, r->body());
 
@@ -322,18 +322,18 @@ void WebUi::routesRes()
         }
 
         Sinks::ResistiveMap m;
-        if (!_st.resMap->peek(m)) return r->reply(503, "text/plain", "busy, try again");
+        if (!_st.resMap->peek(m)) return r->reply(503, "text/plain", "busy");
         App::KeysTask::ResLearn q;
         q.ms = (uint32_t)(d["ms"] | (int)Sinks::ResistiveKeySink::LEARN_MS);
 
         if (d["action"].is<const char*>()) {
             const Keys::Action a = Keys::fromName(d["action"].as<const char*>());
-            if (a == Keys::Action::None) return r->reply(400, "text/plain", "unknown action");
+            if (a == Keys::Action::None) return r->reply(400, "text/plain", "param action");
             // 409 with a reason: otherwise the press silently does nothing.
             // The same test learnAction() makes.
             const Sinks::ResistiveMap::Slot s = m.slot(a);
             if (!s.mask || m.ladder(s.ch).ohmsFor(s.mask) == Sinks::ResistiveLadder::OPEN)
-                return r->reply(409, "text/plain", "no rung, or its legs are not fitted");
+                return r->reply(409, "text/plain", "res_no_legs");
             q.op = App::KeysTask::ResLearn::Op::Action;
             q.action = (uint8_t)a;
             _st.resLearn(q);
@@ -344,10 +344,10 @@ void WebUi::routesRes()
 
         const uint8_t ch   = (uint8_t)(d["ch"] | 0);
         const uint8_t mask = (uint8_t)(d["mask"] | 0);
-        if (!mask) return r->reply(400, "text/plain", "mask?");
+        if (!mask) return r->reply(400, "text/plain", "param mask");
         const uint16_t ohms = m.ladder(ch).ohmsFor(mask);
         if (ohms == Sinks::ResistiveLadder::OPEN)
-            return r->reply(409, "text/plain", "those legs are not fitted");
+            return r->reply(409, "text/plain", "res_no_legs");
         q.op = App::KeysTask::ResLearn::Op::Assert;
         q.ch = ch;
         q.mask = mask;

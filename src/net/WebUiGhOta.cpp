@@ -50,14 +50,14 @@ void WebUi::routesGhOta()
 
     route("/api/fw/check", HTTP_POST, [](PsychicRequest* r) {
         if (!WiFi.isConnected())
-            return fwBusy(r, "the board is on its own access point: join it to a WiFi network with internet");
+            return fwBusy(r, "fw_ap");   // on its own AP: join a WiFi network with internet
         const char* why = GhOta::check();
         return why ? fwBusy(r, why) : r->reply(200, "application/json", "{\"ok\":true}");
     });
 
     route("/api/fw/install", HTTP_POST, [this](PsychicRequest* r) {
         if (!WiFi.isConnected())
-            return fwBusy(r, "the board is on its own access point: join it to a WiFi network with internet");
+            return fwBusy(r, "fw_ap");   // on its own AP: join a WiFi network with internet
         GhOta::attachCar(_state);
         const char* why = GhOta::install();
         return why ? fwBusy(r, why) : r->reply(200, "application/json", "{\"ok\":true}");
@@ -77,8 +77,8 @@ void WebUi::routesGhOta()
         GhOta::View v;
         GhOta::view(v);
         return fwBusy(r, v.phase == GhOta::Phase::Written
-                             ? "a GitHub update is written and waits for its reboot (Плата › З GitHub)"
-                             : "a GitHub check or download is running: try again when it ends");
+                             ? "fw_written"     // a GitHub update waits for its reboot
+                             : "fw_running");   // a GitHub check or download is running
     };
     route("/ota/start", HTTP_GET, refused);
     route("/ota/upload", HTTP_POST, refused);

@@ -48,7 +48,7 @@ void WebUi::routesMacros()
 {
     // ---- the whole configuration -------------------------------------------
     route("/api/macros", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_macros || !_st.macros) return r->reply(503, "text/plain", "no macro engine");
+        if (!_macros || !_st.macros) return r->reply(503, "text/plain", "not_built macro_engine");
         JsonDocument d;
 
         JsonArray ms = d["macros"].to<JsonArray>();
@@ -85,7 +85,7 @@ void WebUi::routesMacros()
                 o["progress"] = _macros->progress(i);
             }
         });
-        if (!got) return r->reply(503, "text/plain", "busy, try again");
+        if (!got) return r->reply(503, "text/plain", "busy");
 
         String out; serializeJson(d, out);
         return replyJson(r, out);
@@ -93,7 +93,7 @@ void WebUi::routesMacros()
 
     // ---- the live half, polled -------------------------------------------
     route("/api/macros/live", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_macros) return r->reply(503, "text/plain", "no macro engine");
+        if (!_macros) return r->reply(503, "text/plain", "not_built macro_engine");
         JsonDocument d;
         d["fired"]     = _macros->fired();
         d["swallowed"] = _macros->swallowed();
@@ -118,11 +118,11 @@ void WebUi::routesMacros()
 
     // The whole table at once, never a single row: macros interact.
     route("/api/macros", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_macros || !_cfg || !_st.macros) return r->reply(503, "text/plain", "no macro engine");
+        if (!_macros || !_cfg || !_st.macros) return r->reply(503, "text/plain", "not_built macro_engine");
         JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         JsonArray in = d["macros"].as<JsonArray>();
-        if (in.isNull()) return r->reply(400, "text/plain", "macros[]?");
+        if (in.isNull()) return r->reply(400, "text/plain", "param macros");
 
         // One row, parsed. Shared by both passes so what is validated is what
         // is stored.
@@ -169,16 +169,13 @@ void WebUi::routesMacros()
                 if (i >= MacroEngine::count()) break;
                 char why[96];
                 if (!parse(o, m)) {
-                    snprintf(why, sizeof(why), "row %u: data must be hex bytes (max %u)",
-                             (unsigned)i, (unsigned)Macro::MAX_DATA);
+                    snprintf(why, sizeof(why), "%u: macro_hex %u", (unsigned)i, (unsigned)Macro::MAX_DATA);
                     return r->reply(400, "text/plain", why);
                 }
                 // An enabled row that can never fire is refused; a disabled
                 // one is a draft and may be incomplete.
                 if (m.enabled && !m.valid()) {
-                    snprintf(why, sizeof(why),
-                             "row %u (%s): incomplete — check keys, taps and effect",
-                             (unsigned)i, m.name[0] ? m.name : triggerName(m.trigger));
+                    snprintf(why, sizeof(why), "%u: macro_incomplete", (unsigned)i);
                     return r->reply(400, "text/plain", why);
                 }
                 ++i;
@@ -206,7 +203,7 @@ void WebUi::routesMacros()
                 if (t.m[j].enabled) ++on;
             MacroEngine::toBlob(t, blob);
         });
-        if (!ok) return r->reply(503, "text/plain", "busy, try again");
+        if (!ok) return r->reply(503, "text/plain", "busy");
         App::KeyBus::kick();
         _cfg->saveMacroBlob(blob);
         LogBus::printf("macros saved — %u active", (unsigned)on);
@@ -214,11 +211,11 @@ void WebUi::routesMacros()
     });
 
     route("/api/macros/defaults", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_macros || !_cfg || !_st.macros) return r->reply(503, "text/plain", "no macro engine");
+        if (!_macros || !_cfg || !_st.macros) return r->reply(503, "text/plain", "not_built macro_engine");
         // As above: serialised under the mutex, written after it.
         uint8_t blob[MacroEngine::BLOB_SIZE];
         if (!_st.macros->edit([&](MacroTable& t) { t.loadDefaults(); MacroEngine::toBlob(t, blob); }))
-            return r->reply(503, "text/plain", "busy, try again");
+            return r->reply(503, "text/plain", "busy");
         App::KeyBus::kick();
         _cfg->saveMacroBlob(blob);
         return r->reply(200, "application/json", "{\"ok\":true}");
@@ -227,15 +224,15 @@ void WebUi::routesMacros()
     // Run the effect only, no trigger: splits "combo not recognised" from
     // "effect wrong".
     route("/api/macros/test", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_macros) return r->reply(503, "text/plain", "no macro engine");
-        if (!r->hasParam("id")) return r->reply(400, "text/plain", "id?");
+        if (!_macros) return r->reply(503, "text/plain", "not_built macro_engine");
+        if (!r->hasParam("id")) return r->reply(400, "text/plain", "param id");
         const uint8_t id = (uint8_t)atoi(r->getParam("id")->value().c_str());
-        if (id >= MacroEngine::count()) return r->reply(400, "text/plain", "id out of range");
+        if (id >= MacroEngine::count()) return r->reply(400, "text/plain", "param id");
         if (_macros->at(id).effect == Effect::None)
-            return r->reply(409, "text/plain", "this row has no effect");
+            return r->reply(409, "text/plain", "row_no_effect");
         // The keys task runs it, after any key already queued. 202: queued.
         if (!App::KeyBus::postMacroRun(id))
-            return r->reply(503, "text/plain", "key queue full, try again");
+            return r->reply(503, "text/plain", "queue_full");
         return r->reply(202, "application/json", "{\"ok\":true,\"queued\":true}");
     });
 }

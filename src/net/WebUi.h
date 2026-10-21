@@ -9,7 +9,7 @@
 // a NULL buffer, and PsychicResponse::setContent() strlen()s it and reboots.
 static inline int replyJson(PsychicRequest* r, const String& out)
 {
-    if (!out.c_str()) return r->reply(503, "text/plain", "no memory");
+    if (!out.c_str()) return r->reply(503, "text/plain", "no_memory");
     return r->reply(200, "application/json", out.c_str());
 }
 

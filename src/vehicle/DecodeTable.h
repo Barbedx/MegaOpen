@@ -82,9 +82,9 @@ namespace Vehicle
         // caller's: 2.4 kB, not for the stack) and copied back only when
         // every part fits. nullptr = applied; else one of the WHY_s, with
         // this untouched.
-        static constexpr const char* WHY_ROWS   = "the map is full: 96 CAN rows";
-        static constexpr const char* WHY_CONSTS = "the map is full: 16 constants";
-        static constexpr const char* WHY_NO_CAN = "confirm: the signal has no CAN row to confirm";
+        static constexpr const char* WHY_ROWS   = "map_full_rows 96";     // the map is full: 96 CAN rows
+        static constexpr const char* WHY_CONSTS = "map_full_consts 16";   // the map is full: 16 constants
+        static constexpr const char* WHY_NO_CAN = "confirm: no_can_row";   // the signal has no CAN row to confirm
         const char* apply(const DecodeChange& c, DecodeTable& scratch);
         // decode_defaults.inc binds `sig` and has measured it: a ✓ there is
         // the factory's, not one to take back.

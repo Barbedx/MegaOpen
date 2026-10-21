@@ -8,7 +8,10 @@ Errors (always):
   * a value's {0}, {1}... differ between the languages (a translation that
     drops an argument shows the wrong number, or none);
   * the code names a key no dictionary has: t('x.y'), data-i18n="x.y",
-    data-i18n-aria="x.y" with a literal key.
+    data-i18n-aria="x.y" with a literal key;
+  * the firmware sends a code the page has no words for: an error reply's
+    text/plain code (e.<code>) or a /api/health chain code (w.<code>; the
+    *_ok codes may have none).
 Warnings:
   * a key nothing names literally and no dynamic prefix covers (KEY_PREFIXES);
   * Ukrainian (Cyrillic) still in web/js/*.js or web/index.html outside comments,
@@ -20,8 +23,9 @@ import json, os, re, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(ROOT, "web")
 LANGS = ("uk", "en")
-# Keys built at run time ('w.'+code, 's.'+state, a screen's title key).
-KEY_PREFIXES = ("w.", "s.", "nav.")
+# Keys built at run time ('w.'+code, 's.'+state, 'e.'+code, a screen's title key).
+KEY_PREFIXES = ("w.", "s.", "e.", "nav.")
+SRC = os.path.join(ROOT, "src")
 
 def load(lang):
     with open(os.path.join(WEB, "i18n", lang + ".json"), encoding="utf-8") as f:
@@ -71,6 +75,25 @@ def main():
         n = sum(1 for line in code.split("\n") if cyr.search(line))
         if n:
             left.append((os.path.relpath(path, ROOT).replace(os.sep, "/"), n))
+    # The firmware's side: codes it sends that the page must have words for.
+    for dirpath, _, names in os.walk(SRC):
+        if os.sep + "gen" in dirpath:
+            continue
+        for n in names:
+            if not n.endswith((".cpp", ".h")):
+                continue
+            path = os.path.join(dirpath, n)
+            with open(path, encoding="utf-8", errors="replace") as f:
+                src = f.read()
+            rel = os.path.relpath(path, ROOT).replace(os.sep, "/")
+            for m in re.finditer(r'"text/plain", "(?:[^"]*: )?([a-z][a-z0-9_]*)(?: [^"]*)?"\)', src):
+                if "e." + m.group(1) not in base:
+                    errors.append("%s: replies with code %s, which uk.json has no e.%s for" % (rel, m.group(1), m.group(1)))
+            if n == "WebUi.cpp" or n == "ClockHealth.h":
+                for m in re.finditer(r'"((?:panel|media|clock|keys|ancs|hu|knobs|lights|phone)_[a-z_]+)"', src):
+                    c = m.group(1)
+                    if not c.endswith("_ok") and "w." + c not in base and "e." + c not in base:
+                        errors.append("%s: health code %s has no w.%s in uk.json" % (rel, c, c))
     for k in base:
         if k not in used and not k.startswith(KEY_PREFIXES):
             warnings.append("unused key %s" % k)

@@ -451,12 +451,11 @@ namespace GhOta
             if (s_busy) {
                 const bool written = s_v.phase == Phase::Written;
                 portEXIT_CRITICAL(&s_mux);
-                return written ? "an update is written and waits for the reboot"
-                               : "a check or an update is already running";
+                return written ? "fw_written" : "fw_running";
             }
             if (job == Job::Install && s_v.phase != Phase::Available) {
                 portEXIT_CRITICAL(&s_mux);
-                return "no newer release: check first";
+                return "fw_no_newer";   // check first
             }
             s_busy       = true;
             s_v.phase    = job == Job::Check ? Phase::Checking : Phase::Downloading;
@@ -474,7 +473,7 @@ namespace GhOta
                 s_v.phase = Phase::Failed;
                 snprintf(s_v.err, sizeof(s_v.err), "no memory for the task");
                 portEXIT_CRITICAL(&s_mux);
-                return "no memory for the task";
+                return "no_memory";
             }
             // Right after the create, still on httpd: the stack and TCB alone.
             // The task's own first sample comes whenever priority 1 gets the
@@ -510,11 +509,11 @@ namespace GhOta
 
     const char* install()
     {
-        if (moving()) return "the car is moving: update when parked";
+        if (moving()) return "fw_moving";
         if (Update.isRunning()) {
             // A /ota/start with no upload after it holds Update open for ever.
             if (s_local && (uint32_t)(millis() - s_localAt) < LOCAL_STALE_MS)
-                return "an upload from the page is running";
+                return "fw_upload";   // an upload from the page is running
             Update.abort();
             s_local = false;
             LogBus::line("[ota] github: cleared a local upload session left open");
@@ -526,8 +525,8 @@ namespace GhOta
     {
         View v;
         view(v);
-        if (v.phase != Phase::Written) return "nothing written to reboot into";
-        if (moving()) return "the car is moving: reboot when parked";
+        if (v.phase != Phase::Written) return "fw_nothing";
+        if (moving()) return "fw_moving";
         s_rebootAsked = true;
         return nullptr;
     }

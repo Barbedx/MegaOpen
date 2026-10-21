@@ -39,9 +39,9 @@ namespace
     const char* formWhy(uint8_t msg, uint8_t cmd28)
     {
         if (msg == Canbox::Rav4Emitter::MSG_TEMP && cmd28)
-            return "0x28 carries the A/C form now: switch it in Service, Raise";
+            return "form_ac";     // 0x28 carries the A/C form now: switch it in Service, Raise
         if (msg == Canbox::Rav4Emitter::MSG_AC && !cmd28)
-            return "0x28 carries the outside temperature now: switch it in Service, Raise";
+            return "form_temp";   // 0x28 carries the outside temperature now
         return nullptr;
     }
 
@@ -131,7 +131,7 @@ void WebUi::routesMap()
     // page joins the two by id. Values have the decimal point placed.
     route("/api/map", HTTP_GET, [this](PsychicRequest* r) {
         App::Hu::EmitterCfg cfg;
-        if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy, try again");
+        if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
         const uint32_t now = millis();
         // ?live=1: the live-car page's poll, every signal and no Raise rows;
         // ?meta=1: the signals' descriptions, once.
@@ -199,21 +199,21 @@ void WebUi::routesMap()
     // that field; the map goes to the car task (no reboot) and to NVS (`decode`).
     route("/api/map", HTTP_POST, [this](PsychicRequest* r) {
         JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
 
         App::Hu::EmitterCfg cfg;
-        if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy, try again");
+        if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
 
         // ---- check ----
         const bool hasSend = d["send"].is<bool>();
         const bool send = d["send"] | false;
-        if (hasSend && send && !_cfg->s().uartEnabled) return r->reply(409, "text/plain", "head-unit UART is off");
+        if (hasSend && send && !_cfg->s().uartEnabled) return r->reply(409, "text/plain", "uart_off");
 
         // {exp: n}: the head-unit experiments, Rav4Emitter::Exp bits.
         const bool hasExp = !d["exp"].isNull();
         const int exp = d["exp"] | -1;
         if (hasExp && (!d["exp"].is<int>() || exp < 0 || exp > Canbox::Rav4Emitter::EXP_ALL))
-            return r->reply(400, "text/plain", "exp: 0..127, the experiment bits");
+            return r->reply(400, "text/plain", "param exp");
         // Two experiments in one field are refused, not settled behind the
         // page's back (the emitter would keep the battery).
         if (hasExp)
@@ -228,8 +228,8 @@ void WebUi::routesMap()
             bool fok = false, tok = false;
             for (const auto& u : Canbox::FUEL_UNITS) fok |= u.v == fuel;
             for (const auto& u : Canbox::TRIP_UNITS) tok |= u.v == trip;
-            if (!fok) return r->reply(400, "text/plain", "units.fuel: one of the catalog's fuelUnits");
-            if (!tok) return r->reply(400, "text/plain", "units.trip: one of the catalog's tripUnits");
+            if (!fok) return r->reply(400, "text/plain", "param units.fuel");
+            if (!tok) return r->reply(400, "text/plain", "param units.trip");
         }
 
         const bool reset = d["reset"] | false;
@@ -241,38 +241,38 @@ void WebUi::routesMap()
         const bool confOn = d["confirm"]["on"] | true;
         if (hasConf) {
             confSig = Vehicle::sigByName(d["confirm"]["sig"] | "");
-            if (confSig >= Vehicle::SIG_COUNT) return r->reply(404, "text/plain", "confirm: no such signal");
+            if (confSig >= Vehicle::SIG_COUNT) return r->reply(404, "text/plain", "param confirm");
             if (!d["confirm"]["on"].isNull() && !d["confirm"]["on"].is<bool>())
-                return r->reply(400, "text/plain", "confirm.on: true or false");
+                return r->reply(400, "text/plain", "param confirm.on");
         }
 
         Edit ed[MAX_EDITS];
         uint8_t n = 0;
         JsonArrayConst rows = d["rows"].as<JsonArrayConst>();
-        if (rows.size() > MAX_EDITS) return r->reply(400, "text/plain", "rows: 16 at most in one request");
+        if (rows.size() > MAX_EDITS) return r->reply(400, "text/plain", "param rows");
         for (JsonObjectConst o : rows) {
             const char* id = o["id"] | "";
             const int ti = RT::find(id);
-            if (ti < 0) return bad(r, 404, nullptr, "no such field");
+            if (ti < 0) return bad(r, 404, nullptr, "not_found");
             const TargetView t = RT::at((uint8_t)ti);
-            if (t.sig >= Vehicle::SIG_COUNT) return bad(r, 409, id, "the firmware has no signal for it yet");
+            if (t.sig >= Vehicle::SIG_COUNT) return bad(r, 409, id, "no_signal");   // the firmware has no signal for it yet
             const int s = uiFind(Vehicle::MAP_SRC, o["src"] | "");
-            if (s < 0) return bad(r, 400, id, "src: can, const or off");
+            if (s < 0) return bad(r, 400, id, "param src");   // can, const or off
             for (uint8_t j = 0; j < n; ++j)
-                if (ed[j].sig == t.sig) return bad(r, 400, id, "twice in one request");
+                if (ed[j].sig == t.sig) return bad(r, 400, id, "twice");
             Edit& e = ed[n++];
             e.sig = t.sig;
             e.src = (uint8_t)s;
             e.k = 0;
             e.row = Vehicle::DecodeRow{};
             if (s == Vehicle::SRC_CAN) {
-                if (!o["can"].is<JsonObjectConst>()) return bad(r, 400, id, "can: {id, byte, len, ...}");
+                if (!o["can"].is<JsonObjectConst>()) return bad(r, 400, id, "param can");
                 if (const char* why = Vehicle::DecodeJson::canFrom(o["can"], e.row)) return bad(r, 400, id, why);
             } else if (s == Vehicle::SRC_CONST) {
                 if (!o["k"].is<double>() || !RT::toInt(o["k"].as<double>(), t.dec, e.k) ||
                     e.k < t.min || e.k > t.max) {
                     char lo[16], hi[16], w[48];
-                    snprintf(w, sizeof(w), "k: %s..%s", RT::fmt(lo, sizeof(lo), t.min, t.dec),
+                    snprintf(w, sizeof(w), "k: between %s %s", RT::fmt(lo, sizeof(lo), t.min, t.dec),
                              RT::fmt(hi, sizeof(hi), t.max, t.dec));
                     return bad(r, 400, id, w);
                 }
@@ -290,7 +290,7 @@ void WebUi::routesMap()
             c.hasConf = hasConf; c.confSig = confSig; c.confOn = confOn;
             const char* why = nullptr;
             if (!App::Car::decodeTable().edit([&](Vehicle::DecodeTable& t) { why = t.apply(c, scratch); }))
-                return r->reply(503, "text/plain", "busy, try again");
+                return r->reply(503, "text/plain", "busy");
             if (why) return r->reply(409, "text/plain", why);
         }
 
@@ -301,7 +301,7 @@ void WebUi::routesMap()
                     if (hasExp) c.exp = (uint8_t)exp;
                     cfg = c;
                 }))
-                return r->reply(503, "text/plain", "busy, try again");
+                return r->reply(503, "text/plain", "busy");
             if (hasUnits) _cfg->saveTuning(cfg.tuning);
             if (hasSend) _cfg->saveHuSend(send);
             if (hasExp) {
@@ -322,14 +322,14 @@ void WebUi::routesMap()
             // task only try-takes it), written after. Factory alone = no blob.
             const char* why = nullptr;
             if (!n && !hasConf) {
-                if (!_cfg->eraseDecode()) why = "NVS erase failed";
+                if (!_cfg->eraseDecode()) why = "nvs_failed";
             } else {
                 uint8_t* blob = (uint8_t*)malloc(Vehicle::DecodeTable::BLOB_MAX);
                 size_t len = 0;
-                if (!blob) why = "no memory";
+                if (!blob) why = "no_memory";
                 else if (!App::Car::decodeTable().read([&](const Vehicle::DecodeTable& t) { len = t.pack(blob); }))
                     why = "busy";
-                else if (!_cfg->saveDecode(blob, len)) why = "NVS write failed";
+                else if (!_cfg->saveDecode(blob, len)) why = "nvs_failed";
                 free(blob);
             }
             if (hasConf)
@@ -340,7 +340,7 @@ void WebUi::routesMap()
                                why ? ", NOT in NVS: " : "", why ? why : "");
             else if (why)
                 LogBus::printf("[map] NOT in NVS: %s", why);
-            if (why) return bad(r, 500, "applied until the next boot only", why);
+            if (why) return bad(r, 500, nullptr, why);   // applied until the next boot only
         }
 
         return r->reply(200, "application/json", "{\"ok\":true}");
@@ -350,27 +350,27 @@ void WebUi::routesMap()
     // CAN) and the field's message goes to the head unit now, once. With
     // `send` on it keeps going out on its schedule until the 30 s are up.
     route("/api/map/test", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_state) return r->reply(503, "text/plain", "no vehicle");
+        if (!_state) return r->reply(503, "text/plain", "not_built vehicle");
         JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         const char* id = d["id"] | "";
         const int ti = RT::find(id);
-        if (ti < 0) return bad(r, 404, nullptr, "no such field");
+        if (ti < 0) return bad(r, 404, nullptr, "not_found");
         const TargetView t = RT::at((uint8_t)ti);
-        if (!t.fw) return bad(r, 409, id, "protocol 112 has no field for it");
-        if (!_cfg->s().uartEnabled) return r->reply(409, "text/plain", "head-unit UART is off");
+        if (!t.fw) return bad(r, 409, id, "no_field_112");
+        if (!_cfg->s().uartEnabled) return r->reply(409, "text/plain", "uart_off");
         App::Hu::EmitterCfg cfg;
-        if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy, try again");
+        if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
         if (const char* why = formWhy(t.msg, cfg.tuning.cmd28)) return bad(r, 409, id, why);
         // An unknown frame to the tablet: only with its switch on, test or not.
         if (t.msg == Canbox::Rav4Emitter::MSG_GEAR && !(cfg.exp & Canbox::Rav4Emitter::EXP_GEAR))
-            return bad(r, 409, id, "switch on the selector experiment first");
+            return bad(r, 409, id, "exp_gear_off");   // switch on the selector experiment first
 
         int32_t v = 0;
         if (!d["value"].is<double>() || !RT::toInt(d["value"].as<double>(), t.dec, v) ||
             v < t.min || v > t.max || (t.boolean && v != 0 && v != 1)) {
             char lo[16], hi[16], w[48];
-            snprintf(w, sizeof(w), "value: %s..%s", RT::fmt(lo, sizeof(lo), t.min, t.dec),
+            snprintf(w, sizeof(w), "value: between %s %s", RT::fmt(lo, sizeof(lo), t.min, t.dec),
                      RT::fmt(hi, sizeof(hi), t.max, t.dec));
             return bad(r, 400, id, w);
         }
@@ -381,7 +381,7 @@ void WebUi::routesMap()
         const uint32_t t0 = millis();
         while (!(_state->pinned(t.sig) && _state->get(t.sig) == v)) {
             if ((uint32_t)(millis() - t0) > APPLY_WAIT_MS)
-                return r->reply(503, "text/plain", "car task busy, try again");
+                return r->reply(503, "text/plain", "busy");
             vTaskDelay(pdMS_TO_TICKS(5));
         }
         switch (App::Hu::sendNowWait(t.msg)) {
@@ -390,8 +390,8 @@ void WebUi::routesMap()
             // "Гібрид є", the rear radar on "Радар увімкнено": the message goes
             // only once its gate has a value.
             case App::Hu::SendNow::NoData:
-                return bad(r, 409, id, "its message needs its main field too (odometer, radar on, TPMS, hybrid): test that first");
-            default: return r->reply(503, "text/plain", "uart task busy, try again");
+                return bad(r, 409, id, "needs_main");   // its message needs its main field too (odometer, radar on, TPMS, hybrid)
+            default: return r->reply(503, "text/plain", "busy");
         }
 
         char hex[3 * Canbox::MAX_FRAME + 1];

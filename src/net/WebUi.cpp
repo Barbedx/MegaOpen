@@ -94,7 +94,7 @@ static uint32_t paramU32(PsychicRequest* r, const char* name, const char* dflt, 
 }
 
 // The menu's scroll byte outside the catalog's `arrows` (Catalog::arrowsKnown).
-static const char kScrollWhy[] = "scroll: 0, 7, 11 or 3";
+static const char kScrollWhy[] = "param scroll";   // 0, 7, 11 or 3
 
 // One /api/health verdict: a stable code for the page, an English why for people.
 
@@ -312,9 +312,9 @@ esp_err_t WebUi::dispatch(PsychicRequest* r)
                        why == RequestGate::Why::Host ? "host" : "no X-MegaOpen");
         if (why == RequestGate::Why::Host) {
             // Say where it IS reachable: the address this request came in on.
-            static char w[160];
+            static char w[96];
             const String ip = r->client()->localIP().toString();
-            snprintf(w, sizeof(w), "%s: use http://%s/ or http://%s.local/", RequestGate::whyText(why),
+            snprintf(w, sizeof(w), "%s http://%s/ http://%s.local/", RequestGate::whyText(why),
                      ip.c_str(), _cfg->s().mdnsName.length() ? _cfg->s().mdnsName.c_str() : "megaopen");
             return r->reply(403, "text/plain", w);
         }
@@ -327,7 +327,7 @@ esp_err_t WebUi::dispatch(PsychicRequest* r)
     bool hit = false;
     for (uint8_t i = 0; i < _nRoutes && !hit; ++i)
         if (_routes[i].method == m && path == _routes[i].path) { res = _routes[i].fn(r); hit = true; }
-    if (!hit) res = r->reply(404, "text/plain", "not found");
+    if (!hit) res = r->reply(404, "text/plain", "not_found");
     huntCheck("after", path.c_str());
     snprintf(s_huntLast, sizeof(s_huntLast), "%s", path.c_str());
     return res;
@@ -335,7 +335,7 @@ esp_err_t WebUi::dispatch(PsychicRequest* r)
     for (uint8_t i = 0; i < _nRoutes; ++i)
         if (_routes[i].method == m && path == _routes[i].path)
             return _routes[i].fn(r);
-    return r->reply(404, "text/plain", "not found");
+    return r->reply(404, "text/plain", "not_found");
 #endif
 }
 
@@ -427,7 +427,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         // Never from a file (SettingsJson::read refuses it there).
         const String apPass = file ? String() : String(d["apPass"] | "");
         if (apPass.length() && (apPass.length() < 8 || apPass.length() > 63))
-            { out = "apPass: 8 to 63 characters"; return 400; }
+            { out = "apPass: pass_len"; return 400; }
 
         // The alert rules and the emitter's settings are edited on copies of
         // what their tasks hold now (rows and cells not sent keep their
@@ -457,7 +457,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         // A file skips what this board does not have, so a part that is
         // merely busy (its owner held it for the peek) must not pass for
         // missing: retry before anything is read or applied.
-        if (file && (!alp || (_emitter && !huOk))) { out = "busy, retry"; return 503; }
+        if (file && (!alp || (_emitter && !huOk))) { out = "busy"; return 503; }
 
         // Everything that can be refused is checked before anything is applied
         // (the /api/map rule): a 400 lists every refusal and leaves the
@@ -471,7 +471,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
             char err[Cfg::SettingsJson::Errors::MAX * Cfg::SettingsJson::Errors::LEN];
         };
         Scratch<Work> w;
-        if (!w) { out = "no memory"; return 503; }
+        if (!w) { out = "no_memory"; return 503; }
         Cfg::SettingsJson::Read& rd = w->rd;
         Cfg::SettingsJson::Errors& er = w->er;
         Cfg::SettingsJson::read(m, d, rd, er, file);
@@ -512,7 +512,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         // request has changed nothing.
         bool alSaved = true;
         if (rd.apT & Cfg::AP_CAR) {
-            if (!App::Car::alertRules().stage(al)) { out = "busy, try again"; return 503; }
+            if (!App::Car::alertRules().stage(al)) { out = "busy"; return 503; }
             uint8_t on = 0;
             for (const Vehicle::AlertRule& x : al.r) on += x.on;
             alSaved = _cfg->saveAlerts(al);
@@ -618,15 +618,15 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
             if (restart) o["pendingReboot"] = true;
             if (!alSaved || huBusy) {
                 JsonArray p = o["partial"].to<JsonArray>();
-                if (!alSaved) p.add("alerts: applied until the next boot only (NVS write failed)");
-                if (huBusy)   p.add("head unit: busy, its settings not applied");
+                if (!alSaved) p.add("alerts: nvs_failed");   // applied until the next boot only
+                if (huBusy)   p.add("hu_busy");
             }
             serializeJson(o, out);
             type = "application/json";
             return 200;
         }
-        if (!alSaved) { out = "alerts: applied until the next boot only: NVS write failed"; return 500; }
-        if (huBusy) { out = "head unit: busy, its part not applied; the rest saved"; return 503; }
+        if (!alSaved) { out = "alerts: nvs_failed"; return 500; }   // applied until the next boot only
+        if (huBusy) { out = "hu_busy"; return 503; }   // its part not applied; the rest saved
         type = "application/json";
         out = restart ? "{\"ok\":true,\"pendingReboot\":true}" : "{\"ok\":true}";
         return 200;
@@ -688,7 +688,7 @@ void WebUi::routes()
         // first (the LogBus task writes it; this waits up to 500 ms).
         if (n == 0) LogBus::flushAndWait(500);
         const char* p = LogFile::path(n);
-        if (!p) return r->reply(404, "text/plain", "no such log");
+        if (!p) return r->reply(404, "text/plain", "no_log");
         PsychicFileResponse resp(r, LittleFS, p, "text/plain", false);
         return resp.send();
     });
@@ -741,9 +741,9 @@ void WebUi::routes()
     // Staged: the task that sweeps the matrix applies it (and with it the
     // encoder phases and the fast-debounce mask) at its next pass.
     route("/api/keymap", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_st.keymap) return r->reply(503, "text/plain", "no keymap");
+        if (!_st.keymap) return r->reply(503, "text/plain", "not_built keymap");
         JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
 
         _cfg->s().encInverted = d["encInverted"] | false;
         const bool inv = _cfg->s().encInverted;
@@ -760,7 +760,7 @@ void WebUi::routes()
             k.encInverted = inv;
             saved = k;
         });
-        if (!ok) return r->reply(503, "text/plain", "busy, try again");
+        if (!ok) return r->reply(503, "text/plain", "busy");
         App::KeyBus::kick();
         _cfg->saveKeyMap(saved.map);
         _cfg->save();
@@ -769,10 +769,10 @@ void WebUi::routes()
     });
 
     route("/api/keymap/defaults", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_st.keymap) return r->reply(503, "text/plain", "no keymap");
+        if (!_st.keymap) return r->reply(503, "text/plain", "not_built keymap");
         App::KeysTask::KeyMapCfg saved;
         if (!_st.keymap->edit([&](App::KeysTask::KeyMapCfg& k) { k.map.loadDefaults(); saved = k; }))
-            return r->reply(503, "text/plain", "busy, try again");
+            return r->reply(503, "text/plain", "busy");
         App::KeyBus::kick();
         _cfg->saveKeyMap(saved.map);
         LogBus::line("keymap reset to Megane defaults");
@@ -805,7 +805,7 @@ void WebUi::routes()
     route("/api/settings", HTTP_POST, [this](PsychicRequest* r) {
         JsonDocument d;
         if (deserializeJson(d, r->body()) || !d.is<JsonObjectConst>())
-            return r->reply(400, "text/plain", "bad json");
+            return r->reply(400, "text/plain", "bad_json");
         String out;
         const char* type = "text/plain";
         const int st = settingsPost(d.as<JsonObjectConst>(), paramStr(r, "dry") == "1", false, out, type);
@@ -850,7 +850,7 @@ void WebUi::routes()
     route("/api/config", HTTP_POST, [this](PsychicRequest* r) {
         JsonDocument d;
         if (deserializeJson(d, r->body()) || !d.is<JsonObjectConst>())
-            return r->reply(400, "text/plain", "bad json");
+            return r->reply(400, "text/plain", "bad_json");
         const auto chk = Cfg::SettingsJson::checkFile(d.as<JsonObjectConst>());
         if (chk != Cfg::SettingsJson::FileCheck::Ok)
             return r->reply(400, "text/plain", Cfg::SettingsJson::fileCheckText(chk));
@@ -862,7 +862,7 @@ void WebUi::routes()
         // copy is applied only after the settings were.
         JsonVariantConst kj = d["knobs"];
         Scratch<Cfg::SettingsJson::Errors> kerrBox;
-        if (!kerrBox) return r->reply(503, "text/plain", "no memory");
+        if (!kerrBox) return r->reply(503, "text/plain", "no_memory");
         Cfg::SettingsJson::Errors& kerr = *kerrBox.get();
         bool knobs = false;
         uint16_t clamped = 0;
@@ -1183,17 +1183,17 @@ void WebUi::routes()
     // is an open network. The first network applies at boot, the second live.
     route("/api/wifi", HTTP_POST, [this](PsychicRequest* r) {
         JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         const bool has1 = d["ssid"].is<const char*>(), has2 = d["ssid2"].is<const char*>();
         const String s1 = d["ssid"] | "", s2 = d["ssid2"] | "";
         String p1 = d["pass"] | "";
         const String p2 = d["pass2"] | "";
-        if (!has1 && !has2) return r->reply(400, "text/plain", "ssid? or ssid2?");
+        if (!has1 && !has2) return r->reply(400, "text/plain", "param ssid");
         if (s1.length() > 32 || s2.length() > 32)
-            return r->reply(400, "text/plain", "ssid: 32 characters at most");
+            return r->reply(400, "text/plain", "param ssid");
         auto bad = [](const String& p) { return p.length() && (p.length() < 8 || p.length() > 64); };
-        if (bad(p1) || bad(p2)) return r->reply(400, "text/plain", "pass: 8 to 64 characters, or empty");
-        if (has2 && !_wifi) return r->reply(503, "text/plain", "no wifi manager");
+        if (bad(p1) || bad(p2)) return r->reply(400, "text/plain", "pass_len");
+        if (has2 && !_wifi) return r->reply(503, "text/plain", "not_built wifi_manager");
         auto& s = _cfg->s();
         // Only the first network needs the reboot: WifiManager takes the second
         // (setNet2) at its next AP retry.
@@ -1243,9 +1243,7 @@ void WebUi::routes()
     route("/api/factory", HTTP_POST, [this](PsychicRequest* r) {
         if (paramStr(r, "confirm") != "factory")
             return r->reply(400, "application/json",
-                            "{\"ok\":false,\"error\":\"factory reset WIPES NVS including "
-                            "WiFi credentials; the board returns in AP mode. Re-send with "
-                            "?confirm=factory if that is what you want.\"}");
+                            "{\"ok\":false,\"error\":\"confirm factory\"}");
         LogBus::line("[cfg] FACTORY RESET — NVS wiped, rebooting into AP mode");
         _cfg->factoryReset();
         return replyAndRestart(r, "{\"ok\":true,\"note\":\"AP mode after reboot\"}");
@@ -1269,10 +1267,10 @@ void WebUi::routesDisplay()
     // pendingReboot when either changed.
     route("/api/display", HTTP_POST, [this](PsychicRequest* r) {
         JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         auto& s = _cfg->s();
         const String type = d["type"] | s.displayType.c_str();
-        if (!Catalog::panelKnown(type.c_str())) return r->reply(400, "text/plain", "type: unknown panel");
+        if (!Catalog::panelKnown(type.c_str())) return r->reply(400, "text/plain", "param type");
         const bool funcReg = d["funcReg"] | s.funcReg;
         const bool changed = type != s.displayType || funcReg != s.funcReg;
         s.displayType = type;
@@ -1295,16 +1293,16 @@ void WebUi::routesDisplay()
     };
 
     route("/api/display/text", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
-        if (!r->hasParam("text")) return r->reply(400, "text/plain", "text?");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
+        if (!r->hasParam("text")) return r->reply(400, "text/plain", "param text");
         const String t = r->getParam("text")->value();
         LogBus::printf("display text: %s", t.c_str());
         return posted(r, _ops->postText(t.c_str()));
     });
 
     route("/api/display/clock", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
-        if (!r->hasParam("time")) return r->reply(400, "text/plain", "time? (HHMM)");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
+        if (!r->hasParam("time")) return r->reply(400, "text/plain", "param time");
         const String t = r->getParam("time")->value();
         const bool ok = _ops->postTime(t.c_str());
         // The ui task owns the clock's record (GET /api/media clockSrc): tell
@@ -1317,14 +1315,14 @@ void WebUi::routesDisplay()
     });
 
     route("/api/display/power", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
         return posted(r, _ops->postPower(paramBool(r, "on", true)));
     });
 
     // Hand the glass back to automatic repaints now. `ms` sets the hold for later
     // draws; 0 = hold until this route is called.
     route("/api/display/release", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_ui.releaseGlass) return r->reply(503, "text/plain", "no display");
+        if (!_ui.releaseGlass) return r->reply(503, "text/plain", "not_built display");
         if (r->hasParam("ms") && _ui.glassHoldMs)
             *_ui.glassHoldMs = paramU32(r, "ms", "10000", 10);
         _ui.releaseGlass();
@@ -1333,7 +1331,7 @@ void WebUi::routesDisplay()
 
     // Three rows of arbitrary ASCII: the general "draw anything" surface.
     route("/api/display/menu", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
         const String h  = paramStr(r, "header");
         const String r0 = paramStr(r, "row0");
         const String r1 = paramStr(r, "row1");
@@ -1349,15 +1347,15 @@ void WebUi::routesDisplay()
     // Move the selection bar. Own RenderSlot, so it and a pending redraw never
     // replace each other.
     route("/api/display/highlight", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
         return posted(r, _ops->postHighlight((uint8_t)atoi(paramStr(r, "row", "0").c_str())));
     });
 
     // icon / src / fmt exposed because they are still being reverse-engineered.
     route("/api/display/popup", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
         if (paramBool(r, "hide")) return posted(r, _ops->postHidePopup());
-        if (!r->hasParam("text")) return r->reply(400, "text/plain", "text? or hide=1");
+        if (!r->hasParam("text")) return r->reply(400, "text/plain", "param text");
         const uint8_t icon = (uint8_t)paramU32(r, "icon", "0x55", 0);
         const uint8_t src  = (uint8_t)paramU32(r, "src",  "0xFF", 0);
         const uint8_t fmt  = (uint8_t)paramU32(r, "fmt",  "0x60", 0);
@@ -1373,7 +1371,7 @@ void WebUi::routesDisplay()
 
     // The same path as a phone notification: fullscreen, sender + wrapped body.
     route("/api/display/notify", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_notify) return r->reply(503, "text/plain", "no display");
+        if (!_notify) return r->reply(503, "text/plain", "not_built display");
         _notify(paramStr(r, "title").c_str(), paramStr(r, "body").c_str());
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
@@ -1381,13 +1379,13 @@ void WebUi::routesDisplay()
     // Back to the media screen: ends a splash/notification, hides a popup,
     // releases the glass hold, resends text and pane.
     route("/api/display/clear", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_clear) return r->reply(503, "text/plain", "no display");
+        if (!_clear) return r->reply(503, "text/plain", "not_built display");
         _clear();
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
 
     route("/api/display/confirm", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
         const String cap = paramStr(r, "caption");
         const String r0  = paramStr(r, "row0");
         const String r1  = paramStr(r, "row1");
@@ -1399,7 +1397,7 @@ void WebUi::routesDisplay()
     // two-button form is 119 wire bytes, the longest message we send, and wraps
     // the ISO-TP counter to 0x20.
     route("/api/display/msgbox", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
         const String r0  = paramStr(r, "row0");
         const String r1  = paramStr(r, "row1");
         const String lab = paramStr(r, "labels");
@@ -1411,7 +1409,7 @@ void WebUi::routesDisplay()
     // `03 29 05 <n>`: select a message-box button. Not /api/display/highlight,
     // which is the list's `29 01 <rowtag>`.
     route("/api/display/selectbutton", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
         const uint8_t i = (uint8_t)paramU32(r, "index", "0", 10);
         return posted(r, _ops->postSelectButton(i));
     });
@@ -1420,7 +1418,7 @@ void WebUi::routesDisplay()
     // polarity is inverted (set bit = icon off, so "no icons" is 0x55). Defaults
     // are the library's captured values, so a bare call is a plain setText.
     route("/api/display/styled", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
         const String t = paramStr(r, "text");
         auto byteOf = [&](const char* k, uint32_t dflt) -> uint8_t {
             if (!r->hasParam(k)) return (uint8_t)dflt;
@@ -1436,7 +1434,7 @@ void WebUi::routesDisplay()
     // The three-row info list: three messages on the wire, one per row, not
     // coalesced. No hide command is known; draw the next screen instead.
     route("/api/display/info", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
         const String l1 = paramStr(r, "l1");
         const String l2 = paramStr(r, "l2");
         const String l3 = paramStr(r, "l3");
@@ -1449,19 +1447,19 @@ void WebUi::routesDisplay()
     // mode is on (devMode, RAM only). Goes when the library's showInfoMenu
     // takes a cell count.
     route("/api/display/inforaw", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
-        if (!_cfg->s().devMode) return r->reply(403, "text/plain", "developer mode is off (Плата › Інтерфейс)");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
+        if (!_cfg->s().devMode) return r->reply(403, "text/plain", "dev_off");
         // 0x0B..0x13 = the library's showInfoRow at 8..16 cells; clamped.
         const uint32_t lenIn = paramU32(r, "len", "11", 0);
         const uint8_t len = lenIn < 0x0B ? 0x0B : lenIn > 0x13 ? 0x13 : (uint8_t)lenIn;
         const uint32_t off = paramU32(r, "offset", "0x41", 0);
         const uint32_t pre = paramU32(r, "prefix", "0x60", 0);
-        if (off < 0x40 || off > 0x4F) return r->reply(400, "text/plain", "offset: 0x40..0x4F");
-        if (pre < 0x40 || pre > 0x7F) return r->reply(400, "text/plain", "prefix: 0x40..0x7F");
+        if (off < 0x40 || off > 0x4F) return r->reply(400, "text/plain", "param offset");
+        if (pre < 0x40 || pre > 0x7F) return r->reply(400, "text/plain", "param prefix");
         // rows=3: the same text in all three rows at the OEM offsets (offset unused),
         // so a photo shows whether the width differs per row.
         const uint32_t rows = paramU32(r, "rows", "1", 0);
-        if (rows != 1 && rows != 3) return r->reply(400, "text/plain", "rows: 1 or 3");
+        if (rows != 1 && rows != 3) return r->reply(400, "text/plain", "param rows");
         return posted(r, _ops->postInfoRaw(paramStr(r, "text").c_str(), len, (uint8_t)pre, (uint8_t)off,
                                            (uint8_t)rows));
     });
@@ -1469,7 +1467,7 @@ void WebUi::routesDisplay()
     // No hide: a fullscreen is not an overlay, setText() over it replaces it
     // (measured on the panel). `02 54 03` is popup?hide=1.
     route("/api/display/fullscreen", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
         const String l1 = paramStr(r, "l1");
         const String l2 = paramStr(r, "l2");
         const String l3 = paramStr(r, "l3");
@@ -1487,16 +1485,16 @@ void WebUi::routesDisplay()
     // The library sends it only while the link is up and the opening is done
     // (or passive); without that it would only be refused in the log, so 409.
     route("/api/display/key", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
-        if (!r->hasParam("code")) return r->reply(400, "text/plain", "code? (hex wire code)");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
+        if (!r->hasParam("code")) return r->reply(400, "text/plain", "param code");
         const uint16_t code = (uint16_t)paramU32(r, "code", "0", 0);
         const bool wire = paramBool(r, "wire"), hold = paramBool(r, "hold");
         if (wire && hold && !Keys::AffaMap::wireHold((affa::Key)code))
-            return r->reply(400, "text/plain", "a held detent has no wire form");
+            return r->reply(400, "text/plain", "held_no_wire");
         if (wire) {
             const MegaOpen::PanelStatus st = _panel ? _panel->read() : MegaOpen::PanelStatus{};
             if (!st.synced && !st.passive)
-                return r->reply(409, "text/plain", "panel link is not up");
+                return r->reply(409, "text/plain", "panel_down");
         }
         return posted(r, _ops->postKey(code, hold, wire));
     });
@@ -1505,8 +1503,8 @@ void WebUi::routesDisplay()
     // library posts it to the panel task, in order with the renders posted
     // before it (they complete Cancelled).
     route("/api/display/resync", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
-        if (!_ops->postResync()) return r->reply(503, "text/plain", "display queue full");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
+        if (!_ops->postResync()) return r->reply(503, "text/plain", "queue_full");
         LogBus::line("resync requested");
         return r->reply(200, "application/json",
                         "{\"ok\":true,\"note\":\"handshake restarting; watch registered\"}");
@@ -1514,7 +1512,7 @@ void WebUi::routesDisplay()
 
     // Drop everything queued but not started; the transfer in flight completes.
     route("/api/display/abort", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
         return posted(r, _ops->postAbort());
     });
 }
@@ -1528,7 +1526,7 @@ void WebUi::routesAffaMap()
     // The map the keys task looks keys up in is staged: the page reads and
     // writes the newest edit, and the keys task swaps it in at its next pass.
     route("/api/affamap", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_affaMap || !_st.affa) return r->reply(503, "text/plain", "no display");
+        if (!_affaMap || !_st.affa) return r->reply(503, "text/plain", "not_built display");
         char last[160];     // worst case ~130: 10-digit seq, longest key and action, all five dests
         keyLastJson(last, sizeof(last));
 
@@ -1586,9 +1584,9 @@ void WebUi::routesAffaMap()
     });
 
     route("/api/affamap", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_affaMap || !_st.affa) return r->reply(503, "text/plain", "no display");
+        if (!_affaMap || !_st.affa) return r->reply(503, "text/plain", "not_built display");
         JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
 
         uint16_t n = 0;
         Keys::AffaMap saved;
@@ -1605,7 +1603,7 @@ void WebUi::routesAffaMap()
             }
             saved = m;
         });
-        if (!ok) return r->reply(503, "text/plain", "busy, try again");
+        if (!ok) return r->reply(503, "text/plain", "busy");
         App::KeyBus::kick();
         _cfg->saveAffaMap(saved);
         LogBus::printf("stalk mapping saved (%u rows)", (unsigned)n);
@@ -1615,10 +1613,10 @@ void WebUi::routesAffaMap()
     });
 
     route("/api/affamap/defaults", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_affaMap || !_st.affa) return r->reply(503, "text/plain", "no display");
+        if (!_affaMap || !_st.affa) return r->reply(503, "text/plain", "not_built display");
         Keys::AffaMap saved;
         if (!_st.affa->edit([&](Keys::AffaMap& m) { m.loadDefaults(); saved = m; }))
-            return r->reply(503, "text/plain", "busy, try again");
+            return r->reply(503, "text/plain", "busy");
         App::KeyBus::kick();
         _cfg->saveAffaMap(saved);
         LogBus::line("stalk mapping reset to defaults");
@@ -1655,16 +1653,16 @@ bool WebUi::mediaSettings(App::Ui::MediaSettings& out) const
 void WebUi::routesMedia()
 {
     route("/api/media", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_ui.media || !_ui.settings) return r->reply(503, "text/plain", "no display");
+        if (!_ui.media || !_ui.settings) return r->reply(503, "text/plain", "not_built display");
         // Copies only: the ui task owns the screen and the pane. Not on the
         // stack (~320 + ~1200 bytes on a 4 kB httpd stack) and not static
         // (internal RAM): for this request only (Scratch).
         Scratch<MegaOpen::MediaScreen> box;
-        if (!box) return r->reply(503, "text/plain", "no memory");
+        if (!box) return r->reply(503, "text/plain", "no_memory");
         MegaOpen::MediaScreen& media = *box;
-        if (!_ui.media->copy(media)) return r->reply(503, "text/plain", "busy, try again");
+        if (!_ui.media->copy(media)) return r->reply(503, "text/plain", "busy");
         App::Ui::MediaSettings ms;
-        if (!mediaSettings(ms)) return r->reply(503, "text/plain", "busy, try again");
+        if (!mediaSettings(ms)) return r->reply(503, "text/plain", "busy");
         const App::Ui::UiStatus us = _ui.status ? _ui.status->read() : App::Ui::UiStatus{};
 
         JsonDocument d;
@@ -1828,7 +1826,7 @@ void WebUi::routesMedia()
     // BLE state. `bonded` false while advertising: pairing never completed on the
     // phone. `bonded` true, `connected` false: stale bond, forget on both sides.
     route("/api/ble", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_bleStatus) return r->reply(503, "text/plain", "no ble");
+        if (!_bleStatus) return r->reply(503, "text/plain", "not_built ble");
         const String s = _bleStatus();
         return replyJson(r, s);
     });
@@ -1836,7 +1834,7 @@ void WebUi::routesMedia()
     // Forgets every bond (no per-peer delete). Clears a half-pair only if the
     // phone also does "Forget This Device".
     route("/api/ble/unbond", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_bleUnbond) return r->reply(503, "text/plain", "no ble");
+        if (!_bleUnbond) return r->reply(503, "text/plain", "not_built ble");
         _bleUnbond();
         LogBus::line("BLE: all bonds cleared — now Forget This Device on the phone too");
         return r->reply(200, "application/json",
@@ -1845,9 +1843,9 @@ void WebUi::routesMedia()
 #endif
 
     route("/api/media", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_ui.settings) return r->reply(503, "text/plain", "no display");
+        if (!_ui.settings) return r->reply(503, "text/plain", "not_built display");
         JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         using MegaOpen::MediaPane;
         if (d["scroll"].is<int>() && !Catalog::arrowsKnown(d["scroll"].as<int>()))
             return r->reply(400, "text/plain", kScrollWhy);
@@ -1859,24 +1857,24 @@ void WebUi::routesMedia()
         if (hasBits) {
             const char* hex = d["bits"].as<const char*>();
             if (!MediaPane::fromHex(hex, nullptr))
-                return r->reply(400, "text/plain", "bits: 576 hex characters");
+                return r->reply(400, "text/plain", "param bits");
             if (!_ui.paneBits || !_ui.paneBits->edit([&](App::Ui::PaneBits& p) {
                     MediaPane::fromHex(hex, p.bits);
                     p.set = true;
                 }))
-                return r->reply(503, "text/plain", "busy, try again");
+                return r->reply(503, "text/plain", "busy");
             // The NVS write runs under the staging mutex (no second buffer).
             // The ui task only try-takes it (Staged::applyIfDirty), so it never
             // waits: the new picture lands on its first pass after this.
             bool saved = false;
             _ui.paneBits->read([&](const App::Ui::PaneBits& p) { saved = _cfg->savePaneBits(p.bits, sizeof(p.bits)); });
-            if (!saved) return r->reply(500, "text/plain", "nvs: picture not saved");
+            if (!saved) return r->reply(500, "text/plain", "nvs_failed");
         }
         const char* paneName = hasBits ? "custom" : d["pane"].as<const char*>();
         if (paneName && !strcmp(paneName, "custom") && !hasBits) {
             bool drawn = false;
             if (_ui.paneBits) _ui.paneBits->read([&](const App::Ui::PaneBits& p) { drawn = p.set; });
-            if (!drawn) return r->reply(409, "text/plain", "draw the custom picture first");
+            if (!drawn) return r->reply(409, "text/plain", "no_custom_pic");
         }
 
         // Every change is staged; the ui task applies the whole set on its next
@@ -1986,7 +1984,7 @@ void WebUi::routesMedia()
             }
             splashNow = d["splashNow"].as<bool>();
         });
-        if (!ok) return r->reply(503, "text/plain", "busy, try again");
+        if (!ok) return r->reply(503, "text/plain", "busy");
         // NVS outside the staging mutex: a flash write can take tens of ms.
         if (save) _cfg->save();
         // Fire one now for the current track.
@@ -2111,7 +2109,7 @@ void WebUi::routesCan()
 
     // Per-id table. `changed`: a bit per byte that differed since the baseline.
     route("/api/can/ids", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_sniffer) return r->reply(503, "text/plain", "no can");
+        if (!_sniffer) return r->reply(503, "text/plain", "not_built can");
         JsonDocument d;
         d["overflow"] = _sniffer->overflow();
         JsonArray a = d["ids"].to<JsonArray>();
@@ -2136,7 +2134,7 @@ void WebUi::routesCan()
     });
 
     route("/api/can/baseline", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_sniffer) return r->reply(503, "text/plain", "no can");
+        if (!_sniffer) return r->reply(503, "text/plain", "not_built can");
         // Applied by the panel task, which owns the table, before its next frame.
         _sniffer->requestBaseline();
         LogBus::line("can baseline marked — now do the thing you want to find");
@@ -2144,7 +2142,7 @@ void WebUi::routesCan()
     });
 
     route("/api/can/reset", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_sniffer) return r->reply(503, "text/plain", "no can");
+        if (!_sniffer) return r->reply(503, "text/plain", "not_built can");
         _sniffer->requestReset();   // the table's owner applies it
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
@@ -2153,7 +2151,7 @@ void WebUi::routesCan()
     // the recorder is the tool and a busy car bus would pay a table search per
     // frame; on elsewhere. Not saved: every boot starts at the default.
     route("/api/can/sniff", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_sniffer) return r->reply(503, "text/plain", "no can");
+        if (!_sniffer) return r->reply(503, "text/plain", "not_built can");
         const bool on = paramStr(r, "on") == "1";
         _sniffer->setEnabled(on);
         LogBus::printf("can sniffer %s", on ? "on" : "off");
@@ -2171,7 +2169,7 @@ void WebUi::routesCan()
 void WebUi::routesCan2()
 {
     route("/api/can2", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_can2) return r->reply(503, "text/plain", "no can2");
+        if (!_can2) return r->reply(503, "text/plain", "not_built can2");
         const Mcp2518Source::Status c = _can2->read();
         static const char* const kAb[] = {"searching", "locked", "manual"};
         JsonDocument d;
@@ -2205,11 +2203,11 @@ void WebUi::routesCan2()
     // ?bitrate=125000|250000|500000|1000000 fixes the rate; 0 (or auto) goes
     // back to finding it. Saved; the car task applies it at once, no reboot.
     route("/api/can2", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_can2Rate) return r->reply(503, "text/plain", "no can2");
+        if (!_can2Rate) return r->reply(503, "text/plain", "not_built can2");
         const String v = paramStr(r, "bitrate");
         const uint32_t bps = (v == "auto" || !v.length()) ? 0u : (uint32_t)v.toInt();
         if (bps && !Bus::Autobaud::valid(bps))
-            return r->reply(400, "text/plain", "bitrate: 0 (auto), 125000, 250000, 500000 or 1000000");
+            return r->reply(400, "text/plain", "param bitrate");
         _cfg->s().can2Bitrate = bps;
         _cfg->save();
         _can2Rate(bps);
@@ -2263,15 +2261,15 @@ void WebUi::routesCanbox()
     // The hu task sends it (it owns the emitter and the UART's vehicle lane);
     // this handler waits up to 2 s for its answer.
     route("/api/messages/send", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_state || !_emitter) return r->reply(503, "text/plain", "no vehicle");
-        if (!r->hasParam("id")) return r->reply(400, "text/plain", "id?");
+        if (!_state || !_emitter) return r->reply(503, "text/plain", "not_built vehicle");
+        if (!r->hasParam("id")) return r->reply(400, "text/plain", "param id");
         const uint8_t id = (uint8_t)atoi(paramStr(r, "id", "255").c_str());
         switch (App::Hu::sendNowWait(id)) {
             case App::Hu::SendNow::Sent:   break;
             case App::Hu::SendNow::NoData:
-                return r->reply(409, "text/plain", "no data for this message — pin its signals");
+                return r->reply(409, "text/plain", "no_msg_data");
             default:
-                return r->reply(503, "text/plain", "uart task busy, try again");
+                return r->reply(503, "text/plain", "busy");
         }
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
@@ -2283,7 +2281,7 @@ void WebUi::routesCanbox()
     // 'J' rows are bytes outside any frame: a different dialect shows up there
     // while rxFrames stays 0.
     route("/api/canbox/last", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_huDump) return r->reply(503, "text/plain", "no uart ring");
+        if (!_huDump) return r->reply(503, "text/plain", "not_built uart_ring");
         // ?in=1: the head unit's frames alone, kept apart from ours.
         const String out = _huDump(paramStr(r, "in") == "1");
         return replyJson(r, out);
@@ -2296,31 +2294,31 @@ void WebUi::routesCanbox()
     // Send any Raise frame: cmd + payload; the framer adds the 0x2E header,
     // length and checksum. No allow-list, on purpose.
     route("/api/canbox/raw", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_tx) return r->reply(503, "text/plain", "no uart");
-        if (!r->hasParam("cmd")) return r->reply(400, "text/plain", "cmd? (hex)");
+        if (!_tx) return r->reply(503, "text/plain", "not_built uart");
+        if (!r->hasParam("cmd")) return r->reply(400, "text/plain", "param cmd");
 
         const uint32_t cmd = paramU32(r, "cmd", "", 16);
-        if (cmd > 0xFF) return r->reply(400, "text/plain", "cmd out of range");
+        if (cmd > 0xFF) return r->reply(400, "text/plain", "param cmd");
 
         uint8_t payload[Canbox::MAX_PAYLOAD];
         const int n = parseHex(paramStr(r, "data", "").c_str(), payload, sizeof(payload));
-        if (n < 0) return r->reply(400, "text/plain", "data must be hex bytes");
+        if (n < 0) return r->reply(400, "text/plain", "param data");
 
         uint8_t frame[Canbox::MAX_FRAME];
         const uint8_t flen = Canbox::buildFrame((uint8_t)cmd, payload, (uint8_t)n, frame);
-        if (!flen) return r->reply(400, "text/plain", "payload too long");
+        if (!flen) return r->reply(400, "text/plain", "too_long");
 
         // The hu task's vehicle lane, never the UART from here: httpd is on
         // core 0, where WiFi can preempt it while it holds the UART mutex. The
         // lane writes it into an empty FIFO, so it cannot delay an ack.
         if (!App::Hu::post(App::Hu::Kind::Raw, frame, flen))
-            return r->reply(503, "text/plain", "uart queue full, try again");
+            return r->reply(503, "text/plain", "queue_full");
 
         String hex; appendHex(hex, frame, flen);
         LogBus::printf("raw tx: %s", hex.c_str());
         JsonDocument d; d["ok"] = true; d["queued"] = true; d["bytes"] = hex;
         String out; serializeJson(d, out);
-        if (!out.c_str()) return r->reply(503, "text/plain", "no memory");
+        if (!out.c_str()) return r->reply(503, "text/plain", "no_memory");
         return r->reply(202, "application/json", out.c_str());
     });
 
@@ -2328,8 +2326,8 @@ void WebUi::routesCanbox()
     // For 0x81-0x86 the second byte is a detent count, not a press state, and
     // there is no release.
     route("/api/canbox/key", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_keySink) return r->reply(503, "text/plain", "no uart");
-        if (!r->hasParam("code")) return r->reply(400, "text/plain", "code? (hex)");
+        if (!_keySink) return r->reply(503, "text/plain", "not_built uart");
+        if (!r->hasParam("code")) return r->reply(400, "text/plain", "param code");
         const uint8_t code  = (uint8_t)paramU32(r, "code", "0", 16);
         const uint8_t state = (uint8_t)paramU32(r, "state", "1", 0);
 
@@ -2337,7 +2335,7 @@ void WebUi::routesCanbox()
         const bool release = !Canbox::isKnobCode(code) && paramBool(r, "release", true) && state != 0;
         // The keys task sends it, after any key already queued.
         if (!App::KeyBus::postLiteral(code, state, release))
-            return r->reply(503, "text/plain", "key queue full, try again");
+            return r->reply(503, "text/plain", "queue_full");
         return r->reply(202, "application/json", "{\"ok\":true,\"queued\":true}");
     });
 }

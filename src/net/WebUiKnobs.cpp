@@ -143,7 +143,7 @@ uint16_t WebUi::knobsFromJson(JsonVariantConst d, Config& c, Cfg::SettingsJson::
     // A name the table has, or a refusal: false = leave the field alone.
     auto known = [err](bool ok, const char* path, const char* v) {
         if (ok || !err) return true;
-        err->add("knobs.%s: unknown value '%s'", path, v);
+        err->add("knobs.%s: enum %s", path, v);
         return false;
     };
     auto bind = [&](JsonVariantConst v, Binding& b, const char* path) {
@@ -236,7 +236,7 @@ void WebUi::routesKnobs()
 {
     // ---- the whole configuration -------------------------------------------
     route("/api/knobs", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_knobs) return r->reply(503, "text/plain", "no knob service");
+        if (!_knobs) return r->reply(503, "text/plain", "not_built knob_service");
         JsonDocument d;
         knobsJson(_knobs->config(), d.to<JsonObject>());
         String out; serializeJson(d, out);
@@ -245,7 +245,7 @@ void WebUi::routesKnobs()
 
     // ---- what the knobs are doing, polled ----------------------------------
     route("/api/knobs/live", HTTP_GET, [this](PsychicRequest* r) {
-        if (!_knobs) return r->reply(503, "text/plain", "no knob service");
+        if (!_knobs) return r->reply(503, "text/plain", "not_built knob_service");
         const Service::Live v = _knobs->live();
         JsonDocument d;
         JsonObject e = d["enc"].to<JsonObject>();
@@ -298,9 +298,9 @@ void WebUi::routesKnobs()
 
     // ---- settings ------------------------------------------------------------
     route("/api/knobs", HTTP_POST, [this](PsychicRequest* r) {
-        if (!_knobs) return r->reply(503, "text/plain", "no knob service");
+        if (!_knobs) return r->reply(503, "text/plain", "not_built knob_service");
         JsonDocument d;
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
 
         Config c = _knobs->config();
         knobsFromJson(d.as<JsonVariantConst>(), c);

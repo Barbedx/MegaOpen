@@ -83,14 +83,14 @@ namespace Canbox
 
     const char* Rav4Emitter::experimentsWhy(uint8_t m)
     {
-        if (m & ~EXP_ALL) return "unknown experiment bits";
+        if (m & ~EXP_ALL) return "param exp";
         if (!(m & EXP_BATT)) return nullptr;
         const uint8_t at = (uint8_t)((m & EXP_BATT_AT) >> 5);
-        if (at > (uint8_t)BattAt::Hist23) return "battery field: 0x21, 0x7D 04 or 0x23";
+        if (at > (uint8_t)BattAt::Hist23) return "param exp";   // battery field: 0x21, 0x7D 04 or 0x23
         if (at == (uint8_t)BattAt::Odo7D04 && (m & EXP_FUEL_7D04))
-            return "battery in 0x7D 04 and fuel in 0x7D 04: the same field, choose one";
+            return "exp_7d04";    // battery and fuel both in 0x7D 04
         if (at != (uint8_t)BattAt::Odo7D04 && (m & EXP_COMPUTED))
-            return "battery in 0x21/0x23 and the computed range/consumption: the same field, choose one";
+            return "exp_range";   // battery in 0x21/0x23 and the computed range/consumption
         return nullptr;
     }
 

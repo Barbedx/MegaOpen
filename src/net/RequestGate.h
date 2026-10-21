@@ -30,8 +30,10 @@ namespace RequestGate
     inline const char* whyText(Why w)
     {
         switch (w) {
-            case Why::Host:   return "this board answers to its IP or its .local name only";
-            case Why::Header: return "a change needs the header X-MegaOpen: 1 (the board's own page sends it)";
+            // The board answers to its IP or its .local name only.
+            case Why::Host:   return "gate_host";
+            // A change needs the header X-MegaOpen: 1 (the board's own page sends it).
+            case Why::Header: return "gate_header";
             default:          return "";
         }
     }

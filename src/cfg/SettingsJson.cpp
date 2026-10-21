@@ -79,14 +79,14 @@ namespace Cfg
         static void readTable(Model& m, const SEntry& e, JsonVariantConst j, Read& r, Errors& err)
         {
             if (!j.is<JsonArrayConst>() || j.size() > e.tab->rows()) {
-                err.add("%s: a list of %u rows at most", e.id, (unsigned)e.tab->rows());
+                err.add("%s: rows_max %u", e.id, (unsigned)e.tab->rows());
                 return;
             }
             uint8_t ap = 0;
             uint8_t ri = 0;
             for (JsonVariantConst jr : j.as<JsonArrayConst>()) {
                 if (!jr.is<JsonArrayConst>()) {
-                    err.add("%s %u: a list of cells", e.id, (unsigned)(ri + 1));
+                    err.add("%s %u: cells", e.id, (unsigned)(ri + 1));
                     ++ri;
                     continue;
                 }
@@ -98,15 +98,15 @@ namespace Cfg
                     int32_t cv = 0;
                     if (jc.isNull()) { ++c; continue; }
                     if (col.type == SType::Bool) {
-                        if (jc.is<bool>()) cv = jc.as<bool>() ? 1 : 0; else cw = "true or false";
+                        if (jc.is<bool>()) cv = jc.as<bool>() ? 1 : 0; else cw = "bool";
                     } else if (col.type == SType::Enum) {
                         const int x = jc.is<const char*>() ? Registry::colEnumIndex(col, jc.as<const char*>()) : -1;
-                        if (x < 0) cw = "unknown value"; else cv = x;
+                        if (x < 0) cw = "enum"; else cv = x;
                     } else if (!jc.is<double>() ||
                                !Registry::decParse(jc.as<double>(), Registry::cellDecimals(m, e, ri, c), cv)) {
-                        cw = "a number";
+                        cw = "number";
                     }
-                    if (!cw && !Registry::setCell(m, e, ri, c, cv, &ap)) cw = "out of range";
+                    if (!cw && !Registry::setCell(m, e, ri, c, cv, &ap)) cw = "range";
                     if (cw) err.add("%s %u: %s: %s", e.id, (unsigned)(ri + 1), col.id, cw);
                     ++c;
                 }
@@ -125,7 +125,7 @@ namespace Cfg
                 if (file) {
                     bool forbidden = false;
                     for (const char* f : FILE_FORBIDDEN) if (!strcmp(key, f)) forbidden = true;
-                    if (forbidden) { err.add("%s: not allowed in a settings file", key); continue; }
+                    if (forbidden) { err.add("%s: file_forbidden", key); continue; }
                 }
                 const SEntry* e = Registry::find(key);
                 if (!e || e->type == SType::Group) { ++r.unknown; continue; }
@@ -141,19 +141,19 @@ namespace Cfg
                 const char* why = nullptr;
                 Change c;
                 c.e = e;
-                if (e->flags & F_RO)                 why = "read-only";
+                if (e->flags & F_RO)                 why = "ro";
                 else if (!Registry::available(m, *e))
-                    why = (e->apply & (AP_CAR | AP_HU)) ? "busy, or not on this board" : "not on this board";
+                    why = (e->apply & (AP_CAR | AP_HU)) ? "busy_absent" : "absent";
                 else if (e->type == SType::Table)  { readTable(m, *e, j, r, err); continue; }
                 else if (e->type == SType::Str) {
                     c.text = j.is<const char*>() ? j.as<const char*>() : nullptr;
-                    if (!Registry::validText(*e, c.text)) why = "printable ASCII text, too long, or not text";
+                    if (!Registry::validText(*e, c.text)) why = "text";   // printable ASCII, short enough
                 }
                 else if (e->type == SType::Bool) {
-                    if (j.is<bool>()) c.v = j.as<bool>() ? 1 : 0; else why = "true or false";
+                    if (j.is<bool>()) c.v = j.as<bool>() ? 1 : 0; else why = "bool";
                 } else if (e->type == SType::Int) {
                     // Out of range is brought into it, as the handlers before did.
-                    if (!j.is<long>()) why = "a number";
+                    if (!j.is<long>()) why = "number";
                     else {
                         const long x = j.as<long>();
                         const int32_t lo = Registry::minOf(*e), hi = Registry::maxOf(*e);
@@ -161,11 +161,11 @@ namespace Cfg
                     }
                 } else {
                     const int i = j.is<const char*>() ? Registry::enumIndex(*e, j.as<const char*>()) : -1;
-                    if (i < 0) why = "unknown value"; else c.v = i;
+                    if (i < 0) why = "enum"; else c.v = i;
                 }
                 if (why) { err.add("%s: %s", e->id, why); continue; }
                 if (r.n >= Registry::MAX_CHANGES) {
-                    if (!r.tooMany) err.add("too many settings in one request: %u at most", (unsigned)Registry::MAX_CHANGES);
+                    if (!r.tooMany) err.add("too_many %u", (unsigned)Registry::MAX_CHANGES);
                     r.tooMany = true;
                     continue;
                 }
@@ -207,9 +207,9 @@ namespace Cfg
         {
             switch (c) {
                 case FileCheck::Ok:         return "";
-                case FileCheck::NotAConfig: return "not a MegaOpen settings file";
-                case FileCheck::Newer:      return "saved by a newer firmware (schema too new): update the board first";
-                default:                    return "saved by an older firmware whose settings this one cannot read";
+                case FileCheck::NotAConfig: return "file_foreign";   // not a MegaOpen settings file
+                case FileCheck::Newer:      return "file_newer";     // schema too new: update the board first
+                default:                    return "file_older";     // too old for this firmware to read
             }
         }
     }

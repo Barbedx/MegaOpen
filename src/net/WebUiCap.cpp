@@ -43,8 +43,8 @@ static int capRes(PsychicRequest* r, Capture::Res res)
 {
     switch (res) {
         case Capture::Res::OK:        return r->reply(200, "application/json", "{\"ok\":true}");
-        case Capture::Res::NOT_FOUND: return r->reply(404, "text/plain", "no such capture file");
-        case Capture::Res::BUSY:      return r->reply(409, "text/plain", "file is being written or downloaded");
+        case Capture::Res::NOT_FOUND: return r->reply(404, "text/plain", "no_capture");
+        case Capture::Res::BUSY:      return r->reply(409, "text/plain", "file_busy");
         default:                      return r->reply(500, "text/plain", "failed");
     }
 }
@@ -123,7 +123,7 @@ void WebUi::routesCap()
         // 2.5 kB, for this request only (Scratch).
         struct Files { Capture::FileInfo f[128]; };
         Scratch<Files> box;
-        if (!box) return r->reply(503, "text/plain", "no memory");
+        if (!box) return r->reply(503, "text/plain", "no_memory");
         const Capture::FileInfo* files = box->f;
         const size_t total = Capture::list(box->f, 128);
         const size_t n = total < 128 ? total : 128;
@@ -148,7 +148,7 @@ void WebUi::routesCap()
     // ?f=NNNN: streamed in chunks; the live file is flushed first.
     route("/api/cap/get", HTTP_GET, [](PsychicRequest* r) {
         const uint32_t num = capFileNum(r);
-        if (!num) return r->reply(400, "text/plain", "f=NNNN");
+        if (!num) return r->reply(400, "text/plain", "param f");
         char path[24];
         const Capture::Res res = Capture::beginRead(num, path, sizeof(path));
         if (res != Capture::Res::OK) return capRes(r, res);
@@ -163,7 +163,7 @@ void WebUi::routesCap()
 
     route("/api/cap/delete", HTTP_POST, [](PsychicRequest* r) {
         const uint32_t num = capFileNum(r);
-        if (!num) return r->reply(400, "text/plain", "f=NNNN");
+        if (!num) return r->reply(400, "text/plain", "param f");
         return capRes(r, Capture::remove(num));
     });
     route("/api/cap/delete_unprotected", HTTP_POST, [](PsychicRequest* r) {
@@ -172,13 +172,13 @@ void WebUi::routesCap()
     // ?f=NNNN&on=0|1: the file's whole session.
     route("/api/cap/protect", HTTP_POST, [](PsychicRequest* r) {
         const uint32_t num = capFileNum(r);
-        if (!num) return r->reply(400, "text/plain", "f=NNNN&on=0|1");
+        if (!num) return r->reply(400, "text/plain", "param f");
         return capRes(r, Capture::protect(num, capFlag(r, "on", true)));
     });
     // Every /cap file, protected ones too. The log is not touched. ?confirm=cap
     route("/api/cap/format", HTTP_POST, [](PsychicRequest* r) {
         if (capParam(r, "confirm") != "cap")
-            return r->reply(400, "text/plain", "deletes every capture, protected too: add confirm=cap");
+            return r->reply(400, "text/plain", "confirm cap");
         return capOk(r, "deleted", Capture::formatArea());
     });
 

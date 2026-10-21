@@ -726,10 +726,10 @@ void test_every_refusal_is_listed()
     TEST_ASSERT_EQUAL_UINT8(1, r.unknown);
     char why[512];
     err.join(why, sizeof(why));
-    TEST_ASSERT_NOT_NULL(strstr(why, "pulseMs: a number"));
-    TEST_ASSERT_NOT_NULL(strstr(why, "mediaStyle: unknown value"));
-    TEST_ASSERT_NOT_NULL(strstr(why, "uartEnabled: true or false"));
-    TEST_ASSERT_NOT_NULL(strstr(why, "can2Detected: read-only"));
+    TEST_ASSERT_NOT_NULL(strstr(why, "pulseMs: number"));
+    TEST_ASSERT_NOT_NULL(strstr(why, "mediaStyle: enum"));
+    TEST_ASSERT_NOT_NULL(strstr(why, "uartEnabled: bool"));
+    TEST_ASSERT_NOT_NULL(strstr(why, "can2Detected: ro"));
 }
 
 // The file names its format and schema; anything else is refused before a
@@ -785,8 +785,8 @@ void test_a_file_may_not_carry_the_password_or_a_reset()
     TEST_ASSERT_EQUAL_UINT8(2, err.n);
     char why[256];
     err.join(why, sizeof(why));
-    TEST_ASSERT_NOT_NULL(strstr(why, "apPass: not allowed in a settings file"));
-    TEST_ASSERT_NOT_NULL(strstr(why, "huForget: not allowed in a settings file"));
+    TEST_ASSERT_NOT_NULL(strstr(why, "apPass: file_forbidden"));
+    TEST_ASSERT_NOT_NULL(strstr(why, "huForget: file_forbidden"));
     // The form: not the registry's, counted, not refused.
     r = SettingsJson::Read{};
     SettingsJson::Errors err2;

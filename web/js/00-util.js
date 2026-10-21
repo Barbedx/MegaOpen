@@ -7,12 +7,12 @@ const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelect
    Слова сторінки — у web/i18n/<мова>.json (ключ -> текст). Українська вбудована в
    сторінку (I18N.uk, tools/gen_pages.py), англійську сторінка бере з /i18n/en.json,
    лише коли її вибрано. Вибір живе в цьому браузері (mo-lang); ?lang=en в адресі важить більше.
-   t(ключ, ...аргументи): "{0}" -> перший аргумент. Нема в мові — українською; нема
+   t(ключ, ...аргументи): "{0}" -> перший аргумент (нема аргументу — порожньо). Нема в мові — українською; нема
    й там — сам ключ, тож ще не перекладений текст, переданий як ключ, лишається як є.
    Ніколи не під час завантаження скрипта: англійська приходить пізніше (i18nLoad) */
 let LANG='uk';try{if((new URLSearchParams(location.search).get('lang')||localStorage.getItem('mo-lang'))==='en')LANG='en'}catch(e){}
 const tHas=k=>k in(I18N[LANG]||I18N.uk)||k in I18N.uk;
-const t=(k,...a)=>{const d=I18N[LANG]||{},s=k in d?d[k]:k in I18N.uk?I18N.uk[k]:k;return a.length?s.replace(/\{(\d)\}/g,(m,i)=>a[i]==null?'':a[i]):s};
+const t=(k,...a)=>{const d=I18N[LANG]||{},s=k in d?d[k]:k in I18N.uk?I18N.uk[k]:k;return s.replace(/\{(\d)\}/g,(m,i)=>a[i]==null?'':a[i])};
 const LOCALE=()=>LANG==='en'?'en-GB':'uk-UA';
 async function i18nLoad(){
  if(!I18N[LANG]){try{const r=await fetch('/i18n/'+LANG+'.json');if(r.ok)I18N[LANG]=await r.json()}catch(e){}}

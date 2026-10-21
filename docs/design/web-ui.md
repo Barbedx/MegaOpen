@@ -96,7 +96,8 @@ address) and reloads the page.
   file at `GET /i18n/en.json`, fetched by an English viewer only. The
   simulator inlines both.
 - The firmware sends codes, not prose (English stays in the log only):
-  `/api/health` chains carry `code`, and the page has the words.
+  `/api/health` chains carry `code` (`w.<code>`), error replies are codes
+  (`e.<code>`, see the API contract), and the page has the words.
 - English is written for someone who has never seen the Ukrainian: natural
   phrasing, not word for word.
 - `tools/check_i18n.py` (CI): same keys in both files, same `{n}` arguments,
@@ -269,7 +270,13 @@ The simulator mock and the firmware both answer exactly this shape:
 The simulator mock answers exactly what the firmware answers today. Examples:
 - `/api/status` `mode` is `sta` or `ap`.
 - `/api/cap/settings` `ring` is a bool.
-- Error bodies are `text/plain`. The page shows the body text.
+- Error bodies are `text/plain` codes, one refusal a line: `[key: ]code[ args]`
+  (`busy`, `param exp`, `pulseMs: number`, `brake: between 0 100`,
+  `not_built display`). The page shows `e.<code>` from `web/i18n` with the args
+  (`errLine()`, `20-kit.js`), and a code it has no words for as it came. A
+  missing or malformed request parameter is `param <name>`: the page never
+  sends one, and an API caller reads the handler. `tools/check_i18n.py` fails
+  on a reply code with no `e.<code>`.
 
 These fields are added; no route is added for them:
 - `GET /api/status` gains `fw` (`MEGAOPEN_VERSION`), `build` (`MegaOpen::buildId()`, the `tools/version.py` stamp) and `apName` (the AP's full name, with the MAC suffix).
@@ -277,7 +284,7 @@ These fields are added; no route is added for them:
   - every chain carries a stable `code` and no prose: the page has the words (`w.<code>`, see Languages);
   - a `hu` chain: `state`, `code` and `rxFrames`. It is `ok` while the head unit sent a frame within `HuMediaSource::linkTimeoutMs()` (15 s). Builds without the panel have no `HuMediaSource`: after the first frame they report `idle` with `hu_seen` (a frame since boot, recency unknown), never `ok`.
   - The codes: `panel_off`, `panel_unregistered`, `panel_ok`; `media_off`, `media_no_panel`, `media_no_phone`, `media_no_track`, `media_ok`; `clock_off`, `clock_phone`, `clock_hu`, `clock_waiting`, `clock_no_source`; `keys_ok`, `keys_none`; `ancs_ok`, `ancs_no_phone`, `ancs_waiting`, `ancs_off`; `hu_off`, `hu_silent`, `hu_quiet`, `hu_ok`, `hu_seen`; `phone_ok`, `phone_ble_off`, `phone_advertising`.
-- `POST /api/macros` errors are `text/plain` `"<index>: <why>"`. The page marks the row whose number leads the message.
+- `POST /api/macros` errors are `text/plain` `"<index>: <code>"` (`3: macro_incomplete`). The page marks the row whose number leads the message.
 
 ### Open contract items, each tagged with the slice that settles it
 

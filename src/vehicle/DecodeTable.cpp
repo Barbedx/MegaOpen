@@ -287,16 +287,16 @@ namespace Vehicle
         const char* canFrom(JsonObjectConst o, DecodeRow& r)
         {
             uint32_t id = 0;
-            if (!hexOf(o["id"], id) || id > 0x1FFFFFFFu) return "id: a CAN id, like 0x354";
+            if (!hexOf(o["id"], id) || id > 0x1FFFFFFFu) return "can.id: param";      // a CAN id, like 0x354
             int32_t b, len, shift, mul, div, add;
-            if (!intOf(o, "byte", -1, 0, 7, b)) return "byte: 0..7";
-            if (!intOf(o, "len", 1, 1, 4, len) || b + len > 8) return "len: 1..4 bytes, inside the 8";
-            if (!intOf(o, "shift", 0, 0, 31, shift)) return "shift: 0..31";
+            if (!intOf(o, "byte", -1, 0, 7, b)) return "can.byte: param";    // 0..7
+            if (!intOf(o, "len", 1, 1, 4, len) || b + len > 8) return "can.len: param";     // 1..4 bytes, inside the 8
+            if (!intOf(o, "shift", 0, 0, 31, shift)) return "can.shift: param";   // 0..31
             uint32_t mask = 0;
-            if (!hexOf(o["mask"], mask) || !mask) return "mask: hex, not 0";
-            if (!intOf(o, "mul", 1, -32768, 32767, mul) || !mul) return "mul: a whole number, not 0, within 16 bits";
-            if (!intOf(o, "div", 1, -32768, 32767, div) || !div) return "div: a whole number, not 0, within 16 bits";
-            if (!intOf(o, "add", 0, INT32_MIN, INT32_MAX, add)) return "add: a whole number";
+            if (!hexOf(o["mask"], mask) || !mask) return "can.mask: param";    // hex, not 0
+            if (!intOf(o, "mul", 1, -32768, 32767, mul) || !mul) return "can.mul: param";     // a whole number, not 0, within 16 bits
+            if (!intOf(o, "div", 1, -32768, 32767, div) || !div) return "can.div: param";     // a whole number, not 0, within 16 bits
+            if (!intOf(o, "add", 0, INT32_MIN, INT32_MAX, add)) return "can.add: param";     // a whole number
 
             r.canId     = id;
             r.startByte = (uint8_t)b;

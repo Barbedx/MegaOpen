@@ -35,16 +35,13 @@ function setChip(el,st,t){if(typeof el==='string')el=$(el);if(!el)return;el.clas
 const CH={ok:'ok',idle:'warn',off:'off',broken:'bad'};
 const svOf=el=>{const c=el&&el.closest&&el.closest('.card');return c?$('.sv',c):null};
 function sv(el,st,msg){if(!el)return;clearTimeout(el._t);el.className='sv '+st;el.textContent=st==='busy'?'…':(st==='ok'?'✓ ':'✗ ')+(msg||(st==='ok'?t('c.saved'):t('c.error')));if(st==='ok')el._t=setTimeout(()=>{el.textContent='✓'},2600)}
-/* текст помилки прошивки (англійський, text/plain) — українською для частих; решта як є: вона називає ключ і причину */
-const ERR_T={'busy, try again':'плата зайнята, спробуй ще раз','busy, retry':'плата зайнята, спробуй ще раз','busy':'плата зайнята',
- 'bad json':'запит не прочитано','no memory':'плата без вільної памʼяті','not found':'на платі такого нема',
- 'key queue full, try again':'черга клавіш повна, спробуй ще','uart queue full, try again':'черга UART повна, спробуй ще',
- 'uart task busy, try again':'UART зайнятий, спробуй ще','head-unit UART is off':'ГУ по UART вимкнено',
- 'no such capture file':'такого файлу запису вже нема','no such log':'такого журналу вже нема',
- 'battery in 0x7D 04 and fuel in 0x7D 04: the same field, choose one':'АКБ і пальне в 0x7D 04 — одне поле: обери щось одне',
- 'battery in 0x21/0x23 and the computed range/consumption: the same field, choose one':'АКБ у 0x21/0x23 і розрах. витрата — одне поле: обери щось одне'};
-/* «no <частина>» від маршруту, частини якого збірка не має або вимкнула; лише відомі частини, а не будь-яке «no …» */
-const errMsgT=m=>ERR_T[m]||(/^no (display|ble|can2?|uart|uart ring|vehicle|keymap|knob service|resistive sink|macro engine|wifi manager)$/.test(m||'')?'цього нема в збірці або воно вимкнене ('+m+')':m);
+/* помилка прошивки — коди, не текст: рядок на відмову, "[ключ: ]код[ аргументи]"
+   ("pulseMs: number", "param exp", "brake: between 0 100"). Слова — e.<код> (web/i18n);
+   код, якого словник не знає, і "HTTP 404" лишаються як є */
+const errLine=l=>{const m=/^(?:(.*): )?([a-z][a-z0-9_]*)((?: \S+)*)$/.exec(String(l).trim());if(!m||!tHas('e.'+m[2]))return l;
+ const a=m[3].trim()?m[3].trim().split(' '):[];return (m[1]?m[1]+': ':'')+t('e.'+m[2],...a).replace(/[\s:]+$/,'')};
+const errLines=m=>String(m||'').split('\n').filter(Boolean).map(errLine);
+const errMsgT=m=>errLines(m).join('; ');
 const errT=e=>(e.status?e.status+' · ':'')+(errMsgT(e.message)||t('c.error'));
 async function run(btn,fn,okText){const s=svOf(btn);if(btn)btn.disabled=true;sv(s,'busy');try{const r=await fn();sv(s,'ok',okText||(r&&r.note)||t('c.done'));return r}catch(e){sv(s,'bad',errT(e))}finally{if(btn)btn.disabled=false}}
 function val(el){if(!el)return;if(el.dataset.hex!==undefined){const n=parseInt(el.value,16);return isNaN(n)?0:n}if(el.classList.contains('seg'))return el.dataset.v;if(el.classList.contains('multi'))return el.dataset.v.split(',').filter(Boolean);

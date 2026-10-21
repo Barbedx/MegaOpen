@@ -46,7 +46,7 @@ const actClass=id=>{const a=C.actions.find(x=>x.id===id);return a?a.class:null};
 const WHEEL=C.panelKeys.filter(k=>k.src==='wheel');
 const CAROUSEL=C.scenes.map(s=>s.id).filter(s=>s!=='off'&&s!=='custom'&&s!=='gmeter');
 /* Catalog::arrowsKnown: POST /api/media і /api/display/menu приймають лише значення arrows */
-const ARROWS=(C.enums.arrows||[]).map(e=>e.v),SCROLL_WHY='scroll: 0, 7, 11 or 3';
+const ARROWS=(C.enums.arrows||[]).map(e=>e.v),SCROLL_WHY='param scroll';
 /* App::Ui::clockFrom: хто востаннє виставив час панелі (hu, cts, manual) і на скільки */
 const clockFrom=(src,at)=>{S.clk={src,at}};
 let ctsMin=-1,huMin=-1;   /* servicePhoneClock: s_lastMin, лише нова хвилина */
@@ -240,25 +240,25 @@ g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type
  if(st.bleMode)o.bleMode=st.bleMode;if(st.wifi)o.ssid=st.wifi.ssid;return o});
 /* НОВЕ (план, зріз 4): перезапуск не побічний ефект, а pendingReboot; apPass */
 po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass);
- if(ap&&(ap.length<8||ap.length>63))return fail(400,'apPass: 8 to 63 characters');
+ if(ap&&(ap.length<8||ap.length>63))return fail(400,'apPass: pass_len');
  let rb=typeof q.mdnsOn==='boolean'&&q.mdnsOn!==s.mdnsOn;
  /* таблиці реєстру (WebUi.cpp): рядок = клітинки в порядку колонок; рядок чи клітинка, яких не прислали
     (або null), лишаються як були; ті самі тексти помилок */
- let AL=null;if(q.alerts!==undefined){if(!Array.isArray(q.alerts)||q.alerts.length>16)return fail(400,'alerts: a list of 16 rows at most');AL=[];
-  for(let i=0;i<q.alerts.length;i++){const a=q.alerts[i],id='alerts '+(i+1)+': ',old=S.alerts[i];if(!Array.isArray(a))return fail(400,id+'a list of cells');
+ let AL=null;if(q.alerts!==undefined){if(!Array.isArray(q.alerts)||q.alerts.length>16)return fail(400,'alerts: rows_max 16');AL=[];
+  for(let i=0;i<q.alerts.length;i++){const a=q.alerts[i],id='alerts '+(i+1)+': ',old=S.alerts[i];if(!Array.isArray(a))return fail(400,id+'cells');
    const[sig,cond,thr,cd,on]=old.map((x,k)=>a[k]==null?x:a[k]),m=META.find(x=>x[0]===sig);
-   if(sig&&!m)return fail(400,id+'sig: unknown value');if(!COND.some(c=>c[0]===cond))return fail(400,id+'cond: unknown value');
-   if(typeof thr!=='number')return fail(400,id+'thr: a number');if(m&&(toInt(thr,m[2])<m[5]||toInt(thr,m[2])>m[6]))return fail(400,id+'thr: out of range');
-   if(!(isInt(cd)&&cd<=65535))return fail(400,id+'cooldownS: '+(typeof cd==='number'?'out of range':'a number'));
-   if(typeof on!=='boolean')return fail(400,id+'on: true or false');AL.push([sig,cond,thr,Math.max(5,cd),!!on&&!!sig])}}
- let MG=null;if(q.huMessages!==undefined){if(!Array.isArray(q.huMessages)||q.huMessages.length>S.msgs.length)return fail(400,'huMessages: a list of '+S.msgs.length+' rows at most');
+   if(sig&&!m)return fail(400,id+'sig: enum');if(!COND.some(c=>c[0]===cond))return fail(400,id+'cond: enum');
+   if(typeof thr!=='number')return fail(400,id+'thr: number');if(m&&(toInt(thr,m[2])<m[5]||toInt(thr,m[2])>m[6]))return fail(400,id+'thr: range');
+   if(!(isInt(cd)&&cd<=65535))return fail(400,id+'cooldownS: '+(typeof cd==='number'?'range':'number'));
+   if(typeof on!=='boolean')return fail(400,id+'on: bool');AL.push([sig,cond,thr,Math.max(5,cd),!!on&&!!sig])}}
+ let MG=null;if(q.huMessages!==undefined){if(!Array.isArray(q.huMessages)||q.huMessages.length>S.msgs.length)return fail(400,'huMessages: rows_max '+S.msgs.length);
   MG=q.huMessages.map((a,i)=>Array.isArray(a)&&a[0]!=null?a[0]:S.msgs[i].enabled);
-  const bad=MG.findIndex(x=>typeof x!=='boolean');if(bad>=0)return fail(400,'huMessages '+(bad+1)+': on: true or false')}
+  const bad=MG.findIndex(x=>typeof x!=='boolean');if(bad>=0)return fail(400,'huMessages '+(bad+1)+': on: bool')}
  /* реєстр (catalog.settings): невідоме значення enum -> 400, число в межі, як прошивка */
  for(const f of C.settings||[]){if(f.type==='group'||f.type==='table'||q[f.id]===undefined||['bleMode','mediaSource','huTitleCmd','huArtistCmd'].includes(f.id))continue;
-  if(f.ro)return fail(400,f.id+': read-only');
-  if(f.type==='enum'&&!f.enum.some(o=>o.v===q[f.id]))return fail(400,f.id+': unknown value');
-  if(f.type==='str'&&!(typeof q[f.id]==='string'&&q[f.id].length<=f.max&&/^[ -~]*$/.test(q[f.id])))return fail(400,f.id+': printable ASCII text, too long, or not text');
+  if(f.ro)return fail(400,f.id+': ro');
+  if(f.type==='enum'&&!f.enum.some(o=>o.v===q[f.id]))return fail(400,f.id+': enum');
+  if(f.type==='str'&&!(typeof q[f.id]==='string'&&q[f.id].length<=f.max&&/^[ -~]*$/.test(q[f.id])))return fail(400,f.id+': text');
   if(f.reboot&&q[f.id]!==s[f.id])rb=true;
   s[f.id]=f.type==='int'?Math.min(f.max,Math.max(f.min,+q[f.id])):q[f.id]}
  if(q.logLevel!==undefined){S.logLevel=LVL.indexOf(q.logLevel);delete s.logLevel}
@@ -277,10 +277,10 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
 /* файл налаштувань (WebUi.cpp /api/config): налаштування без ro/volatile + ручки; POST — ті самі перевірки, ?dry=1 нічого не міняє */
 const fileSettings=()=>{const all=R['GET /api/settings'](),o={};for(const f of C.settings||[])if(f.type!=='group'&&!f.ro&&!f.volatile&&f.id in all)o[f.id]=all[f.id];return o};
 g('/api/config',()=>{const o={format:'megaopen-config',schema:1,fw:S.fw,build:S.build,settings:fileSettings()};if(C.features.knobs)o.knobs=R['GET /api/knobs']();return o});
-po('/api/config',q=>{if(!q||q.format!=='megaopen-config'||typeof q.settings!=='object')return fail(400,'not a MegaOpen settings file');
- if(q.schema>1)return fail(400,'saved by a newer firmware (schema too new): update the board first');
- if(q.schema<1)return fail(400,'saved by an older firmware whose settings this one cannot read');
- const bad=['apPass','huForget'].filter(k=>k in q.settings);if(bad.length)return fail(400,bad.map(k=>k+': not allowed in a settings file').join('\n'));
+po('/api/config',q=>{if(!q||q.format!=='megaopen-config'||typeof q.settings!=='object')return fail(400,'file_foreign');
+ if(q.schema>1)return fail(400,'file_newer');
+ if(q.schema<1)return fail(400,'file_older');
+ const bad=['apPass','huForget'].filter(k=>k in q.settings);if(bad.length)return fail(400,bad.map(k=>k+': file_forbidden').join('\n'));
  const set={};for(const k in q.settings)if(!(C.settings||[]).some(f=>f.id===k&&f.volatile)&&q.settings[k]!==null)set[k]=q.settings[k];
  const was=fileSettings(),unknown=Object.keys(q.settings).filter(k=>!(C.settings||[]).some(f=>f.id===k)).length;
  if(q.dry==='1'){const snap=JSON.parse(JSON.stringify(S));const r=R['POST /api/settings'](set);for(const k of Object.keys(S))delete S[k];Object.assign(S,snap);
@@ -293,18 +293,18 @@ g('/api/display',()=>{const d=S.disp,car=d.type==='carminat';return {type:d.type
  sessionsLost:d.sessionsLost,lastLoss:d.lastLoss,linkFlaps:0,linkRecoveries:0,linkDownMs:0,txGated:false,txGates:0,reinstalls:0,failStreak:0,rendersPosted:412,rendersRefused:0}});
 po('/api/display',q=>{const st=S.staged,t0=st.dispType||S.disp.type,f0=st.funcReg!==undefined?st.funcReg:S.disp.funcReg;
  const t=q.type===undefined?t0:q.type,f=q.funcReg===undefined?f0:!!q.funcReg;
- if(!C.panels.some(p=>p.id===t))return fail(400,'type: unknown panel');
+ if(!C.panels.some(p=>p.id===t))return fail(400,'param type');
  st.dispType=t;st.funcReg=f;return t!==t0||f!==f0?{ok:true,pendingReboot:true}:ok});
 for(const k of ['text','clock','power','menu','highlight','popup','confirm','msgbox','selectbutton','styled','info','fullscreen','abort'])po('/api/display/'+k,q=>{
- if(k==='text'&&q.text===undefined)return fail(400,'text?');if(k==='clock'&&q.time===undefined)return fail(400,'time? (HHMM)');if(k==='popup'&&q.text===undefined&&!B(q.hide))return fail(400,'text? or hide=1');
+ if(k==='text'&&q.text===undefined)return fail(400,'param text');if(k==='clock'&&q.time===undefined)return fail(400,'param time');if(k==='popup'&&q.text===undefined&&!B(q.hide))return fail(400,'param text');
  if(k==='menu'&&q.scroll!==undefined&&!ARROWS.includes(+q.scroll))return fail(400,SCROLL_WHY);
  /* НОВЕ: справжній HHMM записує джерело manual (WebUi → App::Ui::noteManualClock) */
  if(k==='clock'&&/^\d{4}$/.test(q.time)&&+q.time.slice(0,2)<24&&+q.time.slice(2)<60)clockFrom('manual',q.time.slice(0,2)+':'+q.time.slice(2));
  emit(2,'PNL',k+' '+JSON.stringify(q));return queued()});
 for(const k of ['release','notify','clear'])po('/api/display/'+k,()=>ok);
 /* лише для розробника (WebUi.cpp, display/InfoRaw.h): 403 без devMode; len 0x0B..0x13 обрізається, offset/prefix поза межами — 400 */
-po('/api/display/inforaw',q=>{if(!S.set.devMode)return fail(403,'developer mode is off (Плата › Інтерфейс)');const o=parseInt(q.offset??'0x41'),p=parseInt(q.prefix??'0x60');
- if(!(o>=0x40&&o<=0x4F))return fail(400,'offset: 0x40..0x4F');if(!(p>=0x40&&p<=0x7F))return fail(400,'prefix: 0x40..0x7F');const rw=parseInt(q.rows??'1');if(rw!==1&&rw!==3)return fail(400,'rows: 1 or 3');emit(2,'PNL','inforaw '+JSON.stringify(q));return queued()});
+po('/api/display/inforaw',q=>{if(!S.set.devMode)return fail(403,'dev_off');const o=parseInt(q.offset??'0x41'),p=parseInt(q.prefix??'0x60');
+ if(!(o>=0x40&&o<=0x4F))return fail(400,'param offset');if(!(p>=0x40&&p<=0x7F))return fail(400,'param prefix');const rw=parseInt(q.rows??'1');if(rw!==1&&rw!==3)return fail(400,'param rows');emit(2,'PNL','inforaw '+JSON.stringify(q));return queued()});
 /* НОВЕ: last у /api/affamap, як publishKeyLast у main.cpp: key — рядок таблиці (і порожній), action — id дії;
    рядок без дії (None) не відображено, свій код без дії теж; dests — маска і живий приймач, ГУ ще й має код */
 function pressKey(wire,hold){const r=S.affa.find(x=>x.wire===wire&&x.hold===!!hold),key=r?r.key:'';
@@ -315,10 +315,10 @@ function pressKey(wire,hold){const r=S.affa.find(x=>x.wire===wire&&x.hold===!!ho
   to=DESTS.filter(d=>{const x=ds[d];return x&&x.live&&cl!=null&&(x.mask&(1<<cl))&&!(isLong&&x.press)&&(d!=='uart'||r.code||a.hu)&&(d!=='usb'||cl<2)});
  S.last={seq:S.last.seq+1,key,wire,hold:!!hold,action:r.action,dests:to};S.macLive.down=[r.action];
  emit(2,'KEY','[panelkey] '+r.key+(hold?' H':'')+' > '+(to.includes('uart')?h2(r.code||parseInt(a.hu,16))+(isLong?' LONG':' PRESS'):'not routed'))}
-po('/api/display/key',q=>{if(q.code===undefined)return fail(400,'code? (hex wire code)');const code=Number(q.code);
+po('/api/display/key',q=>{if(q.code===undefined)return fail(400,'param code');const code=Number(q.code);
  /* НОВЕ: wire=1 — кадр у CAN B (KeySource::Wire); 409, поки зв'язку з панеллю нема (synced) */
- if(B(q.wire)&&B(q.hold)&&(WHEEL.find(k=>parseInt(k.wire,16)===code)||{}).wireHold===false)return fail(400,'a held detent has no wire form');
- if(B(q.wire)){if(!S.disp.registered)return fail(409,'panel link is not up');emit(2,'PNL','TX key frame 0x'+code.toString(16)+(B(q.hold)?' hold':'')+' (KeySource::Wire)');return queued()}
+ if(B(q.wire)&&B(q.hold)&&(WHEEL.find(k=>parseInt(k.wire,16)===code)||{}).wireHold===false)return fail(400,'held_no_wire');
+ if(B(q.wire)){if(!S.disp.registered)return fail(409,'panel_down');emit(2,'PNL','TX key frame 0x'+code.toString(16)+(B(q.hold)?' hold':'')+' (KeySource::Wire)');return queued()}
  pressKey(code,B(q.hold));return queued()});
 po('/api/display/resync',()=>{S.disp.registered=false;S.disp.resyncAt=now()+3000;S.disp.phase='Handshake';emit(2,'PNL','resync requested');return {ok:true,note:'handshake restarting; watch registered'}});
 g('/api/ble',()=>({mode:S.set.bleMode==='off'?'ams':S.set.bleMode,connected:S.ble.connected,status:S.ble.connected?'connected':'advertising',bonded:S.ble.bonded,address:S.ble.connected?S.ble.address:'',
@@ -336,7 +336,7 @@ po('/api/media',q=>{const m=S.med;
  if(Number.isInteger(q.scroll)&&!ARROWS.includes(q.scroll))return fail(400,SCROLL_WHY);
  if(typeof q.title==='string'){m.inj={title:q.title,artist:q.artist||'',state:1,elapsed:+q.elapsed||0,duration:+q.duration||0,transport:true};setTimeout(()=>m.inj=null,30000)}
  /* НОВЕ: bits= — свій малюнок 48×48 */
- if(q.bits!==undefined){if(!/^[0-9a-f]{576}$/i.test(q.bits))return fail(400,'bits: 576 hex characters');m.custom=hex2px(q.bits);m.pane='custom';m.paneAuto=false}
+ if(q.bits!==undefined){if(!/^[0-9a-f]{576}$/i.test(q.bits))return fail(400,'param bits');m.custom=hex2px(q.bits);m.pane='custom';m.paneAuto=false}
  for(const k of ['scrollMsTitle','scrollMsArtist'])if(typeof q[k]==='number')m[k]=q[k];if(Number.isInteger(q.scroll))m.scroll=q.scroll;
  if(typeof q.splashMs==='number')m.splashMs=q.splashMs<=0?0:Math.min(20000,Math.max(1000,q.splashMs));
  if(typeof q.paneCycleS==='number')m.paneCycleS=Math.min(600,Math.max(5,q.paneCycleS));
@@ -345,7 +345,7 @@ po('/api/media',q=>{const m=S.med;
  if(typeof q.style==='string')m.style=C.styles.some(s=>s.id===q.style)?q.style:'classic';
  if(typeof q.auto==='boolean')m.auto=q.auto;
  if(typeof q.autoTime==='boolean')S.set.autoTime=q.autoTime;
- if(typeof q.pane==='string'){if(q.pane==='auto')m.paneAuto=true;else{if(q.pane==='custom'&&!m.custom)return fail(409,'draw the custom picture first');m.paneAuto=false;m.pane=C.scenes.some(s=>s.id===q.pane)?q.pane:'off'}}
+ if(typeof q.pane==='string'){if(q.pane==='auto')m.paneAuto=true;else{if(q.pane==='custom'&&!m.custom)return fail(409,'no_custom_pic');m.paneAuto=false;m.pane=C.scenes.some(s=>s.id===q.pane)?q.pane:'off'}}
  if(q.splashNow)emit(2,'PNL','splash');
  return ok});
 g('/api/affamap',q=>{const b={unmapped:S.unm,events:S.affaEvents,last:S.last};if(B(q.live))return b;
@@ -356,8 +356,8 @@ po('/api/wifi/scan',()=>({networks:S.nets.map(n=>({...n,rssi:Math.round(n.rssi+r
 /* НОВЕ (зріз 4): ssid2/pass2; порожній пароль = той самий, поки назва та сама; pendingReboot, коли щось змінилось.
    pendingReboot лише за першу мережу; друга (WifiManager::setNet2) діє без перезавантаження, з наступної спроби з точки */
 po('/api/wifi',q=>{const h1=typeof q.ssid==='string',h2=typeof q.ssid2==='string',bad=p=>p&&(p.length<8||p.length>64);
- if(!h1&&!h2)return fail(400,'ssid? or ssid2?');if((q.ssid||'').length>32||(q.ssid2||'').length>32)return fail(400,'ssid: 32 characters at most');
- if(bad(q.pass||'')||bad(q.pass2||''))return fail(400,'pass: 8 to 64 characters, or empty');
+ if(!h1&&!h2)return fail(400,'param ssid');if((q.ssid||'').length>32||(q.ssid2||'').length>32)return fail(400,'param ssid');
+ if(bad(q.pass||'')||bad(q.pass2||''))return fail(400,'pass_len');
  const w1=S.staged.wifi||{ssid:S.set.ssid,pass:S.wifi.pass||''},ch=h1&&(q.ssid!==w1.ssid||!!q.pass&&q.pass!==w1.pass);
  if(h1)S.staged.wifi={ssid:q.ssid,pass:q.pass||(q.ssid===w1.ssid?w1.pass:'')};if(h2)S.wifi2.ssid=q.ssid2;
  emit(2,'NET',ch?'wifi saved, pending reboot':'wifi saved');return ch?{ok:true,pendingReboot:true}:ok});
@@ -369,13 +369,13 @@ function doBoot(){S.bootAt=now()+4000;S.heap=Math.round(rnd(79000,82000));const 
  if(n){S.wifi.mode='sta';S.wifi.ssid=n.ssid;S.wifi.ip=n.ssid==='HomeWiFi'?'192.168.1.50':'172.20.10.4';S.wifi.rssi=n.rssi}else{S.wifi.mode='ap';S.wifi.ip='192.168.4.1'}
  S.disp.registered=false;S.disp.resyncAt=now()+6000;S.cap.recording=S.cap.settings.autostart;S.emitter=false;S.tests={}}
 po('/api/reboot',()=>{setTimeout(doBoot,200);return ok});   /* НОВЕ */
-po('/api/factory',q=>{if(q.confirm!=='factory')return {__status:400,body:{ok:false,error:'factory reset WIPES NVS including WiFi credentials; the board returns in AP mode. Re-send with ?confirm=factory if that is what you want.'}};
+po('/api/factory',q=>{if(q.confirm!=='factory')return {__status:400,body:{ok:false,error:'confirm factory'}};
  S.set=defSet();S.set.ssid='';S.affa=defAffa();S.mac=defMacros();S.kn=defKnobs();S.tun=defTun();S.map=defMap();S.routing={uart:0x0F,ams:0x05,hid:0x02,res:0,usb:0x03};
  S.wifi2={ssid:''};S.wifi.apPass='megaopen';S.ble={bonded:false,connected:false,address:''};S.staged={};setTimeout(doBoot,200);return {ok:true,note:'AP mode after reboot'}});
 g('/api/can2',()=>{const c=S.can2;return {live:!c.quiet,listenOnly:true,autobaud:c.setting?'manual':c.quiet?'searching':'locked',bitrate:c.bitrate,detected:c.quiet||c.setting?0:c.detected,setting:c.setting,saved:c.saved,fps:c.quiet?0:c.fps,frames:c.frames,
  fdDropped:0,rtrDropped:0,intKicks:0,maskMaxUs:0,hwOverflows:c.hwOverflows,ringPeak:c.ringPeak,rec:c.rec,tec:c.tec,errFlags:0,bdiag1:0,restarts:c.restarts,rounds:c.quiet?7:1,rejected:0,beginErr:0}});
 po('/api/can2',q=>{const v=String(q.bitrate==null?'':q.bitrate),bps=v==='auto'||!v?0:parseInt(v,10)||0;const c=S.can2;
- if(bps&&![125000,250000,500000,1000000].includes(bps))return fail(400,'bitrate: 0 (auto), 125000, 250000, 500000 or 1000000');
+ if(bps&&![125000,250000,500000,1000000].includes(bps))return fail(400,'param bitrate');
  c.setting=bps;if(bps){c.bitrate=bps;c.quiet=bps!==500000;c.rec=c.quiet?96:0}else{c.bitrate=500000;c.quiet=false;c.rec=0}return ok});
 const capStatus=()=>{const c=S.cap,used=S.files.reduce((a,f)=>a+f.size,0),cur=S.files.find(f=>f.current);
  return {ready:true,recording:c.recording,mode:c.mode,frames:c.frames,written:c.written,dropped:c.dropped,markers:c.markers,ringUsed:3,ringCap:64,file:c.recording&&cur?+cur.f:0,fileBytes:cur?cur.size:0,session:c.session,
@@ -387,11 +387,11 @@ po('/api/cap/stop',()=>{S.cap.recording=false;S.files.forEach(f=>f.current=false
 po('/api/cap/mark',q=>{S.cap.markers++;if(S.cap.recording&&S.cap.settings.autoProtect){const f=S.files.find(x=>x.current);if(f)S.files.filter(x=>x.session===f.session).forEach(x=>x.protected=true)}emit(2,'CAP','marker "'+(q.t||'')+'"');return ok});
 const fileOf=q=>S.files.find(x=>+x.f===parseInt(q.f,10));
 g('/api/cap/list',()=>({files:S.files.map(f=>({...f,current:!!f.current}))}));
-g('/api/cap/get',q=>{if(!parseInt(q.f,10))return fail(400,'f=NNNN');return fileOf(q)?{bytes:fileOf(q).size}:fail(404,'no such capture file')});
-po('/api/cap/delete',q=>{if(!parseInt(q.f,10))return fail(400,'f=NNNN');const f=fileOf(q);if(!f)return fail(404,'no such capture file');if(f.current)return fail(409,'file is being written or downloaded');S.files=S.files.filter(x=>x!==f);return ok});
+g('/api/cap/get',q=>{if(!parseInt(q.f,10))return fail(400,'param f');return fileOf(q)?{bytes:fileOf(q).size}:fail(404,'no_capture')});
+po('/api/cap/delete',q=>{if(!parseInt(q.f,10))return fail(400,'param f');const f=fileOf(q);if(!f)return fail(404,'no_capture');if(f.current)return fail(409,'file_busy');S.files=S.files.filter(x=>x!==f);return ok});
 po('/api/cap/delete_unprotected',()=>{const n=S.files.length;S.files=S.files.filter(f=>f.protected||f.current);return {ok:true,deleted:n-S.files.length}});
-po('/api/cap/protect',q=>{if(!parseInt(q.f,10))return fail(400,'f=NNNN&on=0|1');const f=fileOf(q);if(!f)return fail(404,'no such capture file');S.files.filter(x=>x.session===f.session).forEach(x=>x.protected=q.on===undefined||B(q.on));return ok});
-po('/api/cap/format',q=>{if(q.confirm!=='cap')return fail(400,'deletes every capture, protected too: add confirm=cap');S.cap.recording=false;const n=S.files.length;S.files=[];return {ok:true,deleted:n}});
+po('/api/cap/protect',q=>{if(!parseInt(q.f,10))return fail(400,'param f');const f=fileOf(q);if(!f)return fail(404,'no_capture');S.files.filter(x=>x.session===f.session).forEach(x=>x.protected=q.on===undefined||B(q.on));return ok});
+po('/api/cap/format',q=>{if(q.confirm!=='cap')return fail(400,'confirm cap');S.cap.recording=false;const n=S.files.length;S.files=[];return {ok:true,deleted:n}});
 /* ---- НОВЕ: мапа RAV4 замість /api/signals, /api/signals/unpinall, /api/emitter і масштабів у /api/canbox/tuning ---- */
 const LV={speed:47,rpm:1850,steering:-1.2,out_temp:9,door_fl:0,door_fr:0,light_pos:1,light_dip:1,fuel_inst:7.2,odometer:182345};
 const CANB={};const canBytes=id=>CANB[id]||(CANB[id]=Array.from({length:8},()=>Math.floor(rnd(0,256))));
@@ -423,28 +423,28 @@ g('/api/map',q=>{const o=mapBase();o.rows=q.live?[]:C.raise.map(t=>({id:t.id,...
  return o});
 const isInt=x=>Number.isInteger(x),hexOk=x=>/^(0x)?[0-9a-f]{1,8}$/i.test(String(x==null?'':x)),hexV=x=>parseInt(String(x).replace(/^0x/i,''),16);
 /* DecodeJson::canFrom: ті самі перевірки й тексти */
-function canWhy(c){if(!hexOk(c.id)||hexV(c.id)>0x1FFFFFFF)return 'id: a CAN id, like 0x354';
- if(!isInt(c.byte)||c.byte<0||c.byte>7)return 'byte: 0..7';const len=c.len==null?1:c.len;if(!isInt(len)||len<1||len>4||c.byte+len>8)return 'len: 1..4 bytes, inside the 8';
- if(c.shift!=null&&(!isInt(c.shift)||c.shift<0||c.shift>31))return 'shift: 0..31';if(!hexOk(c.mask)||!hexV(c.mask))return 'mask: hex, not 0';
- const i16=x=>isInt(x)&&x&&x>=-32768&&x<=32767;if(c.mul!=null&&!i16(c.mul))return 'mul: a whole number, not 0, within 16 bits';if(c.div!=null&&!i16(c.div))return 'div: a whole number, not 0, within 16 bits';if(c.add!=null&&!isInt(c.add))return 'add: a whole number';return ''}
-po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(409,'head-unit UART is off');
- if(q.units){const f=q.units.fuel??S.tun.fuelUnit,t=q.units.trip??S.tun.tripUnit;if(!C.enums.fuelUnits.some(e=>e.v===f))return fail(400,"units.fuel: one of the catalog's fuelUnits");if(!C.enums.tripUnits.some(e=>e.v===t))return fail(400,"units.trip: one of the catalog's tripUnits")}
- const rows=q.rows||[];if(rows.length>16)return fail(400,'rows: 16 at most in one request');const E=[];
- for(const r of rows){const t=C.raise.find(x=>x.id===r.id);if(!t)return fail(404,'no such field');
-  if(!SIM_DECODE.sigs.includes(t.id))return fail(409,r.id+': the firmware has no signal for it yet');
-  if(E.some(([x])=>x.id===r.id))return fail(400,r.id+': twice in one request');
-  if(!['can','const','off'].includes(r.src))return fail(400,r.id+': src: can, const or off');
-  if(r.src==='can'){if(!r.can||typeof r.can!=='object')return fail(400,r.id+': can: {id, byte, len, ...}');const w=canWhy(r.can);if(w)return fail(400,r.id+': '+w)}
-  if(r.src==='const'&&!(typeof r.k==='number'&&toInt(r.k,t.dec)>=toInt(t.min,t.dec)&&toInt(r.k,t.dec)<=toInt(t.max,t.dec)))return fail(400,r.id+': k: '+t.min+'..'+t.max);
+function canWhy(c){if(!hexOk(c.id)||hexV(c.id)>0x1FFFFFFF)return 'can.id: param';
+ if(!isInt(c.byte)||c.byte<0||c.byte>7)return 'can.byte: param';const len=c.len==null?1:c.len;if(!isInt(len)||len<1||len>4||c.byte+len>8)return 'can.len: param';
+ if(c.shift!=null&&(!isInt(c.shift)||c.shift<0||c.shift>31))return 'can.shift: param';if(!hexOk(c.mask)||!hexV(c.mask))return 'can.mask: param';
+ const i16=x=>isInt(x)&&x&&x>=-32768&&x<=32767;if(c.mul!=null&&!i16(c.mul))return 'can.mul: param';if(c.div!=null&&!i16(c.div))return 'can.div: param';if(c.add!=null&&!isInt(c.add))return 'can.add: param';return ''}
+po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(409,'uart_off');
+ if(q.units){const f=q.units.fuel??S.tun.fuelUnit,t=q.units.trip??S.tun.tripUnit;if(!C.enums.fuelUnits.some(e=>e.v===f))return fail(400,'param units.fuel');if(!C.enums.tripUnits.some(e=>e.v===t))return fail(400,'param units.trip')}
+ const rows=q.rows||[];if(rows.length>16)return fail(400,'param rows');const E=[];
+ for(const r of rows){const t=C.raise.find(x=>x.id===r.id);if(!t)return fail(404,'not_found');
+  if(!SIM_DECODE.sigs.includes(t.id))return fail(409,r.id+': no_signal');
+  if(E.some(([x])=>x.id===r.id))return fail(400,r.id+': twice');
+  if(!['can','const','off'].includes(r.src))return fail(400,r.id+': param src');
+  if(r.src==='can'){if(!r.can||typeof r.can!=='object')return fail(400,r.id+': param can');const w=canWhy(r.can);if(w)return fail(400,r.id+': '+w)}
+  if(r.src==='const'&&!(typeof r.k==='number'&&toInt(r.k,t.dec)>=toInt(t.min,t.dec)&&toInt(r.k,t.dec)<=toInt(t.max,t.dec)))return fail(400,r.id+': k: between '+t.min+' '+t.max);
   E.push([r,t])}
- if(q.confirm!=null){const n=q.confirm.sig;if(!META.some(m=>m[0]===n))return fail(404,'confirm: no such signal');
-  if(q.confirm.on!=null&&typeof q.confirm.on!=='boolean')return fail(400,'confirm.on: true or false');
-  if(!BOUND.has(n))return fail(409,'confirm: the signal has no CAN row to confirm')}
+ if(q.confirm!=null){const n=q.confirm.sig;if(!META.some(m=>m[0]===n))return fail(404,'param confirm');
+  if(q.confirm.on!=null&&typeof q.confirm.on!=='boolean')return fail(400,'param confirm.on');
+  if(!BOUND.has(n))return fail(409,'confirm: no_can_row')}
 
- if(q.exp!==undefined&&!(isInt(q.exp)&&q.exp>=0&&q.exp<=127))return fail(400,'exp: 0..127, the experiment bits');
- if(q.exp!==undefined&&q.exp&16){const at=(q.exp>>5)&3;if(at>2)return fail(400,'battery field: 0x21, 0x7D 04 or 0x23');
-  if(at===1&&q.exp&2)return fail(400,'battery in 0x7D 04 and fuel in 0x7D 04: the same field, choose one');
-  if(at!==1&&q.exp&4)return fail(400,'battery in 0x21/0x23 and the computed range/consumption: the same field, choose one')}
+ if(q.exp!==undefined&&!(isInt(q.exp)&&q.exp>=0&&q.exp<=127))return fail(400,'param exp');
+ if(q.exp!==undefined&&q.exp&16){const at=(q.exp>>5)&3;if(at>2)return fail(400,'param exp');
+  if(at===1&&q.exp&2)return fail(400,'exp_7d04');
+  if(at!==1&&q.exp&4)return fail(400,'exp_range')}
  if(q.exp!==undefined){S.huExp=q.exp;emit(2,'HU','[map] head-unit experiments: '+q.exp)}
  if(q.send!==undefined){S.emitter=!!q.send;emit(2,'HU','[map] send to the head unit '+(S.emitter?'on':'off'))}
  if(q.units){if(q.units.fuel!=null)S.tun.fuelUnit=q.units.fuel;if(q.units.trip!=null)S.tun.tripUnit=q.units.trip}
@@ -455,22 +455,22 @@ po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(
  return ok});
 const frameFor=(t,v)=>{const[c,sub0]=t.cmd.split(' '),sub=sub0&&sub0!=='A/C'?sub0:'',n=Math.round(+v*pow10(t.dec))&0xFFFF;return ('2E '+c+' 0'+(sub?3:2)+' '+(sub?sub+' ':'')+h2(n)+' '+h2(n>>8)+' CS').toUpperCase()};
 /* WebUiMap.cpp: перед тестом — чи носить 0x28 цю форму; ворота повідомлень (одометр, TPMS…) мок не моделює */
-po('/api/map/test',q=>{const t=C.raise.find(x=>x.id===q.id);if(!t)return fail(404,'no such field');if(!t.fw)return fail(409,t.id+': protocol 112 has no field for it');if(!S.set.uartEnabled)return fail(409,'head-unit UART is off');
- if(t.cmd==='28'&&S.tun.cmd28)return fail(409,t.id+': 0x28 carries the A/C form now: switch it in Service, Raise');
- if(t.id==='prnd'&&!((S.huExp|0)&8))return fail(409,'prnd: switch on the selector experiment first');
- if(t.cmd==='28 A/C'&&!S.tun.cmd28)return fail(409,t.id+': 0x28 carries the outside temperature now: switch it in Service, Raise');
- const v=q.value;if(typeof v!=='number'||!(v>=t.min&&v<=t.max)||(t.kind==='b'&&v!==0&&v!==1))return fail(400,t.id+': value: '+t.min+'..'+t.max);
+po('/api/map/test',q=>{const t=C.raise.find(x=>x.id===q.id);if(!t)return fail(404,'not_found');if(!t.fw)return fail(409,t.id+': no_field_112');if(!S.set.uartEnabled)return fail(409,'uart_off');
+ if(t.cmd==='28'&&S.tun.cmd28)return fail(409,t.id+': form_ac');
+ if(t.id==='prnd'&&!((S.huExp|0)&8))return fail(409,'prnd: exp_gear_off');
+ if(t.cmd==='28 A/C'&&!S.tun.cmd28)return fail(409,t.id+': form_temp');
+ const v=q.value;if(typeof v!=='number'||!(v>=t.min&&v<=t.max)||(t.kind==='b'&&v!==0&&v!==1))return fail(400,t.id+': value: between '+t.min+' '+t.max);
  S.tests[t.id]={v,until:now()+30000};const b=frameFor(t,v);uart('T',b);S.hu.txVeh++;emit(2,'HU','[map] test '+t.id+' = '+v+' -> '+b);return {ok:true,bytes:b}});
 g('/api/canbox/last',q=>({total:S.hu.count,baud:S.set.uartBaud,frames:S.uartRing.slice().reverse().filter(e=>!(q&&q.in==='1')||e.dir==='R'||e.dir==='J').slice(0,14).map(e=>({...e,ageMs:now()-e.at}))}));
-po('/api/canbox/key',q=>{if(q.code===undefined)return fail(400,'code? (hex)');S.hu.txKey++;uart('T','2E 20 02 '+h2(parseInt(q.code,16)||0)+' 0'+(q.state||1)+' CS');return {__status:202,body:{ok:true,queued:true}}});
-po('/api/canbox/raw',q=>{if(q.cmd===undefined)return fail(400,'cmd? (hex)');const cmd=parseInt(q.cmd,16);if(!(cmd>=0&&cmd<=255))return fail(400,'cmd out of range');
- const d=String(q.data||'').replace(/[\s,:-]/g,'');if(!/^([0-9a-f]{2})*$/i.test(d))return fail(400,'data must be hex bytes');
+po('/api/canbox/key',q=>{if(q.code===undefined)return fail(400,'param code');S.hu.txKey++;uart('T','2E 20 02 '+h2(parseInt(q.code,16)||0)+' 0'+(q.state||1)+' CS');return {__status:202,body:{ok:true,queued:true}}});
+po('/api/canbox/raw',q=>{if(q.cmd===undefined)return fail(400,'param cmd');const cmd=parseInt(q.cmd,16);if(!(cmd>=0&&cmd<=255))return fail(400,'param cmd');
+ const d=String(q.data||'').replace(/[\s,:-]/g,'');if(!/^([0-9a-f]{2})*$/i.test(d))return fail(400,'param data');
  const b='2E '+h2(cmd)+' '+h2(d.length/2)+(d?' '+d.match(/../g).join(' ').toUpperCase():'')+' CS';uart('T',b);return {__status:202,body:{ok:true,queued:true,bytes:b}}});
 g('/api/messages',()=>({messages:S.msgs.map(m=>({...m}))}));
-po('/api/messages/send',q=>{if(q.id===undefined)return fail(400,'id?');const m=S.msgs[+q.id];if(!m||!m.ready)return fail(409,'no data for this message — pin its signals');uart('T',m.bytes);return ok});
+po('/api/messages/send',q=>{if(q.id===undefined)return fail(400,'param id');const m=S.msgs[+q.id];if(!m||!m.ready)return fail(409,'no_msg_data');uart('T',m.bytes);return ok});
 /* без since — як прошивка; since= — НОВЕ замість /ws */
 g('/api/logs',q=>q.since!==undefined?logsSince(+q.since||0):{lines:logSeq,dropped:0,ringSize:300,mounted:true,mountError:'',buffered:812,used:S.logs.used,total:S.logs.total,files:S.logs.files});
-g('/api/logs/file',q=>{const f=S.logs.files[+q.n||0];return f?{bytes:f.size}:fail(404,'no such log')});
+g('/api/logs/file',q=>{const f=S.logs.files[+q.n||0];return f?{bytes:f.size}:fail(404,'no_log')});
 g('/api/can',()=>({txEnabled:true,txGated:false,txGates:0,listenOnly:false,
  state:S.can.state,txErr:S.can.txErr,rxErr:S.can.rxErr,txFailed:0,rxMissed:0,busErr:S.can.busErr,arbLost:0,txQueued:0,twaiTxOk:S.can.twaiTxOk,twaiTxFail:S.can.twaiTxFail,twaiRx:S.can.twaiRx,twaiMode:'normal',
  rxFrames:S.can.twaiRx,ids:Object.keys(S.ids).length,frames:S.can.twaiRx,overflow:0,sniff:S.sniff,rxPin:6,txPin:7}));
@@ -511,13 +511,13 @@ po('/api/res',q=>{const r=resSt();if(typeof q.activeHigh==='boolean')r.activeHig
  if(q.timing)for(const k in r.timing)if(q.timing[k]>=0)r.timing[k]=q.timing[k]|0;
  r.timing.pulseMs=Math.max(50,r.timing.pulseMs);r.timing.gapMs=Math.max(20,r.timing.gapMs);if(typeof q.enabled==='boolean')r.enabled=q.enabled;
  emit(2,'KEY','res: '+(r.enabled?'on':'off'));return ok});
-po('/api/res/map',q=>{if(!C.actions.some(a=>a.id===q.action))return fail(400,'unknown action');const r=resSt(),x={...(r.slot[q.action]||{ch:0,mask:0,longMask:0})};
+po('/api/res/map',q=>{if(!C.actions.some(a=>a.id===q.action))return fail(400,'param action');const r=resSt(),x={...(r.slot[q.action]||{ch:0,mask:0,longMask:0})};
  for(const k of ['ch','mask','longMask'])if(q[k]>=0)x[k]=q[k]|0;r.slot[q.action]=x;return ok});
 po('/api/res/auto',q=>{const r=resSt(),c=q.ch|0,g=rungs(r.ch[c]).sort((a,b)=>a.ohms-b.ohms),w=resWant();let n=0;
  w.forEach((a,i)=>{if(i<g.length){r.slot[a]={ch:c,mask:g[i].mask,longMask:0};n++}});emit(2,'KEY','res: auto-assign ch'+c+' placed '+n+' of '+w.length);return {ok:true,wanted:w.length,placed:n}});
 po('/api/res/learn',q=>{const r=resSt();if(q.stop){r.learnUntil=[0,0];return ok}const ms=q.ms||4000;
- if(q.action){const x=r.slot[q.action];if(!x||!x.mask)return fail(409,'no rung, or its legs are not fitted');r.live[x.ch]=x.mask;r.learnUntil[x.ch]=now()+ms;return ok}
- if(!q.mask)return fail(400,'mask?');const c=q.ch|0;if(rOhms(r.ch[c],q.mask)===65535)return fail(409,'those legs are not fitted');r.live[c]=q.mask;r.learnUntil[c]=now()+ms;return ok});
+ if(q.action){const x=r.slot[q.action];if(!x||!x.mask)return fail(409,'res_no_legs');r.live[x.ch]=x.mask;r.learnUntil[x.ch]=now()+ms;return ok}
+ if(!q.mask)return fail(400,'param mask');const c=q.ch|0;if(rOhms(r.ch[c],q.mask)===65535)return fail(409,'res_no_legs');r.live[c]=q.mask;r.learnUntil[c]=now()+ms;return ok});
 g('/api/knobs',()=>({board:'T-2CAN',pins:{},pullup:{},maxLeds:160,...deep(S.kn),enc:{fitted:true,...deep(S.kn.enc)},enc2:{fitted:true,...deep(S.kn.enc2)},pot:{mode:'off',inverted:false,zones:8,min:0,max:4095,up:bind('None'),down:bind('None')}}));
 g('/api/knobs/live',()=>deep(S.knl));
 po('/api/knobs',q=>{for(const k of ['enc','enc2'])if(q[k])Object.assign(S.kn[k],deep(q[k]));if(q.led){const l=deep(q.led);Object.assign(S.kn.led,l)}return ok});
@@ -531,13 +531,13 @@ function macroWhy(m){const keys=(m.keys||[]).filter(k=>k&&k!=='None'),fx=C.enums
  if(m.trigger==='sequence')return !keys.length||!(m.taps>=2&&m.taps<=10)||m.windowMs<50?'sequence needs a key, 2..10 taps, window >= 50 ms':'';
  if(m.trigger==='hold')return !keys.length||!hold(keys[0])?'hold needs one key that can be held':'';return 'trigger is off'}
 /* НОВЕ: помилка "<index>: <why>" */
-po('/api/macros',q=>{const ms=q.macros;if(!Array.isArray(ms))return fail(400,'macros[]?');
- for(let i=0;i<ms.length&&i<8;i++){const m=ms[i];if(!/^[0-9a-f\s,:-]*$/i.test(m.data||''))return fail(400,i+': data must be hex bytes (max 8)');const w=macroWhy(m);if(m.enabled&&w)return fail(400,i+': '+w)}
+po('/api/macros',q=>{const ms=q.macros;if(!Array.isArray(ms))return fail(400,'param macros');
+ for(let i=0;i<ms.length&&i<8;i++){const m=ms[i];if(!/^[0-9a-f\s,:-]*$/i.test(m.data||''))return fail(400,i+': macro_hex 8');const w=macroWhy(m);if(m.enabled&&w)return fail(400,i+': macro_incomplete')}
  S.mac=Array.from({length:8},(_,i)=>{const m=ms[i];if(!m)return emptyMacro();const keys=(m.keys||[]).filter(k=>k&&k!=='None').slice(0,3);while(keys.length<3)keys.push('None');
   return {enabled:!!m.enabled,name:String(m.name||'').slice(0,19),trigger:m.trigger||'off',keys,taps:m.taps|0||3,windowMs:m.windowMs|0||600,swallow:m.swallow!==false,effect:m.effect||'none',action:m.action||'None',codeHex:h2(parseInt(m.codeHex,16)||0),data:m.data||'',arg:String(m.arg||'').slice(0,39)}});
  emit(2,'MAC','macros saved — '+S.mac.filter(m=>m.enabled).length+' active');return ok});
 po('/api/macros/defaults',()=>{S.mac=defMacros();return ok});
-po('/api/macros/test',q=>{if(q.id===undefined)return fail(400,'id?');const i=parseInt(q.id,10);if(!(i>=0&&i<8))return fail(400,'id out of range');if(S.mac[i].effect==='none')return fail(409,'this row has no effect');
+po('/api/macros/test',q=>{if(q.id===undefined)return fail(400,'param id');const i=parseInt(q.id,10);if(!(i>=0&&i<8))return fail(400,'param id');if(S.mac[i].effect==='none')return fail(409,'row_no_effect');
  S.macFires[i]++;S.macLive.fired++;emit(2,'MAC','test "'+S.mac[i].name+'"');return {__status:202,body:{ok:true,queued:true}}});
 g('/ota/start',()=>'OK');
 /* GhOta (src/net/GhOta.cpp): check -> available (наступний патч), install -> поступ -> перезавантаження */
@@ -549,11 +549,11 @@ const ghView=()=>{const v=S.gh||(S.gh={phase:'idle',latest:'',asset:'',size:0,go
  if(v.phase==='reboot'){v.phase='rebooting';S.fw=v.latest.slice(1);S.build='github '+v.latest;setTimeout(()=>{S.gh=null;doBoot()},1500)}
  return {fw:S.fw,env:'t2can',...v}};
 g('/api/fw',ghView);
-po('/api/fw/check',()=>{const v=ghView();if(S.wifi.mode!=='sta')return fail(409,'the board is on its own access point: join it to a WiFi network with internet');
- if(v.phase==='written')return fail(409,'an update is written and waits for the reboot');if(v.phase==='checking'||v.phase==='downloading')return fail(409,'a check or an update is already running');Object.assign(S.gh,{phase:'checking',at:now(),err:undefined,heapStart:S.heap,heapMin:S.heap});return ok});
-po('/api/fw/reboot',()=>{const v=ghView();if(v.phase!=='written')return fail(409,'nothing written to reboot into');S.gh.phase='reboot';return ok});
-po('/api/fw/install',()=>{const v=ghView();if(v.phase!=='available')return fail(409,'no newer release: check first');Object.assign(S.gh,{phase:'downloading',at:now(),got:0});return ok});
-po('/ota/upload',q=>{if(!q.size)return fail(400,'empty file');S.build='ota '+new Date().toISOString().slice(0,16);setTimeout(doBoot,200);return 'OK'});
+po('/api/fw/check',()=>{const v=ghView();if(S.wifi.mode!=='sta')return fail(409,'fw_ap');
+ if(v.phase==='written')return fail(409,'fw_written');if(v.phase==='checking'||v.phase==='downloading')return fail(409,'fw_running');Object.assign(S.gh,{phase:'checking',at:now(),err:undefined,heapStart:S.heap,heapMin:S.heap});return ok});
+po('/api/fw/reboot',()=>{const v=ghView();if(v.phase!=='written')return fail(409,'fw_nothing');S.gh.phase='reboot';return ok});
+po('/api/fw/install',()=>{const v=ghView();if(v.phase!=='available')return fail(409,'fw_no_newer');Object.assign(S.gh,{phase:'downloading',at:now(),got:0});return ok});
+po('/ota/upload',q=>{if(!q.size)return fail(400,'param file');S.build='ota '+new Date().toISOString().slice(0,16);setTimeout(doBoot,200);return 'OK'});
 function uart(dir,b){const p=b.split(' ');S.hu.count++;S.uartRing.push({dir,cmd:p[1]||'00',len:Math.max(0,p.length-4),total:p.length,at:now(),data:p.slice(3,-1).join(''),ascii:'',u16:false});if(S.uartRing.length>40)S.uartRing.shift()}
 
 /* ---- живий двигун симуляції ---- */
@@ -585,7 +585,7 @@ SIM._call=async function(m,path,params,hdr){
  const t0=now();await sleep(p==='/api/wifi/scan'?1800:p==='/ota/upload'?400:60+Math.random()*160);
  if(SIM.offline){JR.unshift({m,p:path,st:0,ms:now()-t0});jrDraw();throw new Error('немає зв’язку з платою')}
  let st=200,body;const fn=R[m+' '+p];
- if(m==='POST'&&SIM.nextErr){st=SIM.nextErr;SIM.nextErr=0;simErrUi();body={409:'conflict',503:'busy, try again'}[st]}
+ if(m==='POST'&&SIM.nextErr){st=SIM.nextErr;SIM.nextErr=0;simErrUi();body={409:'conflict',503:'busy'}[st]}
  /* src/net/RequestGate.h: зміна без X-MegaOpen — 403, як на платі */
  else if((m!=='GET'||p==='/ota/start')&&!(hdr&&hdr['X-MegaOpen']==='1')){st=403;body="a change needs the header X-MegaOpen: 1 (the board's own page sends it)";
   /* сторінка мала б його слати завжди: помилка в консоль ловиться tools/ui_audit.mjs (CI, job ui) */
