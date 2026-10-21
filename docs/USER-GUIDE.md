@@ -6,7 +6,8 @@ labels below are written as the app shows them. Flashing and wiring:
 
 ## First boot
 
-1. Join the board's WiFi `MegaOpen-XXXX`, password `megaopen`.
+1. Join the board's WiFi `MegaOpen-XXXX` (`XXXX` from the board's MAC
+   address), password `megaopen`.
 2. Open `http://192.168.4.1`. On **Плата → WiFi** add your home network.
 3. At home the board is at `http://megaopen.local` (or the IP your router
    gives it). Android before 12 does not resolve `.local`: use the IP.
