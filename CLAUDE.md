@@ -91,7 +91,7 @@ PlatformIO may not be on PATH: `~/.platformio/penv/Scripts/pio.exe`.
 | host tests | `pio test -e native` |
 | repo checks | `python tools/check_rules.py`, `tools/build_sim.py`, `tools/check_pages.py` |
 | USB flash | `pio run -e t2can -t upload --upload-port COMx` |
-| OTA | `H=$(md5sum firmware.bin \| cut -d' ' -f1); curl "$B/ota/start?mode=fr&hash=$H"; curl -F "file=@firmware.bin;filename=firmware.bin" "$B/ota/upload"` then wait for `[ota] CONFIRMED` |
+| OTA | `H=$(md5sum firmware.bin \| cut -d' ' -f1); curl -H "X-MegaOpen: 1" "$B/ota/start?mode=fr&hash=$H"; curl -H "X-MegaOpen: 1" -F "file=@firmware.bin;filename=firmware.bin" "$B/ota/upload"` then wait for `[ota] CONFIRMED`. `$B` must be the IP or `<name>.local` (Host check); every non-GET needs the `X-MegaOpen: 1` header |
 
 ## Library
 
