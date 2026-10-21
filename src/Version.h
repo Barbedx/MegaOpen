@@ -21,4 +21,7 @@ static_assert(sizeof(MEGAOPEN_VERSION_WIRE) == 17,
 namespace MegaOpen
 {
     const char* buildId();
+    // PlatformIO's env this image was built as ("t2can"): the GitHub update
+    // fetches megaopen-<env>-<ver>.bin. Stamped the same way as buildId().
+    const char* envName();
 }

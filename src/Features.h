@@ -70,6 +70,13 @@
 #error "FEATURE_CAPTURE needs FEATURE_LOGFS (the littlefs mount it writes to)"
 #endif
 
+// Firmware updates from GitHub Releases over STA (src/net/GhOta.*): TLS to
+// api.github.com and the asset CDN, mbedTLS in PSRAM for the job. The
+// T-2CAN's; the DevKit has no PSRAM to put the handshake in.
+#ifndef FEATURE_GH_OTA
+#define FEATURE_GH_OTA 0
+#endif
+
 // Media keys to the head unit as a wired USB keyboard (S3 native USB only; needs
 // ARDUINO_USB_MODE=0, i.e. TinyUSB). src/sinks/UsbKeySink.*.
 #ifndef FEATURE_USB_HID

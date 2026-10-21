@@ -64,6 +64,8 @@ else:
             return node
         defines = list(env.get("CPPDEFINES", []))
         defines.append(("MEGAOPEN_BUILD", env.StringifyMacro(BUILD)))
+        # The env name picks this image's asset in a GitHub release (src/net/GhOta.cpp).
+        defines.append(("MEGAOPEN_ENV", env.StringifyMacro(env["PIOENV"])))
         return env.Object(node, CPPDEFINES=defines)
 
     ENV.AddBuildMiddleware(stamp)

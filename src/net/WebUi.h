@@ -335,6 +335,9 @@ private:
 #if FEATURE_CAPTURE
     void routesCap();            // WebUiCap.cpp
 #endif
+#if FEATURE_GH_OTA
+    void routesGhOta();          // WebUiGhOta.cpp
+#endif
 
     PsychicHttpServer      _server;
     Cfg::Config*           _cfg = nullptr;

@@ -1,0 +1,173 @@
+#include <unity.h>
+#include <string.h>
+#include "net/GhRelease.h"
+
+// The GitHub update's decisions (src/net/GhRelease.h): which version is newer,
+// which asset is this board's, and which hash checks it. A wrong answer either
+// offers an older image as an update or flashes another board's image, so the
+// edges are pinned here.
+
+void setUp() {}
+void tearDown() {}
+
+using namespace GhRelease;
+
+static Ver V(const char* s)
+{
+    Ver v;
+    TEST_ASSERT_TRUE_MESSAGE(parse(s, v), s);
+    return v;
+}
+
+void test_parse_accepts_the_tag_and_the_bare_version()
+{
+    Ver v = V("v1.2.3");
+    TEST_ASSERT_EQUAL(1, v.maj); TEST_ASSERT_EQUAL(2, v.min); TEST_ASSERT_EQUAL(3, v.pat);
+    TEST_ASSERT_EQUAL(-1, v.rc);
+    v = V("10.0.12-rc4");
+    TEST_ASSERT_EQUAL(10, v.maj); TEST_ASSERT_EQUAL(12, v.pat); TEST_ASSERT_EQUAL(4, v.rc);
+}
+
+void test_parse_rejects_what_is_not_a_version()
+{
+    const char* bad[] = {"", "v", "1", "1.2", "1.2.", "1.2.3.4", "1.2.3-beta1", "1.2.3-rc",
+                         "1.2.3 ", "x1.2.3", "1.-2.3", "70000.0.0", "latest"};
+    for (const char* s : bad) {
+        Ver v;
+        TEST_ASSERT_FALSE_MESSAGE(parse(s, v), s);
+    }
+    Ver v;
+    TEST_ASSERT_FALSE(parse(nullptr, v));
+}
+
+void test_compare_orders_numbers_not_text()
+{
+    TEST_ASSERT_TRUE(compare(V("1.0.10"), V("1.0.9")) > 0);
+    TEST_ASSERT_TRUE(compare(V("1.10.0"), V("1.9.99")) > 0);
+    TEST_ASSERT_TRUE(compare(V("2.0.0"), V("1.99.99")) > 0);
+    TEST_ASSERT_EQUAL(0, compare(V("v1.0.0"), V("1.0.0")));
+}
+
+void test_an_rc_is_below_its_final_and_above_the_previous()
+{
+    TEST_ASSERT_TRUE(compare(V("1.0.1-rc1"), V("1.0.1")) < 0);
+    TEST_ASSERT_TRUE(compare(V("1.0.1"), V("1.0.1-rc9")) > 0);
+    TEST_ASSERT_TRUE(compare(V("1.0.1-rc2"), V("1.0.1-rc10")) < 0);
+    TEST_ASSERT_TRUE(compare(V("1.0.1-rc1"), V("1.0.0")) > 0);
+    TEST_ASSERT_EQUAL(0, compare(V("1.0.1-rc3"), V("1.0.1-rc3")));
+}
+
+// A trimmed /releases/latest as release.yml publishes it, run through the filter.
+static const char* REL =
+    "{\"url\":\"x\",\"tag_name\":\"v1.0.1\",\"name\":\"MegaOpen 1.0.1\",\"draft\":false,"
+    "\"prerelease\":false,\"body\":\"## notes\\nlong text\",\"assets\":["
+    "{\"name\":\"megaopen-t2can-1.0.1-factory.bin\",\"size\":2000000,\"browser_download_url\":"
+    "\"https://github.com/Barbedx/MegaOpen/releases/download/v1.0.1/megaopen-t2can-1.0.1-factory.bin\"},"
+    "{\"name\":\"megaopen-t2can_usbhid-1.0.1.bin\",\"size\":1400001,\"browser_download_url\":"
+    "\"https://github.com/Barbedx/MegaOpen/releases/download/v1.0.1/megaopen-t2can_usbhid-1.0.1.bin\"},"
+    "{\"name\":\"megaopen-t2can-1.0.1.bin\",\"size\":1386845,\"uploader\":{\"login\":\"b\"},"
+    "\"browser_download_url\":"
+    "\"https://github.com/Barbedx/MegaOpen/releases/download/v1.0.1/megaopen-t2can-1.0.1.bin\"},"
+    "{\"name\":\"SHA256SUMS\",\"size\":600,\"browser_download_url\":"
+    "\"https://github.com/Barbedx/MegaOpen/releases/download/v1.0.1/SHA256SUMS\"}]}";
+
+static Pick pickFrom(const char* json, const char* env, Release& r, JsonDocument& doc)
+{
+    JsonDocument f;
+    filter(f);
+    TEST_ASSERT_TRUE(deserializeJson(doc, json, DeserializationOption::Filter(f)) ==
+                     DeserializationError::Ok);
+    return pick(doc.as<JsonVariantConst>(), env, r);
+}
+
+void test_the_filter_keeps_only_what_pick_reads()
+{
+    JsonDocument doc;
+    Release r;
+    pickFrom(REL, "t2can", r, doc);
+    TEST_ASSERT_FALSE(doc["body"].is<const char*>());
+    TEST_ASSERT_FALSE(doc["assets"][2]["uploader"].is<JsonObject>());
+    TEST_ASSERT_EQUAL(4, doc["assets"].size());
+}
+
+void test_pick_takes_this_envs_app_image_not_factory_not_another_env()
+{
+    JsonDocument doc;
+    Release r;
+    TEST_ASSERT_TRUE(pickFrom(REL, "t2can", r, doc) == Pick::OK);
+    TEST_ASSERT_EQUAL_STRING("v1.0.1", r.tag);
+    TEST_ASSERT_EQUAL_STRING("megaopen-t2can-1.0.1.bin", r.asset);
+    TEST_ASSERT_EQUAL_UINT32(1386845, r.size);
+    TEST_ASSERT_EQUAL_STRING(
+        "https://github.com/Barbedx/MegaOpen/releases/download/v1.0.1/megaopen-t2can-1.0.1.bin", r.binUrl);
+    TEST_ASSERT_EQUAL_STRING("https://github.com/Barbedx/MegaOpen/releases/download/v1.0.1/SHA256SUMS",
+                             r.sumsUrl);
+
+    TEST_ASSERT_TRUE(pickFrom(REL, "t2can_usbhid", r, doc) == Pick::OK);
+    TEST_ASSERT_EQUAL_UINT32(1400001, r.size);
+    TEST_ASSERT_TRUE(pickFrom(REL, "direct", r, doc) == Pick::NO_ASSET);
+}
+
+void test_pick_refuses_a_prerelease_a_draft_and_a_bad_tag()
+{
+    JsonDocument doc;
+    Release r;
+    TEST_ASSERT_TRUE(pickFrom("{\"tag_name\":\"v1.0.1-rc1\",\"prerelease\":true,\"assets\":[]}", "t2can",
+                              r, doc) == Pick::DRAFT);
+    TEST_ASSERT_TRUE(pickFrom("{\"tag_name\":\"v1.0.1\",\"draft\":true,\"assets\":[]}", "t2can", r, doc) ==
+                     Pick::DRAFT);
+    TEST_ASSERT_TRUE(pickFrom("{\"tag_name\":\"nightly\",\"assets\":[]}", "t2can", r, doc) == Pick::NO_TAG);
+    TEST_ASSERT_TRUE(pickFrom("{\"message\":\"Not Found\"}", "t2can", r, doc) == Pick::NO_TAG);
+}
+
+void test_pick_wants_the_sums_file()
+{
+    JsonDocument doc;
+    Release r;
+    TEST_ASSERT_TRUE(pickFrom("{\"tag_name\":\"v1.0.1\",\"assets\":[{\"name\":\"megaopen-t2can-1.0.1.bin\","
+                              "\"size\":5,\"browser_download_url\":\"https://x/y.bin\"}]}",
+                              "t2can", r, doc) == Pick::NO_SUMS);
+}
+
+static const char* SUMS =
+    "0000000000000000000000000000000000000000000000000000000000000000  megaopen-t2can-1.0.1-factory.bin\n"
+    "AbCdEf0123456789abcdef0123456789ABCDEF0123456789abcdef0123456789  megaopen-t2can-1.0.1.bin\r\n"
+    "1111111111111111111111111111111111111111111111111111111111111111 *megaopen-direct-1.0.1.bin\n"
+    "2222222222222222222222222222222222222222222222222222222222222222  megaopen-t2can-1.0.1.bin.old";
+
+void test_sum_for_finds_the_exact_name_in_both_forms()
+{
+    uint8_t h[32];
+    TEST_ASSERT_TRUE(sumFor(SUMS, strlen(SUMS), "megaopen-t2can-1.0.1.bin", h));
+    TEST_ASSERT_EQUAL_HEX8(0xAB, h[0]);
+    TEST_ASSERT_EQUAL_HEX8(0xCD, h[1]);
+    TEST_ASSERT_EQUAL_HEX8(0x89, h[31]);
+    TEST_ASSERT_TRUE(sumFor(SUMS, strlen(SUMS), "megaopen-direct-1.0.1.bin", h));
+    TEST_ASSERT_EQUAL_HEX8(0x11, h[0]);
+}
+
+void test_sum_for_does_not_match_a_prefix_or_a_missing_name()
+{
+    uint8_t h[32];
+    TEST_ASSERT_FALSE(sumFor(SUMS, strlen(SUMS), "megaopen-t2can-1.0.1", h));
+    TEST_ASSERT_FALSE(sumFor(SUMS, strlen(SUMS), "megaopen-t2can_usbhid-1.0.1.bin", h));
+    const char* broken = "zz00000000000000000000000000000000000000000000000000000000000000  a.bin\n";
+    TEST_ASSERT_FALSE(sumFor(broken, strlen(broken), "a.bin", h));
+    TEST_ASSERT_FALSE(sumFor("", 0, "a.bin", h));
+}
+
+int main(int, char**)
+{
+    UNITY_BEGIN();
+    RUN_TEST(test_parse_accepts_the_tag_and_the_bare_version);
+    RUN_TEST(test_parse_rejects_what_is_not_a_version);
+    RUN_TEST(test_compare_orders_numbers_not_text);
+    RUN_TEST(test_an_rc_is_below_its_final_and_above_the_previous);
+    RUN_TEST(test_the_filter_keeps_only_what_pick_reads);
+    RUN_TEST(test_pick_takes_this_envs_app_image_not_factory_not_another_env);
+    RUN_TEST(test_pick_refuses_a_prerelease_a_draft_and_a_bad_tag);
+    RUN_TEST(test_pick_wants_the_sums_file);
+    RUN_TEST(test_sum_for_finds_the_exact_name_in_both_forms);
+    RUN_TEST(test_sum_for_does_not_match_a_prefix_or_a_missing_name);
+    return UNITY_END();
+}

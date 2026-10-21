@@ -38,7 +38,7 @@ function envCatalog(c0,F){const c=JSON.parse(JSON.stringify(c0));c.features=F?{.
 /* маршрути, що є лише з функцією (як #if у WebUi*.cpp); решта — в кожній збірці */
 const GATES=[[/^\/api\/(display|affamap|media)(\/|$)/,F=>F.display],[/^\/api\/ble(\/|$)/,F=>F.display&&F.ble],[/^\/api\/notifications$/,F=>F.ancs],
  [/^\/api\/can2$/,F=>F.can2],[/^\/api\/can(\/|$)/,F=>F.vehicle],[/^\/api\/cap(\/|$)/,F=>F.capture],[/^\/api\/knobs(\/|$)/,F=>F.knobs],
- [/^\/api\/keymap(\/|$)/,F=>F.matrix],[/^\/api\/res(\/|$)/,F=>F.res],[/^\/api\/logs\/(file|format)$/,F=>F.logfs]];
+ [/^\/api\/keymap(\/|$)/,F=>F.matrix],[/^\/api\/res(\/|$)/,F=>F.res],[/^\/api\/logs\/(file|format)$/,F=>F.logfs],[/^\/api\/fw(\/|$)/,F=>F.ghota]];
 const routeBuilt=p=>{const g=GATES.find(([re])=>re.test(p));return !g||!!g[1](CATALOG.features)};
 const C=CATALOG,LVL=C.enums.logLevels.map(e=>e.name),DESTS=C.dests.map(d=>d.id),DNAME=Object.fromEntries(C.dests.map(d=>[d.id,d.name]));
 const lay=id=>C.layouts.find(l=>l.id===id)||C.layouts.find(l=>l.id==='fullscreen');
@@ -508,6 +508,17 @@ po('/api/macros/defaults',()=>{S.mac=defMacros();return ok});
 po('/api/macros/test',q=>{if(q.id===undefined)return fail(400,'id?');const i=parseInt(q.id,10);if(!(i>=0&&i<8))return fail(400,'id out of range');if(S.mac[i].effect==='none')return fail(409,'this row has no effect');
  S.macFires[i]++;S.macLive.fired++;emit(2,'MAC','test "'+S.mac[i].name+'"');return {__status:202,body:{ok:true,queued:true}}});
 g('/ota/start',()=>'OK');
+/* GhOta (src/net/GhOta.cpp): check -> available (наступний патч), install -> поступ -> перезавантаження */
+const ghNext=()=>{const p=S.fw.split('.').map(Number);p[2]++;return p.join('.')};
+const ghView=()=>{const v=S.gh||(S.gh={phase:'idle',latest:'',asset:'',size:0,got:0,heapStart:0,heapMin:0,tlsInPsram:true});
+ if(v.phase==='checking'&&now()-v.at>1200){v.phase='available';v.latest='v'+ghNext();v.asset='megaopen-t2can-'+ghNext()+'.bin';v.size=1572353}
+ if(v.phase==='downloading'){v.got=Math.min(v.size,Math.round((now()-v.at)/6000*v.size));v.heapMin=Math.min(v.heapMin,v.heapStart-Math.round(rnd(3000,6000)));
+  if(v.got>=v.size){v.phase='rebooting';S.fw=v.latest.slice(1);S.build='github '+v.latest;setTimeout(()=>{S.gh=null;doBoot()},1500)}}
+ return {fw:S.fw,env:'t2can',...v}};
+g('/api/fw',ghView);
+po('/api/fw/check',()=>{const v=ghView();if(S.wifi.mode!=='sta')return fail(409,'the board is on its own access point: join it to a WiFi network with internet');
+ if(v.phase==='checking'||v.phase==='downloading')return fail(409,'a check or an update is already running');Object.assign(S.gh,{phase:'checking',at:now(),err:undefined,heapStart:S.heap,heapMin:S.heap});return ok});
+po('/api/fw/install',()=>{const v=ghView();if(v.phase!=='available')return fail(409,'no newer release: check first');Object.assign(S.gh,{phase:'downloading',at:now(),got:0});return ok});
 po('/ota/upload',q=>{if(!q.size)return fail(400,'empty file');S.build='ota '+new Date().toISOString().slice(0,16);setTimeout(doBoot,200);return 'OK'});
 function uart(dir,b){const p=b.split(' ');S.hu.count++;S.uartRing.push({dir,cmd:p[1]||'00',len:Math.max(0,p.length-4),total:p.length,at:now(),data:p.slice(3,-1).join(''),ascii:'',u16:false});if(S.uartRing.length>40)S.uartRing.shift()}
 

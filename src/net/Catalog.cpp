@@ -143,7 +143,7 @@ namespace Catalog
     // affamap; ble (with display) = /api/ble; ancs = /api/notifications;
     // vehicle = /api/can*; can2 = /api/can2; capture = /api/cap*;
     // knobs = /api/knobs*; matrix = /api/keymap*; res = /api/res*; logfs =
-    // /api/logs/file; usb and uart = routing destinations.
+    // /api/logs/file; ghota = /api/fw*; usb and uart = routing destinations.
     // Macros, routing, the map and the Raise console are in every image.
     #define FEATURE_ROW(id, m) {id, #m, (m) != 0}
     const Feature FEATURES[] = {
@@ -159,6 +159,7 @@ namespace Catalog
         FEATURE_ROW("logfs",   FEATURE_LOGFS),
         FEATURE_ROW("usb",     FEATURE_USB_HID),
         FEATURE_ROW("uart",    FEATURE_CANBOX_UART),
+        FEATURE_ROW("ghota",   FEATURE_GH_OTA),
     };
     #undef FEATURE_ROW
     const size_t FEATURE_COUNT = sizeof(FEATURES) / sizeof(FEATURES[0]);

@@ -139,16 +139,20 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   connect; in AP mode `192.168.4.1`. Part of the UI rework (mockup:
   ui-audit workflow 2026-10-16).
 - **Firmware updates over the internet from GitHub Releases (owner,
-  2026-10-19).** A tag builds `firmware-t2can.bin` (and the other envs) in
-  GitHub Actions and attaches it to a Release with its SHA-256. The board, in
-  STA mode, reads `releases/latest` from the GitHub API, compares the tag
-  with `fw`, and on the owner's tap on Плата downloads the asset over HTTPS
-  into the free OTA slot (esp_https_ota), checks the hash, and reboots
-  through the same trial/rollback as the local OTA. Questions to settle
-  first: whether the repo is public (a private one needs a token on every
-  board); whether it is automatic or only "check + button" (never mid-drive:
-  only with ACC on and the car parked, or from the page); and whether the TLS
-  heap fits (~40 kB; on the T-2CAN put mbedTLS in PSRAM).
+  2026-10-19) — WRITTEN 2026-10-21, not yet run on a board.** Плата → «З
+  GitHub»: Перевірити reads `releases/latest` (public repo, no token; finals
+  only, prereleases are skipped), compares the tag with `MEGAOPEN_VERSION`
+  (an rc orders below its final); Оновити downloads
+  `megaopen-<env>-<ver>.bin` into the free slot while hashing it, and sets the
+  boot partition only when the SHA-256 matches the release's `SHA256SUMS`;
+  then the usual OTA trial. Never automatic; refused in AP mode and while the
+  car's speed is fresh and above 3 km/h. `src/net/GhOta.*` (task, TLS),
+  `GhRelease.*` (decisions, `test_ghota`), `GhRoots.h` (the trusted roots,
+  chains checked 2026-10-21), routes `/api/fw*`. `FEATURE_GH_OTA` is on for
+  the T-2CAN envs, off for `direct` (no PSRAM for the handshake). Still to
+  measure on the board: internal heap during a download (`[ota] github: …
+  heap min`, also in `/api/fw`). Known limit: the API allows 60 unauthenticated
+  checks an hour per public address, and the page says so on a 403.
 - **BLE pairing vs a phone on the board's AP, on the S3 (2026-10-16).** On the
   T-2CAN the iPhone could not pair while it was joined to `MegaOpen-4580`; off
   that WiFi it connected. Same symptom as the 2026-08-07 DevKit bug, fixed then

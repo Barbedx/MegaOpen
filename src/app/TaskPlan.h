@@ -104,6 +104,14 @@ namespace App
         constexpr int         BLE_CORE  = 0;
         constexpr uint32_t    BLE_STACK = 4096;
 
+        // The GitHub update (src/net/GhOta.h): one job, created by a tap on
+        // the page and deleted after it, so not in the registry. Below
+        // everything on the WiFi core. The stack holds the TLS handshake and
+        // must be internal: Update writes flash with the cache off.
+        constexpr UBaseType_t GHOTA_PRIO  = 1;
+        constexpr int         GHOTA_CORE  = 0;
+        constexpr uint32_t    GHOTA_STACK = 8192;
+
         // LogBus: below everything, on the WiFi core.
         constexpr UBaseType_t LOGBUS_PRIO = 1;
         constexpr int         LOGBUS_CORE = 0;
