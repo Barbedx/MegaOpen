@@ -107,7 +107,11 @@ SCR.keys={title:'Кнопки',async render(m){
  mAddOk();
  $('#mDef').onclick=e=>ask(e.target,'Замінити всі макроси прикладами?',()=>run(e.target,()=>API.post('/api/macros/defaults')).then(()=>route()));
  /* підсвітка натискань: окреме швидке опитування, лише поки відкрита вкладка */
- if(D||K||RS){const fast=setInterval(()=>{if(D)this.live().catch(()=>{});if(K)API.get('/api/knobs/live').then(kl=>this.knobTest(kl)).catch(()=>{});if(RS)resLive().catch(()=>{})},K?250:300);leave=()=>clearInterval(fast)}
+ /* лише коли сторінку видно і картка на екрані: інакше ~9 запитів/с без потреби */
+ if(D||K||RS){const fast=setInterval(()=>{if(document.hidden)return;
+   if(D&&onScreen($('#kWheel')))this.live().catch(()=>{});
+   if(K&&($$('.knob',m).some(onScreen)))API.get('/api/knobs/live').then(kl=>this.knobTest(kl)).catch(()=>{});
+   if(RS&&onScreen($('#kRes')))resLive().catch(()=>{})},K?250:300);leave=()=>clearInterval(fast)}
  this.n=0;await this.tick();
 },async live(){const r=await API.get('/api/affamap?live=1');const L=r.last;if(!L||L.seq===this.seq||!$('#affa'))return;this.seq=L.seq;
  $$('#affa .krow').forEach(x=>x.classList.remove('hitC','hitH'));$$('#affa .ka').forEach(x=>x.classList.remove('hit'));

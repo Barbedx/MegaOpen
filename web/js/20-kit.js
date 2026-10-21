@@ -12,6 +12,8 @@ const enumOf=(n,v)=>enumList(n).find(e=>String(e.v!==undefined?e.v:e.id)===Strin
    і не малює карток без них. getIf — запит, коли функція є, інакше null */
 const has=f=>!!(CAT&&CAT.features&&CAT.features[f]);
 const getIf=(ok,p)=>ok?API.get(p):Promise.resolve(null);
+/* картка на екрані (хоч рядок видно): швидке опитування лише тоді — плата одна, а в машині ще й Bluetooth на тому ж радіо */
+const onScreen=el=>{if(!el)return false;const r=el.getBoundingClientRect();return r.bottom>0&&r.top<innerHeight&&r.height>0};
 const notBuilt=(title,what)=>card(title,`<div class="row muted">у цій збірці ${esc(what)} немає</div>`,'','custom');
 const noneAction=()=>(CAT.actions.find(a=>a.class==null)||{}).id;
 const byId=(list,id)=>(list||[]).find(x=>x.id===id);
