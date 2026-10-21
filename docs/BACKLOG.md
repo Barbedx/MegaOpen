@@ -190,6 +190,27 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   Re-test with the log over WiFi (no COM4), read `disconnected reason=`.
 
 ### Build / code health
+- **Internal heap, two levers not taken yet** (audit 2026-10-21; the log ring
+  and request-only statics already moved to PSRAM). Both need a board soak,
+  and the first a phone:
+  - *NimBLE host memory in PSRAM*, ~8-12 kB: `-D
+    CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=1` (NimBLE-Arduino 2.5.1,
+    `esp_port/exp_nimble_mem.c`). Moves msys (12 × 256), ACL from the
+    controller (12 × 255), the event buffers (30 × 70 + 8 × 257) and the host
+    pools; the controller stays internal. Held back: BLE is the riskiest path
+    (the 0x208 drops). Test pairing, AMS/ANCS and key latency; read the
+    `[mem]` marks around `ble.begin`.
+  - *The malloc threshold*, ~3-10 kB (uncertain):
+    `SPIRAM_MALLOC_ALWAYSINTERNAL=4096` keeps every malloc/new of 4 kB or
+    less internal (String, std::function, NimBLE-Arduino and PsychicHttp
+    objects, ArduinoJson pools). `heap_caps_malloc_extmem_enable(512)` first
+    thing in setup() lowers it. Risk: a plain-malloc buffer used by DMA or
+    with the cache off; check before trying, then compare `[hb]` idle and
+    soak.
+  - Fixed by the prebuilt sdkconfig, not ours to change: no
+    `EXT_RAM_BSS_ATTR` (BSS in PSRAM is off), no task stacks in PSRAM, WiFi
+    static RX buffers, the BT controller (`BLE_MAX_ACT` 6), mbedTLS internal
+    allocation, the coredump stack.
 - **`AFFA_ENABLE_TASK=0` on purpose.** The loop task owns `poll()` and sleeps
   in `TwaiLink::waitRx()` paced by `affa::WakePacer`, the same wake `AffaTask`
   has. It stays the loop because the same pass
