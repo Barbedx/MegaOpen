@@ -7,6 +7,10 @@
 #
 #   tools/rc_smoke.sh http://192.168.1.50 [mdns-name]
 #
+# Against the simulator's mock, no board: `node tools/sim_http.mjs build/ui-sim.html`
+# then `tools/rc_smoke.sh http://127.0.0.1:8077`. Six checks are the firmware's
+# alone there and fail (the Host check x3, /update x2, the log ring's size).
+#
 # Needs bash and curl. ASCII output, one line a check; exit 1 when any fails.
 set -u
 
@@ -61,7 +65,7 @@ esac
 # ---- the request gate (src/net/RequestGate.h) ---------------------------------
 req gate_nohdr POST '/api/settings?dry=1' -H 'Content-Type: application/json' --data '{}'
 expect_code "POST without X-MegaOpen refused" 403
-has "  403 names the header" "X-MegaOpen"
+has "  403 is gate_header" "^gate_header$"
 
 req gate_hdr POST '/api/settings?dry=1' "${GATE[@]}" -H 'Content-Type: application/json' --data '{}'
 expect_code "POST with X-MegaOpen (dry run)" 200
@@ -79,7 +83,7 @@ expect_code "POST /api/wifi/scan without the header refused" 403
 
 req host_evil GET /api/status -H 'Host: evil.example'
 expect_code "Host evil.example refused (rebinding)" 403
-has "  403 names where to go" "http://"
+has "  403 is gate_host with where to go" "^gate_host http://"
 
 req host_router GET /api/status -H "Host: $NAME.fritz.box"
 expect_code "a router's name refused" 403
@@ -107,8 +111,9 @@ DEVMODE=$(grep -o '"devMode": *[a-z]*' "$BODY" | head -1)
 req bad_two POST '/api/settings?dry=1' "${GATE[@]}" -H 'Content-Type: application/json' \
     --data '{"keyPopup":"x","logLevel":"NOPE"}'
 expect_code "two bad values refused" 400
-has "  keyPopup listed" "keyPopup"
-has "  logLevel listed (every refusal, not the first)" "logLevel"
+# Codes, one refusal a line ("key: code"): the page has the words (web/i18n e.*).
+has "  keyPopup: bool" "^keyPopup: bool$"
+has "  logLevel: enum (every refusal, not the first)" "^logLevel: enum$"
 
 req config GET /api/config
 expect_code "GET /api/config" 200
@@ -123,17 +128,19 @@ has "  nothing would change" '"changes": *\[\]'
 req config_newer POST '/api/config?dry=1' "${GATE[@]}" -H 'Content-Type: application/json' \
     --data '{"format":"megaopen-config","schema":99,"settings":{}}'
 expect_code "a newer schema refused" 400
+has "  file_newer" "^file_newer$"
 
 req config_pass POST '/api/config?dry=1' "${GATE[@]}" -H 'Content-Type: application/json' \
     --data '{"format":"megaopen-config","schema":1,"settings":{"apPass":"xxxxxxxxxx"}}'
 expect_code "a file carrying apPass refused" 400
+has "  apPass: file_forbidden" "^apPass: file_forbidden$"
 
 # ---- the dev-only route ---------------------------------------------------------
 req inforaw POST '/api/display/inforaw?len=0x0C&text=rc' "${GATE[@]}"
 case "$DEVMODE" in
     *true) echo "SKIP  inforaw: devMode is on (switch it off and rerun to check the 403)" ;;
     *)     if [ "$CODE" = 404 ]; then echo "SKIP  inforaw: no display in this build"
-           else expect_code "inforaw refused without devMode" 403; fi ;;
+           else expect_code "inforaw refused without devMode" 403; has "  dev_off" "^dev_off$"; fi ;;
 esac
 
 # ---- health: the HU dialect and the panel bus watch -----------------------------

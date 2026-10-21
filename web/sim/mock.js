@@ -198,7 +198,7 @@ const W={panel:[['panel_unregistered','registration lost — panel is not comple
 function health(){
  const d=S.disp,ch=[],chain=(id,state,i,x)=>{const[code]=W[id][i],o={id,state,code,...(x||{})};ch.push(o);return o};
  const reg=d.registered,tr=curTrack(),ck=clockStrOrEmpty(),F=C.features;
- if(F.display){chain('panel',reg?'ok':'broken',reg?1:0,{rxFrames:S.can.twaiRx,rxPin:6,txPin:7,resyncs:d.sessionsLost,txGated:false});
+ if(F.display){chain('panel',reg?'ok':'broken',reg?1:0,{rxFrames:S.can.twaiRx,rxPin:6,txPin:7,resyncs:d.sessionsLost,txGated:false,foreignMasters:0,clusterPings:0});
  const mi=!S.med.auto?0:!reg?1:!phone()&&mediaSrc()!=='hu'?2:!tr.title?3:4;
  chain('media',!S.med.auto?'off':mi<4?'idle':'ok',mi,{title:tr.title,artist:tr.artist,clock:ck,delivered:1834,superseded:12,failed:0});
  {const ci=!S.set.autoTime?0:ck?(phone()?1:2):phone()?3:4;chain('clock',!ci?'off':ci<3?'ok':'idle',ci,{hhmm:ck,src:['','cts','hu','',''][ci]})}}
@@ -207,7 +207,7 @@ function health(){
  if(!F.ancs)ch.push({id:'ancs',state:'off',code:'ancs_off'});
  else chain('ancs',S.ntf.length&&phone()?'ok':'idle',S.ntf.length&&phone()?0:!phone()?1:2,{count:S.ntf.length,popup:S.set.ancsPopup});
  const hi=!S.set.uartEnabled?0:!F.display?(S.hu.rx?4:1):!S.hu.connected?(S.hu.rx?2:1):3;
- chain('hu',hi===0?'off':hi===3?'ok':'idle',hi,{rxFrames:S.hu.rx,junk:0,badCs:0,dialect:S.hu.rx?'toyota':'unknown',notSupported:0});
+ chain('hu',hi===0?'off':hi===3?'ok':'idle',hi,{rxFrames:S.hu.rx,junk:0,badCs:0,dialect:S.hu.rx?'toyota':'unknown',notSupported:0,climateChanges:0});
  if(F.knobs){const kl=S.knl||{},e=kl.enc||{},e2=kl.enc2||{};
   ch.push({id:'knobs',state:'ok',code:'knobs_ok',addr:0x3F,i2cErrors:0,right:e.pos||0,left:e2.pos||0,clicks:(e.clicks||0)+(e2.clicks||0),lineErrors:0});
   const on=S.kn.led&&S.kn.led.enabled;ch.push(on?{id:'lights',state:'ok',code:'lights_ok',leds:10,frames:0}:{id:'lights',state:'off',code:'lights_off'})}
@@ -254,12 +254,15 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
  let MG=null;if(q.huMessages!==undefined){if(!Array.isArray(q.huMessages)||q.huMessages.length>S.msgs.length)return fail(400,'huMessages: rows_max '+S.msgs.length);
   MG=q.huMessages.map((a,i)=>Array.isArray(a)&&a[0]!=null?a[0]:S.msgs[i].enabled);
   const bad=MG.findIndex(x=>typeof x!=='boolean');if(bad>=0)return fail(400,'huMessages '+(bad+1)+': on: bool')}
- /* реєстр (catalog.settings): невідоме значення enum -> 400, число в межі, як прошивка */
+ /* реєстр (catalog.settings): невідоме значення enum -> 400, число в межі, як прошивка; кожна відмова
+    окремим рядком "ключ: код" (SettingsJson::read), і нічого не записано */
+ const errs=[],put=[];
  for(const f of C.settings||[]){if(f.type==='group'||f.type==='table'||q[f.id]===undefined||['bleMode','mediaSource','huTitleCmd','huArtistCmd'].includes(f.id))continue;
-  if(f.ro)return fail(400,f.id+': ro');
-  if(f.type==='enum'&&!f.enum.some(o=>o.v===q[f.id]))return fail(400,f.id+': enum');
-  if(f.type==='str'&&!(typeof q[f.id]==='string'&&q[f.id].length<=f.max&&/^[ -~]*$/.test(q[f.id])))return fail(400,f.id+': text');
-  if(f.reboot&&q[f.id]!==s[f.id])rb=true;
+  const v=q[f.id],why=f.ro?'ro':f.type==='bool'&&typeof v!=='boolean'?'bool':f.type==='int'&&typeof v!=='number'?'number':
+   f.type==='enum'&&!f.enum.some(o=>o.v===v)?'enum':f.type==='str'&&!(typeof v==='string'&&v.length<=f.max&&/^[ -~]*$/.test(v))?'text':'';
+  if(why){errs.push(f.id+': '+why);continue}put.push(f)}
+ if(errs.length)return fail(400,errs.join('\n'));
+ for(const f of put){if(f.reboot&&q[f.id]!==s[f.id])rb=true;
   s[f.id]=f.type==='int'?Math.min(f.max,Math.max(f.min,+q[f.id])):q[f.id]}
  if(q.logLevel!==undefined){S.logLevel=LVL.indexOf(q.logLevel);delete s.logLevel}
  for(const[k,[,back]]of Object.entries(RAISE))if(q['raise.'+k]!==undefined){S.tun[k]=back(s['raise.'+k]);delete s['raise.'+k]}
@@ -385,6 +388,8 @@ po('/api/cap/start',()=>{const c=S.cap;if(!c.recording){c.recording=true;c.sessi
  S.files.push({f:String(Math.max(...S.files.map(f=>+f.f),0)+1).padStart(4,'0'),session:c.session,part:0,size:0,wall:unixNow(),protected:false,current:true});c.markers=0}return ok});
 po('/api/cap/stop',()=>{S.cap.recording=false;S.files.forEach(f=>f.current=false);return ok});
 po('/api/cap/mark',q=>{S.cap.markers++;if(S.cap.recording&&S.cap.settings.autoProtect){const f=S.files.find(x=>x.current);if(f)S.files.filter(x=>x.session===f.session).forEach(x=>x.protected=true)}emit(2,'CAP','marker "'+(q.t||'')+'"');return ok});
+/* і GET, як на платі (мітку можна вбити в адресний рядок), але теж лише з X-MegaOpen */
+g('/api/cap/mark',q=>R['POST /api/cap/mark'](q));
 const fileOf=q=>S.files.find(x=>+x.f===parseInt(q.f,10));
 g('/api/cap/list',()=>({files:S.files.map(f=>({...f,current:!!f.current}))}));
 g('/api/cap/get',q=>{if(!parseInt(q.f,10))return fail(400,'param f');return fileOf(q)?{bytes:fileOf(q).size}:fail(404,'no_capture')});
@@ -587,10 +592,10 @@ SIM._call=async function(m,path,params,hdr){
  let st=200,body;const fn=R[m+' '+p];
  if(m==='POST'&&SIM.nextErr){st=SIM.nextErr;SIM.nextErr=0;simErrUi();body={409:'conflict',503:'busy'}[st]}
  /* src/net/RequestGate.h: зміна без X-MegaOpen — 403, як на платі */
- else if((m!=='GET'||p==='/ota/start')&&!(hdr&&hdr['X-MegaOpen']==='1')){st=403;body="a change needs the header X-MegaOpen: 1 (the board's own page sends it)";
+ else if((m!=='GET'||p==='/ota/start'||p==='/api/cap/mark')&&!(hdr&&hdr['X-MegaOpen']==='1')){st=403;body='gate_header';
   /* сторінка мала б його слати завжди: помилка в консоль ловиться tools/ui_audit.mjs (CI, job ui) */
   console.error('[sim] '+m+' '+p+' without X-MegaOpen')}
- else if(!fn||!routeBuilt(p)){st=404;body='not found'}
+ else if(!fn||!routeBuilt(p)){st=404;body='not_found'}
  else{try{const r=fn(q);if(r&&r.__status){st=r.__status;body=r.body}else body=r}catch(e){st=500;body=e.message}}
  JR.unshift({m,p:path,st,ms:now()-t0});if(JR.length>60)JR.pop();jrDraw();
  if(st>=400)throw Object.assign(new Error(errMsg(body,st)),{status:st,body});
