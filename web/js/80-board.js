@@ -48,7 +48,7 @@ SCR.board={title:'Плата',async render(m){
  $('[data-k="rb:/api/settings|bleMode"]').addEventListener('change',e=>{$('#bHint').textContent=BLEHINT[e.target.value]||''});
  $('#bForget').onclick=e=>ask(e.target,'Забути всі пари? На iPhone теж: Bluetooth → MEGA → Забути.',()=>run(e.target,()=>API.post('/api/ble/unbond')).then(()=>this.tick()))}
  $('#devSw').onchange=e=>{DEV=e.target.checked;try{localStorage.setItem('mo-dev',DEV?'1':'0')}catch(x){}devUi();API.post('/api/settings',{devMode:DEV}).catch(()=>{})};
- $('#wScan').onclick=e=>run(e.target,async()=>{$('#wList').innerHTML='<div class="row muted">шукаю ~2 с…</div>';const r=await API.get('/api/wifi/scan');
+ $('#wScan').onclick=e=>run(e.target,async()=>{$('#wList').innerHTML='<div class="row muted">шукаю ~2 с…</div>';const r=await API.post('/api/wifi/scan');
   $('#wList').innerHTML=r.networks.sort((a,b)=>b.rssi-a.rssi).map(n=>`<button class="net" type="button" data-ssid="${esc(n.ssid)}">${bars(n.rssi)}<b>${esc(n.ssid)}</b><span class="muted">${n.secure?'пароль':'відкрита'} · ${n.rssi}</span></button>`).join('');return {note:r.count+' мереж'}});
  $('#wList').onclick=e=>{const b=e.target.closest('[data-ssid]');if(!b)return;const i=$('[data-k="rb:/api/wifi|ssid"]');i.value=b.dataset.ssid;i.dispatchEvent(new Event('input',{bubbles:true}));$('[data-k="rb:/api/wifi|pass"]').focus()};
  $('#otaGo').onclick=async e=>{const f=$('#otaF').files[0];const b=e.target;if(!f){sv(svOf(b),'bad','вибери .bin');return}b.disabled=true;$('#otaP').hidden=false;const s=svOf(b);

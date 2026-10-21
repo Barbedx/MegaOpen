@@ -343,6 +343,8 @@ private:
 #endif
     // Host and X-MegaOpen (RequestGate.h), for dispatch() and the OTA filter.
     RequestGate::Why gateWhy(PsychicRequest* r);
+    // The mDNS name at boot: still announced after a rename until a restart.
+    char _bootName[33] = {0};
     void gateOta();              // after ElegantOTA.begin(): its endpoints gated too
 
     PsychicHttpServer      _server;

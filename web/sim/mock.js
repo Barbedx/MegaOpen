@@ -348,7 +348,7 @@ g('/api/affamap',q=>{const b={unmapped:S.unm,events:S.affaEvents,last:S.last};if
  return {rows:S.affa.map(r=>{const eff=r.code||parseInt((C.actions.find(a=>a.id===r.action)||{hu:''}).hu,16)||0;return {...r,effective:eff,effectiveName:(C.huKeys.find(k=>parseInt(k.code,16)===eff)||{name:'?'}).name}}),...b}});
 po('/api/affamap',q=>{let n=0;for(const r of q.rows||[]){const x=S.affa[r.index];if(!x)continue;x.action=C.actions.some(a=>a.id===r.action)?r.action:'None';x.code=(r.code|0)&255;x.asLong=!!r.asLong;n++}emit(2,'KEY','stalk mapping saved ('+n+' rows)');return {ok:true,applied:n}});
 po('/api/affamap/defaults',()=>{S.affa=defAffa();return ok});
-g('/api/wifi/scan',()=>({networks:S.nets.map(n=>({...n,rssi:Math.round(n.rssi+rnd(-3,3))})),count:S.nets.length,current:S.wifi.mode==='sta'?S.wifi.ssid:''}));
+po('/api/wifi/scan',()=>({networks:S.nets.map(n=>({...n,rssi:Math.round(n.rssi+rnd(-3,3))})),count:S.nets.length,current:S.wifi.mode==='sta'?S.wifi.ssid:''}));
 /* НОВЕ (зріз 4): ssid2/pass2; порожній пароль = той самий, поки назва та сама; pendingReboot, коли щось змінилось.
    pendingReboot лише за першу мережу; друга (WifiManager::setNet2) діє без перезавантаження, з наступної спроби з точки */
 po('/api/wifi',q=>{const h1=typeof q.ssid==='string',h2=typeof q.ssid2==='string',bad=p=>p&&(p.length<8||p.length>64);

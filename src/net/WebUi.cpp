@@ -194,6 +194,10 @@ void WebUi::begin(Cfg::Config& cfg, KeyEngine& engine, KeyMap& map,
                       (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
     };
     mem("start");
+    {
+        Cfg::Config::Guard g(*_cfg);
+        snprintf(_bootName, sizeof(_bootName), "%s", _cfg->s().mdnsName.c_str());
+    }
     _server.listen(80);
     mem("listen");
     routes();
@@ -232,7 +236,7 @@ RequestGate::Why WebUi::gateWhy(PsychicRequest* r)
     const http_method m = r->method();
     return RequestGate::check(r->host().c_str(), _cfg->s().mdnsName.c_str(),
                               m == HTTP_GET || m == HTTP_HEAD, r->path().c_str(),
-                              r->header(RequestGate::HEADER).c_str());
+                              r->header(RequestGate::HEADER).c_str(), _bootName);
 }
 
 // ElegantOTA registers its own handlers: /ota/start and /ota/upload pass the
@@ -306,6 +310,14 @@ esp_err_t WebUi::dispatch(PsychicRequest* r)
     if (why != RequestGate::Why::Ok) {
         LogBus::printf("[web] refused %s %s: %s", http_method_str(m), path.c_str(),
                        why == RequestGate::Why::Host ? "host" : "no X-MegaOpen");
+        if (why == RequestGate::Why::Host) {
+            // Say where it IS reachable: the address this request came in on.
+            static char w[160];
+            const String ip = r->client()->localIP().toString();
+            snprintf(w, sizeof(w), "%s: use http://%s/ or http://%s.local/", RequestGate::whyText(why),
+                     ip.c_str(), _cfg->s().mdnsName.length() ? _cfg->s().mdnsName.c_str() : "megaopen");
+            return r->reply(403, "text/plain", w);
+        }
         return r->reply(403, "text/plain", RequestGate::whyText(why));
     }
 #if HEAP_HUNT
@@ -885,9 +897,11 @@ void WebUi::routes()
     // ElegantOTA's own update page cannot send X-MegaOpen, so it is off
     // (gateOta()); its address leads to the Плата page, which updates.
     route("/update", HTTP_GET, [](PsychicRequest* r) {
-        return r->reply(200, "text/html",
-                        "<!doctype html><meta http-equiv=\"refresh\" content=\"0;url=/#board\">"
-                        "<a href=\"/#board\">Плата › Оновлення прошивки</a>");
+        // 302, not the library's redirect() (301, which a browser keeps).
+        PsychicResponse resp(r);
+        resp.setCode(302);
+        resp.addHeader("Location", "/#board");
+        return resp.send();
     });
 
     route("/api/reboot", HTTP_POST, [](PsychicRequest* r) {
@@ -1113,7 +1127,7 @@ void WebUi::routes()
     // each destination's mask and liveness is the keys chain of /api/health.
 
     // Blocks for a couple of seconds; explicit request only.
-    route("/api/wifi/scan", HTTP_GET, [this](PsychicRequest* r) {
+    route("/api/wifi/scan", HTTP_POST, [this](PsychicRequest* r) {
         if (_wifi) _wifi->scanBegin();
         const int n = WiFi.scanNetworks();
         JsonDocument d;

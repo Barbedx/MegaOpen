@@ -11,9 +11,11 @@
 //    A DNS-rebinding page reaches the board under ITS domain, so its reads
 //    are refused. A router's name for the board (megaopen.fritz.box) is not
 //    accepted: use the IP or .local.
-//  * Writes carry `X-MegaOpen: 1`: every method but GET/HEAD, and GET
-//    /ota/start, which starts an update. A browser cannot send a custom header
-//    cross-site without a CORS preflight, and the board never allows one, so
+//  * Writes carry `X-MegaOpen: 1`: every method but GET/HEAD, and the two
+//    GETs that change something (/ota/start starts an update, /api/cap/mark
+//    writes into the capture). Every other GET is side-effect-free. A
+//    browser cannot send a custom header cross-site without a CORS
+//    preflight, and the board never allows one, so
 //    a page on another site cannot reboot, reset or flash it. Our page adds it
 //    (web/js/10-api.js); curl needs `-H 'X-MegaOpen: 1'`.
 //
@@ -63,35 +65,59 @@ namespace RequestGate
         return true;
     }
 
-    // `host` is the Host header (port and all); `mdns` the board's name
-    // ("megaopen" when empty, as WifiManager does).
-    inline bool hostAllowed(const char* host, const char* mdns)
+    // "[v6]" or "[v6]:port": the ']' last, or followed by ':' and digits.
+    inline bool ipv6(const char* s)
     {
-        if (!host || !*host) return false;
-        size_t n = strlen(host);
-        if (host[0] == '[') return strchr(host, ']') != nullptr;     // an IPv6 literal
-        const char* colon = strchr(host, ':');
-        if (colon) n = (size_t)(colon - host);
-        if (n && host[n - 1] == '.') --n;                             // "megaopen.local."
-        if (!n) return false;
-        if (ipv4(host, n)) return true;
-        const char* name = mdns && *mdns ? mdns : "megaopen";
+        const char* e = strchr(s, ']');
+        if (s[0] != '[' || !e || e == s + 1) return false;
+        if (!e[1]) return true;
+        if (e[1] != ':' || !e[2]) return false;
+        for (const char* p = e + 2; *p; ++p) if (*p < '0' || *p > '9') return false;
+        return true;
+    }
+
+    inline bool nameMatches(const char* host, size_t n, const char* name)
+    {
+        if (!name || !*name) return false;
         if (sameName(host, n, name)) return true;
         const size_t nl = strlen(name);
         return n == nl + 6 && sameName(host, nl, name) && sameName(host + nl, 6, ".local");
     }
 
-    // Needs the header: anything but a read, and GET /ota/start.
+    // `host` is the Host header (port and all); `mdns` the board's name
+    // ("megaopen" when empty, as WifiManager does), `alt` another name it
+    // still answers to (the one announced at boot, until a restart re-announces
+    // a renamed one), or null.
+    inline bool hostAllowed(const char* host, const char* mdns, const char* alt = nullptr)
+    {
+        if (!host || !*host) return false;
+        size_t n = strlen(host);
+        if (host[0] == '[') return ipv6(host);
+        const char* colon = strchr(host, ':');
+        if (colon) n = (size_t)(colon - host);
+        if (n && host[n - 1] == '.') --n;                             // "megaopen.local."
+        if (!n) return false;
+        if (ipv4(host, n)) return true;
+        return nameMatches(host, n, mdns && *mdns ? mdns : "megaopen") || nameMatches(host, n, alt);
+    }
+
+    // The GETs that change something. Keep this list short: a new route that
+    // changes state is a POST.
+    inline constexpr const char* WRITE_GETS[] = {"/ota/start", "/api/cap/mark"};
+
+    // Needs the header: anything but a read, and the GETs above.
     inline bool needsHeader(bool isRead, const char* path)
     {
         if (!isRead) return true;
-        return path && strcmp(path, "/ota/start") == 0;
+        if (!path) return false;
+        for (const char* w : WRITE_GETS) if (strcmp(path, w) == 0) return true;
+        return false;
     }
 
     inline Why check(const char* host, const char* mdns, bool isRead, const char* path,
-                     const char* header)
+                     const char* header, const char* alt = nullptr)
     {
-        if (!hostAllowed(host, mdns)) return Why::Host;
+        if (!hostAllowed(host, mdns, alt)) return Why::Host;
         if (needsHeader(isRead, path) && !(header && strcmp(header, VALUE) == 0)) return Why::Header;
         return Why::Ok;
     }

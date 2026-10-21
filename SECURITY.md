@@ -19,6 +19,8 @@ exposes and how to report a problem.
   name, and every change needs the header `X-MegaOpen: 1`, which a page on
   another site cannot send. So a page you open while on the board's network
   cannot reboot, reset or flash it. Tools: `curl -H "X-MegaOpen: 1" ...`.
+  Every GET is side-effect-free except the two that also need the header
+  (`/ota/start`, `/api/cap/mark`); a WiFi scan is a POST.
 * **Not exposed:** no route returns a WiFi or AP password; the settings file
   never contains them.
 

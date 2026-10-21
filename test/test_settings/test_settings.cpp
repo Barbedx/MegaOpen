@@ -863,6 +863,17 @@ void test_gate_host_ip_and_own_name_only()
     TEST_ASSERT_FALSE(hostAllowed("", "megaopen"));
     TEST_ASSERT_FALSE(hostAllowed(nullptr, "megaopen"));
     TEST_ASSERT_FALSE(hostAllowed(":80", "megaopen"));
+    // IPv6: ']' last, or a numeric port after it.
+    TEST_ASSERT_TRUE(hostAllowed("[fe80::1]", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed("[fe80::1]evil.example", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed("[fe80::1]:8x", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed("[]", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed("[fe80::1", "megaopen"));
+    // Renamed to "car": the boot name still answers until a restart.
+    TEST_ASSERT_TRUE(hostAllowed("megaopen.local", "car", "megaopen"));
+    TEST_ASSERT_TRUE(hostAllowed("car.local", "car", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed("other.local", "car", "megaopen"));
+    TEST_ASSERT_FALSE(hostAllowed("megaopen.local", "car", ""));
 }
 
 void test_gate_header_on_every_change_and_ota_start()
@@ -879,6 +890,11 @@ void test_gate_header_on_every_change_and_ota_start()
     TEST_ASSERT_EQUAL(Why::Header, check(h, "megaopen", true, "/ota/start", ""));
     TEST_ASSERT_EQUAL(Why::Ok, check(h, "megaopen", true, "/ota/start", "1"));
     TEST_ASSERT_EQUAL(Why::Header, check(h, "megaopen", false, "/ota/upload", nullptr));
+    // The other GET that writes: a capture mark. Any other GET is a read.
+    TEST_ASSERT_EQUAL(Why::Header, check(h, "megaopen", true, "/api/cap/mark", ""));
+    TEST_ASSERT_EQUAL(Why::Ok, check(h, "megaopen", true, "/api/cap/mark", "1"));
+    TEST_ASSERT_EQUAL(Why::Ok, check(h, "megaopen", true, "/api/cap/list", ""));
+    TEST_ASSERT_EQUAL(Why::Header, check(h, "megaopen", false, "/api/wifi/scan", ""));
     // The host is checked first, header or not.
     TEST_ASSERT_EQUAL(Why::Host, check("evil.example", "megaopen", false, "/api/fw/install", "1"));
     TEST_ASSERT_EQUAL(Why::Host, check("evil.example", "megaopen", true, "/api/config", nullptr));
