@@ -213,8 +213,15 @@ namespace MegaOpen
             // A key taken off the panel task is applied there; its verdict
             // comes through onComplete (keyDone), or is already here.
             uint8_t early;
-            if (r.op == Op::Key && s.ticket && _keys.expect(s.ticket, early))
+            bool unwatched = false;
+            if (r.op == Op::Key && s.ticket && _keys.expect(s.ticket, early, &unwatched))
                 logKey((affa::Result)early);
+            // More keys in flight than KeyVerdicts has slots: this one went
+            // out, but a refusal of it will not be logged. Said so, rather
+            // than lost quietly.
+            else if (unwatched)
+                LogBus::printf("[disp] key: %u in flight, this one's verdict is not watched (a refusal goes unlogged)",
+                               (unsigned)KeyVerdicts::SLOTS + 1);
         } else {
             _refused.fetch_add(1, std::memory_order_relaxed);
             // The ui task says what matters about its own, rate-limited:

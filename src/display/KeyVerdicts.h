@@ -25,9 +25,11 @@ namespace MegaOpen
 
         // The poster, after pressKey() returned ticket `t`. True when its
         // verdict has already arrived: `result` holds it, report it now.
-        // False: the owner reports it from complete(), or (every slot busy)
-        // nobody does.
-        bool expect(uint16_t t, uint8_t& result)
+        // False: the owner reports it from complete(), or, with every slot
+        // busy (SLOTS keys in flight), nobody does: then *unwatched is set
+        // and unwatched() counts it, so the poster can say a refusal of this
+        // key would go unlogged.
+        bool expect(uint16_t t, uint8_t& result, bool* unwatched = nullptr)
         {
             if (!t) return false;
             for (std::atomic<uint16_t>& w : _wait) {
@@ -38,8 +40,14 @@ namespace MegaOpen
                 uint16_t mine = t;
                 return w.compare_exchange_strong(mine, 0);
             }
-            return earlier(t, result);
+            if (earlier(t, result)) return true;
+            if (unwatched) *unwatched = true;
+            _unwatched.fetch_add(1, std::memory_order_relaxed);
+            return false;
         }
+
+        // Keys whose verdict nobody watched (every slot busy at expect()).
+        uint32_t unwatched() const { return _unwatched.load(std::memory_order_relaxed); }
 
         // The owner, in onComplete. True when `t` is a key's ticket somebody
         // waits for: the caller reports the verdict, and it is not a render's.
@@ -73,5 +81,6 @@ namespace MegaOpen
         std::atomic<uint16_t> _wait[SLOTS] = {};
         std::atomic<uint32_t> _done[SLOTS] = {};   // ticket << 8 | result; the owner writes
         uint8_t               _doneAt = 0;          // the owner's alone
+        std::atomic<uint32_t> _unwatched{0};
     };
 }
