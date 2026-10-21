@@ -5,8 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-21
+
 ### Added
 - Web page in English: the EN / UA switch in the header (per browser; `?lang=en` in the address too). Words live in `web/i18n/uk.json` and `en.json`; the English file is fetched only by a viewer who picks it. Every screen.
+- CI job `smoke`: `tools/rc_smoke.sh --sim` against the web simulator on every push (the checks only a board can pass are skipped by name). `rc_smoke.sh` checks codes, not wording.
+- CI fails on Ukrainian text left in `web/js` or `index.html` outside the dictionaries (`check_i18n --strict`).
+- The board's address on the panel, once per WiFi connection: `IP 192.168.x.y` / `megaopen.local` at home, `AP MegaOpen-XXXX` / `192.168.4.1` on its own access point, as a 6 s fullscreen that waits for the menu and a held glass. A link back within 30 s with the same mode and address is not announced again.
+- GitHub update: each tenth of the download logs its lowest internal heap, its largest block and how long it took; `/api/fw` adds `stepMin` and `stepMs`.
 
 ### Changed
 - `/api/health` chains carry only `code` (no English `why`): the page has the words in both languages. Огляд no longer tells you to turn the knobs or watch the rings.
