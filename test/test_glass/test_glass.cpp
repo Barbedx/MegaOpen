@@ -6,6 +6,10 @@
 #include "display/GlassGate.h"
 #include "display/PopupGate.h"
 #include "display/InfoRaw.h"
+#include <stdio.h>
+#include <initializer_list>
+#include <AffaDisplay.h>
+#include "link/LoopbackLink.h"
 
 using namespace MegaOpen;
 
@@ -172,6 +176,103 @@ void test_inforaw_longer_rows_and_bounds()
     TEST_ASSERT_EQUAL_HEX8(' ', f[5]);
 }
 
+// ---- the library's showInfoRow against InfoRaw.h --------------------------------
+// The dev route moves from InfoRaw::build + enqueue(0x151) to the library's
+// showInfoRow(text, offset, prefix, len - 3). Proof that the bytes on the wire are
+// the same: a real CarminatDisplay over a loopback link, a session opened the way
+// the panel opens it, then the one row reassembled from its ISO-TP frames.
+
+namespace
+{
+    struct Clock final : affa::IClock {
+        uint32_t t = 0;
+        uint32_t millis() const override { return t; }
+    };
+
+    affa::Frame frame(uint32_t id, std::initializer_list<uint8_t> b)
+    {
+        affa::Frame f;
+        f.id = id;
+        f.len = 8;
+        uint8_t i = 0;
+        for (uint8_t v : b) f.data[i++] = v;
+        return f;
+    }
+
+    // The opening as the panel drives it (AffaDisplay's test/affa_test_support.h):
+    // two sync requests, the hello burst with the panel's own 1C1 registration
+    // between B0#1 and B0#2, our registrations, the quiet period, the power-on.
+    template <class L>
+    void openSession(affa::CarminatDisplay& d, L& link, Clock& clk)
+    {
+        d.begin();
+        d.setSelfAck(true);
+        const affa::Frame req = frame(0x3CF, {0x61, 0x11, 0x00, 0xA3, 0xA3, 0xA3, 0xA3, 0xA3});
+        link.inject(req); d.poll();
+        link.inject(req); d.poll();
+        clk.t += affa::carminat::kHelloFirstDelayMs; d.poll();
+        link.inject(frame(0x1C1, {0x70, 0xA3, 0xA3, 0xA3, 0xA3, 0xA3, 0xA3, 0xA3}));
+        clk.t += affa::carminat::kHelloFrameGapMs; d.poll();
+        clk.t += affa::carminat::kHelloFrameGapMs; d.poll();
+        for (int i = 0; i < 16 && !d.registered(); ++i) d.poll();
+        TEST_ASSERT_TRUE_MESSAGE(d.registered(), "the session opens");
+        clk.t += affa::carminat::kPayloadAfterRegistrationMs;
+        for (int i = 0; i < 64 && (d.busy() || d.phase() != affa::Phase::Ready); ++i) d.poll();
+        TEST_ASSERT_TRUE_MESSAGE(d.phase() == affa::Phase::Ready, "and reaches Ready");
+        affa::Frame f;
+        while (link.takeSent(f)) {}
+    }
+
+    // The 0x151 message on the wire as InfoRaw::build lays it out: 10 <len> + content.
+    template <class L>
+    size_t reassemble(L& link, uint8_t* out, size_t max)
+    {
+        affa::Frame f;
+        size_t n = 0, want = 0;
+        while (link.takeSent(f)) {
+            if (f.id != 0x151) continue;
+            if ((f.data[0] & 0xF0) == 0x10) {
+                want = 2 + f.data[1];
+                for (uint8_t i = 0; i < 8 && n < want && n < max; ++i) out[n++] = f.data[i];
+            } else if ((f.data[0] & 0xF0) == 0x20) {
+                for (uint8_t i = 1; i < 8 && n < want && n < max; ++i) out[n++] = f.data[i];
+            }
+        }
+        return n;
+    }
+}
+
+void test_library_info_row_is_inforaws_bytes()
+{
+    struct Case { uint8_t len, prefix, offset; const char* text; };
+    const Case cases[] = {
+        {0x0B, 0x60, 0x41, "AUX"},                    // the library's own 8 cells
+        {0x0F, 0x60, 0x44, "123456789ABCDEFG"},       // 12 cells, the ruler cut
+        {0x13, 0x60, 0x48, "123456789ABCDEFGHIJK"},   // 16 cells, the most
+        {0x13, 0x50, 0x40, "AB"},                     // other prefix and offset, padded
+    };
+    for (const Case& c : cases) {
+        uint8_t want[InfoRaw::FRAME_MAX];
+        const size_t wn = InfoRaw::build(want, c.len, c.prefix, c.offset, c.text);
+        TEST_ASSERT_NOT_EQUAL(0, wn);
+
+        affa::LoopbackLink<256> link;
+        Clock clk;
+        affa::CarminatDisplay d(link, clk);
+        openSession(d, link, clk);
+        TEST_ASSERT_TRUE(d.showInfoRow(c.text, c.offset, c.prefix, (uint8_t)(c.len - 3)).result ==
+                         affa::Result::Ok);
+        for (int i = 0; i < 64 && d.busy(); ++i) d.poll();
+
+        uint8_t got[64];
+        const size_t gn = reassemble(link, got, sizeof(got));
+        char msg[32];
+        snprintf(msg, sizeof(msg), "len 0x%02X", (unsigned)c.len);
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(wn, gn, msg);
+        TEST_ASSERT_EQUAL_HEX8_ARRAY_MESSAGE(want, got, wn, msg);
+    }
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -184,5 +285,6 @@ int main(int, char**)
     RUN_TEST(test_a_repaint_under_a_popup_is_held_then_sent);
     RUN_TEST(test_inforaw_at_0x0B_is_the_librarys_row);
     RUN_TEST(test_inforaw_longer_rows_and_bounds);
+    RUN_TEST(test_library_info_row_is_inforaws_bytes);
     return UNITY_END();
 }
