@@ -76,9 +76,10 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 - **Info list truncates to 8 characters** (`kInfoCells`), seen on camera with a
   row box that is visibly wider. Sweep: docs/glass-sweeps.md steps 7-14,
   through the dev-only `/api/display/inforaw` (declared length 0x0C..0x13).
-  With the owner's photos: give the library's `showInfoMenu` a cell count,
-  use it in MediaScreen's info layout, and DELETE `/api/display/inforaw`,
-  `Op::InfoRaw` and `display/InfoRaw.h`.
+  The route sends through AffaDisplay's `showInfoRow` (v1.3.0; `showInfoMenu`
+  takes a cell count since v1.2.0). With the owner's photos: pass the measured
+  count in MediaScreen's info layout, and DELETE `/api/display/inforaw` and
+  `Op::InfoRaw`.
 - **Column widths: 22 is a count, not a pixel budget.** `MediaScreen::
   COLS_DEFAULT` is 22 since 9d33dc8 (camera-measured; AffaDisplay v1.1.0
   fullRowChars), for the menu and fullscreen layouts and the splash. The font

@@ -5,7 +5,6 @@
 #include <vector>
 #include "display/GlassGate.h"
 #include "display/PopupGate.h"
-#include "display/InfoRaw.h"
 #include <stdio.h>
 #include <initializer_list>
 #include <AffaDisplay.h>
@@ -143,44 +142,13 @@ void test_a_repaint_under_a_popup_is_held_then_sent()
     TEST_ASSERT_EQUAL_UINT32(4000, sent[1]);
 }
 
-// ---- the dev-only info row (src/display/InfoRaw.h) ------------------------------
-
-void test_inforaw_at_0x0B_is_the_librarys_row()
-{
-    uint8_t f[InfoRaw::FRAME_MAX];
-    // showInfoMenu's own form: 10 0B 76 60 41 + 8 space-padded cells.
-    const uint8_t want[] = {0x10, 0x0B, 0x76, 0x60, 0x41, 'A', 'U', 'X', ' ', ' ', ' ', ' ', ' '};
-    TEST_ASSERT_EQUAL_UINT32(sizeof(want), InfoRaw::build(f, 0x0B, 0x60, 0x41, "AUX"));
-    TEST_ASSERT_EQUAL_HEX8_ARRAY(want, f, sizeof(want));
-}
-
-void test_inforaw_longer_rows_and_bounds()
-{
-    uint8_t f[InfoRaw::FRAME_MAX + 4];
-    memset(f, 0xEE, sizeof(f));
-    // 0x13: 16 cells, the text cut to them; nothing written past FRAME_MAX.
-    TEST_ASSERT_EQUAL_UINT32(2 + 0x13, InfoRaw::build(f, 0x13, 0x60, 0x44, "123456789ABCDEFGHIJK"));
-    TEST_ASSERT_EQUAL_HEX8(0x13, f[1]);
-    TEST_ASSERT_EQUAL_HEX8(0x44, f[4]);
-    TEST_ASSERT_EQUAL_MEMORY("123456789ABCDEFG", f + 5, 16);
-    TEST_ASSERT_EQUAL_HEX8(0xEE, f[InfoRaw::FRAME_MAX]);
-    // A length is clamped by the route; build() itself refuses what is out.
-    TEST_ASSERT_EQUAL_UINT8(0x0B, InfoRaw::clampLen(0));
-    TEST_ASSERT_EQUAL_UINT8(0x13, InfoRaw::clampLen(0xFF));
-    TEST_ASSERT_EQUAL_UINT8(0x0E, InfoRaw::clampLen(0x0E));
-    TEST_ASSERT_EQUAL_UINT32(0, InfoRaw::build(f, 0x0A, 0x60, 0x41, "x"));
-    TEST_ASSERT_EQUAL_UINT32(0, InfoRaw::build(f, 0x14, 0x60, 0x41, "x"));
-    TEST_ASSERT_EQUAL_UINT32(0, InfoRaw::build(f, 0x0B, 0x60, 0x50, "x"));    // offset
-    TEST_ASSERT_EQUAL_UINT32(0, InfoRaw::build(f, 0x0B, 0x3F, 0x41, "x"));    // prefix
-    TEST_ASSERT_EQUAL_UINT32(2 + 0x0B, InfoRaw::build(f, 0x0B, 0x60, 0x48, nullptr));
-    TEST_ASSERT_EQUAL_HEX8(' ', f[5]);
-}
-
-// ---- the library's showInfoRow against InfoRaw.h --------------------------------
-// The dev route moves from InfoRaw::build + enqueue(0x151) to the library's
-// showInfoRow(text, offset, prefix, len - 3). Proof that the bytes on the wire are
-// the same: a real CarminatDisplay over a loopback link, a session opened the way
-// the panel opens it, then the one row reassembled from its ISO-TP frames.
+// ---- the dev route's info row: the library's showInfoRow ------------------------
+// /api/display/inforaw sends showInfoRow(text, offset, prefix, len - 3). It used to
+// build the frame itself (display/InfoRaw.h, deleted; this test proved the library's
+// bytes equal before it went). The layout it built, kept here as the reference:
+//   10 <len> 76 <prefix> <offset> + (len - 3) cells, the text cut or space-padded.
+// A real CarminatDisplay over a loopback link, a session opened the way the panel
+// opens it, then the one row reassembled from its ISO-TP frames.
 
 namespace
 {
@@ -223,7 +191,17 @@ namespace
         while (link.takeSent(f)) {}
     }
 
-    // The 0x151 message on the wire as InfoRaw::build lays it out: 10 <len> + content.
+    // InfoRaw.h's frame, as the reference.
+    size_t infoRawFrame(uint8_t* out, uint8_t len, uint8_t prefix, uint8_t offset, const char* text)
+    {
+        const size_t tl = strlen(text);
+        size_t n = 0;
+        out[n++] = 0x10; out[n++] = len; out[n++] = 0x76; out[n++] = prefix; out[n++] = offset;
+        for (uint8_t i = 0; i < len - 3; ++i) out[n++] = i < tl ? (uint8_t)text[i] : (uint8_t)' ';
+        return n;
+    }
+
+    // The 0x151 message on the wire, laid out as that frame: 10 <len> + content.
     template <class L>
     size_t reassemble(L& link, uint8_t* out, size_t max)
     {
@@ -252,9 +230,8 @@ void test_library_info_row_is_inforaws_bytes()
         {0x13, 0x50, 0x40, "AB"},                     // other prefix and offset, padded
     };
     for (const Case& c : cases) {
-        uint8_t want[InfoRaw::FRAME_MAX];
-        const size_t wn = InfoRaw::build(want, c.len, c.prefix, c.offset, c.text);
-        TEST_ASSERT_NOT_EQUAL(0, wn);
+        uint8_t want[2 + 0x13];
+        const size_t wn = infoRawFrame(want, c.len, c.prefix, c.offset, c.text);
 
         affa::LoopbackLink<256> link;
         Clock clk;
@@ -283,8 +260,6 @@ int main(int, char**)
     RUN_TEST(test_a_screen_and_a_repaint_never_interleave);
     RUN_TEST(test_popup_gate_holds_until_the_deadline);
     RUN_TEST(test_a_repaint_under_a_popup_is_held_then_sent);
-    RUN_TEST(test_inforaw_at_0x0B_is_the_librarys_row);
-    RUN_TEST(test_inforaw_longer_rows_and_bounds);
     RUN_TEST(test_library_info_row_is_inforaws_bytes);
     return UNITY_END();
 }

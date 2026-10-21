@@ -5,7 +5,6 @@
 #include "Catalog.h"
 #include "../cfg/SettingsRegistry.h"
 #include "../keys/KeyDests.h"
-#include "../display/InfoRaw.h"
 #include "GhOta.h"
 #include <ArduinoJson.h>
 #include <ElegantOTA.h>
@@ -1453,11 +1452,13 @@ void WebUi::routesDisplay()
     route("/api/display/inforaw", HTTP_POST, [this, posted](PsychicRequest* r) {
         if (!_ops) return r->reply(503, "text/plain", "no display");
         if (!_cfg->s().devMode) return r->reply(403, "text/plain", "developer mode is off (Плата › Інтерфейс)");
-        const uint8_t len = MegaOpen::InfoRaw::clampLen(paramU32(r, "len", "11", 0));
+        // 0x0B..0x13 = the library's showInfoRow at 8..16 cells; clamped.
+        const uint32_t lenIn = paramU32(r, "len", "11", 0);
+        const uint8_t len = lenIn < 0x0B ? 0x0B : lenIn > 0x13 ? 0x13 : (uint8_t)lenIn;
         const uint32_t off = paramU32(r, "offset", "0x41", 0);
         const uint32_t pre = paramU32(r, "prefix", "0x60", 0);
-        if (!MegaOpen::InfoRaw::offsetOk(off)) return r->reply(400, "text/plain", "offset: 0x40..0x4F");
-        if (!MegaOpen::InfoRaw::prefixOk(pre)) return r->reply(400, "text/plain", "prefix: 0x40..0x7F");
+        if (off < 0x40 || off > 0x4F) return r->reply(400, "text/plain", "offset: 0x40..0x4F");
+        if (pre < 0x40 || pre > 0x7F) return r->reply(400, "text/plain", "prefix: 0x40..0x7F");
         return posted(r, _ops->postInfoRaw(paramStr(r, "text").c_str(), len, (uint8_t)pre, (uint8_t)off));
     });
 

@@ -15,6 +15,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ### Fixed
 - AffaDisplay v1.1.2: urgent panel jobs (power on/off) go out in the order they were queued; two of them used to go out reversed.
 
+### Changed
+- AffaDisplay v1.3.0. The dev-only `/api/display/inforaw` (glass sweep) sends through the library's `showInfoRow`: the same bytes as before, and the hand-built frame (`display/InfoRaw.h`) is gone.
+
 ## [1.2.0] - 2026-10-21
 
 ### Added
