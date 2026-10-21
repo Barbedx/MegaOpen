@@ -130,6 +130,7 @@ namespace Cfg
 
     void Config::save()
     {
+        Guard g(*this);
         _p.putString("ssid", _s.ssid);
         _p.putString("pass", _s.pass);
         _p.putString("apName", _s.apName);
@@ -184,10 +185,21 @@ namespace Cfg
         _p.putBool  ("resEn",  _s.resEnabled);
         _p.putULong ("can2Bps", _s.can2Bitrate);
         _p.putULong ("can2Det", _s.can2Detected);
+        _gen.fetch_add(1, std::memory_order_release);
+    }
+
+    bool Config::trySnapshot(Settings& out)
+    {
+        if (!tryLock()) return false;
+        out = _s;
+        unlock();
+        return true;
     }
 
     void Config::saveCan2Detected(uint32_t bps)
     {
+        // No lock: one aligned word, and net_svc must not wait behind a web
+        // request. A save() racing it stores the old or the new rate.
         _s.can2Detected = bps;
         _p.putULong("can2Det", bps);
     }
@@ -349,7 +361,9 @@ namespace Cfg
 
     void Config::factoryReset()
     {
+        Guard g(*this);
         _p.clear();
         _s = Settings{};
+        _gen.fetch_add(1, std::memory_order_release);
     }
 }

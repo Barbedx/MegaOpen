@@ -2168,13 +2168,15 @@ void setup()
     App::OtaTrial::begin();
 
     const char* mdns = g_wifi.mdnsHost().length() ? g_wifi.mdnsHost().c_str() : "(mdns FAILED)";
+    // httpd is up: a String in Settings is read under its lock (Cfg::Config::lock).
+    const String staSsid = [] { Cfg::Config::Guard g(g_cfg); return g_cfg.s().ssid; }();
     if (g_wifi.connecting())
         // WiFi no longer blocks setup(); the outcome is logged by [wifi] lines.
         logf("[MegaOpen " MEGAOPEN_VERSION "] up, WiFi joining in the background, uart=%u baud\n",
                       (unsigned)g_cfg.s().uartBaud);
     else if (g_wifi.isSta())
         logf("[MegaOpen " MEGAOPEN_VERSION "] up, STA \"%s\", http://%s/  http://%s/  uart=%u baud\n",
-                      g_cfg.s().ssid.c_str(), g_wifi.ip().c_str(), mdns,
+                      staSsid.c_str(), g_wifi.ip().c_str(), mdns,
                       (unsigned)g_cfg.s().uartBaud);
     else
         logf("[MegaOpen " MEGAOPEN_VERSION "] up, AP \"%s\", http://%s/  http://%s/  uart=%u baud\n",

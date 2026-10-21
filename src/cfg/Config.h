@@ -1,6 +1,9 @@
 #pragma once
 #include <Arduino.h>
 #include <Preferences.h>
+#include <atomic>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 #include "../Features.h"
 #include "../keys/KeyMap.h"
 #if FEATURE_DISPLAY_CAN
@@ -88,7 +91,29 @@ namespace Cfg
         // write, and nothing else in Settings is touched from that task.
         void saveCan2Detected(uint32_t bps);
 
+        // THE SETTINGS HAVE ONE LOCK. Settings holds Strings: a reassignment
+        // frees the old buffer, so a reader on another task, or a second writer,
+        // is a use-after-free or a double free. Writers are the web (httpd: every
+        // request runs under the lock, WebUi::dispatch) and the panel menu
+        // (net_svc, applyPending: under tryLock, retried next pass). save() takes
+        // it too. Another task reads s() only under the lock, or reads a copy
+        // (snapshot()). Recursive: a request handler calls save().
         Settings& s() { return _s; }
+        void lock()    { xSemaphoreTakeRecursive(_mx, portMAX_DELAY); }
+        bool tryLock() { return xSemaphoreTakeRecursive(_mx, 0) == pdTRUE; }
+        void unlock()  { xSemaphoreGiveRecursive(_mx); }
+        struct Guard {
+            explicit Guard(Config& c) : _c(c) { _c.lock(); }
+            ~Guard() { _c.unlock(); }
+            Guard(const Guard&) = delete;
+            Guard& operator=(const Guard&) = delete;
+            Config& _c;
+        };
+        // A copy, if the lock is free now. False: `out` untouched (the lock is
+        // held; try again later).
+        bool trySnapshot(Settings& out);
+        // Bumped by every save(): a copy older than this is stale.
+        uint32_t generation() const { return _gen.load(std::memory_order_acquire); }
 
         // Stored schema version, and what migrate() started from on this boot.
         uint8_t version() const { return _ver; }
@@ -103,5 +128,8 @@ namespace Cfg
         uint8_t     _verWas = 0;   // what was stored when this boot started
         Preferences _p;
         Settings    _s;
+        StaticSemaphore_t     _mxBuf;
+        SemaphoreHandle_t     _mx = xSemaphoreCreateRecursiveMutexStatic(&_mxBuf);
+        std::atomic<uint32_t> _gen{0};
     };
 }

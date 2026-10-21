@@ -248,6 +248,11 @@ esp_err_t WebUi::dispatch(PsychicRequest* r)
     // Path without the query, method exact. Linear over ~100 rows is microseconds.
     const String path = r->path();
     const http_method m = r->method();
+    // Every handler runs under the settings lock (Cfg::Config::lock): the
+    // panel menu writes Settings from net_svc, and a String read or assigned
+    // here while it does is a use-after-free. ElegantOTA's upload is not a
+    // table route, so a long upload never holds it.
+    Cfg::Config::Guard cfgLock(*_cfg);
 #if HEAP_HUNT
     huntCheck("before", path.c_str());
     ++s_huntReqs;
