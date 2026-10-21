@@ -2093,10 +2093,11 @@ void setup()
         // glass: an alert never covers a menu (CarTask waits, newest wins).
         cs.alert = App::Ui::queueNotification;
         cs.glassFree = []() {
-            // The panel menu holds the glass without glassHeldUntilMs.
+            // The ui task's own glassHeld(), which knows "held until released"
+            // (glassHoldMs 0). The menu is asked live too: the published copy
+            // can be one pass behind a menu that just opened.
             if (App::PanelMenu::isOpen() || App::PanelMenu::panelOff()) return false;
-            const uint32_t until = App::Ui::status().read().glassHeldUntilMs;
-            return !until || (int32_t)(millis() - until) >= 0;
+            return !App::Ui::status().read().glassHeld;
         };
 #endif
         App::Car::begin(cs);

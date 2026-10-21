@@ -1071,6 +1071,7 @@ namespace App
                 u.panesSent        = g_panesSent;
                 u.panesFailed      = g_panesFailed;
                 u.glassHeldUntilMs = g_glassHeldUntilMs;
+                u.glassHeld        = glassHeld(millis());
                 u.resyncs          = g_resyncs;
                 u.lastResyncMs     = g_lastResyncMs;
                 u.keyPopups        = g_keyPopups.load(std::memory_order_relaxed);

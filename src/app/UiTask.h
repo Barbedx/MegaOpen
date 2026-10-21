@@ -98,6 +98,10 @@ namespace App
         struct UiStatus {
             uint32_t panesSent = 0, panesFailed = 0;
             uint32_t glassHeldUntilMs = 0;  // 0 = not held
+            // glassHeld() itself, as of this pass: also true for a hold with no
+            // deadline (glassHoldMs 0) and while the panel menu is open or the
+            // panel is off. What "may something else draw now" must read.
+            bool     glassHeld = false;
             uint32_t resyncs = 0;           // registration lost since boot
             uint32_t lastResyncMs = 0;
             uint32_t keyPopups = 0;
