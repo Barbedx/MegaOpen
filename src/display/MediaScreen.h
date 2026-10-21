@@ -7,7 +7,7 @@
 //
 // Layout, at the default 22-column row:
 //
-//     [12:34] > 1:23/3:45 [##--]    row 1: clock, transport, position, progress
+//     12:34 > 1:23/3:45 [#-]        row 1: clock, transport, position, progress
 //     Bohemian Rhapsody             row 2: title,  marquee if it does not fit
 //     Queen                         row 3: artist, marquee if it does not fit
 //
@@ -55,7 +55,7 @@ namespace MegaOpen
         // Animated styles repaint on their own (~14 frames each); the panel
         // sustains ~5 screens/s, and main.cpp's repaint gate limits them.
         enum class Style : uint8_t {
-            Classic = 0,   // [12:34] > 1:23/3:45 [##--] / title / artist
+            Classic = 0,   // 12:34 > 1:23/3:45 [#-] / title / artist
             Minimal,       // clock only, then title and artist. Nothing that moves.
             Bar,           // title / artist / a full-width progress bar and position
             BigTitle,      // title wrapped across rows 1-2, artist on 3

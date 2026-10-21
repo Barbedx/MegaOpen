@@ -317,12 +317,14 @@ namespace MegaOpen
         mmss(_elapsed, el);
         mmss(_duration, du);
 
-        // Clock first: everything after it is variable width.
+        // Clock first: everything after it is variable width. No brackets round
+        // it: at the glass's 22 columns they were the two cells the bar needs
+        // ("12:34 > 1:23/3:45 [##]" is exactly 22).
         char head[ROW_MAX];
         int n;
         if (!_hasTransport) {
             // Clock only, or an empty row if there is none.
-            n = _clock[0] ? snprintf(head, sizeof(head), "[%s]", _clock) : 0;
+            n = _clock[0] ? snprintf(head, sizeof(head), "%s", _clock) : 0;
             if (n < 0) n = 0;
             head[n] = '\0';
             window(head, 0, _cols, row1);
@@ -330,8 +332,8 @@ namespace MegaOpen
         }
         if (_clock[0])
             n = (_duration > 0)
-                ? snprintf(head, sizeof(head), "[%s] %s %s/%s", _clock, glyph, el, du)
-                : snprintf(head, sizeof(head), "[%s] %s %s", _clock, glyph, el);
+                ? snprintf(head, sizeof(head), "%s %s %s/%s", _clock, glyph, el, du)
+                : snprintf(head, sizeof(head), "%s %s %s", _clock, glyph, el);
         else
             n = (_duration > 0)
                 ? snprintf(head, sizeof(head), "%s %s/%s", glyph, el, du)
@@ -339,11 +341,11 @@ namespace MegaOpen
         if (n < 0) n = 0;
         if (n > (int)sizeof(head) - 1) n = (int)sizeof(head) - 1;
 
-        // The bar shrinks to fit what is left; below three cells it is dropped.
+        // The bar shrinks to fit what is left; below two cells it is dropped.
         const int room  = (int)_cols - n - 1;             // -1 for the space
         int       inner = (int)_bar;
         if (inner > room - 2) inner = room - 2;           // -2 for the brackets
-        if (_bar >= 3 && inner >= 3) {
+        if (_bar >= 2 && inner >= 2) {
             uint8_t filled = 0;
             if (_duration > 0) {
                 uint32_t f = (uint32_t)_elapsed * (uint32_t)inner / _duration;

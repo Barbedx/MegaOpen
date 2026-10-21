@@ -327,9 +327,9 @@ void test_the_clock_leads_the_header_when_it_is_set()
     s.setBarWidth(10);
     s.setClock("1234");
 
-    // 26 columns: "[12:34] > 1:23/3:45" is 19, leaving room for a four-cell bar.
+    // 26 columns: "12:34 > 1:23/3:45" is 17, leaving room for a six-cell bar.
     const Rows r = draw(s, 0);
-    TEST_ASSERT_EQUAL_STRING("[12:34] > 1:23/3:45 [#---]", r.r1);
+    TEST_ASSERT_EQUAL_STRING("12:34 > 1:23/3:45 [##----]", r.r1);
     assertFits(r, 26);
 }
 
@@ -348,7 +348,7 @@ void test_no_clock_leaves_the_header_untouched()
 
 // ---- a source with no transport ---------------------------------------------
 // The head unit reports no play state and no position anywhere in the Raise
-// protocol. Left claiming one, row 1 reads "[12:34] || 0:00" — a pause glyph
+// protocol. Left claiming one, row 1 reads "12:34 || 0:00" — a pause glyph
 // over a track that is playing and a position frozen at zero. That is not
 // missing information, it is WRONG information, and on a dashboard the
 // difference matters.
@@ -360,7 +360,7 @@ void test_without_transport_the_header_is_the_clock_alone()
     s.setClock("1234");
     s.setState(MediaScreen::State::Playing);
     s.setProgress(83, 225);
-    TEST_ASSERT_EQUAL_STRING("[12:34]", draw(s, 0).r1);
+    TEST_ASSERT_EQUAL_STRING("12:34", draw(s, 0).r1);
 }
 
 void test_without_transport_and_without_a_clock_row_one_is_empty()
@@ -590,24 +590,24 @@ void test_the_typewriter_types_a_new_title_then_scrolls_from_the_start()
     // Artist on top, the transport below.
     const Rows r = draw(s, typed);
     TEST_ASSERT_EQUAL_STRING("Queen", r.r1);
-    TEST_ASSERT_EQUAL_INT('[', r.r3[0]);
+    TEST_ASSERT_EQUAL_STRING_LEN("12:34 >", r.r3, 7);
 }
 
 // No track change seen (boot, a style switched mid-song): nothing to type.
 // A row wider than the glass (cols set past it) still draws the cassette
 // within the glass, so the right reel is seen.
 // At the glass's 22 columns Classic keeps the clock and the position; the
-// bar needs four more cells than are left with a clock, so it goes (on the
-// old 26-column row it was sent past the glass edge and cut there anyway).
-void test_classic_at_the_glass_width_keeps_the_clock_and_the_time()
+// clock carries no brackets, so a two-cell bar fits exactly: the brackets
+// were decoration, the bar is information.
+void test_classic_at_the_glass_width_keeps_the_clock_the_time_and_a_bar()
 {
     MediaScreen s;
     fillTypical(s);
+    s.setProgress(200, 225);
     const Rows r = draw(s, 0);
     assertFits(r, MediaScreen::COLS_DEFAULT);
-    TEST_ASSERT_EQUAL_STRING("[12:34] > 1:23/3:45", r.r1);
-    s.setClock("");
-    TEST_ASSERT_NOT_NULL(strchr(draw(s, 0).r1, '['));   // without the clock the bar is back
+    TEST_ASSERT_EQUAL_STRING("12:34 > 3:20/3:45 [#-]", r.r1);
+    TEST_ASSERT_EQUAL_UINT(MediaScreen::COLS_DEFAULT, strlen(r.r1));
 }
 
 void test_the_tape_never_runs_past_the_glass()
@@ -764,7 +764,7 @@ void test_the_bar_shrinks_to_fit_rather_than_disappearing()
     s.setBarWidth(10);
     s.setClock("1234");
     TEST_ASSERT_NOT_NULL(strchr(draw(s, 0).r1, '['));
-    TEST_ASSERT_EQUAL_STRING("[12:34] > 0:00/3:45 [----]", draw(s, 0).r1);
+    TEST_ASSERT_EQUAL_STRING("12:34 > 0:00/3:45 [------]", draw(s, 0).r1);
 }
 
 // Below three cells it is still dropped: a two-cell bar can only read empty or
@@ -778,7 +778,7 @@ void test_a_bar_with_no_room_is_still_dropped_entirely()
     s.setProgress(83, 225);
     s.setClock("1234");
     const Rows r = draw(s, 0);
-    TEST_ASSERT_EQUAL_STRING("[12:34] > 1:23/3:45", r.r1);
+    TEST_ASSERT_EQUAL_STRING("12:34 > 1:23/3:45", r.r1);
     assertFits(r, 20);
 }
 
@@ -896,7 +896,7 @@ void test_flow_opens_with_exactly_classics_header()
     f.setTitle("Kashmir"); f.setArtist("Led Zeppelin");
     // The clock is the point: whichever style is up, the time is in the same place.
     TEST_ASSERT_EQUAL_STRING(draw(c, 0).r1, draw(f, 0).r1);
-    TEST_ASSERT_NOT_NULL(strstr(draw(f, 0).r1, "[12:34]"));
+    TEST_ASSERT_EQUAL_STRING_LEN("12:34 ", draw(f, 0).r1, 6);
 }
 
 void test_flow_with_a_title_that_fits_is_still_and_shows_the_album_beside_the_artist()
@@ -1220,6 +1220,6 @@ int main(int, char**)
     RUN_TEST(test_the_typewriter_types_a_new_title_then_scrolls_from_the_start);
     RUN_TEST(test_the_typewriter_without_a_track_change_shows_the_title);
     RUN_TEST(test_the_tape_never_runs_past_the_glass);
-    RUN_TEST(test_classic_at_the_glass_width_keeps_the_clock_and_the_time);
+    RUN_TEST(test_classic_at_the_glass_width_keeps_the_clock_the_time_and_a_bar);
     return UNITY_END();
 }

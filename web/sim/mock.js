@@ -125,14 +125,14 @@ function preview(){
  const Ti=sc(tr.title,m.scrollMsTitle),A=sc(tr.artist,m.scrollMsArtist),pos=tr.duration?fmtT(tr.elapsed)+'/'+fmtT(tr.duration):'',ck=clockStr();
  const bar=n=>{const p=tr.duration?Math.round(tr.elapsed/tr.duration*n):0;return '#'.repeat(p)+'-'.repeat(n-p)};
  const tick=Math.floor(now()/300);
- const r={classic:[(w>8?'['+ck+'] > '+pos+' ['+bar(4)+']':ck+' >'),Ti,A],minimal:[ck,Ti,A],bar:[Ti,A,w>8?bar(w-12)+' '+pos:pos||bar(w)],
+ const r={classic:[(w>8?ck+' > '+pos+' ['+bar(2)+']':ck+' >'),Ti,A],minimal:[ck,Ti,A],bar:[Ti,A,w>8?bar(w-12)+' '+pos:pos||bar(w)],
   bigtitle:[tr.title.slice(0,w),tr.title.slice(w,2*w)||' ',A],ticker:[0,1,2].map(i=>sc(tr.title+' — '+tr.artist,(m.scrollMsTitle||700)/(i+1))),
   split:[A,Ti,pos],pulse:[Ti,A,' '.repeat(tick%w)+'*'],scanner:[Ti,A,' '.repeat(Math.abs(tick%(2*w-2)-(w-1)))+'█'],clock:[ck.padStart(Math.floor((w+5)/2)),Ti,A],
-  vu:[Ti,A,'▮'.repeat(1+Math.floor(Math.random()*(w-1)))],flow:[(w>8?'['+ck+'] > '+pos:ck),tr.title.slice(0,w),tr.title.slice(w,2*w)||A],
+  vu:[Ti,A,'▮'.repeat(1+Math.floor(Math.random()*(w-1)))],flow:[(w>8?ck+' > '+pos+' ['+bar(2)+']':ck),tr.title.slice(0,w),tr.title.slice(w,2*w)||A],
   plain:[Ti,A,tr.album||''],winamp:[ck+' '+Array.from({length:w},()=>' .:|'[Math.floor(Math.random()*4)]).join(''),sc(tr.artist+' - '+tr.title+' *** ',m.scrollMsTitle||300),tr.album||''],
   tape:(()=>{const c=w>=16?ck+' ':'',n=Math.max(0,w-c.length-6),sp=tr.transport!==false&&tr.state===1&&Math.floor(now()/250)%2?'x':'+',hd=tr.duration?Math.min(n-1,Math.floor(tr.elapsed/tr.duration*n)):-1;
    return [c+'('+sp+')'+Array.from({length:n},(_,i)=>i===hd?'o':'=').join('')+'('+sp+')',Ti,A]})(),
-  typewriter:[A,Ti,(w>8?'['+ck+'] > '+pos:ck)]}[m.style]||[Ti,A,''];
+  typewriter:[A,Ti,(w>8?ck+' > '+pos+' ['+bar(2)+']':ck)]}[m.style]||[Ti,A,''];
  return r.map(x=>String(x).slice(0,w));
 }
 /* ---- картинка 48×48 сцени (MediaPane); на платі її малює прошивка ---- */
