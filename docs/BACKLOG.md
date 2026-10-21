@@ -79,11 +79,13 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   With the owner's photos: give the library's `showInfoMenu` a cell count,
   use it in MediaScreen's info layout, and DELETE `/api/display/inforaw`,
   `Op::InfoRaw` and `display/InfoRaw.h`.
-- **Column widths are guesses elsewhere.** `MediaScreen::COLS_DEFAULT = 26`
-  still drives the menu/fullscreen media layouts; the glass measured ~22 wide
-  characters (capitals/digits) and ~21 lowercase. Proportional font, so the
-  real limit is pixels: measure the widest glyphs (W, M) and set the budget.
-  Procedure: docs/glass-sweeps.md (Сервіс → Заміри скла, 10 minutes).
+- **Column widths: 22 is a count, not a pixel budget.** `MediaScreen::
+  COLS_DEFAULT` is 22 since 9d33dc8 (camera-measured; AffaDisplay v1.1.0
+  fullRowChars), for the menu and fullscreen layouts and the splash. The font
+  is proportional (~22 capitals/digits, ~21 lowercase seen), so a row of wide
+  glyphs (W, M) may still be cut: measure them and decide whether styles
+  need a pixel budget. Procedure: docs/glass-sweeps.md (Сервіс → Заміри скла,
+  10 minutes).
 - **Right pane seen blank for a while after a notification** in one capture
   (2026-09-27, ~20 s), fine in the next. Observe before acting; could be the
   carousel on an empty scene.
@@ -92,10 +94,12 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   arrows beside the pane and the byte that hides them is unknown; whether row 1
   (the clock) is visible beside the pane was never answered. Ten minutes on
   `/api/display/raw` with the camera. Where: `MediaScreen` info layout.
-- **Never checked on glass:** the `flow` style, `paneSpeed`, and the
-  twelve-scene `pane: auto` carousel. Host-tested only.
-- **Auto-detect the panel family and the head unit — researched 2026-10-21,
-  NOT started.** The owner wants more glass time before the board sends
+- **Never checked on glass:** the `flow`, `tape` and `typewriter` styles,
+  `paneSpeed`, the `tape` and `tunnel` scenes, and the fourteen-scene
+  `pane: auto` carousel. Host-tested and drawn in the simulator only.
+- **Auto-detect the panel family and the head unit — researched 2026-10-21;
+  the passive half DONE (see Done: the panel bus watch, the head-unit
+  dialect), the switching half not started.** The owner wants more glass time before the board sends
   anything it is not sure of. Findings:
   - `displayType` (carminat | updatelist) is already a runtime NVS setting
     (Settings.h, SettingsRegistry, AffaPort.cpp builds the object, reboot to
@@ -198,6 +202,21 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   debug callback guard.
 
 ## Done
+
+- **Health says when the head unit speaks the VW canbox profile**
+  (547753c, v1.2.0): `Canbox::HuDialect` counts Toyota-only and VW-only
+  inbound commands (the profiles are disjoint) and the 0xF3 NACKs; health
+  `hu` carries `dialect` and `notSupported`, and `hu_dialect_vw` when the
+  unit is wired right but set to VW. Switching profiles still needs a second
+  emitter.
+
+- **The panel bus watch** (715d886, v1.2.0): `MegaOpen::PanelBusWatch`
+  listens (never transmits) for another bus master (0x3AF/0x3DF syncs) and a
+  lone cluster (0x3CF `69`, no `61 11`). The panel TX gate opens 1 s after
+  the link comes up, only with no other master heard; a foreign master makes
+  the stack passive, TX-gated and listen-only until reboot. Health
+  `panel_foreign_master` / `panel_cluster_only`. Replays in test_panelwatch;
+  the foreign-master path is still to be seen on a bus with an OEM radio.
 
 - **A menu knob commit is no longer lost under a web save** (review,
   2026-10-21): closed by the settings lock (3ad4450). The /api/settings
