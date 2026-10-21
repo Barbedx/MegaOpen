@@ -172,7 +172,13 @@ namespace App
             // Who set it last, and to what (GET /api/media clockSrc, clockAt).
             ClockSrc g_clockSrc = ClockSrc::None;
             uint16_t g_clockAt  = 0;
-            void clockFrom(ClockSrc src, uint16_t hm) { g_clockSrc = src; g_clockAt = hm; }
+            uint32_t g_clockSetMs = 0;
+            void clockFrom(ClockSrc src, uint16_t hm)
+            {
+                g_clockSrc = src;
+                g_clockAt = hm;
+                g_clockSetMs = millis();
+            }
             // Earliest retry time; with the single request, stops a failing
             // render owning the bus.
             uint32_t g_clockNextMs  = 0;
@@ -980,13 +986,18 @@ namespace App
                     }
 
                     // The clock face needs seconds. Timeout 0: the default getLocalTime()
-                    // blocks up to 5 s.
+                    // blocks up to 5 s. With no phone time, the head unit's minute
+                    // plus the time since it came (the face counts from :00).
                     if (g_pane.scene() == MegaOpen::MediaPane::Scene::Clock) {
                         struct tm tmNow;
+                        const uint32_t sinceSet = now - g_clockSetMs;
                         if (getLocalTime(&tmNow, 0))
                             g_pane.setClockSecs((uint32_t)tmNow.tm_hour * 3600u +
                                                 (uint32_t)tmNow.tm_min * 60u +
                                                 (uint32_t)tmNow.tm_sec);
+                        else if (g_clockSrc == ClockSrc::Hu && sinceSet <= HU_CLOCK_FRESH_MS)
+                            g_pane.setClockSecs((uint32_t)(g_clockAt >> 8) * 3600u +
+                                                (uint32_t)(g_clockAt & 0xFF) * 60u + sinceSet / 1000u);
                     }
 
                     // The G-meter: 0x2A0's two accelerations. Moving while both are
@@ -1108,6 +1119,7 @@ namespace App
                 u.paneScene        = (uint8_t)g_pane.scene();
                 u.clockSrc         = g_clockSrc;
                 u.clockAt          = g_clockAt;
+                u.clockSetMs       = g_clockSetMs;
                 s_status.publish(u);
                 // The web composes its previews from these copies. A reader
                 // holding one only delays its refresh to the next pass.

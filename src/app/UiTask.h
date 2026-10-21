@@ -2,6 +2,7 @@
 #include "../Features.h"
 #if FEATURE_DISPLAY_CAN
 #include <Arduino.h>
+#include "ClockHealth.h"
 #include "UiWaits.h"
 #include "../display/MediaScreen.h"
 #include "../display/MediaPane.h"
@@ -91,8 +92,7 @@ namespace App
             bool    set = false;
         };
 
-        // Who set the panel's clock last (GET /api/media clockSrc).
-        enum class ClockSrc : uint8_t { None = 0, Hu, Cts, Manual };
+        // ClockSrc: ClockHealth.h.
         const char* clockSrcName(ClockSrc s);   // "", "hu", "cts", "manual"
 
         // The ui task's counters for the web, published every pass.
@@ -109,6 +109,7 @@ namespace App
             uint8_t  paneScene = 0;         // MediaPane::Scene, live
             ClockSrc clockSrc = ClockSrc::None;
             uint16_t clockAt = 0;           // hours << 8 | minutes of that set
+            uint32_t clockSetMs = 0;        // millis() of that set
         };
 
         struct Deps {

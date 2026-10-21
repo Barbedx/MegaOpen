@@ -191,7 +191,7 @@ const strip=o=>{const x={...o};if(x.live)delete x.why;delete x.press;x.state=!o.
 /* НОВЕ (зріз 4): кожен ланцюг має стабільний code; W — ті самі пари [code, why], що в WebUi.cpp */
 const W={panel:[['panel_unregistered','registration lost — panel is not completing the handshake'],['panel_ok','']],
  media:[['media_off','media screen is switched off (mediaScreen)'],['media_no_panel','panel is not registered — nothing can be drawn'],['media_no_phone','no phone connected'],['media_no_track','phone connected but has reported no track yet'],['media_ok','']],
- clock:[['clock_off','autoTime is off'],['clock_no_phone','no phone — CTS is the only time source'],['clock_waiting','phone connected, no time received yet'],['clock_ok','']],
+ clock:[['clock_off','autoTime is off'],['clock_phone','from the phone (CTS)'],['clock_hu','from the head unit (0x9D)'],['clock_waiting','phone connected, no time received yet'],['clock_no_source','no phone, and no clock from the head unit']],
  keys:[['keys_ok',''],['keys_none','no key event since boot']],ancs:[['ancs_ok',''],['ancs_no_phone','no phone connected'],['ancs_waiting','connected, nothing pushed yet']],
  hu:[['hu_off','uartEnabled is off'],['hu_silent','no frame from the head unit since boot'],['hu_quiet','head unit has gone quiet (link timeout)'],['hu_ok',''],['hu_seen','frames since boot; this build cannot tell how recent']],
  phone:[['phone_ok',''],['phone_ble_off','bleMode is off'],['phone_advertising','advertising — not connected']]};
@@ -201,7 +201,7 @@ function health(){
  if(F.display){chain('panel',reg?'ok':'broken',reg?1:0,{rxFrames:S.can.twaiRx,rxPin:6,txPin:7,resyncs:d.sessionsLost,txGated:false});
  const mi=!S.med.auto?0:!reg?1:!phone()&&mediaSrc()!=='hu'?2:!tr.title?3:4;
  chain('media',!S.med.auto?'off':mi<4?'idle':'ok',mi,{title:tr.title,artist:tr.artist,clock:ck,delivered:1834,superseded:12,failed:0});
- chain('clock',!S.set.autoTime?'off':ck?'ok':'idle',!S.set.autoTime?0:!phone()?1:!ck?2:3,{hhmm:ck})}
+ {const ci=!S.set.autoTime?0:ck?(phone()?1:2):phone()?3:4;chain('clock',!ci?'off':ci<3?'ok':'idle',ci,{hhmm:ck,src:['','cts','hu','',''][ci]})}}
  const k=chain('keys',S.affaEvents?'ok':'idle',S.affaEvents?0:1,{events:S.events,dest:{}});
  for(const[id,x]of Object.entries(destState()))k.dest[id]=strip(x);
  if(!F.ancs)ch.push({id:'ancs',state:'off',code:'ancs_off',why:'FEATURE_ANCS is off in this build'});

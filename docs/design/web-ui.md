@@ -244,7 +244,7 @@ These fields are added; no route is added for them:
 - `GET /api/health`:
   - every chain carries a stable `code` next to the English `why`;
   - a `hu` chain: `state`, `code`, `why` and `rxFrames`. It is `ok` while the head unit sent a frame within `HuMediaSource::linkTimeoutMs()` (15 s). Builds without the panel have no `HuMediaSource`: after the first frame they report `idle` with `hu_seen` (a frame since boot, recency unknown), never `ok`.
-  - The codes: `panel_off`, `panel_unregistered`, `panel_ok`; `media_off`, `media_no_panel`, `media_no_phone`, `media_no_track`, `media_ok`; `clock_off`, `clock_no_phone`, `clock_waiting`, `clock_ok`; `keys_ok`, `keys_none`; `ancs_ok`, `ancs_no_phone`, `ancs_waiting`, `ancs_off`; `hu_off`, `hu_silent`, `hu_quiet`, `hu_ok`, `hu_seen`; `phone_ok`, `phone_ble_off`, `phone_advertising`.
+  - The codes: `panel_off`, `panel_unregistered`, `panel_ok`; `media_off`, `media_no_panel`, `media_no_phone`, `media_no_track`, `media_ok`; `clock_off`, `clock_phone`, `clock_hu`, `clock_waiting`, `clock_no_source`; `keys_ok`, `keys_none`; `ancs_ok`, `ancs_no_phone`, `ancs_waiting`, `ancs_off`; `hu_off`, `hu_silent`, `hu_quiet`, `hu_ok`, `hu_seen`; `phone_ok`, `phone_ble_off`, `phone_advertising`.
 - `POST /api/macros` errors are `text/plain` `"<index>: <why>"`. The page marks the row whose number leads the message.
 
 ### Open contract items, each tagged with the slice that settles it

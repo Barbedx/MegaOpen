@@ -1017,15 +1017,11 @@ void WebUi::routes()
         // 3. The clock. Separate from media: the panel draws its clock even with
         //    the display off.
         {
-            const bool want = haveMs && ms.autoTime;
-            const bool have = haveMedia && box->clock()[0];
-            static constexpr Why W[] = {
-                {"clock_off", "autoTime is off"},
-                {"clock_no_phone", "no phone — CTS is the only time source"},
-                {"clock_waiting", "phone connected, no time received yet"},
-                {"clock_ok", ""}};
-            const uint8_t i = !want ? 0 : !phone ? 1 : !have ? 2 : 3;
-            JsonObject o = chain("clock", !want ? "off" : (have ? "ok" : "idle"), W[i]);
+            //    Sources: the phone and the head unit's 0x9D (ClockHealth.h).
+            const App::Ui::ClockHealth h =
+                App::Ui::clockHealth(haveMs && ms.autoTime, phone, us.clockSrc, millis() - us.clockSetMs);
+            JsonObject o = chain("clock", h.state, Why{h.code, h.why});
+            o["src"] = App::Ui::clockSrcName(us.clockSrc);
             if (haveMedia) o["hhmm"] = box->clock();
         }
 #endif

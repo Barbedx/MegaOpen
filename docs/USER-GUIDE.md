@@ -184,7 +184,8 @@ JSON from `http://<board>/api/health`: one entry per part with a `code`.
 | `panel_cluster_only` | only an instrument cluster answers on this bus, no AFFA display | CAN B is wired to the wrong bus |
 | `media_off` | now playing switched off | **Екран → Показувати музику** |
 | `media_no_panel` | nothing can be drawn | see `panel_unregistered` |
-| `media_no_phone`, `clock_no_phone`, `ancs_no_phone` | no iPhone connected | pair from the iPhone's Bluetooth settings |
+| `media_no_phone`, `ancs_no_phone` | no iPhone connected | pair from the iPhone's Bluetooth settings |
+| `clock_no_source` | no iPhone, and no clock from the head unit for 2.5 min | pair the iPhone, or check the head unit's UART (health `hu`) |
 | `media_no_track` | iPhone connected, nothing playing yet | start playback |
 | `clock_waiting`, `ancs_waiting` | connected, nothing received yet | wait; notifications need permission on the iPhone |
 | `clock_off` | automatic time is off | **Екран → Час автоматично** |

@@ -3,6 +3,7 @@
 #include "display/MediaScreen.h"
 #include "display/TextFold.h"
 #include "media/MediaInfo.h"
+#include "app/ClockHealth.h"
 
 using MegaOpen::MediaScreen;
 
@@ -1147,6 +1148,31 @@ void test_flow_is_one_of_the_styles_by_name()
     TEST_ASSERT_FALSE(MediaScreen::styleAnimates(MediaScreen::Style::Flow));
 }
 
+// The clock chain: the head unit's 0x9D is a source of its own, not only the
+// phone (owner, from the car: "clock_no_phone" while the head unit sent it).
+static void test_the_clock_chain_takes_the_head_unit_as_a_source()
+{
+    using namespace App::Ui;
+    ClockHealth h = clockHealth(true, false, ClockSrc::Hu, 30000);
+    TEST_ASSERT_EQUAL_STRING("ok", h.state);
+    TEST_ASSERT_EQUAL_STRING("clock_hu", h.code);
+    // One minute missed is still fine; three are a head unit that stopped.
+    TEST_ASSERT_EQUAL_STRING("clock_hu", clockHealth(true, false, ClockSrc::Hu, HU_CLOCK_FRESH_MS).code);
+    h = clockHealth(true, false, ClockSrc::Hu, HU_CLOCK_FRESH_MS + 1);
+    TEST_ASSERT_EQUAL_STRING("idle", h.state);
+    TEST_ASSERT_EQUAL_STRING("clock_no_source", h.code);
+    // The phone while connected, the head unit with a phone that has sent nothing.
+    TEST_ASSERT_EQUAL_STRING("clock_phone", clockHealth(true, true, ClockSrc::Cts, 999999).code);
+    TEST_ASSERT_EQUAL_STRING("clock_hu", clockHealth(true, true, ClockSrc::Hu, 1000).code);
+    TEST_ASSERT_EQUAL_STRING("clock_waiting", clockHealth(true, true, ClockSrc::None, 0).code);
+    // The phone's last time does not count once it is gone.
+    TEST_ASSERT_EQUAL_STRING("clock_no_source", clockHealth(true, false, ClockSrc::Cts, 1000).code);
+    TEST_ASSERT_EQUAL_STRING("clock_no_source", clockHealth(true, false, ClockSrc::Manual, 1000).code);
+    h = clockHealth(false, true, ClockSrc::Hu, 0);
+    TEST_ASSERT_EQUAL_STRING("off", h.state);
+    TEST_ASSERT_EQUAL_STRING("clock_off", h.code);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -1221,5 +1247,6 @@ int main(int, char**)
     RUN_TEST(test_the_typewriter_without_a_track_change_shows_the_title);
     RUN_TEST(test_the_tape_never_runs_past_the_glass);
     RUN_TEST(test_classic_at_the_glass_width_keeps_the_clock_the_time_and_a_bar);
+    RUN_TEST(test_the_clock_chain_takes_the_head_unit_as_a_source);
     return UNITY_END();
 }
