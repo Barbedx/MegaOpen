@@ -6,8 +6,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [Unreleased]
 
 ### Added
-- Pane scene G-метр: the car's lateral/longitudinal g (0x2A0) as a dot with a trail, a 0.5 g ring and a 3 s peak; a dotted still ring while the signal is stale or unverified. Not in the carousel.
-- Car screen preset «Поїздка»: consumption now/average, range, trip distance (`--` with no data); Display › Car screen › Preset, `carPreset`, and a card on Екран.
+- Pane scene G-метр: the felt force from 0x2A0 (left turn → right, braking → up) as a dot with a trail, a 0.5 g ring and a 3 s peak; the ring dotted while the decode is unverified, a still dotted ring with no fresh data. Not in the carousel.
+- Car screen preset «Поїздка»: consumption now/average, range, trip distance (`--` with no data; the trip keeps its last value with `?` after the engine stops); Display › Car screen › Preset, `carPreset`, and a card on Екран.
 
 ### Changed
 - Panel menu: the car screen settings moved into Display › Car screen.

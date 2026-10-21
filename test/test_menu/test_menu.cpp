@@ -499,6 +499,11 @@ void test_trip_rows()
     TEST_ASSERT_EQUAL_STRING("L/100km       9.5/7.0?", a);
     TEST_ASSERT_EQUAL_STRING("Range           380km?", b);
     TEST_ASSERT_EQUAL_STRING("Trip            0.7km?", c);
+    // The trip is a total: after the engine stops it keeps its last value, "?".
+    MenuUi::tripRows(rows, sizeof(a), 22, {0, false, true}, {68, false, true}, {420, false, true},
+                     {1234, false, true, true});
+    TEST_ASSERT_EQUAL_STRING("Range               --", b);
+    TEST_ASSERT_EQUAL_STRING("Trip          123.4km?", c);
 }
 
 // Display › Car screen › Preset, stored as its number, by name on the wire.

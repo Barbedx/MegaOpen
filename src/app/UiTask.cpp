@@ -906,7 +906,7 @@ namespace App
                     auto val = [&](uint8_t sg) {
                         return MenuUi::TripVal{s_d.car->get(sg),
                                                s_d.car->has(sg) && s_d.car->ageMs(sg, now) <= MenuUi::STALE_MS,
-                                               Vehicle::verified(sg)};
+                                               Vehicle::verified(sg), s_d.car->has(sg)};
                     };
                     if (g_carPreset == (uint8_t)Cfg::CarPreset::Trip)
                         MenuUi::tripRows(rows, PanelOps::STR_MAX, MegaOpen::FS_COLS,
@@ -989,23 +989,24 @@ namespace App
                                                 (uint32_t)tmNow.tm_sec);
                     }
 
-                    // The G-meter: 0x2A0's two accelerations, shown moving only when
-                    // both are fresh and verified (a hypothesis decode stays a dotted
-                    // ring, never a guess in motion).
+                    // The G-meter: 0x2A0's two accelerations. Moving while both are
+                    // fresh; the ring dotted until both decodes are verified (the
+                    // "?" of the text rows), a still dotted ring when stale.
                     if (g_pane.scene() == MegaOpen::MediaPane::Scene::GMeter) {
-                        bool live = false;
+                        bool fresh = false, ver = false;
                         int32_t lat = 0, lon = 0;
                         if (s_d.car) {
                             auto ok = [&](uint8_t sg) {
-                                return s_d.car->has(sg) && s_d.car->ageMs(sg, now) <= MenuUi::STALE_MS &&
-                                       Vehicle::verified(sg);
+                                return s_d.car->has(sg) && s_d.car->ageMs(sg, now) <= MenuUi::STALE_MS;
                             };
-                            live = ok(Vehicle::SIG_ACCEL_LAT) && ok(Vehicle::SIG_ACCEL_LONG);
+                            fresh = ok(Vehicle::SIG_ACCEL_LAT) && ok(Vehicle::SIG_ACCEL_LONG);
+                            ver   = Vehicle::verified(Vehicle::SIG_ACCEL_LAT) &&
+                                    Vehicle::verified(Vehicle::SIG_ACCEL_LONG);
                             lat  = s_d.car->get(Vehicle::SIG_ACCEL_LAT);
                             lon  = MegaOpen::MediaPane::mgFromMs2x100(s_d.car->get(Vehicle::SIG_ACCEL_LONG));
                         }
                         auto mg = [](int32_t v) { return (int16_t)(v > 30000 ? 30000 : v < -30000 ? -30000 : v); };
-                        g_pane.setAccel(mg(lat), mg(lon), live, now);
+                        g_pane.setAccel(mg(lat), mg(lon), fresh, ver, now);
                     }
 
                     // Several steps per image: the wire delivers ~2 images/s.

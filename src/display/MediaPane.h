@@ -100,14 +100,25 @@ namespace MegaOpen
         // NOT compose Custom: the buffer is the ui task's. Null draws dark.
         void setCustom(const uint8_t* bits) { _custom = bits; }
 
-        // The G-meter's input, in milli-g: + lateral draws right, + longitudinal
-        // (speeding up) draws up. `live` = fresh and verified; when it is not,
-        // the scene is a dotted ring and nothing moves, and the trail and the
-        // peak are dropped. Each live call is one trail point (the ui task calls
-        // once per image, ~2/s); the peak is held PEAK_MS of nowMs.
-        void setAccel(int16_t latMg, int16_t longMg, bool live, uint32_t nowMs);
+        // The G-meter's input, in milli-g, drawn as the force a driver feels:
+        // a left turn pushes the dot right, braking up, speeding up down. Not
+        // `fresh`: a still dotted ring, the trail
+        // and the peak dropped. Fresh: the dot moves; the ring is solid when
+        // `verified` and dotted when not (the "?" of the text rows: real bus
+        // data whose decode no car has confirmed yet). Each fresh call is one
+        // trail point (the ui task calls once per image, ~2/s); the peak is
+        // held PEAK_MS of nowMs.
+        void setAccel(int16_t latMg, int16_t longMg, bool fresh, bool verified, uint32_t nowMs);
         // accel_long is m/s² x100; the meter works in milli-g.
         static int32_t mgFromMs2x100(int32_t v) { return v * 1000 / 981; }
+        // 0x2A0's signs are not in the matrix; assumed ISO 8855 (Bosch ESP):
+        // + lateral = accelerating to the LEFT (a left turn), + longitudinal =
+        // speeding up. The felt force is the opposite of the acceleration, so
+        // + lateral draws right and + longitudinal draws down (screen y grows
+        // down). A car check that disagrees flips one of these
+        // (docs/car-test-can-signals.md: a steady left turn, then hard braking).
+        static constexpr int8_t   G_LAT_SIGN  = 1;    // +1: + lateral draws right
+        static constexpr int8_t   G_LONG_SIGN = 1;    // +1: + longitudinal draws down
         static constexpr int16_t  G_FULL_MG = 1000;   // the dot's reach, G_R px
         static constexpr int8_t   G_R       = 22;
         static constexpr uint32_t PEAK_MS   = 3000;
@@ -228,7 +239,7 @@ namespace MegaOpen
         static constexpr uint8_t kGTrail = 6;
         int8_t   _gx[kGTrail] = {0}, _gy[kGTrail] = {0};
         uint8_t  _gn = 0, _gSeq = 0;
-        bool     _gLive = false, _gHavePeak = false;
+        bool     _gLive = false, _gVerified = false, _gHavePeak = false;
         int8_t   _gpx = 0, _gpy = 0;
         int32_t  _gpMag = 0;
         uint32_t _gpMs = 0;

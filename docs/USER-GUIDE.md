@@ -103,10 +103,11 @@ still, consumption now is `--`).
   through them all. Scenes: медіа, VU, хвиля, годинник, зорі, м'ячик, кола,
   спіраль, осцилограф, дощ, радар, життя, касета, тунель, G-метр, своя (draw
   it under **Намалювати свою**). G-метр and своя are not in the carousel.
-* **G-метр:** the car's sideways and forward pull as a dot (right = right, up =
-  speeding up), a short trail, a ring at 0.5 g and the strongest pull held for
-  3 s. Until the acceleration signals are checked in a car, or when they stop,
-  it shows a dotted ring and nothing moves.
+* **G-метр:** the force you feel as a dot (a left turn pushes it right,
+  braking up, speeding up down), a short trail, a ring at 0.5 g and the
+  strongest pull held for 3 s. The ring is dotted while the acceleration
+  signals are not yet checked in a car (like `?` on a text row); with no fresh
+  data it is a dotted ring and nothing moves.
 
 ## Keys
 

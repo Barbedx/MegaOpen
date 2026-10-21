@@ -69,8 +69,9 @@ namespace MenuUi
         signalValue(val, sizeof(val), Vehicle::meta(Vehicle::SIG_RANGE_CALC), range.v, range.fresh,
                     range.verified || !range.fresh);
         lay(rows[1], cap, width, "Range", val);
-        signalValue(val, sizeof(val), Vehicle::meta(Vehicle::SIG_TRIP_KM), km.v, km.fresh,
-                    km.verified || !km.fresh);
+        const bool kmShown = km.fresh || km.seen;
+        signalValue(val, sizeof(val), Vehicle::meta(Vehicle::SIG_TRIP_KM), km.v, kmShown,
+                    !kmShown || (km.fresh && km.verified));
         lay(rows[2], cap, width, "Trip", val);
     }
 }

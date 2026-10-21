@@ -157,8 +157,8 @@ function sceneBits(id,t){const p=new Uint8Array(2304),set=(x,y)=>{x=Math.round(x
    for(let x=13;x<35;x++)set(x,36);for(let x=15;x<33;x++)set(x,38);break}
   case 'tunnel':{const vx=23+7*Math.sin(f*0.3),vy=23+7*Math.cos(f*0.5);for(let i=0;i<8;i++){const ph=(i*12+f*8)%96,h=Math.round(3*2**(ph/24)),n=Math.min(24,h)/24,x=vx+(23-vx)*n,y=vy+(23-vy)*n;
    for(let k=-h;k<=h;k++){set(x+k,y-h);set(x+k,y+h);set(x-h,y+k);set(x+h,y+k)}}break}
-  /* G-метр: у симуляторі завжди «живий» (точка по фігурі Ліссажу, слід, кільце 0.5 g, пік); на платі — пунктирне кільце, поки 0x2A0 не перевірено */
-  case 'gmeter':{for(let a=0;a<64;a++)set(23+11*Math.cos(a/64*6.283),23+11*Math.sin(a/64*6.283));for(let k=0;k<3;k++){set(1+k,23);set(45-k,23);set(23,1+k);set(23,45-k)}set(23,23);
+  /* G-метр: точка по фігурі Ліссажу, слід, пік; кільце 0.5 g пунктиром — як на платі, поки 0x2A0 не перевірено («?») */
+  case 'gmeter':{for(let a=0;a<64;a+=2)set(23+11*Math.cos(a/64*6.283),23+11*Math.sin(a/64*6.283));for(let k=0;k<3;k++){set(1+k,23);set(45-k,23);set(23,1+k);set(23,45-k)}set(23,23);
    const at=g=>[23+Math.round(18*Math.sin(g*0.9)),23+Math.round(-14*Math.sin(g*0.5))];for(let i=5;i>0;i--){const[x,y]=at(f-i*0.5);if(i<=2||(i+Math.floor(f*2))%2)set(x,y)}
    const[px,py]=at(Math.floor(f/3)*3+1.7);[[-1,-1],[1,-1],[0,0],[-1,1],[1,1]].forEach(([dx,dy])=>set(px+dx,py+dy));const[x,y]=at(f);for(let dy=-1;dy<2;dy++)for(let dx=-1;dx<2;dx++)set(x+dx,y+dy);break}
   case 'custom':if(S.med.custom)p.set(S.med.custom);break}

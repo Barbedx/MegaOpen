@@ -511,9 +511,9 @@ static bool on(const uint8_t* b, int x, int y)
     return b[y * MediaPane::STRIDE + (x >> 3)] & (0x80 >> (x & 7));
 }
 
-static void test_the_gmeter_without_live_data_is_a_still_dotted_ring()
+static void test_a_stale_gmeter_is_a_still_dotted_ring()
 {
-    // Stale or unverified: a dotted 0.5 g ring and the centre, and the same
+    // Stale: a dotted 0.5 g ring and the centre, and the same
     // bytes however long it runs or whatever values arrive. Never motion.
     MediaPane p;
     p.setScene(MediaPane::Scene::GMeter);
@@ -524,13 +524,13 @@ static void test_the_gmeter_without_live_data_is_a_still_dotted_ring()
     TEST_ASSERT_FALSE(on(a, 45, 23));           // no 1 g tick
     const uint16_t dim = litPixels(a);
     for (int i = 0; i < 10; ++i) {
-        p.setAccel((int16_t)(i * 90), (int16_t)(-i * 70), false, (uint32_t)i * 500);
+        p.setAccel((int16_t)(i * 90), (int16_t)(-i * 70), false, false, (uint32_t)i * 500);
         p.step();
     }
     composeGuarded(p, b);
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, memcmp(a, b, MediaPane::BYTES), "a stale G-meter moved");
     // Dimmer than the live ring: about half its points.
-    p.setAccel(0, 0, true, 0);
+    p.setAccel(0, 0, true, true, 0);
     composeGuarded(p, b);
     TEST_ASSERT_TRUE(dim < litPixels(b));
 }
@@ -541,7 +541,7 @@ static void test_the_gmeter_draws_the_dot_where_the_pull_is()
     p.setScene(MediaPane::Scene::GMeter);
     uint8_t b[MediaPane::BYTES];
     // At rest: the 3x3 dot on the centre, the solid ring, the 1 g ticks.
-    p.setAccel(0, 0, true, 0);
+    p.setAccel(0, 0, true, true, 0);
     composeGuarded(p, b);
     for (int y = 22; y <= 24; ++y)
         for (int x = 22; x <= 24; ++x) TEST_ASSERT_TRUE(on(b, x, y));
@@ -554,19 +554,49 @@ static void test_the_gmeter_draws_the_dot_where_the_pull_is()
     // 0.5 g to the right: the dot sits on the ring, 11 px right.
     MediaPane q;
     q.setScene(MediaPane::Scene::GMeter);
-    q.setAccel(500, 0, true, 0);
+    q.setAccel(500, 0, true, true, 0);
     composeGuarded(q, b);
     for (int y = 22; y <= 24; ++y)
         for (int x = 33; x <= 35; ++x) TEST_ASSERT_TRUE(on(b, x, y));
     TEST_ASSERT_FALSE(on(b, 22, 22));           // the centre is only its pixel now
-    // Speeding up at 1 g draws up, to the top tick; past 1 g clamps there.
+    // Braking at 1 g (felt: thrown forward) draws up, to the top tick; past
+    // 1 g clamps there. Speeding up draws down.
     MediaPane r;
     r.setScene(MediaPane::Scene::GMeter);
-    r.setAccel(0, 2000, true, 0);
+    r.setAccel(0, -2000, true, true, 0);
     composeGuarded(r, b);
     TEST_ASSERT_TRUE(on(b, 23, 1));
     TEST_ASSERT_TRUE(on(b, 22, 2));
     TEST_ASSERT_TRUE(on(b, 24, 0));
+    MediaPane d;
+    d.setScene(MediaPane::Scene::GMeter);
+    d.setAccel(0, 500, true, true, 0);
+    composeGuarded(d, b);
+    TEST_ASSERT_TRUE(on(b, 23, 34) && on(b, 22, 33) && on(b, 24, 35));
+}
+
+static void test_an_unverified_gmeter_moves_with_a_dotted_ring()
+{
+    // Real bus data, decode not yet confirmed: the owner has to see it move
+    // to confirm it, so the dot moves; the ring is dotted, the "?" mark.
+    MediaPane u, v;
+    u.setScene(MediaPane::Scene::GMeter);
+    v.setScene(MediaPane::Scene::GMeter);
+    uint8_t a[MediaPane::BYTES], b[MediaPane::BYTES];
+    u.setAccel(500, 0, true, false, 0);
+    v.setAccel(500, 0, true, true, 0);
+    composeGuarded(u, a);
+    composeGuarded(v, b);
+    for (int y = 22; y <= 24; ++y)
+        for (int x = 33; x <= 35; ++x) TEST_ASSERT_TRUE(on(a, x, y));
+    TEST_ASSERT_TRUE(on(a, 45, 23));                    // the 1 g ticks: it is live
+    TEST_ASSERT_TRUE_MESSAGE(litPixels(a) < litPixels(b), "the unverified ring is not dotted");
+    TEST_ASSERT_TRUE(on(b, 13, 23) && on(b, 23, 13));   // solid where it is verified
+    // And it moves.
+    u.setAccel(-500, 0, true, false, 500);
+    composeGuarded(u, b);
+    TEST_ASSERT_TRUE(on(b, 12, 23));
+    TEST_ASSERT_TRUE(memcmp(a, b, MediaPane::BYTES) != 0);
 }
 
 static void test_the_gmeter_holds_the_peak_for_three_seconds()
@@ -574,15 +604,15 @@ static void test_the_gmeter_holds_the_peak_for_three_seconds()
     MediaPane p;
     p.setScene(MediaPane::Scene::GMeter);
     uint8_t b[MediaPane::BYTES];
-    p.setAccel(1000, 0, true, 0);             // the peak: 1 g right, x = 45
-    p.setAccel(0, 0, true, 1000);
-    p.setAccel(0, 0, true, 2000);
-    p.setAccel(0, 0, true, 2900);
+    p.setAccel(1000, 0, true, true, 0);             // the peak: 1 g right, x = 45
+    p.setAccel(0, 0, true, true, 1000);
+    p.setAccel(0, 0, true, true, 2000);
+    p.setAccel(0, 0, true, true, 2900);
     composeGuarded(p, b);
     TEST_ASSERT_TRUE_MESSAGE(on(b, 44, 22) && on(b, 46, 22) && on(b, 44, 24) && on(b, 46, 24),
                              "no peak x at 2.9 s");
     // A weaker pull does not replace it; 3 s after it, the peak lets go.
-    p.setAccel(300, 0, true, 3000);
+    p.setAccel(300, 0, true, true, 3000);
     composeGuarded(p, b);
     TEST_ASSERT_FALSE(on(b, 44, 22));
     TEST_ASSERT_FALSE(on(b, 46, 24));
@@ -593,15 +623,15 @@ static void test_the_gmeter_drops_its_trail_when_the_data_goes()
     MediaPane p, fresh;
     p.setScene(MediaPane::Scene::GMeter);
     fresh.setScene(MediaPane::Scene::GMeter);
-    for (int i = 0; i < 6; ++i) p.setAccel((int16_t)(i * 150), (int16_t)(i * 100), true, (uint32_t)i * 500);
-    p.setAccel(0, 0, false, 3000);
+    for (int i = 0; i < 6; ++i) p.setAccel((int16_t)(i * 150), (int16_t)(i * 100), true, true, (uint32_t)i * 500);
+    p.setAccel(0, 0, false, false, 3000);
     uint8_t a[MediaPane::BYTES], b[MediaPane::BYTES];
     composeGuarded(p, a);
     composeGuarded(fresh, b);
     TEST_ASSERT_EQUAL_INT(0, memcmp(a, b, MediaPane::BYTES));
     // Back: one point, no old trail and no old peak.
-    p.setAccel(0, 0, true, 3500);
-    fresh.setAccel(0, 0, true, 3500);
+    p.setAccel(0, 0, true, true, 3500);
+    fresh.setAccel(0, 0, true, true, 3500);
     composeGuarded(p, a);
     composeGuarded(fresh, b);
     TEST_ASSERT_EQUAL_INT(0, memcmp(a, b, MediaPane::BYTES));
@@ -895,10 +925,11 @@ int main(int, char**)
     RUN_TEST(test_the_clock_wraps_a_day_rather_than_running_off_the_face);
     RUN_TEST(test_the_tape_turns_only_while_playing);
     RUN_TEST(test_the_tape_winds_with_the_position);
-    RUN_TEST(test_the_gmeter_without_live_data_is_a_still_dotted_ring);
+    RUN_TEST(test_a_stale_gmeter_is_a_still_dotted_ring);
     RUN_TEST(test_the_gmeter_draws_the_dot_where_the_pull_is);
     RUN_TEST(test_the_gmeter_holds_the_peak_for_three_seconds);
     RUN_TEST(test_the_gmeter_drops_its_trail_when_the_data_goes);
+    RUN_TEST(test_an_unverified_gmeter_moves_with_a_dotted_ring);
     RUN_TEST(test_accel_long_converts_to_milli_g);
     return UNITY_END();
 }

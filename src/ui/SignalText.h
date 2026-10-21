@@ -28,7 +28,9 @@ namespace MenuUi
     //   "Range        420km"   range_calc
     //   "Trip       123.4km"   trip_km
     // "--" with no data; "?" after a value not yet verified, as everywhere else.
-    struct TripVal { int32_t v; bool fresh, verified; };
+    // trip_km is a total: once `seen` it keeps its last value after it goes
+    // stale (the engine off), with "?".
+    struct TripVal { int32_t v; bool fresh, verified, seen = false; };
     void tripRows(char* const rows[3], size_t cap, size_t width, const TripVal& inst,
                   const TripVal& avg, const TripVal& range, const TripVal& km);
 }
