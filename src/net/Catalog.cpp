@@ -539,7 +539,9 @@ namespace Catalog
                 .ks("cmd", t.cmd).ks("kind", t.boolean ? "b" : "n")
                 .k("min").lit(Canbox::RaiseTargets::fmt(lo, sizeof(lo), t.min, t.dec))
                 .k("max").lit(Canbox::RaiseTargets::fmt(hi, sizeof(hi), t.max, t.dec))
-                .kn("dec", t.dec).kb("fw", t.fw).endObj();
+                .kn("dec", t.dec).kb("fw", t.fw);
+            if (t.why) j.ks("why", t.why);
+            j.endObj();
         }
         j.endArr();
 

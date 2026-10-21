@@ -455,7 +455,7 @@ po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(
  return ok});
 const frameFor=(t,v)=>{const[c,sub0]=t.cmd.split(' '),sub=sub0&&sub0!=='A/C'?sub0:'',n=Math.round(+v*pow10(t.dec))&0xFFFF;return ('2E '+c+' 0'+(sub?3:2)+' '+(sub?sub+' ':'')+h2(n)+' '+h2(n>>8)+' CS').toUpperCase()};
 /* WebUiMap.cpp: перед тестом — чи носить 0x28 цю форму; ворота повідомлень (одометр, TPMS…) мок не моделює */
-po('/api/map/test',q=>{const t=C.raise.find(x=>x.id===q.id);if(!t)return fail(404,'no such field');if(!t.fw)return fail(409,t.id+': firmware does not send '+t.cmd+' yet');if(!S.set.uartEnabled)return fail(409,'head-unit UART is off');
+po('/api/map/test',q=>{const t=C.raise.find(x=>x.id===q.id);if(!t)return fail(404,'no such field');if(!t.fw)return fail(409,t.id+': protocol 112 has no field for it');if(!S.set.uartEnabled)return fail(409,'head-unit UART is off');
  if(t.cmd==='28'&&S.tun.cmd28)return fail(409,t.id+': 0x28 carries the A/C form now: switch it in Service, Raise');
  if(t.id==='prnd'&&!((S.huExp|0)&8))return fail(409,'prnd: switch on the selector experiment first');
  if(t.cmd==='28 A/C'&&!S.tun.cmd28)return fail(409,t.id+': 0x28 carries the outside temperature now: switch it in Service, Raise');

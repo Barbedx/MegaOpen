@@ -12,9 +12,9 @@
 // (Signals.cpp), so only the Ukrainian label and the wire command are here.
 // ADDING A TOYOTA FUNCTION: a Sig, a builder in Rav4Emitter, and one row here.
 //
-// A row with fw=false is a field the head unit's app decodes
-// (docs/hu-decoder.md) that this firmware does not send yet: listed so the page
-// shows the gap. Those with no Sig yet carry their own unit and range.
+// A row with fw=false is a car value protocol 112 has no field for (the
+// battery): listed with its signal so the page shows the value and `why`, and
+// points at the experiment that borrows another field for it.
 namespace Canbox
 {
     constexpr uint8_t NO_MSG = 0xFF;
@@ -27,7 +27,8 @@ namespace Canbox
         const char* group;
         const char* name;
         const char* unit;
-        const char* cmd;
+        const char* cmd;      // "" when not sent
+        const char* why;      // fw=false: why not, for the page; else null
         bool        boolean;
         int32_t     min, max;
         uint8_t     dec;

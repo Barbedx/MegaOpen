@@ -357,11 +357,7 @@ void WebUi::routesMap()
         const int ti = RT::find(id);
         if (ti < 0) return bad(r, 404, nullptr, "no such field");
         const TargetView t = RT::at((uint8_t)ti);
-        if (!t.fw) {
-            char w[64];
-            snprintf(w, sizeof(w), "firmware does not send %s yet", t.cmd);
-            return bad(r, 409, id, w);
-        }
+        if (!t.fw) return bad(r, 409, id, "protocol 112 has no field for it");
         if (!_cfg->s().uartEnabled) return r->reply(409, "text/plain", "head-unit UART is off");
         App::Hu::EmitterCfg cfg;
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy, try again");

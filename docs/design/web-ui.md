@@ -110,7 +110,7 @@ These are the changes only. Everything not named stays as it is.
   The mapping lives in the NVS blob `decode` (`Vehicle::DecodeTable::pack`, at most 48 CAN rows and 16 constants, 1187 B) on every env, and is hot-loaded through Staged (the two buffers in PSRAM where there is some). No blob is the factory table, `decode_defaults.inc`; `POST /api/map {reset:true}` erases the key. A save that does not reach NVS answers 500 with a text body.
   - `GET /api/map`: `{send, uart, units:{fuel,trip}, rows:[{id, src, can|null, k, v, how, left?, raw?}]}`. A row's name, unit, range and `fw` are the catalog's `raise` row with the same `id` (the signal's name); `k` and `v` have the decimal point placed. `raw` only while the ID table (`/api/can/sniff`) has the id.
   - `POST /api/map`: any of `send`, `units`, `rows:[{id,src,k,can}]` (16 at most, one per field), `reset`. Everything is checked before anything is applied. 400 bad field or a field twice, 404 unknown id, 409 a field with no signal, the UART off for `send`, or a full map.
-  - `POST /api/map/test {id,value}`: pins the value for 30 s and sends the field's message once; `{ok,bytes}`. 409 when the firmware does not send the field, the UART is off, `0x28` carries the other form, or the message's gate field (odometer, rear radar, TPMS, hybrid) has no value yet.
+  - `POST /api/map/test {id,value}`: pins the value for 30 s and sends the field's message once; `{ok,bytes}`. 409 when protocol 112 has no field for it (`fw:false`), the UART is off, `0x28` carries the other form, or the message's gate field (odometer, rear radar, TPMS, hybrid) has no value yet.
 - `GET /api/config` and `POST /api/config` (settings to a file) are the only addition that replaces nothing. They go last and can be dropped.
 
 **Changed parameters, no new routes:**
@@ -213,7 +213,7 @@ The simulator mock and the firmware both answer exactly this shape:
 
 - **Field meanings:**
   - `kind` is `n` (number) or `b` (yes/no).
-  - `fw:false` means the Android app reads this field but the firmware does not send it yet.
+  - `fw:false` is a car value protocol 112 has no field for (only the battery, `batt_v`): `why` says so, `cmd` is empty, and the page links the experiment that borrows another field.
   - The scene index is the position in `scenes`. `custom` is a real `MediaPane` scene, last in the enum (slice 6).
 ### Catalog decisions after the slice 1 review (2026-10-16)
 

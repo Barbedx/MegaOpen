@@ -255,6 +255,24 @@ void test_doors_defaults_to_length_two()
     TEST_ASSERT_EQUAL_UINT8(6, g_len);            // 2E 24 02 <mask> <D1> <cs>
 }
 
+// The bonnet alone sends the doors frame, in D1 b7 next to the ignition bit;
+// len 1 has no D1, so there it is dropped, never put in the checksum's place.
+void test_doors_message_carries_the_bonnet()
+{
+    resetCapture();
+    State s;
+    s.pin(SIG_BONNET, 1);
+    s.pin(SIG_KEY_ON, 1);
+    E e;
+    e.begin(capture, nullptr);
+    TEST_ASSERT_TRUE(e.sendNow(E::MSG_DOORS, s));
+    TEST_ASSERT_EQUAL_UINT8(0x00, g_last[3]);     // D0: no door
+    TEST_ASSERT_EQUAL_UINT8(0x82, g_last[4]);     // D1: bonnet b7 + ignition b1
+    s.pin(SIG_BONNET, 0);
+    TEST_ASSERT_TRUE(e.sendNow(E::MSG_DOORS, s));
+    TEST_ASSERT_EQUAL_UINT8(0x02, g_last[4]);
+}
+
 void test_doors_message_carries_the_ignition_bit()
 {
     resetCapture();
@@ -890,7 +908,7 @@ void test_raise_targets_ids_are_unique_and_name_real_signals()
         const Canbox::TargetView t = RT::at(i);
         TEST_ASSERT_NOT_NULL(t.id);
         TEST_ASSERT_TRUE_MESSAGE(t.min <= t.max, t.id);
-        TEST_ASSERT_TRUE_MESSAGE(t.group && *t.group && t.name && *t.name && t.cmd && *t.cmd, t.id);
+        TEST_ASSERT_TRUE_MESSAGE(t.group && *t.group && t.name && *t.name && t.cmd && (*t.cmd || !t.fw), t.id);
         TEST_ASSERT_EQUAL_INT_MESSAGE(i, RT::find(t.id), t.id);          // unique
         if (t.sig < SIG_COUNT) TEST_ASSERT_EQUAL_STRING(meta(t.sig).name, t.id);
         // A field the firmware sends has a signal to hold its value.
@@ -898,12 +916,14 @@ void test_raise_targets_ids_are_unique_and_name_real_signals()
         else      TEST_ASSERT_EQUAL_UINT8_MESSAGE(Canbox::NO_MSG, t.msg, t.id);
     }
     TEST_ASSERT_EQUAL_INT(-1, RT::find("nope"));
-    // The two the app decodes that the firmware does not send yet (eng_temp
-    // goes as the coolant experiment, 0x7D 09; prnd as the selector one, 0x7D 06).
-    for (const char* id : {"bonnet", "batt"}) {
-        const int i = RT::find(id);
-        TEST_ASSERT_TRUE_MESSAGE(i >= 0, id);
-        TEST_ASSERT_FALSE_MESSAGE(RT::at((uint8_t)i).fw, id);
+    // The bonnet goes out in 0x24 D1 b7. The battery is the one row not sent:
+    // protocol 112 has no field for it, and the page says so (`why`).
+    TEST_ASSERT_TRUE(RT::at((uint8_t)RT::find("bonnet")).fw);
+    for (uint8_t i = 0; i < RT::count(); ++i) {
+        const Canbox::TargetView t = RT::at(i);
+        TEST_ASSERT_EQUAL_MESSAGE(t.fw, t.why == nullptr, t.id);
+        TEST_ASSERT_TRUE_MESSAGE(t.sig < SIG_COUNT, t.id);
+        if (!t.fw) TEST_ASSERT_EQUAL_STRING("batt_v", t.id);
     }
 }
 
@@ -932,17 +952,19 @@ void test_every_sent_raise_target_changes_its_message()
         TEST_ASSERT_TRUE_MESSAGE(la != lb || memcmp(a, b, la) != 0, t.id);
     }
     // And every signal the emitter reads has a row (only the 8 it does not
-    // send are missing, and eng_temp is listed as not sent). The Mégane
-    // broadcast signals from SIG_FUEL_LEVEL on have no Raise field, except
-    // the selector probe, SIG_PRND.
+    // send are missing). The Mégane broadcast signals from SIG_FUEL_LEVEL on
+    // have no Raise field, except the selector probe, SIG_PRND, the bonnet,
+    // and the battery (listed, not sent).
     bool listed[SIG_COUNT] = {};
     uint8_t n = 0;
     for (uint8_t i = 0; i < RT::count(); ++i) {
         const uint8_t sg = RT::at(i).sig;
         if (sg < SIG_COUNT && !listed[sg]) { listed[sg] = true; ++n; }
     }
-    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LEVEL - 7 + 1, n);
+    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LEVEL - 7 + 3, n);
     TEST_ASSERT_TRUE(listed[SIG_PRND]);
+    TEST_ASSERT_TRUE(listed[SIG_BONNET]);
+    TEST_ASSERT_TRUE(listed[SIG_BATT_V]);
 }
 
 void test_raise_values_place_the_decimal_point()
@@ -1224,6 +1246,7 @@ int main(int, char**)
     RUN_TEST(test_rpm_goes_on_the_wire_times_four);
     RUN_TEST(test_doors_are_keyed_by_side_not_by_role);
     RUN_TEST(test_doors_defaults_to_length_two);
+    RUN_TEST(test_doors_message_carries_the_bonnet);
     RUN_TEST(test_doors_message_carries_the_ignition_bit);
     RUN_TEST(test_doors_length_is_switchable);
     RUN_TEST(test_speed_carries_average_in_the_trailing_pair);

@@ -251,14 +251,16 @@ namespace Canbox
         switch (msgIndex) {
             case M_DOORS: {
                 if (!(s.has(SIG_DOOR_FL) || s.has(SIG_DOOR_FR) || s.has(SIG_DOOR_RL) ||
-                      s.has(SIG_DOOR_RR) || s.has(SIG_BOOT) || s.has(SIG_KEY_ON))) return false;
+                      s.has(SIG_DOOR_RR) || s.has(SIG_BOOT) || s.has(SIG_KEY_ON) ||
+                      s.has(SIG_BONNET))) return false;
                 cmd = 0x24;
                 p[0] = doorsMask(s);
                 if (_t.doorsLen == 2) {
                     // D1 b1 = ignition; gates the trip/fuel/history/TPMS panels
-                    // (vendor spec). See setDoorsWithIgnition().
+                    // (vendor spec). See setDoorsWithIgnition(). D1 b7 = bonnet
+                    // (docs/hu-decoder.md §2a); len 1 has no D1 to carry it.
                     len = 2;
-                    p[1] = (uint8_t)(s.get(SIG_KEY_ON) ? 0x02 : 0x00);
+                    p[1] = (uint8_t)((s.get(SIG_KEY_ON) ? 0x02 : 0x00) | (s.get(SIG_BONNET) ? 0x80 : 0x00));
                 } else {
                     len = 1;
                 }

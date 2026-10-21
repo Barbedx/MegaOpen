@@ -23,26 +23,19 @@ namespace Canbox
         };
         static_assert(sizeof(kMsgCmd) / sizeof(kMsgCmd[0]) == M::MSG_COUNT, "kMsgCmd is out of step with Msg");
 
-        // What the head unit's app decodes and the firmware does not send:
-        // the command, and for a field with no signal yet its own id, unit and
-        // range (a field with a signal takes those from Signals.cpp).
-        struct NoFw {
-            const char* id;
-            const char* cmd;
-            const char* unit;
-            bool        boolean;
-            int32_t     min, max;
-            uint8_t     dec;
-        };
-        enum : uint8_t { NF_BONNET = 0, NF_ENG_TEMP, NF_BATT, NF_NONE = 0xFF };
-        const NoFw kNoFw[] = {
-            {"bonnet", "7D 05", "",  true,  0, 1,   0},
-            {nullptr,  "7D 09", "",  false, 0, 0,   0},
-            {"batt",   "41 02", "В", false, 0, 160, 1},
+        // A car value the owner looks for on the tablet that protocol 112
+        // has no field for: the page shows the value and says why it does not
+        // go out (the command column is empty).
+        enum : uint8_t { NF_BATT = 0, NF_NONE = 0xFF };
+        const char* const kNoFw[] = {
+            // 0x41 02 is VW's; this head unit decodes 0x41 into Toyota codes
+            // and 0x7D 0B not at all (docs/hu-decoder.md §2b-2c). EXP_BATT
+            // borrows another field instead.
+            "протокол 112 цього не має",
         };
 
-        // 8 B a row: the name, the signal, the message, the section, and the
-        // not-sent side row.
+        // 8 B a row: the name, the signal, the message, the section, and why
+        // it is not sent.
         struct Row {
             const char* name;
             uint8_t     sig;
@@ -51,7 +44,7 @@ namespace Canbox
             uint8_t     nofw;
         };
 
-        // A signal the emitter sends; a field it does not (yet).
+        // A signal the emitter sends; a car value it has no field for.
         #define T(sig, msg, g, name)   {name, sig, M::msg, g, NF_NONE}
         #define X(sig, g, name, nf)    {name, sig, NO_MSG, g, nf}
 
@@ -62,7 +55,7 @@ namespace Canbox
             T(SIG_DOOR_RR, MSG_DOORS, G_DOORS, "Задні праві"),
             T(SIG_BOOT, MSG_DOORS, G_DOORS, "Багажник"),
             T(SIG_KEY_ON, MSG_DOORS, G_DOORS, "Запалювання (D1 b1)"),
-            X(SIG_COUNT, G_DOORS, "Капот", NF_BONNET),
+            T(SIG_BONNET, MSG_DOORS, G_DOORS, "Капот (D1 b7)"),
 
             T(SIG_SPEED, MSG_SPEED, G_DRIVE, "Швидкість"),
             T(SIG_AVG_SPEED, MSG_TRIP, G_DRIVE, "Середня швидкість"),   // also 7D 03, which needs speed
@@ -80,7 +73,7 @@ namespace Canbox
             T(SIG_FUEL_AVG, MSG_FUEL_HIST, G_FUEL, "Витрата за поїздку"),
 
             T(SIG_ENG_TEMP, MSG_COOLANT, G_ENGINE, "t° охолодної рідини (експеримент)"),
-            X(SIG_COUNT, G_ENGINE, "Напруга АКБ", NF_BATT),
+            X(SIG_BATT_V, G_ENGINE, "Напруга АКБ", NF_BATT),
 
             T(SIG_OUT_TEMP, MSG_TEMP, G_CLIMATE, "t° зовні"),
             T(SIG_AC_ON, MSG_AC, G_CLIMATE, "Кондиціонер"),
@@ -183,7 +176,7 @@ namespace Canbox
             {"km/h", "км/год"}, {"rpm", "об/хв"}, {"deg", "°"}, {"km", "км"}, {"C", "°C"},
             {"min", "хв"}, {"L/100km", "л/100 км"}, {"raw", "байт"}, {"0-2", "0–2"},
             {"0-3", "0–3"}, {"0-4", "0–4"}, {"0-7", "0–7"}, {"0-8", "0–8"}, {"0-14", "0–14"},
-            {"0-15", "0–15"}, {"0-63", "0–63"}, {"1-5", "1–5"}, {"-5..5", "−5–5"},
+            {"0-15", "0–15"}, {"0-63", "0–63"}, {"1-5", "1–5"}, {"-5..5", "−5–5"}, {"V", "В"},
         };
 
         const char* unitUk(const char* en)
@@ -200,30 +193,21 @@ namespace Canbox
         TargetView at(uint8_t i)
         {
             const Row& r = kRows[i < kCount ? i : 0];
-            const NoFw* nf = r.nofw != NF_NONE ? &kNoFw[r.nofw] : nullptr;
+            const Meta& m = meta(r.sig);
             TargetView v;
-            v.group = kGroups[r.group];
-            v.name  = r.name;
-            v.cmd   = nf ? nf->cmd : kMsgCmd[r.msg];
-            v.fw    = r.msg != NO_MSG;
-            v.sig   = r.sig;
-            v.msg   = r.msg;
-            if (r.sig < SIG_COUNT) {
-                const Meta& m = meta(r.sig);
-                v.id      = m.name;
-                v.unit    = unitUk(m.unit);
-                v.boolean = m.boolean;
-                v.min     = m.min;
-                v.max     = m.max;
-                v.dec     = m.decimals;
-            } else {
-                v.id      = nf->id;
-                v.unit    = nf->unit;
-                v.boolean = nf->boolean;
-                v.min     = nf->min;
-                v.max     = nf->max;
-                v.dec     = nf->dec;
-            }
+            v.group   = kGroups[r.group];
+            v.name    = r.name;
+            v.cmd     = r.msg != NO_MSG ? kMsgCmd[r.msg] : "";
+            v.why     = r.nofw != NF_NONE ? kNoFw[r.nofw] : nullptr;
+            v.fw      = r.msg != NO_MSG;
+            v.sig     = r.sig;
+            v.msg     = r.msg;
+            v.id      = m.name;
+            v.unit    = unitUk(m.unit);
+            v.boolean = m.boolean;
+            v.min     = m.min;
+            v.max     = m.max;
+            v.dec     = m.decimals;
             return v;
         }
 

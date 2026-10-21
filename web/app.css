@@ -192,6 +192,7 @@ canvas.glassC{display:block;width:100%;height:auto;border-radius:8px;border:2px 
 .tcell{display:flex;gap:4px;align-items:center}
 .tcell .in{width:84px}
 tr.nofw td{color:var(--mute)}
+.row.hl{outline:2px solid var(--acc);outline-offset:-2px;border-radius:8px}
 tr.testing td:nth-child(2){color:var(--warn);font-weight:700}
 .tag.new{color:var(--acc);border-color:var(--acc)}
 /* прапорець у таблиці: зона натискання 40 px — label навколо нього */

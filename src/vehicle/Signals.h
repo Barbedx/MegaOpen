@@ -225,6 +225,10 @@ namespace Vehicle
         // A head-unit probe, not a car value: 0x7D 06 D2's low nibble, set by
         // hand from the map page (Rav4Emitter::EXP_GEAR) to find PRND.
         SIG_PRND,
+        // 0x24 D1 b7 on the head unit (docs/hu-decoder.md §2a). The X84
+        // broadcast matrix has no bonnet contact, so no factory row: bind it
+        // by hand if a car has one. Last, so the saved map's indices hold.
+        SIG_BONNET,
 
         SIG_COUNT
     };
