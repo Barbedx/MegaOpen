@@ -289,9 +289,21 @@ void WebUi::putDests(JsonObject out, const App::KeysTask::Routing& k) const
         o["state"] = !live ? "off" : (mask ? "ok" : "muted");
         if (!live) o["why"] = why;
     };
-    dest(Keys::DEST_UART, k.uartCls, k.uartOn, "uartEnabled is off");
+    // Live only while the head unit is heard: keys to a silent one go nowhere.
+    // A build that cannot tell (no HuMediaSource) counts it live.
+#if FEATURE_DISPLAY_CAN
+    const bool heard = !_hu || _hu->heard(millis());
+#else
+    const bool heard = true;
+#endif
+    dest(Keys::DEST_UART, k.uartCls, k.uartOn && heard,
+         !k.uartOn ? "uartEnabled is off" : "head unit silent (link timeout)");
 #if FEATURE_BLE
+    // `volFallback`: volume goes to the phone because nothing live takes it
+    // (Keys::volumeToAms); the mask is the user's, without the fallback bit.
+    const bool vol = _st.volToAms && _st.volToAms();
     dest(Keys::DEST_AMS, k.amsCls, _amsSink != nullptr, "bleMode has no AMS role");
+    out[Keys::DEST_IDS[Keys::DEST_AMS]]["volFallback"] = vol;
     dest(Keys::DEST_HID, k.hidCls, _hidSink != nullptr, "bleMode has no keyboard role");
 #else
     dest(Keys::DEST_AMS, 0, false, "FEATURE_BLE is off in this build");
@@ -905,9 +917,7 @@ void WebUi::routes()
                 {"hu_seen", "frames since boot; this build cannot tell how recent"}};
             const uint32_t n = _huRx ? _huRx->frames() : 0;
 #if FEATURE_DISPLAY_CAN
-            const uint32_t last = _hu ? _hu->lastFrameMs() : 0;
-            const uint8_t live = !_hu ? 4
-                               : last && (uint32_t)(millis() - last) < _hu->linkTimeoutMs() ? 3 : 2;
+            const uint8_t live = !_hu ? 4 : _hu->heard(millis()) ? 3 : 2;
 #else
             const uint8_t live = 4;
 #endif

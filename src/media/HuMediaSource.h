@@ -96,6 +96,13 @@ public:
     uint32_t frames() const { return _frames; }
     // millis() of the newest frame, 0 = none yet. Any task (/api/health).
     uint32_t lastFrameMs() const { return _lastFrameMs; }
+    // A frame within the link timeout, by the caller's clock. Any task: the
+    // health chain `hu` and the keys task's volume fallback ask the same.
+    bool heard(uint32_t nowMs) const
+    {
+        const uint32_t last = _lastFrameMs;
+        return last && (uint32_t)(nowMs - last) < _linkTimeoutMs;
+    }
     // Frames the feed found the mutex busy for and kept for later; and of
     // those, the ones lost because the stash was full. Both should stay near
     // 0: a hold is one string copy.

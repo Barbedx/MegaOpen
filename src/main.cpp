@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <atomic>
 #include "Features.h"
 #include "Version.h"
 #include "board/BoardProfile.h"
@@ -404,6 +405,9 @@ static Sinks::BleKeyWorker g_bleKeys;
 // Whether each BLE key sink is in the dispatch chain; set in setup().
 static bool g_amsSinkLive = false;
 static bool g_hidSinkLive = false;
+// Volume falls back to AMS (keysVolumeFallback). Written by the keys task,
+// read by the web.
+static std::atomic<bool> g_volToAms{false};
 
 // ---------------------------------------------------------------------------
 // BLE service, on its own task
@@ -435,7 +439,8 @@ static void publishKeyLast(const Keys::AffaKeySource::Report& r, bool uartSends)
         const bool isLong = r.asLong && !Keys::isEncoder(r.action);
 
         Keys::DestState d[Keys::DEST_COUNT];
-        d[Keys::DEST_UART] = {g_keySink.classes(), uartSends, false};   // formatKeyLine's explain()
+        // Live only while the head unit is heard, as in /api/health keys.dest.
+        d[Keys::DEST_UART] = {g_keySink.classes(), uartSends && g_hu.heard(millis()), false};
 #if FEATURE_BLE
         d[Keys::DEST_AMS] = {g_amsKeys.classes(), g_amsSinkLive, true};
         d[Keys::DEST_HID] = {g_hidKeys.classes(), g_hidSinkLive, true};
@@ -1301,7 +1306,7 @@ static void keysApplyRouting(const App::KeysTask::Routing& r)
     }
 #endif
 #if FEATURE_BLE
-    g_amsKeys.setClasses(r.amsCls);
+    g_amsKeys.setClasses(r.amsCls | (g_volToAms.load() ? Keys::CLASS_VOLUME : 0));
     g_hidKeys.setClasses(r.hidCls);
 #endif
 #if FEATURE_USB_HID
@@ -1309,9 +1314,39 @@ static void keysApplyRouting(const App::KeysTask::Routing& r)
 #endif
 }
 
+#if FEATURE_BLE
+// Volume nothing live would take goes to the phone (Keys::volumeToAms): the
+// UART dest is live only while the head unit is heard, so a phone-only car,
+// or a head unit that went quiet, does not leave the volume keys dead. Every
+// keys pass (at most 100 ms apart); logged once per change, not per press.
+static void keysVolumeFallback()
+{
+    const App::KeysTask::Routing& r = g_routingCfg.live();
+    Keys::DestState d[Keys::DEST_COUNT];
+    d[Keys::DEST_UART] = {r.uartCls, r.uartOn && g_hu.heard(millis()), false};
+    d[Keys::DEST_AMS]  = {r.amsCls, g_amsSinkLive, true};
+    d[Keys::DEST_HID]  = {r.hidCls, g_hidSinkLive, true};
+#if FEATURE_RESISTIVE_KEYS
+    d[Keys::DEST_RES]  = {r.resCls, r.resOn, false};
+#endif
+#if FEATURE_USB_HID
+    d[Keys::DEST_USB]  = {r.usbCls, true, true};
+#endif
+    const bool on = Keys::volumeToAms(d);
+    if (on == g_volToAms.load()) return;
+    g_volToAms.store(on);
+    g_amsKeys.setClasses(r.amsCls | (on ? Keys::CLASS_VOLUME : 0));
+    if (on) LOGI("key", "vol -> ams (%s)", r.uartOn ? "hu silent" : "uart off");
+    else    LOGI("key", "vol -> routing (ams no longer the fallback)");
+}
+#endif
+
 static void keysApply()
 {
     if (g_routingCfg.applyIfDirty()) keysApplyRouting(g_routingCfg.live());
+#if FEATURE_BLE
+    keysVolumeFallback();
+#endif
     if (g_macroCfg.applyIfDirty())   g_macros.setTable(g_macroCfg.live());
 #if FEATURE_DISPLAY_CAN
     if (g_affaCfg.applyIfDirty())    g_affaMap = g_affaCfg.live();
@@ -2033,6 +2068,9 @@ void setup()
         // What the web edits and another task applies (see g_routingCfg).
         WebUi::Staging st;
         st.routing = &g_routingCfg;
+#if FEATURE_BLE
+        st.volToAms = []() { return g_volToAms.load(); };
+#endif
         st.keymap  = &g_keymapCfg;
         st.macros  = &g_macroCfg;
 #if FEATURE_DISPLAY_CAN

@@ -241,6 +241,65 @@ void test_ble_sinks_take_only_what_they_have_commands_for()
     TEST_ASSERT_EQUAL_HEX8(0, keyDests(Action::Voice, false, d));
 }
 
+// The volume fallback (Keys::volumeToAms), with the factory masks: UART all,
+// AMS transport, HID volume (not live under bleMode=ams).
+static void factory(DestState (&d)[DEST_COUNT], bool huHeard, bool amsLive)
+{
+    d[DEST_UART] = {CLASS_ALL, huHeard, false};
+    d[DEST_AMS]  = {CLASS_TRANSPORT, amsLive, true};
+    d[DEST_HID]  = {CLASS_VOLUME, false, true};
+}
+
+void test_a_silent_head_unit_sends_volume_to_the_phone()
+{
+    DestState d[DEST_COUNT];
+    factory(d, false, true);
+    TEST_ASSERT_TRUE(volumeToAms(d));
+    d[DEST_AMS].mask |= CLASS_VOLUME;     // what the keys task then applies
+    TEST_ASSERT_EQUAL_HEX8(1u << DEST_AMS, keyDests(Action::VolUp, false, d));
+    // Only volume falls back: a phone key still goes nowhere.
+    TEST_ASSERT_EQUAL_HEX8(0, keyDests(Action::Voice, false, d));
+}
+
+void test_a_heard_head_unit_keeps_the_volume()
+{
+    DestState d[DEST_COUNT];
+    factory(d, true, true);
+    TEST_ASSERT_FALSE(volumeToAms(d));
+    TEST_ASSERT_EQUAL_HEX8(1u << DEST_UART, keyDests(Action::VolUp, false, d));
+}
+
+void test_no_phone_no_fallback()
+{
+    DestState d[DEST_COUNT];
+    factory(d, false, false);
+    TEST_ASSERT_FALSE(volumeToAms(d));
+    TEST_ASSERT_EQUAL_HEX8(0, keyDests(Action::VolUp, false, d));
+}
+
+// Another live sink that takes volume (HID under bleMode=both, the ladder)
+// keeps it; one whose mask lacks volume does not.
+void test_any_live_volume_sink_blocks_the_fallback()
+{
+    DestState d[DEST_COUNT];
+    factory(d, false, true);
+    d[DEST_HID].live = true;
+    TEST_ASSERT_FALSE(volumeToAms(d));
+    d[DEST_HID].mask = CLASS_TRANSPORT;
+    TEST_ASSERT_TRUE(volumeToAms(d));
+    d[DEST_RES] = {CLASS_VOLUME, true, false};
+    TEST_ASSERT_FALSE(volumeToAms(d));
+}
+
+// AMS already masked for volume: nothing to add.
+void test_ams_with_volume_needs_no_fallback()
+{
+    DestState d[DEST_COUNT];
+    factory(d, false, true);
+    d[DEST_AMS].mask = CLASS_TRANSPORT | CLASS_VOLUME;
+    TEST_ASSERT_FALSE(volumeToAms(d));
+}
+
 // An asLong row: BLE (AMS, HID) and USB refuse the Long, the UART takes it.
 void test_as_long_is_refused_by_ble_and_usb()
 {
@@ -287,6 +346,11 @@ int main(int, char**)
     RUN_TEST(test_no_class_goes_nowhere);
     RUN_TEST(test_usb_takes_only_transport_and_volume);
     RUN_TEST(test_ble_sinks_take_only_what_they_have_commands_for);
+    RUN_TEST(test_a_silent_head_unit_sends_volume_to_the_phone);
+    RUN_TEST(test_a_heard_head_unit_keeps_the_volume);
+    RUN_TEST(test_no_phone_no_fallback);
+    RUN_TEST(test_any_live_volume_sink_blocks_the_fallback);
+    RUN_TEST(test_ams_with_volume_needs_no_fallback);
     RUN_TEST(test_as_long_is_refused_by_ble_and_usb);
     RUN_TEST(test_dest_ids_are_the_catalogs);
     return UNITY_END();

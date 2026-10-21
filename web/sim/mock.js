@@ -166,11 +166,13 @@ const fail=(st,text)=>({__status:st,body:String(text)});
 const ok={ok:true},queued=()=>({__status:202,body:{queued:true,note:'queued for the display task; the result is reported in the log'}});
 /* НОВЕ (зріз 5): рівно dest із каталогу; usb лише там, де він є. press: приймач бере лише Press (BLE, USB), не Long */
 function destState(){const o={
- uart:{mask:S.routing.uart,live:S.set.uartEnabled,why:'uartEnabled is off'},
+ uart:{mask:S.routing.uart,live:S.set.uartEnabled&&(!C.features.display||S.hu.connected),why:S.set.uartEnabled?'head unit silent (link timeout)':'uartEnabled is off'},
  ams:{mask:S.routing.ams,live:amsOn(),why:'bleMode has no AMS role',press:true},
  hid:{mask:S.routing.hid,live:hidOn(),why:'bleMode has no keyboard role',press:true},
  res:{mask:0,live:false,why:'FEATURE_RESISTIVE_KEYS is off in this build'}};
- if(DESTS.includes('usb'))o.usb={mask:S.routing.usb,live:true,why:'',press:true};return o}
+ if(DESTS.includes('usb'))o.usb={mask:S.routing.usb,live:true,why:'',press:true};
+ /* як Keys::volumeToAms: гучність, яку ніхто живий не бере, іде в iPhone */
+ o.ams.volFallback=o.ams.live&&!(o.ams.mask&2)&&!Object.entries(o).some(([k,x])=>k!=='ams'&&x.live&&x.mask&2);return o}
 /* як WebUi::putDests: /api/health keys.dest */
 const strip=o=>{const x={...o};if(x.live)delete x.why;delete x.press;x.state=!o.live?'off':o.mask?'ok':'muted';return x};
 /* НОВЕ (зріз 4): кожен ланцюг має стабільний code; W — ті самі пари [code, why], що в WebUi.cpp */

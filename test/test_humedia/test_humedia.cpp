@@ -195,12 +195,15 @@ static void test_status_frames_keep_the_link_alive_between_tracks()
 static void test_silence_expires_the_link()
 {
     HuMediaSource s;
+    TEST_ASSERT_FALSE(s.heard(5));   // nothing yet: the keys' UART dest is not live
     feedText(s, 0xC0, "Track", 1000);
     TEST_ASSERT_TRUE(s.active());
     s.setNow(1000 + 61000);          // one 0x9D clock period: still alive
     TEST_ASSERT_TRUE(s.active());
+    TEST_ASSERT_TRUE(s.heard(1000 + 61000));
     s.setNow(1000 + 151000);         // past the 150 s default
     TEST_ASSERT_FALSE(s.active());
+    TEST_ASSERT_FALSE(s.heard(1000 + 151000));
     TEST_ASSERT_EQUAL_STRING("HEAD UNIT QUIET", s.statusText());
 }
 

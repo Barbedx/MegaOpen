@@ -118,7 +118,7 @@ knobTest(kl){this.kt=this.kt||{};for(const pre of['enc','enc2']){const el=$('#kt
  const d=$('.kdir',el);if(p&&l.pos!==p.pos){d.textContent=l.pos>p.pos?'⟳':'⟲';clearTimeout(p.t);p.t=setTimeout(()=>d.textContent='·',700)}
  if(p&&moved.some(Boolean)&&$('[data-beep="'+pre+'"]',el).getAttribute('aria-pressed')==='true')tick(pre==='enc'?1200:700);
  this.kt[pre]={pos:l.pos,g,t:p&&p.t};$('#ktn_'+pre).textContent=`A ${g[0]} · B ${g[1]} · кн ${g[2]} · ${l.detents} клац (${l.pos>0?'+':''}${l.pos}) · ${l.clicks} натиск${l.errors?' · '+l.errors+' помилок':''}`}},
-why(rt){const w=Object.entries(rt.dest).filter(([d,x])=>!x.live&&(byId(CAT.dests,d)||{}).built).map(([d,x])=>`<div class="row"><div class="l"><b>${esc(destName(d))}: ${esc(x.why||'')}</b></div>${d==='uart'?'':`<div class="c"><a href="#board">Плата →</a></div>`}</div>`).join('');const el=$('#rtWhy');if(el)el.innerHTML=w;
+why(rt){const w=Object.entries(rt.dest).filter(([d,x])=>!x.live&&(byId(CAT.dests,d)||{}).built).map(([d,x])=>`<div class="row"><div class="l"><b>${esc(destName(d))}: ${esc(x.why||'')}</b></div>${d==='uart'?'':`<div class="c"><a href="#board">Плата →</a></div>`}</div>`).join('')+((rt.dest.ams||{}).volFallback?row('Гучність → iPhone','<span class="chip warn">запасний шлях</span>','ГУ мовчить, тож гучність іде в телефон'):'');const el=$('#rtWhy');if(el)el.innerHTML=w;
  CAT.dests.forEach(d=>{const c=$(`[data-live="${d.id}"]`),x=rt.dest[d.id];if(c)setChip(c,x&&x.live?'ok':'off',!d.built||!x?'нема':x.live?'живий':'мертвий')})},
 async tick(){
  this.n++;const[kl,ml]=await Promise.all([getIf(has('knobs'),'/api/knobs/live'),API.get('/api/macros/live')]);if(!$('#mDown'))return;

@@ -254,6 +254,8 @@ public:
 #if FEATURE_DISPLAY_CAN
         Staged<Keys::AffaMap>*            affa    = nullptr;   // the keys task
 #endif
+        // The keys task's volume fallback is on (Keys::volumeToAms). Any task.
+        bool (*volToAms)() = nullptr;
         // Ask the keys task to let go of every ladder rung (and end a learn).
         void (*resAllOff)() = nullptr;
 #if FEATURE_RESISTIVE_KEYS

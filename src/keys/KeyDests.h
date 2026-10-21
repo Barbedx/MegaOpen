@@ -60,6 +60,19 @@ namespace Keys
         return out;
     }
 
+    // The volume fallback: a volume key that no live sink would take goes to
+    // the phone over AMS, when AMS is live. With a head unit the user turns
+    // the head unit's volume and the phone's stays put; without one (the UART
+    // dest is not live while the head unit is silent) the keys are not dead.
+    // Only the volume class falls back. True: add CLASS_VOLUME to AMS's mask.
+    inline bool volumeToAms(const DestState (&d)[DEST_COUNT])
+    {
+        if (!d[DEST_AMS].live || (d[DEST_AMS].mask & CLASS_VOLUME)) return false;
+        for (uint8_t i = 0; i < DEST_COUNT; ++i)
+            if (i != DEST_AMS && d[i].live && (d[i].mask & DEST_CLASSES[i] & CLASS_VOLUME)) return false;
+        return true;
+    }
+
     // The last panel key, as the keys task resolved it: published through a
     // Snapshot<PanelKeyLast> for the wiring check (/api/affamap?live=1).
     struct PanelKeyLast {

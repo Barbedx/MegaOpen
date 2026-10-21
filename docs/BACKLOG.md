@@ -103,10 +103,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 
 ### Keys / input
 
-- **Default routing gives a phone-only user dead volume keys.** `routeHid =
-  VOLUME` but `bleMode` defaults to `ams` (HID off), and `routeUart = ALL`
-  assumes a head unit. A "phone only" preset exists on the index page; the
-  default is a design call. Where: `cfg/Config.h` (`routeAms/Hid/Uart`, `bleMode`).
 - **The left (bare) encoder has never run.** Wired on 32/33/36 with R1 2k on
   GPIO36; watch `/api/knobs/live` while it turns. Where: `knobs/KnobSource`.
 - **SK6812 RGBW strips are not supported** (WS2812B GRB / RGB only).
