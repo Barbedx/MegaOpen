@@ -307,10 +307,15 @@ namespace App
                 case Verdict::Do::Swallow:
                     return true;
                 case Verdict::Do::Open:
-                    if (moveMode(Mode::Closed, Mode::Open)) s_keys.push(K_OPEN);
+                    // A full ring undoes the move: Open with no menu behind it
+                    // would freeze the glass, Closed with the panel dark
+                    // would leave nothing to wake it.
+                    if (moveMode(Mode::Closed, Mode::Open) && !s_keys.push(K_OPEN))
+                        moveMode(Mode::Open, Mode::Closed);
                     return true;
                 case Verdict::Do::PowerOn:
-                    if (moveMode(Mode::PanelOff, Mode::Closed)) s_keys.push(K_POWER_ON);
+                    if (moveMode(Mode::PanelOff, Mode::Closed) && !s_keys.push(K_POWER_ON))
+                        moveMode(Mode::Closed, Mode::PanelOff);
                     return true;
                 case Verdict::Do::Command:
                     switch (v.cmd) {
@@ -343,6 +348,7 @@ namespace App
 
             if (s_applied.exchange(false, std::memory_order_acq_rel)) {
                 refreshKnobs();
+                refreshSnap();                  // applyPending saved or touched
                 s_dirty = true;
             }
             // A save from the menu or the web: read the new values. While the
@@ -390,6 +396,7 @@ namespace App
                 if ((ap & Cfg::AP_UI) && s_d.stageUi) s_d.stageUi(s_d.cfg->s());
                 if ((ap & Cfg::AP_MEDIA) && s_d.stageMedia) s_d.stageMedia(s_d.cfg->s());
                 if (ap & ~Cfg::AP_KNOBS) s_d.cfg->save();
+                else s_d.cfg->touch();          // volatile or knobs only: no save, still news
                 char v[24];
                 Cfg::Registry::formatValue(e, c.value, v, sizeof(v));
                 LogBus::printf("[menu] %s = %s%s", e.id, v, (ap & Cfg::AP_REBOOT) ? " (after a reboot)" : "");

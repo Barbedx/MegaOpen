@@ -476,6 +476,28 @@ void test_log_level_is_ram_only()
     }
 }
 
+// The panel menu reads a COPY of Settings (PanelMenu's snapshot). A menu-visible
+// volatile entry must not live in Settings, or a commit that saves nothing would
+// show its old value from that copy: each reads its own owner, so a model over
+// a stale copy shows the new value at once.
+void test_menu_volatile_entries_read_their_owner()
+{
+    Fixture f;
+    const SEntry* e = Registry::find("logLevel");
+    Cfg::Settings stale = f.s;
+    Cfg::Model copy{&stale, f.m.k};
+    TEST_ASSERT_TRUE(Registry::set(f.m, *e, Registry::enumIndex(*e, "DBG")));
+    TEST_ASSERT_EQUAL(Registry::enumIndex(*e, "DBG"), Registry::get(copy, *e));
+    Registry::set(f.m, *e, Registry::enumIndex(*e, "INF"));
+    // And nothing else the menu can commit is volatile yet; a new one needs
+    // the same property, or a Config::touch() test on the board.
+    for (size_t i = 0; i < Registry::count(); ++i) {
+        const SEntry& x = Registry::at(i);
+        if ((x.flags & F_VOLATILE) && (x.flags & F_MENU))
+            TEST_ASSERT_EQUAL_STRING_MESSAGE("logLevel", x.id, "a new volatile menu entry: check its snapshot");
+    }
+}
+
 // The head unit's message switches: one row per message the emitter has,
 // RAM only, handed to the hu task.
 void test_hu_messages_table()
@@ -614,6 +636,7 @@ int main(int, char**)
     RUN_TEST(test_tables_refuse_the_scalar_calls);
     RUN_TEST(test_decimal_text_both_ways);
     RUN_TEST(test_log_level_is_ram_only);
+    RUN_TEST(test_menu_volatile_entries_read_their_owner);
     RUN_TEST(test_hu_messages_table);
     RUN_TEST(test_texts_are_web_only_and_described);
     RUN_TEST(test_version_text_pads_and_refuses);

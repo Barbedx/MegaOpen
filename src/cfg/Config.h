@@ -97,7 +97,9 @@ namespace Cfg
         // request runs under the lock, WebUi::dispatch) and the panel menu
         // (net_svc, applyPending: under tryLock, retried next pass). save() takes
         // it too. Another task reads s() only under the lock, or reads a copy
-        // (snapshot()). Recursive: a request handler calls save().
+        // (trySnapshot()). Recursive: a request handler calls save().
+        // save() BLOCKS for the lock: never call it while holding another lock
+        // a web handler may wait on (KnobService, a staging mutex, LogBus).
         Settings& s() { return _s; }
         void lock()    { xSemaphoreTakeRecursive(_mx, portMAX_DELAY); }
         bool tryLock() { return xSemaphoreTakeRecursive(_mx, 0) == pdTRUE; }
@@ -112,8 +114,10 @@ namespace Cfg
         // A copy, if the lock is free now. False: `out` untouched (the lock is
         // held; try again later).
         bool trySnapshot(Settings& out);
-        // Bumped by every save(): a copy older than this is stale.
+        // Bumped by every save() and touch(): a copy older than this is stale.
         uint32_t generation() const { return _gen.load(std::memory_order_acquire); }
+        // A change that is not saved (a volatile setting) still makes copies stale.
+        void touch() { _gen.fetch_add(1, std::memory_order_release); }
 
         // Stored schema version, and what migrate() started from on this boot.
         uint8_t version() const { return _ver; }
