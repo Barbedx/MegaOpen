@@ -24,11 +24,16 @@ namespace Vehicle
     };
     static_assert(sizeof(ALERT_COND) / sizeof(ALERT_COND[0]) == AC_COUNT, "ALERT_COND is out of step");
 
+    // The shortest pause between two popups of one rule: an edge rule on a
+    // moving value ("rpm змінилось") would otherwise queue one every tick and
+    // keep the glass on alerts for the whole drive.
+    inline constexpr uint16_t ALERT_COOLDOWN_MIN_S = 5;
+
     struct AlertRule {
         uint8_t  sig = SIG_COUNT;   // SIG_COUNT = an empty row
         uint8_t  cond = AC_RISES;
         int32_t  thr = 0;           // the signal's scaled integer (Meta.decimals)
-        uint16_t cooldownS = 0;     // at least this long between two popups
+        uint16_t cooldownS = ALERT_COOLDOWN_MIN_S;   // at least this long between two popups
         bool     on = false;
     };
 
@@ -50,7 +55,9 @@ namespace Vehicle
         // The registry's view. get() of a bad cell is 0; set() refuses (false,
         // nothing changed) a bad cell or a value out of the column's range:
         // sig 0..SIG_COUNT (SIG_COUNT empties the row), cond 0..AC_COUNT-1,
-        // thr within the signal's range, cooldownS 0..COOLDOWN_MAX_S, on 0/1.
+        // thr within the signal's range, cooldownS up to COOLDOWN_MAX_S and
+        // 16 bits (below ALERT_COOLDOWN_MIN_S it is raised to it, not
+        // refused), on 0/1.
         int32_t get(uint8_t row, uint8_t col) const;
         bool    set(uint8_t row, uint8_t col, int32_t v);
 
@@ -62,7 +69,8 @@ namespace Vehicle
     //
     // above/below: fires when the value crosses the threshold, then stays
     // quiet until it comes back past it by a hysteresis band (1/50 of the
-    // signal's range, at least 1) AND the cooldown has run out.
+    // signal's range, at least 1; the way back stops at the range's end, so
+    // "above 0" on a yes/no re-arms at 0) AND the cooldown has run out.
     // rises/falls/changes: fires on the edge itself (a yes/no that is already
     // on when first seen counts as rising: the lamp lit at ignition).
     //

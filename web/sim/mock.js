@@ -233,8 +233,8 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
    const[sig,cond,thr,cd,on]=old.map((x,k)=>a[k]==null?x:a[k]),m=META.find(x=>x[0]===sig);
    if(sig&&!m)return fail(400,id+'sig: unknown value');if(!COND.some(c=>c[0]===cond))return fail(400,id+'cond: unknown value');
    if(typeof thr!=='number')return fail(400,id+'thr: a number');if(m&&(toInt(thr,m[2])<m[5]||toInt(thr,m[2])>m[6]))return fail(400,id+'thr: out of range');
-   if(!(isInt(cd)&&cd>=0&&cd<=65535))return fail(400,id+'cooldownS: '+(typeof cd==='number'?'out of range':'a number'));
-   if(typeof on!=='boolean')return fail(400,id+'on: true or false');AL.push([sig,cond,thr,cd,!!on&&!!sig])}}
+   if(!(isInt(cd)&&cd<=65535))return fail(400,id+'cooldownS: '+(typeof cd==='number'?'out of range':'a number'));
+   if(typeof on!=='boolean')return fail(400,id+'on: true or false');AL.push([sig,cond,thr,Math.max(5,cd),!!on&&!!sig])}}
  let MG=null;if(q.huMessages!==undefined){if(!Array.isArray(q.huMessages)||q.huMessages.length>S.msgs.length)return fail(400,'huMessages: a list of '+S.msgs.length+' rows at most');
   MG=q.huMessages.map((a,i)=>Array.isArray(a)&&a[0]!=null?a[0]:S.msgs[i].enabled);
   const bad=MG.findIndex(x=>typeof x!=='boolean');if(bad>=0)return fail(400,'huMessages '+(bad+1)+': on: true or false')}
@@ -370,7 +370,7 @@ function mapVal(t){const r=S.map[t.id],ts=S.tests[t.id];if(ts&&ts.until>now())re
 const META=SIM_DECODE.meta||[],DERIVED=new Set(SIM_DECODE.derived||[]),BOUND=new Set(SIM_DECODE.rows.map(r=>r.sig));
 const decStr=(v,d)=>d?(v/pow10(d)).toFixed(d):String(v);
 const COND=[['above','вище'],['below','нижче'],['rises','зʼявилось'],['falls','зникло'],['changes','змінилось']];
-S.alerts=Array.from({length:16},(_,i)=>i?['','rises',0,0,false]:['fuel_low','rises',0,300,true]);
+S.alerts=Array.from({length:16},(_,i)=>i?['','rises',0,5,false]:['fuel_low','rises',0,300,true]);
 function liveVal(n,t){const s=t/1000,w=(p,a,b)=>a+(b-a)*(.5+.5*Math.sin(s/p));
  const v={speed:Math.round(w(9,0,9000)),rpm:Math.round(w(9,800,3200)),fuel_level:31,fuel_low:0,batt_v:Math.round(w(30,1380,1420)),eng_temp:89,out_temp:12,
   throttle:Math.round(w(5,0,400)),neutral:0,clutch:s%20<1?1:0,handbrake:0,door_fl:0,door_fr:0,door_rl:0,door_rr:0,boot:0,light_pos:1,light_dip:1,

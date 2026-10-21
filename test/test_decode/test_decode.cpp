@@ -779,8 +779,14 @@ void test_alert_cells_check_their_ranges_and_round_trip()
     TEST_ASSERT_TRUE(a.set(3, AlertRules::C_COND, AC_BELOW));
     TEST_ASSERT_TRUE(a.set(3, AlertRules::C_THR, 1180));
     TEST_ASSERT_FALSE(a.set(3, AlertRules::C_THR, 5000));        // past batt_v's 16.00
+    // A pause under the 5 s floor is raised to it, not refused.
+    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_COOLDOWN, 0));
+    TEST_ASSERT_EQUAL_INT32(ALERT_COOLDOWN_MIN_S, a.get(3, AlertRules::C_COOLDOWN));
+    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_COOLDOWN, -1));
+    TEST_ASSERT_EQUAL_INT32(ALERT_COOLDOWN_MIN_S, a.get(3, AlertRules::C_COOLDOWN));
+    TEST_ASSERT_FALSE(a.set(3, AlertRules::C_COOLDOWN, 70000));
     TEST_ASSERT_TRUE(a.set(3, AlertRules::C_COOLDOWN, 600));
-    TEST_ASSERT_FALSE(a.set(3, AlertRules::C_COOLDOWN, -1));
+    TEST_ASSERT_EQUAL_INT32(600, a.get(3, AlertRules::C_COOLDOWN));
     TEST_ASSERT_TRUE(a.set(3, AlertRules::C_ON, 1));
     TEST_ASSERT_FALSE(a.set(3, AlertRules::C_ON, 2));
     TEST_ASSERT_FALSE(a.set(3, AlertRules::C_COND, AC_COUNT));
@@ -860,7 +866,8 @@ void test_alert_threshold_has_hysteresis_and_newest_wins()
     AlertRules a;
     a.factory();
     a.r[0].on = false;
-    // batt_v below 11.80 V, no cooldown; the band is 1600/50 = 0.32 V.
+    // batt_v below 11.80 V at the shortest pause (5 s); the band is
+    // 1600/50 = 0.32 V. Readings 6 s apart, so the pause never decides.
     a.set(1, AlertRules::C_SIG, SIG_BATT_V);
     a.set(1, AlertRules::C_COND, AC_BELOW);
     a.set(1, AlertRules::C_THR, 1180);
@@ -869,7 +876,7 @@ void test_alert_threshold_has_hysteresis_and_newest_wins()
     State s;
     AlertEval::Fire f;
     uint32_t t = 0;
-    auto at = [&](int32_t v) { t += 100; s.set(SIG_BATT_V, v, t); e.tick(a, s, t); return e.take(a, s, true, f); };
+    auto at = [&](int32_t v) { t += 6000; s.set(SIG_BATT_V, v, t); e.tick(a, s, t); return e.take(a, s, true, f); };
     TEST_ASSERT_FALSE(at(1250));
     TEST_ASSERT_TRUE(at(1170));
     TEST_ASSERT_FALSE(at(1185));                                // back over, inside the band
@@ -882,7 +889,7 @@ void test_alert_threshold_has_hysteresis_and_newest_wins()
     a.set(2, AlertRules::C_ON, 1);
     s.set(SIG_HANDBRAKE, 0, t); e.tick(a, s, t);
     TEST_ASSERT_FALSE(e.take(a, s, true, f));
-    t += 100;
+    t += 6000;
     s.set(SIG_BATT_V, 1300, t);
     e.tick(a, s, t);                                            // re-arms batt_v
     s.set(SIG_BATT_V, 1100, t + 1);
@@ -891,6 +898,72 @@ void test_alert_threshold_has_hysteresis_and_newest_wins()
     TEST_ASSERT_TRUE(e.take(a, s, true, f));
     TEST_ASSERT_EQUAL_UINT8(SIG_HANDBRAKE, f.sig);
     TEST_ASSERT_EQUAL_UINT32(1, e.overwritten());
+}
+
+// "above 0" on a yes/no: the way back (0 - band = -1) is past the range, so
+// it stops at the range's end and the rule re-arms when the value is 0 again.
+void test_alert_threshold_at_the_range_end_still_rearms()
+{
+    AlertRules a;
+    a.factory();
+    a.r[0].on = false;
+    a.set(1, AlertRules::C_SIG, SIG_FUEL_LOW);
+    a.set(1, AlertRules::C_COND, AC_ABOVE);
+    a.set(1, AlertRules::C_THR, 0);
+    a.set(1, AlertRules::C_ON, 1);
+    // And "below 3" on the 0-3 lock state: back at 3, not 4.
+    a.set(2, AlertRules::C_SIG, SIG_LOCKED);
+    a.set(2, AlertRules::C_COND, AC_BELOW);
+    a.set(2, AlertRules::C_THR, 3);
+    a.set(2, AlertRules::C_ON, 1);
+    AlertEval e;
+    State s;
+    AlertEval::Fire f;
+    uint32_t t = 0;
+    auto at = [&](uint8_t sig, int32_t v) {
+        t += 6000;
+        s.set(sig, v, t);
+        e.tick(a, s, t);
+        return e.take(a, s, true, f) && f.sig == sig;
+    };
+    s.set(SIG_LOCKED, 3, 1);
+    TEST_ASSERT_FALSE(at(SIG_FUEL_LOW, 0));
+    TEST_ASSERT_TRUE(at(SIG_FUEL_LOW, 1));
+    TEST_ASSERT_FALSE(at(SIG_FUEL_LOW, 0));                     // re-armed here
+    TEST_ASSERT_TRUE(at(SIG_FUEL_LOW, 1));
+    TEST_ASSERT_TRUE(at(SIG_LOCKED, 2));
+    TEST_ASSERT_FALSE(at(SIG_LOCKED, 3));
+    TEST_ASSERT_TRUE(at(SIG_LOCKED, 0));
+}
+
+// The pause never goes under 5 s, whatever the table says: an edge rule on
+// a moving value gives one popup per 5 s, not one per tick.
+void test_alert_cooldown_has_a_five_second_floor()
+{
+    AlertRules a;
+    a.factory();
+    a.r[0].on = false;
+    a.set(1, AlertRules::C_SIG, SIG_RPM);
+    a.set(1, AlertRules::C_COND, AC_CHANGES);
+    a.set(1, AlertRules::C_COOLDOWN, 0);
+    a.set(1, AlertRules::C_ON, 1);
+    TEST_ASSERT_EQUAL_UINT16(ALERT_COOLDOWN_MIN_S, a.r[1].cooldownS);
+    a.r[1].cooldownS = 0;                                       // written past set()
+    AlertEval e;
+    State s;
+    for (uint32_t t = 0; t < 12000; t += 100) {                 // rpm moves every tick
+        s.set(SIG_RPM, (int32_t)(800 + t / 100), t + 1);
+        e.tick(a, s, t + 1);
+    }
+    // Changes from t = 100 on: fires at 0.1 s, 5.1 s and 10.1 s.
+    TEST_ASSERT_EQUAL_UINT32(3, e.fired());
+    // An older blob's 0 comes back as the floor.
+    uint8_t blob[AlertRules::BLOB_BYTES];
+    a.toBlob(blob);
+    AlertRules b;
+    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
+    TEST_ASSERT_EQUAL_UINT16(ALERT_COOLDOWN_MIN_S, b.r[1].cooldownS);
+    TEST_ASSERT_EQUAL_UINT16(ALERT_COOLDOWN_MIN_S, AlertRule{}.cooldownS);
 }
 
 void test_alert_text_places_the_decimal_point()
@@ -916,6 +989,8 @@ int main(int, char**)
     RUN_TEST(test_alert_pending_is_dropped_when_its_condition_clears);
     RUN_TEST(test_alert_threshold_has_hysteresis_and_newest_wins);
     RUN_TEST(test_alert_text_places_the_decimal_point);
+    RUN_TEST(test_alert_threshold_at_the_range_end_still_rearms);
+    RUN_TEST(test_alert_cooldown_has_a_five_second_floor);
     RUN_TEST(test_gear_is_the_nearest_ratio_within_the_band);
     RUN_TEST(test_gear_from_speed_rpm_and_the_switches);
     RUN_TEST(test_fuel_rate_consumption_trip_and_range);

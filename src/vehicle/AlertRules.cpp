@@ -48,8 +48,8 @@ namespace Vehicle
                 x.thr = v;
                 return true;
             case C_COOLDOWN:
-                if (v < 0 || (uint32_t)v > COOLDOWN_MAX_S || v > UINT16_MAX) return false;
-                x.cooldownS = (uint16_t)v;
+                if (v > 0 && ((uint32_t)v > COOLDOWN_MAX_S || v > UINT16_MAX)) return false;
+                x.cooldownS = v < ALERT_COOLDOWN_MIN_S ? ALERT_COOLDOWN_MIN_S : (uint16_t)v;
                 return true;
             case C_ON:
                 if (v != 0 && v != 1) return false;
@@ -86,6 +86,7 @@ namespace Vehicle
             x.cond = p[1];
             x.thr = (int32_t)((uint32_t)p[2] | ((uint32_t)p[3] << 8) | ((uint32_t)p[4] << 16) | ((uint32_t)p[5] << 24));
             x.cooldownS = (uint16_t)(p[6] | (p[7] << 8));
+            if (x.cooldownS < ALERT_COOLDOWN_MIN_S) x.cooldownS = ALERT_COOLDOWN_MIN_S;   // an older blob
             x.on = p[8] != 0;
             // A signal index past this build's list (a newer image's blob)
             // empties that row rather than refusing the table.
@@ -125,16 +126,21 @@ namespace Vehicle
             const int32_t v = s.get(r.sig);
             int32_t band = (m.max - m.min) / 50;
             if (band < 1) band = 1;
+            // Where an above/below rule re-arms: back past thr by the band, but
+            // never beyond the range, or "above 0" on a yes/no would wait for -1.
+            int64_t back = r.cond == AC_ABOVE ? (int64_t)r.thr - band : (int64_t)r.thr + band;
+            if (back < m.min) back = m.min;
+            if (back > m.max) back = m.max;
 
             bool hit = false;
             switch (r.cond) {
                 case AC_ABOVE:
                     hit = v > r.thr;
-                    if (!st.armed && v <= r.thr - band) st.armed = true;
+                    if (!st.armed && v <= back) st.armed = true;
                     break;
                 case AC_BELOW:
                     hit = v < r.thr;
-                    if (!st.armed && v >= r.thr + band) st.armed = true;
+                    if (!st.armed && v >= back) st.armed = true;
                     break;
                 case AC_RISES:   hit = st.seen ? v > st.last : (m.boolean && v != 0); break;
                 case AC_FALLS:   hit = st.seen && v < st.last; break;
@@ -143,7 +149,9 @@ namespace Vehicle
             st.last = v;
             st.seen = true;
 
-            const bool cooled = !st.everFired || (uint32_t)(now - st.lastFireMs) >= (uint32_t)r.cooldownS * 1000u;
+            // The floor again, for a table written past set() and fromBlob().
+            const uint32_t cdS = r.cooldownS < ALERT_COOLDOWN_MIN_S ? ALERT_COOLDOWN_MIN_S : r.cooldownS;
+            const bool cooled = !st.everFired || (uint32_t)(now - st.lastFireMs) >= cdS * 1000u;
             if (!hit || !st.armed || !cooled) continue;
             if (_has) ++_overwritten;
             _pend.row = i;

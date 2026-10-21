@@ -195,7 +195,7 @@ namespace Cfg
             {"sig",       "Сигнал",   SType::Enum, 0, 0, &kAlertSigs},
             {"cond",      "Умова",    SType::Enum, 0, 0, &kConds},
             {"thr",       "Поріг",    SType::Int,  INT32_MIN, INT32_MAX, nullptr},
-            {"cooldownS", "Пауза, с", SType::Int,  0, 65535, nullptr},
+            {"cooldownS", "Пауза, с", SType::Int,  Vehicle::ALERT_COOLDOWN_MIN_S, 65535, nullptr},
             {"on",        "Увімк",    SType::Bool, 0, 1, nullptr},
         };
         static_assert(sizeof(kAlertCols) / sizeof(kAlertCols[0]) == Vehicle::AlertRules::COLS,
