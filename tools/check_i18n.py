@@ -28,7 +28,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(ROOT, "web")
 LANGS = ("uk", "en")
 # Keys built at run time ('w.'+code, 's.'+state, 'e.'+code, a screen's title key).
-KEY_PREFIXES = ("w.", "s.", "e.", "k.", "nav.")
+KEY_PREFIXES = ("w.", "s.", "e.", "k.", "nav.", "dr.t.", "kb.why.", "sc.panelHint.", "sc.clk.", "bd.ble.")
 CATALOG = os.path.join(ROOT, "build", "catalog.json")
 SRC = os.path.join(ROOT, "src")
 
@@ -146,6 +146,12 @@ def main():
                     c = m.group(1)
                     if not c.endswith("_ok") and "w." + c not in base and "e." + c not in base:
                         errors.append("%s: health code %s has no w.%s in uk.json" % (rel, c, c))
+            if n == "WebUi.cpp":
+                # A routing destination that cannot take a key says why (putDests).
+                for call in re.finditer(r'dest\(Keys::DEST_\w+,([^;]*)\);', src, re.S):
+                    for c in re.findall(r'"([a-z_]+)"', call.group(1)):
+                        if "kb.why." + c not in base:
+                            errors.append("%s: destination code %s has no kb.why.%s in uk.json" % (rel, c, c))
     cyr_s = lambda v: isinstance(v, str) and cyr.search(v)
     if os.path.exists(CATALOG):
         with open(CATALOG, encoding="utf-8") as f:

@@ -345,16 +345,17 @@ void WebUi::loop()
 }
 
 // Every destination the catalog lists (Keys::DEST_IDS), from the staged
-// routing: its mask, whether it can take a key at all (`live`, and `why` when
-// it cannot), and `state`. For the keys chain of /api/health.
+// routing: its mask, whether it can take a key at all (`live`, and `code` when
+// it cannot: the page has the words, kb.why.<code>), and `state`. For the keys
+// chain of /api/health.
 void WebUi::putDests(JsonObject out, const App::KeysTask::Routing& k) const
 {
-    auto dest = [&](Keys::Dest i, uint8_t mask, bool live, const char* why) {
+    auto dest = [&](Keys::Dest i, uint8_t mask, bool live, const char* code) {
         JsonObject o = out[Keys::DEST_IDS[i]].to<JsonObject>();
         o["mask"]  = mask;
         o["live"]  = live;
         o["state"] = !live ? "off" : (mask ? "ok" : "muted");
-        if (!live) o["why"] = why;
+        if (!live) o["code"] = code;
     };
     // Live only while the head unit is heard: keys to a silent one go nowhere.
     // A build that cannot tell (no HuMediaSource) counts it live.
@@ -364,22 +365,22 @@ void WebUi::putDests(JsonObject out, const App::KeysTask::Routing& k) const
     const bool heard = true;
 #endif
     dest(Keys::DEST_UART, k.uartCls, k.uartOn && heard,
-         !k.uartOn ? "uartEnabled is off" : "head unit silent (link timeout)");
+         !k.uartOn ? "uart_off" : "hu_silent");
 #if FEATURE_BLE
     // `volFallback`: volume goes to the phone because nothing live takes it
     // (Keys::volumeToAms); the mask is the user's, without the fallback bit.
     const bool vol = _st.volToAms && _st.volToAms();
-    dest(Keys::DEST_AMS, k.amsCls, _amsSink != nullptr, "bleMode has no AMS role");
+    dest(Keys::DEST_AMS, k.amsCls, _amsSink != nullptr, "no_ams_role");
     out[Keys::DEST_IDS[Keys::DEST_AMS]]["volFallback"] = vol;
-    dest(Keys::DEST_HID, k.hidCls, _hidSink != nullptr, "bleMode has no keyboard role");
+    dest(Keys::DEST_HID, k.hidCls, _hidSink != nullptr, "no_hid_role");
 #else
-    dest(Keys::DEST_AMS, 0, false, "FEATURE_BLE is off in this build");
-    dest(Keys::DEST_HID, 0, false, "FEATURE_BLE is off in this build");
+    dest(Keys::DEST_AMS, 0, false, "not_built");
+    dest(Keys::DEST_HID, 0, false, "not_built");
 #endif
 #if FEATURE_RESISTIVE_KEYS
-    dest(Keys::DEST_RES, k.resCls, k.resOn, "resEnabled is off");   // KEY1/KEY2 ladder
+    dest(Keys::DEST_RES, k.resCls, k.resOn, "res_off");   // KEY1/KEY2 ladder
 #else
-    dest(Keys::DEST_RES, 0, false, "FEATURE_RESISTIVE_KEYS is off in this build");
+    dest(Keys::DEST_RES, 0, false, "not_built");
 #endif
 #if FEATURE_USB_HID
     // Always in the chain; whether a host is plugged in is not known here.
