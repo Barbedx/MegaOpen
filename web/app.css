@@ -1,15 +1,15 @@
 :root{color-scheme:light;--mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
 --bg:#e7eaed;--panel:#fff;--panel2:#f1f3f5;--line:#d0d6dc;--text:#0e1216;--mute:#58626c;--acc:#0a5fd8;--accT:#fff;
---ok:#0d7434;--okB:#d6f0de;--warn:#8f5200;--warnB:#fbe8c0;--bad:#bd2218;--badB:#f8d9d5;--off:#5e6872;--offB:#e1e5e9;
+--ok:#0d7434;--okB:#d6f0de;--warn:#8f5200;--warnB:#fbe8c0;--bad:#bd2218;--badB:#f8d9d5;--off:#545d67;--offB:#e1e5e9;
 --rec:#d41e15;--glass:#0b130e;--glassT:#86ffa4;--glassD:#2b4d35;--tab:#fff;--ov:rgba(8,10,12,.72);--hi:#fff3b0;--onC:#fff;--knob:#fff;--shd:rgba(0,0,0,.35)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
---bg:#090b0d;--panel:#13171b;--panel2:#1a1f25;--line:#29313a;--text:#e7ecf1;--mute:#8a95a1;--acc:#3f8cff;--accT:#fff;
---ok:#3fd072;--okB:#11301e;--warn:#f2a93b;--warnB:#36270d;--bad:#ff5b50;--badB:#3b1512;--off:#7f8995;--offB:#222830;
---rec:#ff3b30;--glass:#040705;--glassT:#6dff8f;--glassD:#1d3a26;--tab:#0f1215;--ov:rgba(0,0,0,.8);--hi:#3a3410;--onC:#fff;--knob:#e7ecf1;--shd:rgba(0,0,0,.6)}}
+--bg:#090b0d;--panel:#13171b;--panel2:#1a1f25;--line:#29313a;--text:#e7ecf1;--mute:#8a95a1;--acc:#3f8cff;--accT:#04101f;
+--ok:#3fd072;--okB:#11301e;--warn:#f2a93b;--warnB:#36270d;--bad:#ff5b50;--badB:#3b1512;--off:#97a1ad;--offB:#222830;
+--rec:#d92d20;--glass:#040705;--glassT:#6dff8f;--glassD:#1d3a26;--tab:#0f1215;--ov:rgba(0,0,0,.8);--hi:#3a3410;--onC:#fff;--knob:#e7ecf1;--shd:rgba(0,0,0,.6)}}
 :root[data-theme="dark"]{color-scheme:dark;
---bg:#090b0d;--panel:#13171b;--panel2:#1a1f25;--line:#29313a;--text:#e7ecf1;--mute:#8a95a1;--acc:#3f8cff;--accT:#fff;
---ok:#3fd072;--okB:#11301e;--warn:#f2a93b;--warnB:#36270d;--bad:#ff5b50;--badB:#3b1512;--off:#7f8995;--offB:#222830;
---rec:#ff3b30;--glass:#040705;--glassT:#6dff8f;--glassD:#1d3a26;--tab:#0f1215;--ov:rgba(0,0,0,.8);--hi:#3a3410;--onC:#fff;--knob:#e7ecf1;--shd:rgba(0,0,0,.6)}
+--bg:#090b0d;--panel:#13171b;--panel2:#1a1f25;--line:#29313a;--text:#e7ecf1;--mute:#8a95a1;--acc:#3f8cff;--accT:#04101f;
+--ok:#3fd072;--okB:#11301e;--warn:#f2a93b;--warnB:#36270d;--bad:#ff5b50;--badB:#3b1512;--off:#97a1ad;--offB:#222830;
+--rec:#d92d20;--glass:#040705;--glassT:#6dff8f;--glassD:#1d3a26;--tab:#0f1215;--ov:rgba(0,0,0,.8);--hi:#3a3410;--onC:#fff;--knob:#e7ecf1;--shd:rgba(0,0,0,.6)}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--text);font:15px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-text-size-adjust:100%;font-variant-numeric:tabular-nums}
