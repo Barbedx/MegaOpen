@@ -157,6 +157,9 @@ void test_x84_rows_match_the_matrix_positions()
         // A yes/no read from a 2-bit state is one; a raw 0-3 is not.
         const bool state2 = d.w == 2 && meta(d.sig).boolean;
         TEST_ASSERT_EQUAL_MESSAGE(state2, (r->flags & DF_STATE2) != 0, meta(d.sig).name);
+        // Inverted where the matrix's 00 is the yes: belts and the seat.
+        const bool inv = d.sig == SIG_BELT_DRV || d.sig == SIG_BELT_PASS || d.sig == SIG_PASS_PRESENT;
+        TEST_ASSERT_EQUAL_MESSAGE(inv, (r->flags & DF_STATE2_INV) != 0, meta(d.sig).name);
     }
 }
 
@@ -223,10 +226,22 @@ void test_belts_lock_roof_climate_and_dynamics()
     CanDecode dec;
     TEST_ASSERT_TRUE(dec.loadDefaults());
     State s;
+    // The matrix's 00 is buckled / seated: the signals read 1 for it.
+    // 0x41: passenger belt 01 (unbuckled), seat 00 (taken), driver belt 01.
     dec.apply(frame(0x651, {0x02, 0x41}), s, 10);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_BELT_DRV));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_BELT_PASS));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_PASS_PRESENT));
+    // 0x10: both belts buckled, nobody on the passenger seat.
+    dec.apply(frame(0x651, {0x02, 0x10}), s, 20);
     TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_BELT_DRV));
     TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_BELT_PASS));
     TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_PASS_PRESENT));
+    // 0xFF: every field 11 (reserved): the last reading stands.
+    dec.apply(frame(0x651, {0x02, 0xFF}), s, 30);
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_BELT_DRV));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_PASS_PRESENT));
+    TEST_ASSERT_EQUAL_UINT32(20, s.stamp(SIG_BELT_DRV));
     TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_PASS_AIRBAG_OFF));
     TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_AIRBAG_FAULT));
     dec.apply(frame(0x60D, {0, 0, 0x18, 0, 0, 0, 0, 0}), s, 10);

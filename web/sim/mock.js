@@ -374,7 +374,7 @@ S.alerts=Array.from({length:16},(_,i)=>i?['','rises',0,5,false]:['fuel_low','ris
 function liveVal(n,t){const s=t/1000,w=(p,a,b)=>a+(b-a)*(.5+.5*Math.sin(s/p));
  const v={speed:Math.round(w(9,0,9000)),rpm:Math.round(w(9,800,3200)),fuel_level:31,fuel_low:0,batt_v:Math.round(w(30,1380,1420)),eng_temp:89,out_temp:12,
   throttle:Math.round(w(5,0,400)),neutral:0,clutch:s%20<1?1:0,handbrake:0,door_fl:0,door_fr:0,door_rl:0,door_rr:0,boot:0,light_pos:1,light_dip:1,
-  fuel_counter:Math.floor(s*7)%256,oil_level:9,service_km:12500,locked:0,belt_drv:0,belt_pass:3,odo_cluster:184321,fuel_level_apv:30};
+  fuel_counter:Math.floor(s*7)%256,oil_level:9,service_km:12500,locked:0,belt_drv:1,belt_pass:0,odo_cluster:184321,fuel_level_apv:30};
  const R5=[75,136,200,270,352];v.gear_ratio=Math.round(v.speed*100/v.rpm);let gi=0;R5.forEach((r,i)=>{if(Math.abs(v.gear_ratio-r)<Math.abs(v.gear_ratio-R5[gi]))gi=i});v.gear=v.speed<300?0:gi+1;
  return v[n]}
 const mapBase=()=>({send:S.emitter,uart:S.set.uartEnabled,units:{fuel:S.tun.fuelUnit,trip:S.tun.tripUnit},exp:S.huExp||0});

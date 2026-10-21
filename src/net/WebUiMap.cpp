@@ -294,7 +294,7 @@ void WebUi::routesMap()
                                 // its reading. A changed field is the user's own,
                                 // so it counts as measured and reads plain.
                                 if (Vehicle::DecodeTable::sameField(row, t.row[old]))
-                                    row.flags |= t.row[old].flags & (Vehicle::DF_HYPOTHESIS | Vehicle::DF_STATE2);
+                                    row.flags |= t.row[old].flags & (Vehicle::DF_HYPOTHESIS | Vehicle::DF_STATE2 | Vehicle::DF_STATE2_INV);
                             }
                             bound &= t.bindCan(e.sig, row);
                         } else if (e.src == Vehicle::SRC_CONST) {

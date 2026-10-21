@@ -13,6 +13,8 @@
 // a yes/no reads the whole field with DF_STATE2: 2 and 3 leave the signal as
 // it was, so an invalid frame never reads as "yes" (reverse, brake...). Where
 // the matrix gives every value a meaning (wipers, MIL, roof), the row is raw.
+// DF_STATE2_INV where the matrix's 00 is the yes (belts: contact open when
+// buckled; the seat: 00 = passenger detected): those signals read 1 = yes.
 //
 // Left out on purpose:
 //   0x60D b5         a second engine temperature; 0x551 b0 is the one used.
@@ -72,9 +74,9 @@
 { 0x645,   1, 1,  0, 0xFFu,       1, 1,      0, SIG_BACKLIGHT,  DF_HYPOTHESIS,               0 },  // 0x00-0xFE, 0xFF = off
 { 0x651,   0, 1,  0, 0x1u,        1, 1,      0, SIG_AIRBAG_FAULT, DF_HYPOTHESIS,             0 },  // b1.7/1
 { 0x651,   0, 1,  1, 0x1u,        1, 1,      0, SIG_PASS_AIRBAG_OFF, DF_HYPOTHESIS,          0 },  // b1.6/1
-{ 0x651,   1, 1,  0, 0x3u,        1, 1,      0, SIG_BELT_DRV,   DF_HYPOTHESIS,               0 },  // b2.6/2
-{ 0x651,   1, 1,  4, 0x3u,        1, 1,      0, SIG_PASS_PRESENT, DF_HYPOTHESIS,             0 },  // b2.2/2
-{ 0x651,   1, 1,  6, 0x3u,        1, 1,      0, SIG_BELT_PASS,  DF_HYPOTHESIS,               0 },  // b2.0/2
+{ 0x651,   1, 1,  0, 0x3u,        1, 1,      0, SIG_BELT_DRV,   DF_HYPOTHESIS | DF_STATE2 | DF_STATE2_INV, 0 },  // b2.6/2
+{ 0x651,   1, 1,  4, 0x3u,        1, 1,      0, SIG_PASS_PRESENT, DF_HYPOTHESIS | DF_STATE2 | DF_STATE2_INV, 0 },  // b2.2/2
+{ 0x651,   1, 1,  6, 0x3u,        1, 1,      0, SIG_BELT_PASS,  DF_HYPOTHESIS | DF_STATE2 | DF_STATE2_INV, 0 },  // b2.0/2
 { 0x684,   0, 1,  3, 0x1u,        1, 1,      0, SIG_ROOF_FAULT, DF_HYPOTHESIS,               0 },  // b1.4/1
 { 0x684,   0, 1,  5, 0x7u,        1, 1,      0, SIG_ROOF_POS,   DF_HYPOTHESIS,               0 },  // b1.0/3
 { 0x715,   3, 1,  2, 0xFu,        1, 1,      0, SIG_OIL_LEVEL,  DF_HYPOTHESIS,               0 },  // b4.2/4

@@ -190,10 +190,10 @@ namespace Vehicle
         SIG_CLUTCH,            // clutch switch
         SIG_NEUTRAL,           // gearbox in neutral
         SIG_REVERSE_UPC,       // reverse, the UPC's copy (0x215)
-        SIG_LOCKED,            // doors and boot locking state, 0-3
-        SIG_BELT_DRV,          // 2-bit contact state: 0 = fastened
-        SIG_BELT_PASS,
-        SIG_PASS_PRESENT,      // 2-bit: someone on the passenger seat
+        SIG_LOCKED,            // raw 0-3: bit0 boot locked, bit1 doors locked
+        SIG_BELT_DRV,          // 1 = fastened (the matrix's 00, DF_STATE2_INV)
+        SIG_BELT_PASS,         // 1 = fastened
+        SIG_PASS_PRESENT,      // 1 = someone on the passenger seat (matrix 00)
         SIG_AIRBAG_FAULT,
         SIG_PASS_AIRBAG_OFF,
         SIG_ROOF_POS,          // the CC's roof, 0-7

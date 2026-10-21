@@ -39,6 +39,9 @@ namespace Vehicle
         DF_STATE2     = 1 << 6,  // a Renault 2-bit state (mask 0x3): 00 no, 01 yes,
                                  // 10/11 reserved or invalid, which leave the
                                  // signal untouched (it ages) and are counted
+        DF_STATE2_INV = 1 << 7,  // with DF_STATE2: the matrix's 00 is the "yes"
+                                 // (a belt's contact is open when buckled), so
+                                 // the signal reads 1 = buckled / present
     };
 
     struct DecodeRow {   // 24 B: packed by field order
