@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- `tools/car_report.sh <board>`: after a drive, one folder and `.tar.gz` with status, health, settings, the settings file, the live map, the logs (ring, this boot, the boot before), the update state and the capture list, plus `summary.txt`. GETs only.
+
 ## [1.3.0] - 2026-10-21
 
 ### Added
