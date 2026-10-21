@@ -80,15 +80,17 @@ factory signal rows show up (a saved map keeps the old set).
 
 ## First boot
 
-1. Join the board's AP `MegaOpen-XXXX` (`XXXX` from the board's MAC address),
-   password `megaopen` (or the one in your `src/secrets.h`).
+1. Join the board's AP `MegaOpen-XXXX` (`XXXX` from the board's MAC address)
+   with the password the car's display shows at first boot (the panel menu's
+   **WiFi pass** row shows it again). A build without a panel, or one with
+   `src/secrets.h`, uses `MO_AP_PASS`.
 2. Open `http://192.168.4.1`, go to the board page and add your WiFi.
 3. On your network the board is at `http://megaopen.local` (or the router's IP).
 
-> **Change the AP password at first boot** (board page). Until you do, anyone
-> in WiFi range of the car can join with the public default and flash the
-> board. OTA and the web API have no password of their own: the WiFi/AP
-> password is the only lock. See [SECURITY.md](SECURITY.md).
+> OTA and the web API have no password of their own: the WiFi/AP password is
+> the only lock. A board updated from an older release still uses the old
+> public default (`megaopen`) until you adopt its new password from the panel
+> menu (**WiFi pass**) or set your own. See [SECURITY.md](SECURITY.md).
 
 ## Build
 

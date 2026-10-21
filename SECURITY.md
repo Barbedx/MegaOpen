@@ -6,9 +6,12 @@ exposes and how to report a problem.
 ## What is exposed
 
 * **WiFi.** With no home network in range (in the car) the board runs its own
-  access point, `MegaOpen-XXXX`. Its default password is `megaopen`, which is
-  public. **Change it at first boot** (Плата page). At home the board joins
-  your WiFi and is reachable by anything on that network.
+  access point, `MegaOpen-XXXX`. Its password is made up by the board at
+  first boot and shown only on the car's display (panel menu → WiFi pass);
+  the web never shows it. A board updated from an older release keeps the old
+  public default, `megaopen`, until the owner adopts the new one from the
+  menu or sets an own one. At home the board joins your WiFi and is reachable
+  by anything on that network.
 * **No login.** The web app, the API and OTA have no password of their own:
   whoever is on the board's network can change settings, reset it and flash
   firmware. The WiFi/AP password is the only lock.
@@ -24,9 +27,9 @@ exposes and how to report a problem.
 * **Not exposed:** no route returns a WiFi or AP password; the settings file
   never contains them.
 
-Work in progress (docs/BACKLOG.md): a per-board AP password shown only on
-the car's display, a physical "allow update" step, signed images, and a hardware mod that makes CAN A
-receive-only (the TX line broken, docs/BACKLOG.md "Hardware").
+Work in progress (docs/BACKLOG.md): a physical "allow update" step, signed
+images, and a hardware mod that makes CAN A receive-only (the TX line
+broken, docs/BACKLOG.md "Hardware").
 
 ## Reporting
 

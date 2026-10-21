@@ -5,7 +5,9 @@
 // They are DEFAULTS: what a fresh or factory-reset board starts with. Anything
 // saved from the web app (NVS) wins over them.
 
-// The board's own access point. 8 to 63 characters, or the AP comes up open.
+// The board's own access point, for a dev build: 8 to 63 characters. The
+// public "megaopen" counts as none: a fresh board then makes up its own and
+// shows it on the panel (src/cfg/ApPass.h); a build without a panel keeps it.
 #define MO_AP_PASS   "megaopen"
 
 // A WiFi network to join when none is saved, so a factory reset does not lose
