@@ -115,12 +115,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 
 ### BLE
 
-- **An AMS volume step is 15 writes-with-response, 450-750 ms of radio time.**
-  Read `canWriteNoResponse()` on Remote Command and use write-without-response
-  if offered (log which path); otherwise change the burst's shape. HID is
-  already one notify. Where: `sinks/BleKeySinks.cpp:48`,
-  `apple_media_service.cpp` (`writeValue(..., true)`).
-
 - **Long track titles are cut at the AMS entity-update size.** The entity
   attribute characteristic (for the rest of a long value) is not used, and its
   existence check looks up `APPLE_REMOTE_COMMAND_UUID` by mistake.

@@ -105,6 +105,15 @@ namespace AppleMediaService
 
     bool StartMediaService(BLEClient *client);
 
+    // The phone's volume as last reported (0..1), and how many reports have
+    // arrived since boot (0 = this phone never said). Any task: written on the
+    // NimBLE host task, read by the key worker (sinks/AmsVolumeStep.h).
+    float Volume();
+    uint32_t VolumeReports();
+    // True when the remote command goes as a write without response: the
+    // phone's characteristic offered it when AMS bound (logged there).
+    bool RemoteCommandNoResponse();
+
     // Drop the cached remote-command characteristic. Call whenever the owning
     // NimBLEClient goes away: getClient() is rebound per peer and deleteServices()
     // frees the cached characteristic (use-after-free otherwise).

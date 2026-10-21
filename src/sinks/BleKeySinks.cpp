@@ -4,6 +4,7 @@
 #include "../apple_media_service.h"
 #include "../bluetooth.h"
 #include "../ble/HidRole.h"
+#include "../utils/Log.h"
 
 // Not in the ported HidRole.h; kept here so that header stays a clean copy.
 #ifndef KEY_MEDIA_MUTE
@@ -72,9 +73,11 @@ namespace Sinks
 
         if (Keys::isVolume(c.action)) {
             if (_vol) ++_coalesced;
-            int16_t v = (int16_t)(_vol + (c.action == Action::VolUp ? VOL_STEPS : -VOL_STEPS));
-            if (v >  VOL_PENDING_MAX) v =  VOL_PENDING_MAX;
-            if (v < -VOL_PENDING_MAX) v = -VOL_PENDING_MAX;
+            const int16_t steps = _volStep.steps();
+            const int16_t cap   = (int16_t)(VOL_PRESSES_MAX * steps);
+            int16_t v = (int16_t)(_vol + (c.action == Action::VolUp ? steps : -steps));
+            if (v >  cap) v =  cap;
+            if (v < -cap) v = -cap;
             _vol = v;
             return;
         }
@@ -92,10 +95,46 @@ namespace Sinks
         return true;
     }
 
+    void BleKeyWorker::volBurstWrite(int8_t dir, uint32_t nowMs)
+    {
+        if (_burst.dir != dir) {
+            // One before it not yet measured: its report may still land
+            // after v0 is taken, so this one is not learned from.
+            const bool overlap = _burst.dir != 0;
+            _burst = Burst{};
+            _burst.dir      = dir;
+            _burst.v0       = AppleMediaService::Volume();
+            _burst.reports0 = AppleMediaService::VolumeReports();
+            _burst.startMs  = nowMs;
+            _burst.clean    = !overlap;
+        }
+        ++_burst.writes;
+        _burst.endMs = 0;
+    }
+
+    // One line per press (or presses run together), once the phone's report
+    // has had time to arrive: what it cost and how far it moved.
+    void BleKeyWorker::volBurstSettle(uint32_t nowMs)
+    {
+        if (!_burst.dir || _vol || !_burst.endMs || (uint32_t)(nowMs - _burst.endMs) < VOL_SETTLE_MS) return;
+        const float v1 = AppleMediaService::Volume();
+        const bool updated = AppleMediaService::VolumeReports() != _burst.reports0;
+        const bool learned = _burst.clean && _volStep.observe(_burst.v0, v1, _burst.writes, updated);
+        LOGI("ble", "vol %c: %u write(s) %lu ms (%s), %.3f -> %.3f%s; %s %u/press",
+             _burst.dir > 0 ? '+' : '-', (unsigned)_burst.writes,
+             (unsigned long)(_burst.endMs - _burst.startMs),
+             AppleMediaService::RemoteCommandNoResponse() ? "no-rsp" : "rsp",
+             _burst.v0, v1, updated ? "" : " (no report)",
+             learned ? "learned" : _volStep.learned() ? "kept" : "default",
+             (unsigned)_volStep.steps());
+        _burst = Burst{};
+    }
+
     bool BleKeyWorker::step()
     {
         const uint32_t nowMs = millis();
         _hidHeld = false;             // only asked between a press and its release
+        volBurstSettle(nowMs);
         if (!_fifoN && !_vol) return false;
 
         // No phone: what is pending is for a link that is not there.
@@ -103,6 +142,7 @@ namespace Sinks
             _noLink += _fifoN + (_vol ? 1u : 0u);
             _fifoN = 0;
             _vol = 0;
+            _burst = Burst{};
             return false;
         }
 
@@ -114,9 +154,11 @@ namespace Sinks
             if ((uint32_t)(nowMs - c.atMs) > STALE_MS) ++_stale;
             else { amsCommand(c.action); ++_amsWrites; }
         } else {
+            volBurstWrite(_vol > 0 ? 1 : -1, nowMs);
             if (_vol > 0) { AppleMediaService::VolumeUp();   --_vol; }
             else          { AppleMediaService::VolumeDown(); ++_vol; }
             ++_amsWrites;
+            if (!_vol) _burst.endMs = millis();
         }
         return _fifoN || _vol;
     }

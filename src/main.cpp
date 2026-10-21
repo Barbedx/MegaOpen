@@ -1499,11 +1499,13 @@ static void hkBeat(uint32_t now)
 #if FEATURE_BLE
     // The BLE key path since boot: q = the keys-to-ble_svc queue's drops;
     // stale = waited over 300 ms; coal = volume presses folded into one
-    // pending count; nolink = owed with no phone connected.
-    logf("[ble] keys q=%u ams=%u hid=%u stale=%u coal=%u nolink=%u",
+    // pending count; nolink = owed with no phone connected; vol = AMS
+    // commands a volume press sends (measured, sinks/AmsVolumeStep.h).
+    logf("[ble] keys q=%u ams=%u hid=%u stale=%u coal=%u nolink=%u vol=%u",
          (unsigned)Sinks::BleKeyQueue::dropped(), (unsigned)g_bleKeys.amsWrites(),
          (unsigned)g_bleKeys.hidPresses(), (unsigned)g_bleKeys.stale(),
-         (unsigned)g_bleKeys.coalesced(), (unsigned)g_bleKeys.noLink());
+         (unsigned)g_bleKeys.coalesced(), (unsigned)g_bleKeys.noLink(),
+         (unsigned)g_bleKeys.volSteps());
 #endif
 #if FEATURE_DISPLAY_CAN || FEATURE_BLE
     // lockMiss = head-unit frames that found a reader holding the media
