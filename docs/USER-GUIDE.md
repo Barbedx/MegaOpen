@@ -112,6 +112,10 @@ loose), volume keys go to the iPhone instead, after the board's first minute
 of uptime, and back to the head unit as soon as it talks again. The grid then
 shows **ГУ** as not live, with the reason under it.
 
+The knob rings take WS2812B (GRB), RGB or SK6812 **RGBW** strips: **Кнопки →
+Підсвітка → Тонко → Порядок кольорів**. On RGBW the white LED carries what
+the three colours have in common.
+
 ## Updating
 
 **From GitHub** (the board on a network with internet):
@@ -137,6 +141,16 @@ If the car page was ever saved (**Авто → RAV4 → ГУ**), the board keeps
 saved list of signal bindings, and signals added by the update do not show.
 Press **Заводські прив'язки** once. It replaces your own bindings with the
 new factory list.
+
+## Settings to a file
+
+**Плата → Налаштування у файл.** **Зберегти у файл** downloads every setting
+and the knob configuration as a `.json` (no passwords). Choosing a file
+checks it first and shows what would change, what needs a reboot, and what
+this board does not have (skipped); a bad value lists every problem and
+changes nothing. **Застосувати** applies it all at once. A file never sets the
+AP password. A file from a newer firmware is refused; keys this firmware does
+not know are skipped.
 
 ## When something is wrong
 
