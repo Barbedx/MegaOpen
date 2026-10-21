@@ -19,6 +19,7 @@
 #include "vehicle/VehicleState.h"
 #include "net/WebUi.h"
 #include "net/WifiManager.h"
+#include "net/IpNotice.h"
 #include <WiFi.h>          // the heartbeat reports SSID/BSSID/gateway directly
 #include "utils/Log.h"
 #include "utils/LogBus.h"
@@ -1485,6 +1486,40 @@ static bool hkWifiSeen()
     return s_seen;
 }
 
+// WiFi, then the board's address on the panel once per connection
+// (src/net/IpNotice.h): "IP 192.168.1.15 / megaopen.local" on the home
+// network, "AP MegaOpen-XXXX / 192.168.4.1" on our own. Polite: it waits out
+// the menu and a glass hold (App::Ui::queueNotice).
+static void hkWifi(uint32_t now)
+{
+    g_wifi.loop(now);
+#if FEATURE_DISPLAY_CAN
+    static IpNotice s_notice;
+    IpNotice::Mode m = IpNotice::Mode::None;
+    uint32_t ip = 0;
+    if (g_wifi.connecting()) {
+        // a join or a scan: neither link is settled
+    } else if (g_wifi.isSta()) {
+        if (WiFi.status() == WL_CONNECTED) { m = IpNotice::Mode::Sta; ip = (uint32_t)WiFi.localIP(); }
+    } else if (WiFi.getMode() & WIFI_AP) {
+        m = IpNotice::Mode::Ap;
+        ip = (uint32_t)WiFi.softAPIP();
+    }
+    if (!s_notice.tick(now, m, ip)) return;
+    char head[40];
+    String body;
+    if (m == IpNotice::Mode::Sta) {
+        snprintf(head, sizeof(head), "IP %s", WiFi.localIP().toString().c_str());
+        body = g_wifi.mdnsHost();          // empty with mDNS off
+    } else {
+        snprintf(head, sizeof(head), "AP %s", g_wifi.apSsid().c_str());
+        body = WiFi.softAPIP().toString();
+    }
+    App::Ui::queueNotice(head, body.c_str());
+    logf("[wifi] on the panel: %s / %s\n", head, body.c_str());
+#endif
+}
+
 // Every 10 s, after [win] and [task]: the lines nobody else owns.
 static void hkBeat(uint32_t now)
 {
@@ -2279,7 +2314,7 @@ void setup()
     {
         App::Housekeeping::Hooks h;
         h.web      = hkWeb;
-        h.wifi     = [](uint32_t now) { g_wifi.loop(now); };
+        h.wifi     = hkWifi;
         h.wifiSeen = hkWifiSeen;
         h.beat     = hkBeat;
         h.beatSlow = hkBeatSlow;

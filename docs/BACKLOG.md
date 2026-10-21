@@ -158,11 +158,16 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   is redesigned.
 
 - **New UI (owner, 2026-10-16): show the board's IP on the display when WiFi
-  connects.** `megaopen.local` answers now (see Done), but Android before 12
-  has no `.local`, so the address can still be unknown without a router or
-  a LAN scan. A popup/splash with `IP 192.168.x.y` for a few seconds on STA
-  connect; in AP mode `192.168.4.1`. Part of the UI rework (mockup:
-  ui-audit workflow 2026-10-16).
+  connects — WRITTEN 2026-10-21, not yet on glass.** On the home network:
+  `IP 192.168.x.y` / `megaopen.local` (the mDNS name, when mDNS is on); on
+  the board's own AP: `AP MegaOpen-XXXX` / `192.168.4.1`. A fullscreen for
+  6 s through the notification path, polite: it waits out the panel menu,
+  a switched-off panel and a glass hold (`App::Ui::queueNotice`). Once per
+  connection: a link back within 30 s with the same mode and address says
+  nothing; a new address, a mode change or 30 s down does
+  (`src/net/IpNotice.*`, `test_ipnotice`; fed from net_svc in `main.cpp`
+  `hkWifi`). In the car that means one `AP …` notice per drive; a switch
+  for it is open if that turns out to be noise.
 - **Firmware updates over the internet from GitHub Releases (owner,
   2026-10-19) — WRITTEN 2026-10-21, not yet run on a board.** Плата → «З
   GitHub»: Перевірити reads `releases/latest` (public repo, no token; finals

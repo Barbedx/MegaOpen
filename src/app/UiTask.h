@@ -145,6 +145,9 @@ namespace App
         void noteManualClock(uint16_t hm);
         // Sender on row 1, body wrapped over rows 2-3; drawn as a fullscreen.
         void queueNotification(const char* sender, const char* text);
+        // The same, polite: it also waits out a glass hold, which a phone
+        // notification or an alert does not. The board's address on connect.
+        void queueNotice(const char* sender, const char* text);
         // The active media source changed; the screen refills on the next pass.
         void mediaChanged();
         // Fire the track splash now, for the current title (the media page).

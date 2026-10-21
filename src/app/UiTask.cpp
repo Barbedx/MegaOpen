@@ -136,6 +136,7 @@ namespace App
             portMUX_TYPE g_notifyMux = portMUX_INITIALIZER_UNLOCKED;
             bool     g_notifyDue = false;
             uint32_t g_notifySeq = 0;
+            bool     g_notifyPolite = false;   // the owed one waits out glassHeld()
             char     g_notifyRows[3][MegaOpen::MediaScreen::ROW_MAX] = {};
             Ticket   s_notifyReq = NO_TICKET;
 
@@ -790,9 +791,14 @@ namespace App
 
                 // ---- a notification, ahead of everything automatic --------------------
                 // Not gated on glassHeld(), except by the panel menu and a panel
-                // switched off: owed until accepted, so it shows after them.
+                // switched off: owed until accepted, so it shows after them. A
+                // polite one (the board's address) waits out the hold as well.
+                bool polite;
+                portENTER_CRITICAL(&g_notifyMux);
+                polite = g_notifyPolite;
+                portEXIT_CRITICAL(&g_notifyMux);
                 if (g_notifyDue && !s_notifyReq && ps.synced && !listenOnly && !busy() &&
-                    !PanelMenu::isOpen() && !PanelMenu::panelOff()) {
+                    !PanelMenu::isOpen() && !PanelMenu::panelOff() && !(polite && glassHeld(now))) {
                     char rows[3][MegaOpen::MediaScreen::ROW_MAX];
                     portENTER_CRITICAL(&g_notifyMux);
                     memcpy(rows, g_notifyRows, sizeof(rows));
@@ -1292,8 +1298,9 @@ namespace App
 
         // Sender on row 1, body wrapped over rows 2-3, folded to ASCII; drawn by
         // the ui task as a fullscreen. Any task: the rows cross under
-        // g_notifyMux. A newer notification replaces the rows of one still owed.
-        void queueNotification(const char* sender, const char* text)
+        // g_notifyMux. A newer notification replaces the rows of one still owed,
+        // and its politeness with them.
+        static void queueRows(const char* sender, const char* text, bool polite)
         {
             using MegaOpen::MediaScreen;
             const uint8_t cols = MegaOpen::FS_COLS;
@@ -1310,9 +1317,13 @@ namespace App
             portENTER_CRITICAL(&g_notifyMux);
             memcpy(g_notifyRows, rows, sizeof(rows));
             ++g_notifySeq;
-            g_notifyDue = true;
+            g_notifyDue    = true;
+            g_notifyPolite = polite;
             portEXIT_CRITICAL(&g_notifyMux);
         }
+
+        void queueNotification(const char* sender, const char* text) { queueRows(sender, text, false); }
+        void queueNotice(const char* sender, const char* text)        { queueRows(sender, text, true); }
 
         bool keyPopupWanted(bool trackKey)
         {
