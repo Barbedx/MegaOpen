@@ -12,16 +12,20 @@
 // settled, the reported change divided by the writes is one command's step,
 // and a press becomes as many commands as make one iPhone button step (1/16).
 //
-// It starts at one command a press: the first press is the measurement. A
-// phone that never reports its volume gets the old fifteen. A burst that ends
-// at 0 or 1 says nothing (it was cut short), and is not learned from.
+// It starts at one command a press, and stays there until a measurement says
+// otherwise. A burst with no report (late, or a phone that does not send one)
+// says nothing; two in a row before anything was learned mean this phone does
+// not report, and only then does a press become FALLBACK_STEPS. A burst that
+// ends at 0 or 1 was cut short and is not learned from.
 //
 // Pure (no Arduino): host-tested in test/test_amsvol.
 namespace Sinks
 {
     class AmsVolumeStep {
     public:
-        static constexpr uint8_t MAX_STEPS   = 15;          // the old fixed count
+        static constexpr uint8_t MAX_STEPS   = 15;          // the old fixed count, now the cap
+        static constexpr uint8_t FALLBACK_STEPS = 4;        // a phone that never reports
+        static constexpr uint8_t SILENT_BURSTS  = 2;        // in a row, before that
         static constexpr float   PRESS       = 1.0f / 16;   // one iPhone volume button step
         static constexpr float   EDGE        = 0.001f;      // 0 or 1: clamped, not measured
         static constexpr float   NOISE       = 0.0001f;     // below this, nothing moved
@@ -40,11 +44,13 @@ namespace Sinks
             if (atEdge(v0) || atEdge(v1)) return false;
             const float moved = fabsf(v1 - v0);
             if (!updated || moved < NOISE) {
-                // Nothing reported: this phone does not say, so press the way
-                // that worked before. A learned count stays.
-                if (!_learned) _steps = MAX_STEPS;
+                // Nothing reported. A learned count stays; an unlearned one
+                // waits for a second silent burst before giving up on reports.
+                if (!_learned && _silent < SILENT_BURSTS && ++_silent == SILENT_BURSTS)
+                    _steps = FALLBACK_STEPS;
                 return false;
             }
+            _silent = 0;
             _step = moved / writes;
             long n = lroundf(PRESS / _step);
             if (n < 1) n = 1;
@@ -58,6 +64,7 @@ namespace Sinks
         static bool atEdge(float v) { return v <= EDGE || v >= 1.0f - EDGE; }
 
         uint8_t _steps = 1;
+        uint8_t _silent = 0;      // no-report bursts in a row, before a measurement
         bool    _learned = false;
         float   _step = 0;
     };
