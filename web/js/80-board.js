@@ -37,6 +37,8 @@ SCR.board={title:'Плата',async render(m){
   '<div class="fr"><input type="file" id="otaF" accept=".bin" class="in" style="flex:1"><button class="btn pri" type="button" id="otaGo">Оновити</button></div><div class="pad" id="otaP" hidden><div class="bar big"><i id="otaBar"></i></div></div>','cOta','custom')+
  (has('logfs')?card('Журнал запусків',row('','','Ті самі рядки, що йдуть у серійний порт, але на флеші: файл на кожен запуск, 8 останніх. Живий потік — Сервіс › Лог. Після зависання чи зникнення живлення останні ~16 кБ можуть не потрапити.')+`<div id="logs">${(lg.files||[]).map(f=>row(f.n?'Запуск −'+f.n:'Цей запуск',`<button class="btn sm" type="button" data-n="${f.n}">Скачати</button>`,fmtB(f.size))).join('')}</div>`,'','custom'):'')+
  '<div id="allSlot"></div>'+
+ card('Налаштування у файл',row('','','Усі налаштування й ручки — у файл .json; з файлу — після перегляду змін. WiFi-паролі у файл не йдуть.')+
+  '<div class="fr"><button class="btn" type="button" id="cfgSave">Зберегти у файл</button><input type="file" id="cfgF" accept=".json,application/json" class="in" style="flex:1" aria-label="Файл налаштувань"></div><div id="cfgPrev"></div>','cCfg','custom')+
  card('Інтерфейс',row('Режим розробника',`<input type="checkbox" class="sw" id="devSw" data-nosave${DEV?' checked':''}>`,'показує вкладку Сервіс'),'','custom')+
  card('Небезпечна зона','<div class="fr"><button class="btn" type="button" id="rbt">Перезавантажити</button><button class="btn dng" type="button" id="fac">Скинути до заводських</button></div>','','custom');
  $('#allSlot').outerHTML=fold('Усі налаштування',row('','','Ті самі значення, що в меню на щитку (утримати правий енкодер).')+allSettings(se,m.innerHTML),'cAll');
@@ -56,10 +58,30 @@ SCR.board={title:'Плата',async render(m){
   $('#ghGo').onclick=e=>ask(e.target,'Завантажити '+this.ghTag+' з GitHub? Перезавантаження — потім, окремо.',()=>run(e.target,async()=>{await API.post('/api/fw/install');await this.gh()},'завантажую'));
   $('#ghBoot').onclick=e=>ask(e.target,'Перезавантажити в '+this.ghTag+' зараз?',()=>run(e.target,async()=>{await API.post('/api/fw/reboot');await this.gh()},'перезавантажую'))}
  if(has('logfs'))$('#logs').onclick=e=>{const b=e.target.closest('[data-n]');if(b)run(b,()=>download('/api/logs/file?n='+b.dataset.n,'boot-'+b.dataset.n+'.log'))};
+ this.fw=se.fw;this.cfgBind();
  $('#rbt').onclick=e=>ask(e.target,'Перезавантажити плату?',()=>reboot().catch(err=>sv(svOf(e.target),'bad',errT(err))));
  $('#fac').onclick=e=>ask(e.target,'Стерти все, включно з WiFi. Плата підніме точку 192.168.4.1.',()=>reboot('/api/factory?confirm=factory',undefined,'заводські налаштування').catch(err=>sv(svOf(e.target),'bad',errT(err))),'factory');
  this.bleOff=!B||se.bleMode==='off';await this.tick();
 },
+/* файл налаштувань: GET /api/config у файл; з файлу — /api/config?dry=1 (що зміниться, або всі помилки), потім POST */
+cfgBind(){
+ $('#cfgSave').onclick=e=>run(e.target,async()=>{const c=await API.get('/api/config');const d=new Date().toISOString().slice(0,10);
+  return {note:saveText('megaopen-settings-'+d+'.json',JSON.stringify(c,null,1))}});
+ const prev=$('#cfgPrev'),lbl=id=>{const f=(CAT.settings||[]).find(x=>x.id===id);return f&&f.label?f.label:id};
+ $('#cfgF').onchange=async e=>{const f=e.target.files[0];prev.innerHTML='';if(!f)return;let doc;
+  try{doc=JSON.parse(await f.text())}catch(x){sv(svOf(e.target),'bad','це не JSON');return}
+  sv(svOf(e.target),'busy');let p;
+  try{p=await API.post('/api/config?dry=1',doc)}catch(x){sv(svOf(e.target),'bad','файл не підходить');
+   prev.innerHTML=row('Нічого не змінено','',(x.message||'').split('\n').map(esc).join('<br>'));return}
+  sv(svOf(e.target),'ok','перевірено');
+  const ch=p.changes||[],fw=p.fileFw&&p.fileFw!==this.fw?row('Файл з іншої прошивки',chipH('warn',p.fileFw),'ключі, яких ця не знає, пропущено'):'';
+  prev.innerHTML=fw+row(ch.length?'Зміниться: '+ch.length:'Нічого не зміниться',p.reboot?chipH('warn','потрібен перезапуск'):'',ch.map(lbl).map(esc).join(' · '))+
+   (p.knobs?row('Ручки й підсвітка','','замінено з файлу'):'')+(p.unknown?row('Пропущено ключів',chipH('off',String(p.unknown)),'немає в цій прошивці'):'')+
+   '<div class="fr"><button class="btn pri" type="button" id="cfgGo">Застосувати</button><button class="btn" type="button" id="cfgNo">Скасувати</button></div>';
+  $('#cfgNo').onclick=()=>{prev.innerHTML='';e.target.value=''};
+  $('#cfgGo').onclick=b=>run(b.target,async()=>{const r=await API.post('/api/config',doc);prev.innerHTML='';e.target.value='';
+   if(r&&r.pendingReboot){prev.innerHTML=row('Застосовано','<button class="btn" type="button" id="cfgRb">Перезавантажити</button>','частина — після перезапуску');$('#cfgRb').onclick=x=>reboot().catch(err=>sv(svOf(x.target),'bad',errT(err)))}
+   return {note:'застосовано'}})}},
 /* GhOta: стан з /api/fw; phase -> чип, підпис, кнопка, смуга. rebooting -> та сама заставка, що й після файлу */
 async gh(){const v=await API.get('/api/fw');if(!$('#ghSt'))return;this.ghTag=v.latest;
  const busy=v.phase==='checking'||v.phase==='downloading',pct=v.size?Math.floor(v.got/v.size*100):0;

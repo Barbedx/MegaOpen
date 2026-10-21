@@ -1,4 +1,5 @@
 #include "WebUi.h"
+#include "../cfg/SettingsJson.h"
 #include "../proto/canbox/Rav4Profile.h"
 #include "../proto/canbox/Rav4Catalog.h"
 #include "Catalog.h"
@@ -324,6 +325,217 @@ void WebUi::putDests(JsonObject out, const App::KeysTask::Routing& k) const
 #endif
 }
 
+// The registry's values as GET /api/settings sends them, or (`forFile`) as a
+// settings file carries them: on copies of what each owner holds now.
+void WebUi::settingsOut(JsonObject d, bool forFile)
+{
+    auto& s = _cfg->s();
+    // The newest rules, applied or not (the car task owns them).
+    Vehicle::AlertRules al;
+    Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
+    // The emitter's, likewise (the hu task owns it).
+    static App::Hu::EmitterCfg hu;
+    const bool huOk = _emitter && App::Hu::emitterCfg().peek(hu);
+#if FEATURE_CAPTURE
+    Capture::Settings cs = Capture::settings();
+    Capture::Settings* csp = &cs;
+#else
+    Capture::Settings* csp = nullptr;
+#endif
+#if FEATURE_KNOBS
+    Knobs::Config kc;
+    if (_knobs) kc = _knobs->config();
+    const Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp,
+                       huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
+#else
+    const Cfg::Model m{&s, nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
+#endif
+    Cfg::SettingsJson::write(m, d, forFile);
+}
+
+// POST /api/settings and the settings half of POST /api/config: check every
+// key, then (unless `dry`) apply and hand each part to the task that owns it.
+// `file`: a settings file, whose volatile entries are skipped. Returns the
+// HTTP status; `out`/`type` are the body.
+int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, const char*& type)
+{
+        auto& s = _cfg->s();
+        // The AP password, which is also the OTA password. Empty = unchanged.
+        const String apPass = d["apPass"] | "";
+        if (apPass.length() && (apPass.length() < 8 || apPass.length() > 63))
+            { out = "apPass: 8 to 63 characters"; return 400; }
+
+        // The alert rules and the emitter's settings are edited on copies of
+        // what their tasks hold now (rows and cells not sent keep their
+        // values); a copy goes back only when something in it changed.
+        // Static: httpd serves one request at a time.
+        static Vehicle::AlertRules al;
+        Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
+        static App::Hu::EmitterCfg hu;
+        const bool huOk = _emitter && App::Hu::emitterCfg().peek(hu);
+        static Canbox::Tuning huWas;
+        huWas = hu.tuning;
+#if FEATURE_CAPTURE
+        Capture::Settings cs = Capture::settings();
+        Capture::Settings* csp = &cs;
+#else
+        Capture::Settings* csp = nullptr;
+#endif
+#if FEATURE_KNOBS
+        // Read here, set whole at the end: safe because this handler holds the
+        // settings lock throughout, as the menu's knob commits do (dispatch()).
+        Knobs::Config kc;
+        if (_knobs) kc = _knobs->config();
+        Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
+#else
+        Cfg::Model m{&s, nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
+#endif
+        // Everything that can be refused is checked before anything is applied
+        // (the /api/map rule): a 400 lists every refusal and leaves the
+        // settings as they were. Keys the registry does not know (apPass,
+        // huForget, a newer file's) are not refused. Static: httpd serves one
+        // request at a time, and these are not for its stack.
+        static Cfg::SettingsJson::Read rd;
+        static Cfg::SettingsJson::Errors er;
+        rd = Cfg::SettingsJson::Read{};
+        er = Cfg::SettingsJson::Errors{};
+        Cfg::SettingsJson::read(m, d, rd, er, file);
+        if (er.any()) {
+            static char err[Cfg::SettingsJson::Errors::MAX * Cfg::SettingsJson::Errors::LEN];
+            er.join(err, sizeof(err));
+            out = err;
+            return 400;
+        }
+
+        // A dry run: what would change, nothing applied (the table copies are
+        // this handler's own).
+        if (dry) {
+            JsonDocument o;
+            o["ok"] = true;
+            bool reboot = false;
+            JsonArray chg = o["changes"].to<JsonArray>();
+            for (uint8_t i = 0; i < rd.n; ++i)
+                if (Cfg::SettingsJson::differs(m, rd.ch[i])) {
+                    chg.add(rd.ch[i].e->id);
+                    if (rd.ch[i].e->apply & Cfg::AP_REBOOT) reboot = true;
+                }
+            for (uint8_t i = 0; i < rd.nTables; ++i) chg.add(rd.tables[i]->id);
+            o["reboot"]  = reboot;
+            o["unknown"] = rd.unknown;
+            serializeJson(o, out);
+            type = "application/json";
+            return 200;
+        }
+
+        // The rules first: a busy hand-off is the last refusal, so a refused
+        // request has changed nothing.
+        bool alSaved = true;
+        if (rd.apT & Cfg::AP_CAR) {
+            if (!App::Car::alertRules().stage(al)) { out = "busy, try again"; return 503; }
+            uint8_t on = 0;
+            for (const Vehicle::AlertRule& x : al.r) on += x.on;
+            alSaved = _cfg->saveAlerts(al);
+            LogBus::printf("[alert] rules saved: %u on%s", (unsigned)on, alSaved ? "" : ", NOT in NVS");
+        }
+
+        // What the head-unit text learner had, so only a real change resets it.
+        const uint8_t huT = s.huTitleCmd, huA = s.huArtistCmd;
+        const bool huFirst = s.huTitleFirst;
+        const Cfg::Str src = s.mediaSource;
+
+
+        uint8_t ap = 0;
+        Cfg::SettingsJson::apply(m, rd, &ap);
+        bool restart = (ap & Cfg::AP_REBOOT) != 0;
+
+        // The emitter, for the hu task: the tuning as a whole block (replace,
+        // not merge, so a concurrent edit is never half-applied) and the
+        // message switches (RAM only). The tuning goes to NVS when it changed.
+        bool huBusy = false;
+        if (ap & Cfg::AP_HU) {
+            huBusy = !App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& c) {
+                c.tuning = hu.tuning;
+                memcpy(c.msgOn, hu.msgOn, sizeof(c.msgOn));
+            });
+            if (huBusy) LogBus::line("settings: the head-unit emitter was busy, its part not applied");
+            else if (memcmp(&hu.tuning, &huWas, sizeof(huWas))) {
+                _cfg->saveTuning(hu.tuning);
+                LogBus::line("canbox tuning saved (survives a power cycle)");
+            }
+        }
+
+        // Staged for the tasks that own them: the debounce timing and the
+        // encoder direction for the matrix sweep; the pulse, the links and
+        // the class masks for the keys task.
+        if (ap & Cfg::AP_KEYS) {
+            if (_st.keymap) {
+                const Input::KeyDebouncer::Params t = s.timing;
+                const bool inv = s.encInverted;
+                _st.keymap->edit([&](App::KeysTask::KeyMapCfg& k) { k.timing = t; k.encInverted = inv; });
+            }
+            if (_st.routing) {
+                const uint16_t pulse = s.pulseMs;
+                const bool on = s.uartEnabled, resOn = s.resEnabled;
+                const uint8_t u = s.routeUart, a = s.routeAms, h = s.routeHid, rs = s.routeRes,
+                              us = s.routeUsb;
+                if (!_st.routing->edit([&](App::KeysTask::Routing& k) {
+                        k.pulseMs = pulse; k.uartOn = on; k.resOn = resOn;
+                        k.uartCls = u; k.amsCls = a; k.hidCls = h; k.resCls = rs; k.usbCls = us;
+                    }))
+                    LogBus::line("settings: the keys task's routing was busy, applied at the next change");
+                LogBus::printf("routing: uart=0x%02X ams=0x%02X hid=0x%02X res=0x%02X usb=0x%02X",
+                               u, a, h, rs, us);
+            }
+#if FEATURE_RESISTIVE_KEYS
+            // A rung held under a mask just changed would never see its Release.
+            if (_res && _st.resAllOff) _st.resAllOff();
+#endif
+            App::KeyBus::kick();
+        }
+
+#if FEATURE_DISPLAY_CAN
+        // The screen, the pane and the key popup, live.
+        if ((ap & Cfg::AP_UI) && !App::Ui::stageFrom(s))
+            LogBus::line("settings: the screen's were busy, applied at the next change");
+
+        // Where the now-playing text comes from: live, so sources can be
+        // compared with the panel in view. Setting a command byte forgets
+        // what was learned, so it is set only when it changed.
+        if (ap & Cfg::AP_MEDIA) {
+            if (_router && s.mediaSource != src) _router->setMode(MediaRouter::modeFromStr(s.mediaSource.c_str()));
+            if (_hu && (s.huTitleCmd != huT || s.huArtistCmd != huA)) _hu->setChannels(s.huTitleCmd, s.huArtistCmd);
+            if (_hu && s.huTitleFirst != huFirst) _hu->setTitleFirst(s.huTitleFirst);
+        }
+        // "Throw away what you learned and watch again", for when the learner
+        // latched onto a status frame that happened to look like text.
+        if (_hu && (d["huForget"] | false)) _hu->forget();
+#endif
+
+#if FEATURE_KNOBS
+        if ((ap & Cfg::AP_KNOBS) && _knobs) {
+            _knobs->setConfig(kc);
+            _cfg->saveKnobs(kc);
+        }
+#endif
+
+#if FEATURE_CAPTURE
+        // Clamped and saved to its own NVS namespace by the recorder.
+        if (ap & Cfg::AP_CAP) Capture::setSettings(cs);
+#endif
+
+        if (apPass.length()) { restart = restart || apPass != s.apPass; s.apPass = apPass; }
+
+        _cfg->save();
+        LogBus::printf("settings saved: %u value(s)%s%s", (unsigned)rd.n, file ? " from a file" : "",
+                       restart ? ", pending reboot" : "");
+        if (!alSaved) { out = "alerts: applied until the next boot only: NVS write failed"; return 500; }
+        if (huBusy) { out = "head unit: busy, its part not applied; the rest saved"; return 503; }
+        type = "application/json";
+        out = restart ? "{\"ok\":true,\"pendingReboot\":true}" : "{\"ok\":true}";
+        return 200;
+
+}
+
 void WebUi::routes()
 {
     // The app (web/, tools/gen_pages.py). Its screens are hash routes.
@@ -475,60 +687,7 @@ void WebUi::routes()
     route("/api/settings", HTTP_GET, [this](PsychicRequest* r) {
         auto& s = _cfg->s();
         JsonDocument d;
-        // The newest rules, applied or not (the car task owns them).
-        Vehicle::AlertRules al;
-        Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
-        // The emitter's, likewise (the hu task owns it).
-        static App::Hu::EmitterCfg hu;
-        const bool huOk = _emitter && App::Hu::emitterCfg().peek(hu);
-#if FEATURE_CAPTURE
-        Capture::Settings cs = Capture::settings();
-        Capture::Settings* csp = &cs;
-#else
-        Capture::Settings* csp = nullptr;
-#endif
-#if FEATURE_KNOBS
-        Knobs::Config kc;
-        if (_knobs) kc = _knobs->config();
-        const Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp,
-                           huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
-#else
-        const Cfg::Model m{&s, nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
-#endif
-        for (size_t i = 0; i < Cfg::Registry::count(); ++i) {
-            const Cfg::SEntry& e = Cfg::Registry::at(i);
-            if (e.type == Cfg::SType::Group || !(e.flags & Cfg::F_WEB) || !Cfg::Registry::available(m, e))
-                continue;
-            if (e.type == Cfg::SType::Table) {
-                JsonArray rows = d[e.id].to<JsonArray>();
-                char b[16];
-                for (uint8_t ri = 0; ri < e.tab->rows(); ++ri) {
-                    JsonArray row = rows.add<JsonArray>();
-                    for (uint8_t c = 0; c < e.tab->cols; ++c) {
-                        const Cfg::SColumn& col = e.tab->col[c];
-                        const int32_t v = Cfg::Registry::cell(m, e, ri, c);
-                        const uint8_t dp = Cfg::Registry::cellDecimals(m, e, ri, c);
-                        if (col.type == Cfg::SType::Bool)      row.add(v != 0);
-                        else if (col.type == Cfg::SType::Enum) row.add(col.en->id((uint8_t)v));
-                        else if (dp) row.add(serialized(String(Cfg::Registry::decText(b, sizeof(b), v, dp))));
-                        else         row.add(v);
-                    }
-                }
-                continue;
-            }
-            if (e.type == Cfg::SType::Str) {
-                char b[64];
-                Cfg::Registry::getText(m, e, b, sizeof(b));
-                d[e.id] = String(b);
-                continue;
-            }
-            const int32_t v = Cfg::Registry::get(m, e);
-            switch (e.type) {
-                case Cfg::SType::Bool: d[e.id] = v != 0; break;
-                case Cfg::SType::Enum: d[e.id] = Cfg::Registry::enumId(e, v); break;
-                default:               d[e.id] = v; break;
-            }
-        }
+        settingsOut(d.to<JsonObject>(), false);
         // Not settings: the network names (passwords never) and the build.
         d["ssid"]           = s.ssid;
         d["ssid2"]          = _wifi ? _wifi->net2Ssid() : String();
@@ -546,235 +705,72 @@ void WebUi::routes()
         JsonDocument d;
         if (deserializeJson(d, r->body()) || !d.is<JsonObjectConst>())
             return r->reply(400, "text/plain", "bad json");
-        auto& s = _cfg->s();
-        // The AP password, which is also the OTA password. Empty = unchanged.
-        const String apPass = d["apPass"] | "";
-        if (apPass.length() && (apPass.length() < 8 || apPass.length() > 63))
-            return r->reply(400, "text/plain", "apPass: 8 to 63 characters");
+        String out;
+        const char* type = "text/plain";
+        const int st = settingsPost(d.as<JsonObjectConst>(), paramStr(r, "dry") == "1", false, out, type);
+        return r->reply(st, type, out.c_str());
+    });
 
-        // The alert rules and the emitter's settings are edited on copies of
-        // what their tasks hold now (rows and cells not sent keep their
-        // values); a copy goes back only when something in it changed.
-        // Static: httpd serves one request at a time.
-        static Vehicle::AlertRules al;
-        Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
-        static App::Hu::EmitterCfg hu;
-        const bool huOk = _emitter && App::Hu::emitterCfg().peek(hu);
-        static Canbox::Tuning huWas;
-        huWas = hu.tuning;
-#if FEATURE_CAPTURE
-        Capture::Settings cs = Capture::settings();
-        Capture::Settings* csp = &cs;
-#else
-        Capture::Settings* csp = nullptr;
-#endif
+    // ---- the settings file ----------------------------------------------------
+    // GET: every setting a file should carry (no read-only, no RAM-only ones)
+    // and the knob configuration, with the schema and the build that wrote it.
+    // POST: such a file, through the same checks as POST /api/settings, all or
+    // nothing; ?dry=1 answers what would change and changes nothing.
+    route("/api/config", HTTP_GET, [this](PsychicRequest* r) {
+        JsonDocument d;
+        d["format"] = Cfg::SettingsJson::FORMAT;
+        d["schema"] = Cfg::SettingsJson::SCHEMA;
+        d["fw"]     = MEGAOPEN_VERSION;
+        d["build"]  = MegaOpen::buildId();
+        settingsOut(d["settings"].to<JsonObject>(), true);
 #if FEATURE_KNOBS
-        // Read here, set whole at the end: safe because this handler holds the
-        // settings lock throughout, as the menu's knob commits do (dispatch()).
-        Knobs::Config kc;
-        if (_knobs) kc = _knobs->config();
-        Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
-#else
-        Cfg::Model m{&s, nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
+        if (_knobs) knobsJson(_knobs->config(), d["knobs"].to<JsonObject>());
 #endif
-        uint8_t apT = 0;     // what the tables' cells changed
+        String out; serializeJson(d, out);
+        return replyJson(r, out);
+    });
 
-        // Everything that can be refused is checked before anything is applied
-        // (the /api/map rule): a 400 leaves the settings as they were. Keys the
-        // registry does not know (apPass, huForget) are not refused. An Int
-        // out of range is brought into it, as the handlers before did; a
-        // table's cell is not (the table's own check refuses it).
-        // A Str's text stays in `d`, which outlives the apply below.
-        struct Change { const Cfg::SEntry* e; int32_t v; const char* text; };
-        // Static: httpd serves one request at a time, and 1 kB is not for its stack.
-        // Room for every registry entry; more keys than that is a 400, never a drop.
-        static Change ch[Cfg::Registry::MAX_CHANGES];
-        uint8_t n = 0;
-        static char err[96];
-        for (JsonPairConst kv : d.as<JsonObjectConst>()) {
-            const Cfg::SEntry* e = Cfg::Registry::find(kv.key().c_str());
-            if (!e || e->type == Cfg::SType::Group) continue;
-            const JsonVariantConst j = kv.value();
-            const char* why = nullptr;
-            int32_t v = 0;
-            const char* text = nullptr;
-            if (e->flags & Cfg::F_RO)                    why = "read-only";
-            else if (!Cfg::Registry::available(m, *e))
-                why = (e->apply & (Cfg::AP_CAR | Cfg::AP_HU)) ? "busy, or not on this board" : "not on this board";
-            else if (e->type == Cfg::SType::Table) {
-                // Row i first; a row is its cells in column order. A row or
-                // cell not sent, or null, keeps its value.
-                if (!j.is<JsonArrayConst>() || j.size() > e->tab->rows()) {
-                    snprintf(err, sizeof(err), "%s: a list of %u rows at most", e->id, (unsigned)e->tab->rows());
-                    return r->reply(400, "text/plain", err);
-                }
-                uint8_t ri = 0;
-                for (JsonVariantConst jr : j.as<JsonArrayConst>()) {
-                    if (!jr.is<JsonArrayConst>()) {
-                        snprintf(err, sizeof(err), "%s %u: a list of cells", e->id, (unsigned)(ri + 1));
-                        return r->reply(400, "text/plain", err);
-                    }
-                    uint8_t c = 0;
-                    for (JsonVariantConst jc : jr.as<JsonArrayConst>()) {
-                        if (c >= e->tab->cols) break;
-                        const Cfg::SColumn& col = e->tab->col[c];
-                        const char* cw = nullptr;
-                        int32_t cv = 0;
-                        if (jc.isNull()) { ++c; continue; }
-                        if (col.type == Cfg::SType::Bool) {
-                            if (jc.is<bool>()) cv = jc.as<bool>() ? 1 : 0; else cw = "true or false";
-                        } else if (col.type == Cfg::SType::Enum) {
-                            const int x = jc.is<const char*>() ? Cfg::Registry::colEnumIndex(col, jc.as<const char*>()) : -1;
-                            if (x < 0) cw = "unknown value"; else cv = x;
-                        } else if (!jc.is<double>() ||
-                                   !Cfg::Registry::decParse(jc.as<double>(), Cfg::Registry::cellDecimals(m, *e, ri, c), cv)) {
-                            cw = "a number";
-                        }
-                        if (!cw && !Cfg::Registry::setCell(m, *e, ri, c, cv, &apT)) cw = "out of range";
-                        if (cw) {
-                            snprintf(err, sizeof(err), "%s %u: %s: %s", e->id, (unsigned)(ri + 1), col.id, cw);
-                            return r->reply(400, "text/plain", err);
-                        }
-                        ++c;
-                    }
-                    ++ri;
-                }
-                continue;
-            }
-            else if (e->type == Cfg::SType::Str) {
-                text = j.is<const char*>() ? j.as<const char*>() : nullptr;
-                if (!Cfg::Registry::validText(*e, text)) why = "printable ASCII text, too long, or not text";
-            }
-            else if (e->type == Cfg::SType::Bool) {
-                if (j.is<bool>()) v = j.as<bool>() ? 1 : 0; else why = "true or false";
-            } else if (e->type == Cfg::SType::Int) {
-                if (!j.is<long>()) why = "a number";
-                else {
-                    const long x = j.as<long>();
-                    const int32_t lo = Cfg::Registry::minOf(*e), hi = Cfg::Registry::maxOf(*e);
-                    v = (int32_t)(x < lo ? lo : x > hi ? hi : x);
-                }
-            } else {
-                const int i = j.is<const char*>() ? Cfg::Registry::enumIndex(*e, j.as<const char*>()) : -1;
-                if (i < 0) why = "unknown value"; else v = i;
-            }
-            if (why) {
-                snprintf(err, sizeof(err), "%s: %s", e->id, why);
-                return r->reply(400, "text/plain", err);
-            }
-            if (n >= sizeof(ch) / sizeof(ch[0])) {
-                snprintf(err, sizeof(err), "too many settings in one request: %u at most", (unsigned)(sizeof(ch) / sizeof(ch[0])));
-                return r->reply(400, "text/plain", err);
-            }
-            ch[n++] = Change{e, v, text};
-        }
-
-        // The rules first: a busy hand-off is the last refusal, so a refused
-        // request has changed nothing.
-        bool alSaved = true;
-        if (apT & Cfg::AP_CAR) {
-            if (!App::Car::alertRules().stage(al)) return r->reply(503, "text/plain", "busy, try again");
-            uint8_t on = 0;
-            for (const Vehicle::AlertRule& x : al.r) on += x.on;
-            alSaved = _cfg->saveAlerts(al);
-            LogBus::printf("[alert] rules saved: %u on%s", (unsigned)on, alSaved ? "" : ", NOT in NVS");
-        }
-
-        // What the head-unit text learner had, so only a real change resets it.
-        const uint8_t huT = s.huTitleCmd, huA = s.huArtistCmd;
-        const bool huFirst = s.huTitleFirst;
-        const Cfg::Str src = s.mediaSource;
-
-        uint8_t ap = apT;
-        for (uint8_t i = 0; i < n; ++i) {
-            if (ch[i].e->type == Cfg::SType::Str) Cfg::Registry::setText(m, *ch[i].e, ch[i].text, &ap);
-            else                                   Cfg::Registry::set(m, *ch[i].e, ch[i].v, &ap);
-        }
-        bool restart = (ap & Cfg::AP_REBOOT) != 0;
-
-        // The emitter, for the hu task: the tuning as a whole block (replace,
-        // not merge, so a concurrent edit is never half-applied) and the
-        // message switches (RAM only). The tuning goes to NVS when it changed.
-        bool huBusy = false;
-        if (ap & Cfg::AP_HU) {
-            huBusy = !App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& c) {
-                c.tuning = hu.tuning;
-                memcpy(c.msgOn, hu.msgOn, sizeof(c.msgOn));
-            });
-            if (huBusy) LogBus::line("settings: the head-unit emitter was busy, its part not applied");
-            else if (memcmp(&hu.tuning, &huWas, sizeof(huWas))) {
-                _cfg->saveTuning(hu.tuning);
-                LogBus::line("canbox tuning saved (survives a power cycle)");
-            }
-        }
-
-        // Staged for the tasks that own them: the debounce timing and the
-        // encoder direction for the matrix sweep; the pulse, the links and
-        // the class masks for the keys task.
-        if (ap & Cfg::AP_KEYS) {
-            if (_st.keymap) {
-                const Input::KeyDebouncer::Params t = s.timing;
-                const bool inv = s.encInverted;
-                _st.keymap->edit([&](App::KeysTask::KeyMapCfg& k) { k.timing = t; k.encInverted = inv; });
-            }
-            if (_st.routing) {
-                const uint16_t pulse = s.pulseMs;
-                const bool on = s.uartEnabled, resOn = s.resEnabled;
-                const uint8_t u = s.routeUart, a = s.routeAms, h = s.routeHid, rs = s.routeRes,
-                              us = s.routeUsb;
-                if (!_st.routing->edit([&](App::KeysTask::Routing& k) {
-                        k.pulseMs = pulse; k.uartOn = on; k.resOn = resOn;
-                        k.uartCls = u; k.amsCls = a; k.hidCls = h; k.resCls = rs; k.usbCls = us;
-                    }))
-                    LogBus::line("settings: the keys task's routing was busy, applied at the next change");
-                LogBus::printf("routing: uart=0x%02X ams=0x%02X hid=0x%02X res=0x%02X usb=0x%02X",
-                               u, a, h, rs, us);
-            }
-#if FEATURE_RESISTIVE_KEYS
-            // A rung held under a mask just changed would never see its Release.
-            if (_res && _st.resAllOff) _st.resAllOff();
-#endif
-            App::KeyBus::kick();
-        }
-
-#if FEATURE_DISPLAY_CAN
-        // The screen, the pane and the key popup, live.
-        if ((ap & Cfg::AP_UI) && !App::Ui::stageFrom(s))
-            LogBus::line("settings: the screen's were busy, applied at the next change");
-
-        // Where the now-playing text comes from: live, so sources can be
-        // compared with the panel in view. Setting a command byte forgets
-        // what was learned, so it is set only when it changed.
-        if (ap & Cfg::AP_MEDIA) {
-            if (_router && s.mediaSource != src) _router->setMode(MediaRouter::modeFromStr(s.mediaSource.c_str()));
-            if (_hu && (s.huTitleCmd != huT || s.huArtistCmd != huA)) _hu->setChannels(s.huTitleCmd, s.huArtistCmd);
-            if (_hu && s.huTitleFirst != huFirst) _hu->setTitleFirst(s.huTitleFirst);
-        }
-        // "Throw away what you learned and watch again", for when the learner
-        // latched onto a status frame that happened to look like text.
-        if (_hu && (d["huForget"] | false)) _hu->forget();
-#endif
-
+    route("/api/config", HTTP_POST, [this](PsychicRequest* r) {
+        JsonDocument d;
+        if (deserializeJson(d, r->body()) || !d.is<JsonObjectConst>())
+            return r->reply(400, "text/plain", "bad json");
+        const auto chk = Cfg::SettingsJson::checkFile(d.as<JsonObjectConst>());
+        if (chk != Cfg::SettingsJson::FileCheck::Ok)
+            return r->reply(400, "text/plain", Cfg::SettingsJson::fileCheckText(chk));
+        const bool dry = paramStr(r, "dry") == "1";
+        // The knobs are lenient (clamped, never refused), so the settings
+        // decide the all-or-nothing; the knobs follow only when they applied.
+        JsonVariantConst kj = d["knobs"];
+        bool knobs = false;
 #if FEATURE_KNOBS
-        if ((ap & Cfg::AP_KNOBS) && _knobs) {
-            _knobs->setConfig(kc);
-            _cfg->saveKnobs(kc);
+        knobs = _knobs && kj.is<JsonObjectConst>();
+#endif
+        String out;
+        const char* type = "text/plain";
+        const int st = settingsPost(d["settings"].as<JsonObjectConst>(), dry, true, out, type);
+        if (st != 200) return r->reply(st, type, out.c_str());
+        if (dry) {
+            // The settings' preview, and whether the knobs would be replaced.
+            JsonDocument o;
+            deserializeJson(o, out);
+            o["knobs"] = knobs;
+            o["fileFw"] = d["fw"] | "";
+            out = "";
+            serializeJson(o, out);
+            return replyJson(r, out);
         }
+#if FEATURE_KNOBS
+        if (knobs) {
+            Knobs::Config c = _knobs->config();
+            knobsFromJson(kj, c);
+            _knobs->setConfig(c);
+            _cfg->saveKnobs(c);
+            LogBus::line("[knobs] set from a settings file");
+        }
+#else
+        (void)kj;
 #endif
-
-#if FEATURE_CAPTURE
-        // Clamped and saved to its own NVS namespace by the recorder.
-        if (ap & Cfg::AP_CAP) Capture::setSettings(cs);
-#endif
-
-        if (apPass.length()) { restart = restart || apPass != s.apPass; s.apPass = apPass; }
-
-        _cfg->save();
-        LogBus::printf("settings saved: %u value(s)%s", (unsigned)n, restart ? ", pending reboot" : "");
-        if (!alSaved) return r->reply(500, "text/plain", "alerts: applied until the next boot only: NVS write failed");
-        if (huBusy) return r->reply(503, "text/plain", "head unit: busy, its part not applied; the rest saved");
-        return r->reply(200, "application/json", restart ? "{\"ok\":true,\"pendingReboot\":true}"
-                                                         : "{\"ok\":true}");
+        return r->reply(st, type, out.c_str());
     });
 
     route("/api/reboot", HTTP_POST, [](PsychicRequest* r) {

@@ -126,11 +126,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   need a binding type and a colour type first. Revisit only if the knob page
   is redesigned.
 
-- **Settings export/import (/api/config) — UI card removed in ui-v2 slice 8
-  until built.** The Плата screen had "Налаштування у файл" calling
-  `GET`/`POST /api/config`, which the firmware never had (404). The plan lists
-  it as the one route that replaces nothing. Where: `src/net/WebUi.cpp`,
-  `web/js/80-board.js`, `web/sim/mock.js`.
 - **New UI (owner, 2026-10-16): show the board's IP on the display when WiFi
   connects.** `megaopen.local` answers now (see Done), but Android before 12
   has no `.local`, so the address can still be unknown without a router or

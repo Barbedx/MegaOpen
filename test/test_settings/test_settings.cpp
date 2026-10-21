@@ -3,6 +3,7 @@
 #include <string>
 #include <set>
 #include "cfg/SettingsRegistry.h"
+#include "cfg/SettingsJson.h"
 #include "utils/Log.h"
 
 // The registry is what the settings form and the panel menu both draw, so a
@@ -630,6 +631,143 @@ void test_settings_struct_unchanged()
     (void)kNotInRegistry;
 }
 
+
+// ---- the settings file (SettingsJson; GET/POST /api/config) ------------------
+
+// Every value a file carries comes back the same on a fresh board: changed
+// scalars, a text, and a table cell, through JSON text and back.
+void test_a_settings_file_round_trips()
+{
+    Fixture a, b;
+    for (size_t i = 0; i < Registry::count(); ++i) {
+        const SEntry& e = Registry::at(i);
+        if (!scalar(e) || (e.flags & (F_RO | F_VOLATILE)) || isColor(e)) continue;
+        const int32_t was = Registry::get(a.m, e);
+        int32_t v = Registry::stepped(e, was, +1);
+        if (v == was) v = Registry::stepped(e, was, -1);
+        Registry::set(a.m, e, v);
+    }
+    const SEntry* ver = Registry::find("raise.version");
+    TEST_ASSERT_NOT_NULL(ver);
+    TEST_ASSERT_TRUE(Registry::setText(a.m, *ver, "file-test-1"));
+    const SEntry* al = Registry::find("alerts");
+    TEST_ASSERT_NOT_NULL(al);
+    const int32_t on = Registry::cell(a.m, *al, 0, 0);
+    TEST_ASSERT_TRUE(Registry::setCell(a.m, *al, 0, 0, on ? 0 : 1));
+
+    JsonDocument f;
+    f["format"] = SettingsJson::FORMAT;
+    f["schema"] = SettingsJson::SCHEMA;
+    SettingsJson::write(a.m, f["settings"].to<JsonObject>(), true);
+    std::string text;
+    serializeJson(f, text);
+
+    JsonDocument g;
+    TEST_ASSERT_FALSE(deserializeJson(g, text));
+    TEST_ASSERT_TRUE(SettingsJson::checkFile(g.as<JsonObjectConst>()) == SettingsJson::FileCheck::Ok);
+    static SettingsJson::Read r;
+    r = SettingsJson::Read{};
+    SettingsJson::Errors err;
+    SettingsJson::read(b.m, g["settings"].as<JsonObjectConst>(), r, err, true);
+    char why[256];
+    err.join(why, sizeof(why));
+    TEST_ASSERT_FALSE_MESSAGE(err.any(), why);
+    SettingsJson::apply(b.m, r, nullptr);
+
+    for (size_t i = 0; i < Registry::count(); ++i) {
+        const SEntry& e = Registry::at(i);
+        if (!scalar(e) || (e.flags & (F_RO | F_VOLATILE)) || !(e.flags & F_WEB)) continue;
+        TEST_ASSERT_EQUAL_INT32_MESSAGE(Registry::get(a.m, e), Registry::get(b.m, e), e.id);
+    }
+    char t[32];
+    Registry::getText(b.m, *ver, t, sizeof(t));
+    TEST_ASSERT_EQUAL_STRING("file-test-1", t);
+    TEST_ASSERT_EQUAL_INT32(on ? 0 : 1, Registry::cell(b.m, *al, 0, 0));
+}
+
+// A file carries no read-only or RAM-only entries, and reading one skips the
+// RAM-only ones (a hand-edited file may still name logLevel).
+void test_a_settings_file_leaves_out_what_is_not_a_setting()
+{
+    Fixture f;
+    JsonDocument d;
+    SettingsJson::write(f.m, d.to<JsonObject>(), true);
+    TEST_ASSERT_FALSE(d["logLevel"].is<const char*>());
+    TEST_ASSERT_TRUE(d["can2Detected"].isNull());
+    TEST_ASSERT_TRUE(d["uartBaud"].is<const char*>());
+    JsonDocument in;
+    in["logLevel"] = "TRC";
+    static SettingsJson::Read r;
+    r = SettingsJson::Read{};
+    SettingsJson::Errors err;
+    SettingsJson::read(f.m, in.as<JsonObjectConst>(), r, err, true);
+    TEST_ASSERT_FALSE(err.any());
+    TEST_ASSERT_EQUAL_UINT8(0, r.n);
+}
+
+// Every bad key is reported, not the first one only, and nothing is applied:
+// the 400 lists them all.
+void test_every_refusal_is_listed()
+{
+    Fixture f;
+    JsonDocument in;
+    in["pulseMs"]      = "fast";     // not a number
+    in["mediaStyle"]   = "nope";     // unknown row
+    in["uartEnabled"]  = 3;          // not a bool
+    in["can2Detected"] = "500k";     // read-only
+    in["debounceMs"]   = 20;         // fine
+    in["apPass"]       = "secret12"; // not the registry's: counted, not refused
+    static SettingsJson::Read r;
+    r = SettingsJson::Read{};
+    SettingsJson::Errors err;
+    SettingsJson::read(f.m, in.as<JsonObjectConst>(), r, err, false);
+    TEST_ASSERT_EQUAL_UINT8(4, err.n);
+    TEST_ASSERT_EQUAL_UINT8(1, r.unknown);
+    char why[512];
+    err.join(why, sizeof(why));
+    TEST_ASSERT_NOT_NULL(strstr(why, "pulseMs: a number"));
+    TEST_ASSERT_NOT_NULL(strstr(why, "mediaStyle: unknown value"));
+    TEST_ASSERT_NOT_NULL(strstr(why, "uartEnabled: true or false"));
+    TEST_ASSERT_NOT_NULL(strstr(why, "can2Detected: read-only"));
+}
+
+// The file names its format and schema; anything else is refused before a
+// single key is read.
+void test_a_file_from_another_schema_is_refused()
+{
+    JsonDocument d;
+    d["format"] = SettingsJson::FORMAT;
+    d["settings"].to<JsonObject>();
+    d["schema"] = SettingsJson::SCHEMA + 1;
+    TEST_ASSERT_TRUE(SettingsJson::checkFile(d.as<JsonObjectConst>()) == SettingsJson::FileCheck::Newer);
+    d["schema"] = SettingsJson::SCHEMA - 1;
+    TEST_ASSERT_TRUE(SettingsJson::checkFile(d.as<JsonObjectConst>()) == SettingsJson::FileCheck::Older);
+    d["schema"] = SettingsJson::SCHEMA;
+    TEST_ASSERT_TRUE(SettingsJson::checkFile(d.as<JsonObjectConst>()) == SettingsJson::FileCheck::Ok);
+    d["format"] = "something-else";
+    TEST_ASSERT_TRUE(SettingsJson::checkFile(d.as<JsonObjectConst>()) == SettingsJson::FileCheck::NotAConfig);
+    JsonDocument e;
+    e["format"] = SettingsJson::FORMAT;
+    e["schema"] = SettingsJson::SCHEMA;
+    TEST_ASSERT_TRUE(SettingsJson::checkFile(e.as<JsonObjectConst>()) == SettingsJson::FileCheck::NotAConfig);
+}
+
+// A stored uartBaud outside the list goes into the file as null and comes
+// back as "keep it", not as a refusal.
+void test_a_value_with_no_row_round_trips_as_null()
+{
+    Fixture a, b;
+    a.s.uartBaud = 4800;
+    JsonDocument d;
+    SettingsJson::write(a.m, d.to<JsonObject>(), true);
+    TEST_ASSERT_TRUE(d["uartBaud"].isNull());
+    static SettingsJson::Read r;
+    r = SettingsJson::Read{};
+    SettingsJson::Errors err;
+    SettingsJson::read(b.m, d.as<JsonObjectConst>(), r, err, true);
+    TEST_ASSERT_FALSE(err.any());
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -643,6 +781,11 @@ int main(int, char**)
     RUN_TEST(test_entries_are_independent);
     RUN_TEST(test_unknown_stored_id_reads_as_row_zero);
     RUN_TEST(test_uart_baud_is_one_of_the_canbox_rates);
+    RUN_TEST(test_a_settings_file_round_trips);
+    RUN_TEST(test_a_settings_file_leaves_out_what_is_not_a_setting);
+    RUN_TEST(test_every_refusal_is_listed);
+    RUN_TEST(test_a_file_from_another_schema_is_refused);
+    RUN_TEST(test_a_value_with_no_row_round_trips_as_null);
     RUN_TEST(test_pane_auto_is_its_own_row);
     RUN_TEST(test_splash_under_a_second_becomes_one);
     RUN_TEST(test_color_preset_paints_the_zone_and_custom_keeps_it);

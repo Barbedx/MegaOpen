@@ -270,6 +270,19 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
  if(AL){S.alerts=S.alerts.map((old,i)=>AL[i]||old);emit(2,'CAN','[alert] rules saved: '+S.alerts.filter(a=>a[4]).length+' on')}
  if(MG)MG.forEach((x,i)=>S.msgs[i].enabled=x);
  emit(2,'NET',rb?'settings saved, pending reboot':'settings saved');return rb?{ok:true,pendingReboot:true}:ok});
+/* файл налаштувань (WebUi.cpp /api/config): налаштування без ro/volatile + ручки; POST — ті самі перевірки, ?dry=1 нічого не міняє */
+const fileSettings=()=>{const all=R['GET /api/settings'](),o={};for(const f of C.settings||[])if(f.type!=='group'&&!f.ro&&!f.volatile&&f.id in all)o[f.id]=all[f.id];return o};
+g('/api/config',()=>{const o={format:'megaopen-config',schema:1,fw:S.fw,build:S.build,settings:fileSettings()};if(C.features.knobs)o.knobs=R['GET /api/knobs']();return o});
+po('/api/config',q=>{if(!q||q.format!=='megaopen-config'||typeof q.settings!=='object')return fail(400,'not a MegaOpen settings file');
+ if(q.schema>1)return fail(400,'saved by a newer firmware (schema too new): update the board first');
+ if(q.schema<1)return fail(400,'saved by an older firmware whose settings this one cannot read');
+ const set={};for(const k in q.settings)if(!(C.settings||[]).some(f=>f.id===k&&f.volatile)&&q.settings[k]!==null)set[k]=q.settings[k];
+ const was=fileSettings(),unknown=Object.keys(q.settings).filter(k=>!(C.settings||[]).some(f=>f.id===k)).length;
+ if(q.dry==='1'){const snap=JSON.parse(JSON.stringify(S));const r=R['POST /api/settings'](set);for(const k of Object.keys(S))delete S[k];Object.assign(S,snap);
+  if(r&&r.__status)return r;
+  const changes=Object.keys(set).filter(k=>k in was&&JSON.stringify(was[k])!==JSON.stringify(set[k]));
+  return {ok:true,changes,reboot:changes.some(k=>((C.settings||[]).find(f=>f.id===k)||{}).reboot),unknown,knobs:!!(q.knobs&&C.features.knobs),fileFw:q.fw||''}}
+ const r=R['POST /api/settings'](set);if(r&&r.__status)return r;if(q.knobs&&C.features.knobs)R['POST /api/knobs'](q.knobs);emit(2,'NET','settings set from a file');return r});
 g('/api/display',()=>{const d=S.disp,car=d.type==='carminat';return {type:d.type,funcReg:d.funcReg,canRx:S.can.twaiRx,attached:true,sync:d.registered?15:1,synced:d.registered,registered:d.registered,passive:!d.funcReg,busy:false,queued:0,lastResult:'Ok',
  supports:{text:true,time:car,power:car,menu:car,popup:car,fullscreen:car,confirm:car,info:car},phase:d.phase,lastRendered:'text',lastRenderedMs:1200,glassHoldMs:10000,glassHeldMs:0,
  sessionsLost:d.sessionsLost,lastLoss:d.lastLoss,linkFlaps:0,linkRecoveries:0,linkDownMs:0,txGated:false,txGates:0,reinstalls:0,failStreak:0,rendersPosted:412,rendersRefused:0}});

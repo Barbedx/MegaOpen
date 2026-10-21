@@ -370,6 +370,16 @@ private:
 #endif
     // The routing destinations, for /api/health (keys.dest).
     void putDests(JsonObject out, const App::KeysTask::Routing& k) const;
+    // The registry's values (GET /api/settings; a settings file with forFile).
+    void settingsOut(JsonObject out, bool forFile);
+    // POST /api/settings and POST /api/config's settings: the HTTP status,
+    // body in out/type. dry: check and preview only; file: skip RAM-only keys.
+    int settingsPost(JsonObjectConst d, bool dry, bool file, String& out, const char*& type);
+#if FEATURE_KNOBS
+    // GET /api/knobs's document, and what POST /api/knobs (or a file) sets.
+    void knobsJson(const Knobs::Config& c, JsonObject out) const;
+    void knobsFromJson(JsonVariantConst in, Knobs::Config& c) const;
+#endif
 #if FEATURE_BLE
     Sinks::BleKeyProxy*    _amsSink = nullptr;
     Sinks::BleKeyProxy*    _hidSink = nullptr;
