@@ -239,7 +239,7 @@ g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type
  for(const[k,[to]]of Object.entries(RAISE))o['raise.'+k]=to(S.tun[k]);
  if(st.bleMode)o.bleMode=st.bleMode;if(st.wifi)o.ssid=st.wifi.ssid;return o});
 /* НОВЕ (план, зріз 4): перезапуск не побічний ефект, а pendingReboot; apPass */
-po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass);
+po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass);if(ap&&!presOk())return fail(423,PRES_MSG);
  if(ap&&(ap.length<8||ap.length>63))return fail(400,'apPass: 8 to 63 characters');
  let rb=typeof q.mdnsOn==='boolean'&&q.mdnsOn!==s.mdnsOn;
  /* таблиці реєстру (WebUi.cpp): рядок = клітинки в порядку колонок; рядок чи клітинка, яких не прислали
@@ -355,7 +355,7 @@ po('/api/affamap/defaults',()=>{S.affa=defAffa();return ok});
 po('/api/wifi/scan',()=>({networks:S.nets.map(n=>({...n,rssi:Math.round(n.rssi+rnd(-3,3))})),count:S.nets.length,current:S.wifi.mode==='sta'?S.wifi.ssid:''}));
 /* НОВЕ (зріз 4): ssid2/pass2; порожній пароль = той самий, поки назва та сама; pendingReboot, коли щось змінилось.
    pendingReboot лише за першу мережу; друга (WifiManager::setNet2) діє без перезавантаження, з наступної спроби з точки */
-po('/api/wifi',q=>{const h1=typeof q.ssid==='string',h2=typeof q.ssid2==='string',bad=p=>p&&(p.length<8||p.length>64);
+po('/api/wifi',q=>{if(!presOk())return fail(423,PRES_MSG);const h1=typeof q.ssid==='string',h2=typeof q.ssid2==='string',bad=p=>p&&(p.length<8||p.length>64);
  if(!h1&&!h2)return fail(400,'ssid? or ssid2?');if((q.ssid||'').length>32||(q.ssid2||'').length>32)return fail(400,'ssid: 32 characters at most');
  if(bad(q.pass||'')||bad(q.pass2||''))return fail(400,'pass: 8 to 64 characters, or empty');
  const w1=S.staged.wifi||{ssid:S.set.ssid,pass:S.wifi.pass||''},ch=h1&&(q.ssid!==w1.ssid||!!q.pass&&q.pass!==w1.pass);

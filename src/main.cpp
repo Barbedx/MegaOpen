@@ -477,13 +477,27 @@ static void publishKeyLast(const Keys::AffaKeySource::Report& r, bool uartSends)
 static void hkWeb(uint32_t now)
 {
     // The board's BOOT button (GPIO0, pulled up, low while held) is someone
-    // at the board: it opens the update window (app/Presence.h).
-    if (digitalRead(0) == LOW) {
-        static uint32_t s_logged = 0;
-        App::presence().press(now);
-        if ((uint32_t)(now - s_logged) > 5000) {
-            s_logged = now;
-            LogBus::line("[ota] BOOT button: update allowed for 2 min");
+    // at the board: it opens the update window (app/Presence.h). Counted
+    // only once it has read HIGH after boot: a button held through power-on
+    // (the AP-password recovery, or ROM download mode) is not a press. Then
+    // LOW on 3 passes in a row and for 50 ms: a glitch is not one either.
+    {
+        static bool s_armed = false;
+        static uint8_t s_lowPasses = 0;
+        static uint32_t s_lowSince = 0, s_logged = 0;
+        if (digitalRead(0) != LOW) {
+            s_armed = true;
+            s_lowPasses = 0;
+        } else if (s_armed) {
+            if (!s_lowPasses++) s_lowSince = now;
+            if (s_lowPasses >= 3 && (uint32_t)(now - s_lowSince) >= 50) {
+                App::presence().press(now);
+                if ((uint32_t)(now - s_logged) > 5000) {
+                    s_logged = now;
+                    LogBus::line("[ota] BOOT button: update allowed for 2 min");
+                }
+            }
+            if (s_lowPasses > 200) s_lowPasses = 200;
         }
     }
     g_web.loop();
@@ -2266,6 +2280,13 @@ void setup()
     memMark("web");
     // The OTA trial's verdict comes from net_svc (Housekeeping).
     App::OtaTrial::begin();
+    // An image on trial may have broken the menu or the knobs: the update
+    // window is open for its first 2 minutes, so it can always be replaced
+    // over OTA (app/Presence.h). Never on a confirmed image.
+    if (App::OtaTrial::onTrial()) {
+        App::presence().press(millis());
+        LogBus::line("[ota] trial boot: update allowed for 2 min without a press");
+    }
 
     const char* mdns = g_wifi.mdnsHost().length() ? g_wifi.mdnsHost().c_str() : "(mdns FAILED)";
     // httpd is up: a String in Settings is read under its lock (Cfg::Config::lock).

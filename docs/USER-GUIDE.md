@@ -8,7 +8,10 @@ labels below are written as the app shows them. Flashing and wiring:
 
 1. Join the board's WiFi `MegaOpen-XXXX` (`XXXX` from the board's MAC
    address), password `megaopen`.
-2. Open `http://192.168.4.1`. On **Плата → WiFi** add your home network.
+2. Open `http://192.168.4.1`. Allow it at the board (see
+   [Updating](#updating): the panel menu's **Allow update**, or the board's
+   **BOOT** button once the board is up), then on **Плата → WiFi** add your
+   home network within 2 minutes.
 3. At home the board is at `http://megaopen.local` (or the IP your router
    gives it). Android before 12 does not resolve `.local`: use the IP. A router's own
    name for the board (`megaopen.fritz.box`) is refused: use the IP or `.local`.
@@ -122,12 +125,16 @@ the three colours have in common.
 ## Updating
 
 **First, allow it at the board.** An update (either way below), a factory
-reset or a settings file is accepted only within 2 minutes of **Allow
-update** in the panel menu (hold the right knob, then the row above
-**Power off**), or of pressing the board's **BOOT** button. **Плата →
-Оновлення прошивки → Дозвіл на платі** shows the time left. Without it the
-page says what to press. (To switch this off: the panel menu, **Service ›
-Upd needs OK**.)
+reset, a settings file, a new AP password or a new WiFi network is accepted
+only within 2 minutes of **Allow update** in the panel menu (hold the right
+knob, then the row above **Power off**), or of pressing the board's **BOOT**
+button: press, then start the upload within 2 minutes. Press BOOT once the
+board is up; held while it powers on, BOOT is the chip's download mode (and
+the AP-password recovery), not a press. **Плата → Оновлення прошивки →
+Дозвіл на платі** shows the time left; without it the page says what to
+press. The first 2 minutes after an update are open by themselves, so an
+image that broke the menu or the knobs can always be replaced. (To switch
+the rule off: the panel menu, **Service › Upd needs OK**.)
 
 **From GitHub** (the board on a network with internet):
 **Плата → Оновлення прошивки → З GitHub**.

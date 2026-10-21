@@ -251,11 +251,13 @@ bool WebUi::presenceOk() const
     return !_cfg->s().presenceGate || App::presence().allowed(millis());
 }
 
+static const char* const kNeedsPresence =
+    "needs someone at the board: panel menu > Allow update, or the BOOT button, "
+    "then try again within 2 minutes";
+
 int WebUi::presenceRefused(PsychicRequest* r)
 {
-    return r->reply(423, "text/plain",
-                    "needs someone at the board: panel menu > Allow update, or the BOOT button, "
-                    "then try again within 2 minutes");
+    return r->reply(423, "text/plain", kNeedsPresence);
 }
 
 void WebUi::gateOta()
@@ -445,6 +447,9 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         const String apPass = file ? String() : String(d["apPass"] | "");
         if (apPass.length() && (apPass.length() < 8 || apPass.length() > 63))
             { out = "apPass: 8 to 63 characters"; return 400; }
+        // A new AP (and OTA) password locks the owner out of the car: as
+        // dangerous as an image, so the same window (app/Presence.h).
+        if (apPass.length() && !presenceOk()) { out = kNeedsPresence; return 423; }
 
         // The alert rules and the emitter's settings are edited on copies of
         // what their tasks hold now (rows and cells not sent keep their
@@ -1210,6 +1215,9 @@ void WebUi::routes()
     // the stored one while the name stays the same; a new name with no password
     // is an open network. The first network applies at boot, the second live.
     route("/api/wifi", HTTP_POST, [this](PsychicRequest* r) {
+        // Pointing the board at another network hands it to that network:
+        // someone at the board first (app/Presence.h).
+        if (!presenceOk()) return presenceRefused(r);
         JsonDocument d;
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad json");
         const bool has1 = d["ssid"].is<const char*>(), has2 = d["ssid2"].is<const char*>();

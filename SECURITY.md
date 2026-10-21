@@ -13,12 +13,20 @@ exposes and how to report a problem.
   whoever is on the board's network can change settings. The WiFi/AP
   password is the lock for those.
 * **Someone at the board.** Flashing firmware (a file or the GitHub
-  install), a factory reset and applying a settings file are refused (423)
-  unless someone was at the board within the last 2 minutes: the panel
-  menu's **Allow update** row, or the board's **BOOT** button. A device on
-  your home network cannot take the board over by itself. The gate is
-  switched off only in the panel menu (**Service › Upd needs OK**), never
-  from the web.
+  install), a factory reset, applying a settings file, a new AP password and
+  a new WiFi network are refused (423) unless someone was at the board within
+  the last 2 minutes: the panel menu's **Allow update** row, or the board's
+  **BOOT** button (pressed once the board is up, held 50 ms). A device on
+  your home network cannot take the board over, lock the owner out of the
+  car's AP or move it to another network by itself. The first 2 minutes of
+  an OTA trial boot are open, so a broken image can always be replaced. The
+  gate is switched off only in the panel menu (**Service › Upd needs OK**),
+  never from the web.
+* **Still open to the network, on purpose:** the other settings, the display
+  and key tests, the head-unit test frames and the capture. A device on the
+  LAN can make a nuisance of itself there (a wrong screen, a key press, a
+  setting changed back), but none of it flashes the board, changes who can
+  reach it, or transmits on the car's bus.
 * **Firmware.** An image flashed over WiFi is not signature-checked. Our
   firmware keeps the car's CAN bus (CAN A) listen-only, but that is enforced
   in software: a foreign image could transmit on it.
