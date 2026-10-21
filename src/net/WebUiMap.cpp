@@ -33,12 +33,7 @@ namespace
     constexpr uint32_t APPLY_WAIT_MS = 300;   // a test's pin reaching State
 
     // One row of a POST, checked before anything is changed.
-    struct Edit {
-        uint8_t            sig;
-        uint8_t            src;               // Vehicle::MapSrc
-        int32_t            k;
-        Vehicle::DecodeRow row;
-    };
+    using Edit = Vehicle::DecodeEdit;
 
     // The 0x28 form the emitter is set to send must be the one a field is in.
     const char* formWhy(uint8_t msg, uint8_t cmd28)
@@ -285,65 +280,18 @@ void WebUi::routesMap()
         }
 
         // ---- apply ----
-        // The map first: its room check is the last refusal, so a refused
-        // request has changed nothing.
+        // The map first, all or nothing (DecodeTable::apply builds it on a
+        // copy): a refused request has changed nothing.
         if (reset || n || hasConf) {
-            const char* full = nullptr;
-            bool bound = true, confirmed = true;
-            if (!App::Car::decodeTable().edit([&](Vehicle::DecodeTable& t) {
-                    // Reset first is safe: factory (62) plus 16 edits always fits.
-                    if (reset) t.factory();
-                    // Room first: a table half-changed by a refused request
-                    // would be worse than the refusal.
-                    uint8_t rowsLeft = t.nRows, constsLeft = t.nK;
-                    for (uint8_t i = 0; i < n; ++i) {
-                        for (uint8_t j = 0; j < t.nRows; ++j) if (t.row[j].sig == ed[i].sig) --rowsLeft;
-                        if (t.constOf(ed[i].sig) >= 0) --constsLeft;
-                    }
-                    for (uint8_t i = 0; i < n; ++i) {
-                        if (ed[i].src == Vehicle::SRC_CAN)   ++rowsLeft;
-                        if (ed[i].src == Vehicle::SRC_CONST) ++constsLeft;
-                    }
-                    if (rowsLeft > Vehicle::DecodeTable::MAX_ROWS) { full = "the map is full: 96 CAN rows"; return; }
-                    if (constsLeft > Vehicle::DecodeTable::MAX_CONSTS) { full = "the map is full: 16 constants"; return; }
-                    // A ✓ needs a CAN row to land on once the edits are in.
-                    if (hasConf) {
-                        bool can = t.rowOf(confSig) >= 0;
-                        for (uint8_t i = 0; i < n; ++i) if (ed[i].sig == confSig) can = ed[i].src == Vehicle::SRC_CAN;
-                        if (!can) { confirmed = false; return; }
-                    }
-                    for (uint8_t i = 0; i < n; ++i) {
-                        const Edit& e = ed[i];
-                        if (e.src == Vehicle::SRC_CAN) {
-                            // A latch or a key flag is the row's own behaviour,
-                            // which the page does not edit: kept from the old row.
-                            const int old = t.rowOf(e.sig);
-                            Vehicle::DecodeRow row = e.row;
-                            if (old >= 0) {
-                                row.flags |= t.row[old].flags & (Vehicle::DF_LATCH | Vehicle::DF_KEY);
-                                if (t.row[old].flags & Vehicle::DF_LATCH) row.holdMs = t.row[old].holdMs;
-                                // Re-saving the same field is not a measurement:
-                                // a hypothesis stays one, and a 2-bit state keeps
-                                // its reading. A changed field is the user's own,
-                                // so it counts as measured and reads plain.
-                                if (Vehicle::DecodeTable::sameField(row, t.row[old]))
-                                    row.flags |= t.row[old].flags & (Vehicle::DF_HYPOTHESIS | Vehicle::DF_STATE2 | Vehicle::DF_STATE2_INV);
-                            }
-                            bound &= t.bindCan(e.sig, row);
-                        } else if (e.src == Vehicle::SRC_CONST) {
-                            bound &= t.bindConst(e.sig, e.k);
-                        } else {
-                            t.unbind(e.sig);
-                        }
-                    }
-                    // After the edits: a ✓ in the same request is on the new rows.
-                    if (hasConf) t.setMeasured(confSig, confOn);
-                }))
+            // Static: 2.4 kB, and only this handler stages the map.
+            static Vehicle::DecodeTable scratch;
+            Vehicle::DecodeChange c;
+            c.reset = reset; c.ed = ed; c.n = n;
+            c.hasConf = hasConf; c.confSig = confSig; c.confOn = confOn;
+            const char* why = nullptr;
+            if (!App::Car::decodeTable().edit([&](Vehicle::DecodeTable& t) { why = t.apply(c, scratch); }))
                 return r->reply(503, "text/plain", "busy, try again");
-            if (full) return r->reply(409, "text/plain", full);
-            if (!confirmed) return r->reply(409, "text/plain", "confirm: the signal has no CAN row to confirm");
-            // The room check above makes this unreachable; never a quiet 200.
-            if (!bound) return r->reply(500, "text/plain", "the map refused a binding: not saved");
+            if (why) return r->reply(409, "text/plain", why);
         }
 
         if (hasSend || hasUnits || hasExp) {

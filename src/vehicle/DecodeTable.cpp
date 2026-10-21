@@ -91,13 +91,60 @@ namespace Vehicle
 
     bool DecodeTable::setMeasured(uint8_t sig, bool on)
     {
+        uint8_t nd = 0;
+        const DecodeRow* d = CanDecode::defaults(nd);
         bool any = false;
         for (uint8_t i = 0; i < nRows; ++i) {
             if (row[i].sig != sig) continue;
-            row[i].flags = on ? (uint8_t)(row[i].flags & ~DF_HYPOTHESIS) : (uint8_t)(row[i].flags | DF_HYPOTHESIS);
+            bool hyp = !on;
+            for (uint8_t j = 0; !on && j < nd; ++j)
+                if (d[j].sig == sig && sameField(d[j], row[i])) { hyp = (d[j].flags & DF_HYPOTHESIS) != 0; break; }
+            row[i].flags = hyp ? (uint8_t)(row[i].flags | DF_HYPOTHESIS) : (uint8_t)(row[i].flags & ~DF_HYPOTHESIS);
             any = true;
         }
         return any;
+    }
+
+    const char* DecodeTable::apply(const DecodeChange& c, DecodeTable& s)
+    {
+        s = *this;
+        if (c.reset) s.factory();
+        // Every edited signal unbound first, so the room is the final
+        // table's (one edit freeing a constant another one takes).
+        for (uint8_t i = 0; i < c.n; ++i) s.unbind(c.ed[i].sig);
+        for (uint8_t i = 0; i < c.n; ++i) {
+            const DecodeEdit& e = c.ed[i];
+            if (e.src == SRC_CAN) {
+                // A latch or a key flag is the row's own behaviour, which the
+                // page does not edit: kept from the old row (the table before
+                // this request, or the factory's after a reset).
+                const DecodeRow* old = nullptr;
+                if (c.reset) {
+                    uint8_t nd = 0;
+                    const DecodeRow* d = CanDecode::defaults(nd);
+                    for (uint8_t j = 0; !old && j < nd; ++j) if (d[j].sig == e.sig) old = &d[j];
+                } else if (rowOf(e.sig) >= 0) {
+                    old = &row[rowOf(e.sig)];
+                }
+                DecodeRow r = e.row;
+                if (old) {
+                    r.flags |= old->flags & (DF_LATCH | DF_KEY);
+                    if (old->flags & DF_LATCH) r.holdMs = old->holdMs;
+                    // Re-saving the same field is not a measurement: a
+                    // hypothesis stays one, and a 2-bit state keeps its
+                    // reading. A changed field is the user's own, so it
+                    // counts as measured and reads plain.
+                    if (sameField(r, *old))
+                        r.flags |= old->flags & (DF_HYPOTHESIS | DF_STATE2 | DF_STATE2_INV);
+                }
+                if (!s.bindCan(e.sig, r)) return WHY_ROWS;
+            } else if (e.src == SRC_CONST) {
+                if (!s.bindConst(e.sig, e.k)) return WHY_CONSTS;
+            }
+        }
+        if (c.hasConf && !s.setMeasured(c.confSig, c.confOn)) return WHY_NO_CAN;
+        *this = s;
+        return nullptr;
     }
 
     bool DecodeTable::factoryMeasured(uint8_t sig)

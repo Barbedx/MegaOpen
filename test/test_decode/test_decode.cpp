@@ -583,6 +583,65 @@ void test_a_confirm_flips_the_flag_and_survives_the_blob()
     TEST_ASSERT_FALSE(b.setMeasured(SIG_RANGE, true));          // no CAN row: refused
     a.factory();                                                // «Заводські прив'язки»
     TEST_ASSERT_FALSE(a.measured(SIG_ACCEL_LAT));
+    // ↺ is each row's factory flag, not "hypothesis" across the board: a
+    // factory-measured row stays measured, a row of the user's own goes back.
+    TEST_ASSERT_TRUE(a.setMeasured(SIG_DOOR_FL, false));
+    TEST_ASSERT_TRUE(a.measured(SIG_DOOR_FL));
+    DecodeRow own = a.row[a.rowOf(SIG_DOOR_FL)];
+    own.startByte ^= 1;
+    TEST_ASSERT_TRUE(a.bindCan(SIG_DOOR_FL, own));
+    TEST_ASSERT_TRUE(a.setMeasured(SIG_DOOR_FL, false));
+    TEST_ASSERT_FALSE(a.measured(SIG_DOOR_FL));
+}
+
+static bool sameTable(const DecodeTable& a, const DecodeTable& b)
+{
+    if (a.nRows != b.nRows || a.nK != b.nK) return false;
+    for (uint8_t i = 0; i < a.nRows; ++i)
+        if (!sameRow(a.row[i], b.row[i]) || a.row[i].sig != b.row[i].sig || a.row[i].flags != b.row[i].flags) return false;
+    for (uint8_t i = 0; i < a.nK; ++i)
+        if (a.k[i].sig != b.k[i].sig || a.k[i].value != b.k[i].value) return false;
+    return true;
+}
+
+// POST /api/map is all or nothing: a refused part leaves the table as it was,
+// even after a reset in the same request.
+void test_a_refused_map_change_leaves_the_table_untouched()
+{
+    static DecodeTable t, before, scratch;
+    t.factory();
+    TEST_ASSERT_TRUE(t.bindConst(SIG_RANGE, 420));
+    TEST_ASSERT_TRUE(t.setMeasured(SIG_ACCEL_LAT, true));
+    before = t;
+
+    DecodeChange c;
+    c.reset = true; c.hasConf = true; c.confSig = SIG_RANGE;     // a constant: no CAN row
+    TEST_ASSERT_EQUAL_STRING(DecodeTable::WHY_NO_CAN, t.apply(c, scratch));
+    TEST_ASSERT_TRUE(sameTable(before, t));
+
+    // 17 constants: past the 16 cap, refused whole.
+    static DecodeEdit ed[17];
+    for (uint8_t i = 0; i < 17; ++i) ed[i] = DecodeEdit{(uint8_t)(SIG_AC_ON + i), SRC_CONST, 1, DecodeRow{}};
+    DecodeChange full;
+    full.ed = ed; full.n = 17;
+    TEST_ASSERT_EQUAL_STRING(DecodeTable::WHY_CONSTS, t.apply(full, scratch));
+    TEST_ASSERT_TRUE(sameTable(before, t));
+
+    // One that fits goes through: reset, then a ✓ on a factory row.
+    DecodeChange ok;
+    ok.reset = true; ok.hasConf = true; ok.confSig = SIG_ACCEL_LONG;
+    TEST_ASSERT_NULL(t.apply(ok, scratch));
+    TEST_ASSERT_EQUAL_INT(-1, t.constOf(SIG_RANGE));
+    TEST_ASSERT_FALSE(t.measured(SIG_ACCEL_LAT));
+    TEST_ASSERT_TRUE(t.measured(SIG_ACCEL_LONG));
+
+    // Freeing a constant and taking one in the same request fits at the cap.
+    for (uint8_t i = 0; i < 16; ++i) TEST_ASSERT_TRUE(t.bindConst((uint8_t)(SIG_AC_ON + i), 1));
+    DecodeEdit swap[2] = {{(uint8_t)SIG_AC_ON, SRC_OFF, 0, DecodeRow{}}, {(uint8_t)SIG_RANGE, SRC_CONST, 300, DecodeRow{}}};
+    DecodeChange sw;
+    sw.ed = swap; sw.n = 2;
+    TEST_ASSERT_NULL(t.apply(sw, scratch));
+    TEST_ASSERT_EQUAL_INT32(300, t.k[t.constOf(SIG_RANGE)].value);
 }
 
 void test_a_bad_blob_is_refused_whole()
@@ -1124,6 +1183,7 @@ int main(int, char**)
     RUN_TEST(test_derived_signals_name_their_inputs);
     RUN_TEST(test_the_blob_round_trips_the_factory_table_and_constants);
     RUN_TEST(test_a_confirm_flips_the_flag_and_survives_the_blob);
+    RUN_TEST(test_a_refused_map_change_leaves_the_table_untouched);
     RUN_TEST(test_a_bad_blob_is_refused_whole);
     RUN_TEST(test_the_caps_are_96_rows_and_16_constants);
     RUN_TEST(test_binding_replaces_and_keeps_the_order);

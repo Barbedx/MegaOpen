@@ -26,6 +26,25 @@ namespace Vehicle
         int32_t value;
     };
 
+    // One field of a POST /api/map, already checked: what binds `sig` now.
+    struct DecodeEdit {
+        uint8_t   sig;
+        uint8_t   src;               // MapSrc
+        int32_t   k;
+        DecodeRow row;
+    };
+
+    // The map part of one POST /api/map: back to factory first, then the
+    // edits, then the ✓ (on the new rows).
+    struct DecodeChange {
+        bool              reset   = false;
+        const DecodeEdit* ed      = nullptr;
+        uint8_t           n       = 0;
+        bool              hasConf = false;
+        uint8_t           confSig = 0;
+        bool              confOn  = true;
+    };
+
     struct DecodeTable {
         static constexpr uint8_t MAX_ROWS   = CanDecode::MAX_ROWS;   // 96
         static constexpr uint8_t MAX_CONSTS = 16;
@@ -53,10 +72,20 @@ namespace Vehicle
         // DF_HYPOTHESIS): what Vehicle::verified() reports, pins aside.
         bool measured(uint8_t sig) const;
         // The owner's ✓ after a car check (POST /api/map {confirm}): every
-        // row binding `sig` measured, or back to a hypothesis. False, with
-        // nothing changed, when no CAN row binds it. factory() brings the
-        // factory's flags back.
+        // row binding `sig` measured, or (↺) each row's factory flag back: a
+        // row with a factory twin (sameField) takes the twin's, any other
+        // row is a hypothesis. False, with nothing changed, when no CAN row
+        // binds it. factory() brings the factory's flags back.
         bool setMeasured(uint8_t sig, bool on);
+
+        // All or nothing: `c` is built on `scratch` (a copy of this, the
+        // caller's: 2.4 kB, not for the stack) and copied back only when
+        // every part fits. nullptr = applied; else one of the WHY_s, with
+        // this untouched.
+        static constexpr const char* WHY_ROWS   = "the map is full: 96 CAN rows";
+        static constexpr const char* WHY_CONSTS = "the map is full: 16 constants";
+        static constexpr const char* WHY_NO_CAN = "confirm: the signal has no CAN row to confirm";
+        const char* apply(const DecodeChange& c, DecodeTable& scratch);
         // decode_defaults.inc binds `sig` and has measured it: a ✓ there is
         // the factory's, not one to take back.
         static bool factoryMeasured(uint8_t sig);
