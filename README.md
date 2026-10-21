@@ -38,7 +38,8 @@ Download from [Releases](https://github.com/Barbedx/MegaOpen/releases):
 | `megaopen-<env>-<ver>.bin` | OTA updates |
 | `SHA256SUMS` | checksums |
 
-`<env>` is `t2can` for the car board.
+`<env>` is `t2can` for the car board. The latest release has run on a board;
+`-rcN` pre-releases have not yet.
 
 **First flash (USB).** Connect the T-2CAN's Type-C (hold BOOT if it does not enter
 download mode), then either:

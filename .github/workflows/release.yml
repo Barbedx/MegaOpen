@@ -1,15 +1,25 @@
-# A tag vX.Y.Z builds every board env and publishes a GitHub release:
-#   megaopen-<env>-<ver>.bin           the app, for OTA (/update)
-#   megaopen-<env>-<ver>-factory.bin   bootloader + partitions + boot_app0 + app,
-#                                      for a first USB flash at 0x0
-#   SHA256SUMS
-# Notes: the CHANGELOG.md section for <ver> and the AffaDisplay commit the build
-# actually used.
+# Two tags, one set of bytes.
+#
+#   vX.Y.Z-rcN  builds every board env and publishes a PRE-RELEASE:
+#                 megaopen-<env>-X.Y.Z.bin           the app, for OTA (/update)
+#                 megaopen-<env>-X.Y.Z-factory.bin   bootloader + partitions +
+#                                                    boot_app0 + app, USB at 0x0
+#                 SHA256SUMS
+#   vX.Y.Z      on the SAME commit does not rebuild: it takes the assets of the
+#               newest vX.Y.Z-rc* release on that commit, checks SHA256SUMS and
+#               publishes them as the latest release. The car OTAs from latest,
+#               so what goes there is exactly what was tried on a board (build
+#               stamps make two builds of one commit differ). No rc, no release.
+#
+# Both: X.Y.Z must equal MEGAOPEN_VERSION (and its WIRE string) in src/Version.h.
+# Notes: the CHANGELOG.md section for X.Y.Z and the AffaDisplay commit built.
 name: Release
 
 on:
   push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+"
 
 permissions:
   contents: write
@@ -17,26 +27,28 @@ permissions:
 env:
   PLATFORMIO_VERSION: "6.1.19"
   ENVS: "t2can t2can_usbhid direct"
+  GH_TOKEN: ${{ github.token }}
 
 jobs:
   release:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          fetch-depth: 0            # every tag, to find the rc on this commit
 
       - name: Tag matches src/Version.h
         run: |
-          ver="${GITHUB_REF_NAME#v}"
+          tag="$GITHUB_REF_NAME"
+          ver="${tag#v}"; ver="${ver%%-rc*}"
           code=$(sed -n 's/^#define MEGAOPEN_VERSION "\(.*\)"$/\1/p' src/Version.h)
           wire=$(sed -n 's/^#define MEGAOPEN_VERSION_WIRE "\(.*\)"$/\1/p' src/Version.h)
-          echo "tag $ver, MEGAOPEN_VERSION '$code', WIRE '$wire'"
-          [ "$code" = "$ver" ] || { echo "::error::MEGAOPEN_VERSION is '$code', tag is $ver"; exit 1; }
+          echo "tag $tag, MEGAOPEN_VERSION '$code', WIRE '$wire'"
+          [ "$code" = "$ver" ] || { echo "::error::MEGAOPEN_VERSION is '$code', tag is $tag"; exit 1; }
           [ "$(echo "$wire" | sed 's/ *$//')" = "MegaOpen $ver" ] \
             || { echo "::error::MEGAOPEN_VERSION_WIRE is '$wire', expected 'MegaOpen $ver'"; exit 1; }
           echo "VER=$ver" >> "$GITHUB_ENV"
+          case "$tag" in *-rc*) echo "RC=1" >> "$GITHUB_ENV" ;; *) echo "RC=0" >> "$GITHUB_ENV" ;; esac
 
       - name: CHANGELOG section
         run: |
@@ -46,39 +58,76 @@ jobs:
             on' CHANGELOG.md > notes.md
           [ -s notes.md ] || { echo "::error::CHANGELOG.md has no '## [$VER]' section"; exit 1; }
 
+      # ---- vX.Y.Z-rcN: build and publish a pre-release ----------------------
+      - uses: actions/setup-python@v5
+        if: env.RC == '1'
+        with:
+          python-version: "3.11"
       - uses: actions/cache@v4
+        if: env.RC == '1'
         with:
           path: |
             ~/.platformio
             .pio/libdeps
           key: pio-release-${{ hashFiles('platformio.ini') }}
-      - run: pip install "platformio==${PLATFORMIO_VERSION}"
-
       - name: Build
+        if: env.RC == '1'
         run: |
+          pip install "platformio==${PLATFORMIO_VERSION}"
           mkdir -p dist
           for e in $ENVS; do
             pio run -e "$e" -t factory
             cp ".pio/build/$e/firmware.bin"         "dist/megaopen-$e-$VER.bin"
             cp ".pio/build/$e/firmware-factory.bin" "dist/megaopen-$e-$VER-factory.bin"
+            # The stamp tools/version.py baked in (/api/status "build"): this
+            # commit, never "-dirty", or every bug report quotes a ghost.
+            stamp=$(grep -a -o "${GITHUB_SHA:0:7}[0-9a-f]*[-a-z]*@20[0-9T:-]*" ".pio/build/$e/firmware.bin" | head -1 || true)
+            echo "$e build id: ${stamp:-none}"
+            case "$stamp" in
+              *-dirty@*|"") echo "::error::$e is stamped '${stamp:-nothing}', expected ${GITHUB_SHA:0:7}@<time>"; git status --short; exit 1 ;;
+              *) ;;
+            esac
           done
           (cd dist && sha256sum *.bin > SHA256SUMS)
           cat dist/SHA256SUMS
-
-      - name: Release notes
+      - name: Publish pre-release
+        if: env.RC == '1'
         run: |
           lib=$(git -C .pio/libdeps/t2can/AffaDisplay rev-parse HEAD)
           {
             cat notes.md
             echo
-            echo "Built with [AffaDisplay@${lib:0:7}](https://github.com/Barbedx/AffaDisplay/commit/$lib)."
+            echo "Built from ${GITHUB_SHA:0:7} with [AffaDisplay@${lib:0:7}](https://github.com/Barbedx/AffaDisplay/commit/$lib)."
             echo
             echo "First flash over USB: \`esptool.py write_flash 0x0 megaopen-<env>-$VER-factory.bin\`."
             echo "Later updates: \`megaopen-<env>-$VER.bin\` from the board's /update page."
           } > release.md
           cat release.md
+          gh release create "$GITHUB_REF_NAME" --title "MegaOpen $GITHUB_REF_NAME" \
+            --notes-file release.md --prerelease --latest=false dist/*
 
-      - name: Publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "MegaOpen $VER" --notes-file release.md dist/*
+      # ---- vX.Y.Z: promote the newest rc of this commit, bytes unchanged ----
+      - name: Find the rc
+        if: env.RC == '0'
+        run: |
+          rc=""; best=-1
+          for t in $(git tag -l "v$VER-rc*"); do
+            [ "$(git rev-list -n1 "$t")" = "$GITHUB_SHA" ] || continue
+            gh release view "$t" > /dev/null 2>&1 || continue
+            n="${t##*-rc}"
+            if [ "$n" -gt "$best" ]; then best=$n; rc=$t; fi
+          done
+          [ -n "$rc" ] || { echo "::error::no v$VER-rc* release on ${GITHUB_SHA:0:7}; tag an rc first"; exit 1; }
+          echo "promoting $rc"
+          echo "RCTAG=$rc" >> "$GITHUB_ENV"
+      - name: Publish release
+        if: env.RC == '0'
+        run: |
+          mkdir -p dist
+          gh release download "$RCTAG" -D dist
+          (cd dist && sha256sum -c SHA256SUMS)
+          gh release view "$RCTAG" --json body -q .body > release.md
+          printf '\nSame files as %s.\n' "$RCTAG" >> release.md
+          cat release.md
+          gh release create "$GITHUB_REF_NAME" --title "MegaOpen $VER" \
+            --notes-file release.md --latest dist/*
