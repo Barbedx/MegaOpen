@@ -30,6 +30,7 @@ gives the width directly.
 | 5 | menu: header digits, row 0 digits, row 1 W | last visible in each |
 | 6 | info list: `12345678`, `WWWWWWWW`, `abcdefgh` | how much empty room is left in each row's box, in characters |
 | 7-14 | info row 1 with a longer declared length, `0x0C` … `0x13` (9 … 16 cells of `123456789ABCDEFG`) | how many characters row 1 shows at each step, or if it stops drawing |
+| 15 | all three info rows, `0x13` (16 cells of `123456789ABCDEFG` in each) | characters visible in each row: does the width differ per row? |
 
 Each step is the same as a web request, for a laptop instead of the page:
 
@@ -54,3 +55,6 @@ curl -X POST -H "X-MegaOpen: 1" "$B/api/display/clear"
   (403 unless **Режим розробника** is on; length clamped to `0x0B`…`0x13`,
   offset `0x40`…`0x4F`, prefix `0x40`…`0x7F`). The result becomes a cell
   count in the library's `showInfoMenu`, and the route goes.
+* Step 15: the same route with `rows=3` (`len=0x13&rows=3&text=…`): the text
+  in all three rows at the OEM offsets `0x41`/`0x44`/`0x48`, so the photo
+  shows whether the width differs per row.

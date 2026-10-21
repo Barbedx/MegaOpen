@@ -304,7 +304,7 @@ for(const k of ['text','clock','power','menu','highlight','popup','confirm','msg
 for(const k of ['release','notify','clear'])po('/api/display/'+k,()=>ok);
 /* лише для розробника (WebUi.cpp, display/InfoRaw.h): 403 без devMode; len 0x0B..0x13 обрізається, offset/prefix поза межами — 400 */
 po('/api/display/inforaw',q=>{if(!S.set.devMode)return fail(403,'developer mode is off (Плата › Інтерфейс)');const o=parseInt(q.offset??'0x41'),p=parseInt(q.prefix??'0x60');
- if(!(o>=0x40&&o<=0x4F))return fail(400,'offset: 0x40..0x4F');if(!(p>=0x40&&p<=0x7F))return fail(400,'prefix: 0x40..0x7F');emit(2,'PNL','inforaw '+JSON.stringify(q));return queued()});
+ if(!(o>=0x40&&o<=0x4F))return fail(400,'offset: 0x40..0x4F');if(!(p>=0x40&&p<=0x7F))return fail(400,'prefix: 0x40..0x7F');const rw=parseInt(q.rows??'1');if(rw!==1&&rw!==3)return fail(400,'rows: 1 or 3');emit(2,'PNL','inforaw '+JSON.stringify(q));return queued()});
 /* НОВЕ: last у /api/affamap, як publishKeyLast у main.cpp: key — рядок таблиці (і порожній), action — id дії;
    рядок без дії (None) не відображено, свій код без дії теж; dests — маска і живий приймач, ГУ ще й має код */
 function pressKey(wire,hold){const r=S.affa.find(x=>x.wire===wire&&x.hold===!!hold),key=r?r.key:'';

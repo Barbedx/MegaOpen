@@ -65,6 +65,7 @@ SCR.service={title:'Сервіс',async render(m){
   ['info',{l1:'12345678',l2:'WWWWWWWW',l3:'abcdefgh'},'Інфо: 8 знаків у кожному рядку; скільки ще місця праворуч у рамці'],
   /* лише для розробника (inforaw, 403 без devMode): рядок 1 з довшою заявленою довжиною */
   ...[0x0C,0x0D,0x0E,0x0F,0x10,0x11,0x12,0x13].map(n=>['inforaw',{len:'0x'+h2(n),offset:'0x41',text:'123456789ABCDEFG'},'Інфо, рядок 1, довжина 0x'+h2(n)+' ('+(n-3)+' знаків): скільки видно']),
+  ['inforaw',{len:'0x13',rows:'3',text:'123456789ABCDEFG'},'Інфо, усі три рядки, довжина 0x13 (16 знаків): скільки видно в кожному рядку'],
  ];
  let swI=-1;const swStep=async b=>{swI++;if(swI>=SW.length){swI=-1;$('#swN').textContent='готово';$('#swW').textContent='';b.textContent='Почати';await API.post('/api/display/clear');return {note:'кінець, щиток повернуто'}}
   const[c,q,w]=SW[swI];$('#swN').textContent=(swI+1)+'/'+SW.length;$('#swW').textContent=w;b.textContent='Далі';await API.post('/api/display/'+c+'?'+new URLSearchParams(q));return {note:'крок '+(swI+1)+': фото'}};

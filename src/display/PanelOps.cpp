@@ -113,11 +113,12 @@ namespace MegaOpen
         return accepted(submit(r));
     }
 
-    bool PanelOps::postInfoRaw(const char* text, uint8_t len, uint8_t prefix, uint8_t offset)
+    bool PanelOps::postInfoRaw(const char* text, uint8_t len, uint8_t prefix, uint8_t offset,
+                               uint8_t rows)
     {
         Req r; r.op = Op::InfoRaw;
         copyStr(r.a, text);
-        r.p[0] = len; r.p[1] = prefix; r.p[2] = offset;
+        r.p[0] = len; r.p[1] = prefix; r.p[2] = offset; r.p[3] = rows;
         return accepted(submit(r));
     }
 
@@ -299,6 +300,11 @@ namespace MegaOpen
                 if (!_carminat || r.p[0] < 4)
                     res = affa::Submitted::refused(_carminat ? affa::Result::BadArgument
                                                              : affa::Result::NotSupported);
+                else if (r.p[3] == 3)
+                    res = _carminat->showInfoMenu(r.a, r.a, r.a, affa::carminat::kInfoOffset0,
+                                                  affa::carminat::kInfoOffset1,
+                                                  affa::carminat::kInfoOffset2, r.p[1],
+                                                  (uint8_t)(r.p[0] - 3));
                 else
                     res = _carminat->showInfoRow(r.a, r.p[2], r.p[1], (uint8_t)(r.p[0] - 3));
                 break;

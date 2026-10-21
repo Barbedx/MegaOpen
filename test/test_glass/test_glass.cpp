@@ -250,6 +250,38 @@ void test_library_info_row_is_inforaws_bytes()
     }
 }
 
+// rows=3: showInfoMenu with the same ruler in all three rows: three messages, each
+// the one-row frame at the OEM offsets 0x41 / 0x44 / 0x48, in that order.
+void test_library_info_rows3_is_three_one_row_frames()
+{
+    const char* ruler = "123456789ABCDEFG";
+    affa::LoopbackLink<256> link;
+    Clock clk;
+    affa::CarminatDisplay d(link, clk);
+    openSession(d, link, clk);
+    TEST_ASSERT_TRUE(d.showInfoMenu(ruler, ruler, ruler, 0x41, 0x44, 0x48, 0x60, 16).result ==
+                     affa::Result::Ok);
+    for (int i = 0; i < 128 && d.busy(); ++i) d.poll();
+
+    const uint8_t offsets[3] = {0x41, 0x44, 0x48};
+    affa::Frame f;
+    for (uint8_t row = 0; row < 3; ++row) {
+        uint8_t want[2 + 0x13];
+        const size_t wn = infoRawFrame(want, 0x13, 0x60, offsets[row], ruler);
+        uint8_t got[32];
+        size_t n = 0;
+        while (n < wn && link.takeSent(f)) {
+            if (f.id != 0x151) continue;
+            const uint8_t from = (f.data[0] & 0xF0) == 0x10 ? 0 : 1;
+            for (uint8_t i = from; i < 8 && n < wn; ++i) got[n++] = f.data[i];
+        }
+        char msg[16];
+        snprintf(msg, sizeof(msg), "row %u", (unsigned)row);
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(wn, n, msg);
+        TEST_ASSERT_EQUAL_HEX8_ARRAY_MESSAGE(want, got, wn, msg);
+    }
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -261,5 +293,6 @@ int main(int, char**)
     RUN_TEST(test_popup_gate_holds_until_the_deadline);
     RUN_TEST(test_a_repaint_under_a_popup_is_held_then_sent);
     RUN_TEST(test_library_info_row_is_inforaws_bytes);
+    RUN_TEST(test_library_info_rows3_is_three_one_row_frames);
     return UNITY_END();
 }

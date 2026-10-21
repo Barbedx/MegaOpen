@@ -1459,7 +1459,12 @@ void WebUi::routesDisplay()
         const uint32_t pre = paramU32(r, "prefix", "0x60", 0);
         if (off < 0x40 || off > 0x4F) return r->reply(400, "text/plain", "offset: 0x40..0x4F");
         if (pre < 0x40 || pre > 0x7F) return r->reply(400, "text/plain", "prefix: 0x40..0x7F");
-        return posted(r, _ops->postInfoRaw(paramStr(r, "text").c_str(), len, (uint8_t)pre, (uint8_t)off));
+        // rows=3: the same text in all three rows at the OEM offsets (offset unused),
+        // so a photo shows whether the width differs per row.
+        const uint32_t rows = paramU32(r, "rows", "1", 0);
+        if (rows != 1 && rows != 3) return r->reply(400, "text/plain", "rows: 1 or 3");
+        return posted(r, _ops->postInfoRaw(paramStr(r, "text").c_str(), len, (uint8_t)pre, (uint8_t)off,
+                                           (uint8_t)rows));
     });
 
     // No hide: a fullscreen is not an overlay, setText() over it replaces it
