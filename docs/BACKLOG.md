@@ -12,6 +12,25 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 
 ### Hardware (T-2CAN)
 
+- **CAN A listen-only in hardware (security review P5; researched 2026-10-21,
+  NOT done, owner's call).** Firmware keeps the MCP2518FD in listen-only, but
+  any foreign image flashed over OTA could transmit on the car bus. The T-2CAN
+  has no transceiver silent pin: CAN A is a Mornsun TD501MCAN isolated module
+  (RXD/TXD/GND/VCC/CANG/CANL/CANH only). Path (LilyGO T-2Can-Fd_V1.0.pdf):
+  MCP2518FD pin 1 TXCAN → UY2 MS4553S A1/B1 level translator → U2 TD501MCAN
+  pin 2 TXD. Options, easiest first:
+  1. Lift MCP2518FD pin 1 (SOIC-14 corner) and pull the freed UY2 A1 node to
+     3V3 through 10 kΩ. Reversible; relies on UY2 OE staying enabled.
+  2. Lift UY2 pin 2 (B1, MSOP-8, 0.65 mm) and pull U2 TXD to 5 V via 10 kΩ.
+     Strongest, risky pad.
+  3. Cut the CANA_TXD trace and pull U2's side to 5 V via 10 kΩ.
+  Never leave TXD floating. Verify: U2 TXD ≈ 5 V in every mode; a NORMAL-mode
+  test image sends nothing a USB-CAN adapter can see; `[can2]` fps unchanged.
+  Trade-off: it rules out transmitting on CAN A for good, including the
+  planned KWP diag polling (reads still need requests on the bus), unless
+  the mod is undone. Sources: github.com/Xinyuan-LilyGO/T-2Can (c918e0b,
+  project/T-2Can-Fd_V1.0.pdf); Mornsun TD501MCAN and MS4553S infosheets.
+
 - **Swap the LCD backpack for an Adafruit 5545 (STEMMA QT PCF8574), noted
   2026-10-19.** It is the same PCF8574, with STEMMA QT (= Qwiic) on both ends,
   so a stock cable from QWIIC 2 plugs straight in, and P0-P7 are labelled
