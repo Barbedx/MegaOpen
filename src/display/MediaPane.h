@@ -72,7 +72,7 @@ namespace MegaOpen
 
         // Stored by name, never by index.
         static const char* sceneName(Scene s);
-        static const char* sceneTitle(Scene s);     // Ukrainian, for /api/catalog
+        static const char* sceneTitle(Scene s);     // nullptr unless a non-word (VU); words: k.scene.*
         static Scene sceneFromName(const char* s);
 
         void setScene(Scene s) { _scene = (uint8_t)s < SCENE_COUNT ? s : Scene::Off; }

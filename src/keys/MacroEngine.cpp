@@ -12,20 +12,20 @@ namespace Keys
     // Row i is the enum value i. `taps`: the trigger counts presses; `field`:
     // the one Macro member the effect reads ("" none) — the page shows only that.
     const TriggerRow TRIGGERS[] = {
-        {"off",      "вимк",      false},
-        {"combo",    "разом",     false},
-        {"sequence", "натиски",   true},
-        {"hold",     "утримання", false},
+        {"off",      nullptr,      false},
+        {"combo",    nullptr,     false},
+        {"sequence", nullptr,   true},
+        {"hold",     nullptr, false},
     };
     const EffectRow EFFECTS[] = {
-        {"none",    "нічого",       ""},
-        {"action",  "дія",          "action"},
-        {"key",     "код у ГУ",     "code"},
-        {"raw",     "кадр Raise",   "raw"},
-        {"text",    "текст",        "text"},
-        {"popup",   "попап",        "text"},
-        {"pane",    "сцена",        "scene"},
-        {"message", "повідомлення", "code"},
+        {"none",    nullptr,       ""},
+        {"action",  nullptr,          "action"},
+        {"key",     nullptr,     "code"},
+        {"raw",     nullptr,   "raw"},
+        {"text",    nullptr,        "text"},
+        {"popup",   nullptr,        "text"},
+        {"pane",    nullptr,        "scene"},
+        {"message", nullptr, "code"},
     };
 
     const char* triggerName(Trigger t)

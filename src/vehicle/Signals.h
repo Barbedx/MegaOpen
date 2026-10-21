@@ -244,8 +244,6 @@ namespace Vehicle
 
     const Meta& meta(uint8_t s);
     uint8_t     sigByName(const char* name);   // SIG_COUNT when unknown
-    // The page's Ukrainian name, "" where the Raise list names it.
-    const char* label(uint8_t s);
 
     // Is this signal's value trustworthy: bound to CAN by rows that are all
     // measured (no DF_HYPOTHESIS), and not pinned. The car task owns the

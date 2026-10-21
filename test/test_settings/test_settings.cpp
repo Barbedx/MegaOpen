@@ -121,7 +121,9 @@ void test_enums_have_ascii_ids_and_names()
         std::set<std::string> ids;
         for (uint8_t r = 0; r < n; ++r) {
             TEST_ASSERT_TRUE_MESSAGE(ascii(e.en->id(r)), e.id);
-            TEST_ASSERT_TRUE_MESSAGE(*e.en->name(r), e.id);
+            // A name only where the id is not the word (bauds, rates): the
+            // page has the words (web/i18n k.*), so a name is never Ukrainian.
+            if (const char* nm = e.en->name(r)) TEST_ASSERT_TRUE_MESSAGE(*nm && ascii(nm), e.id);
             TEST_ASSERT_TRUE_MESSAGE(ids.insert(e.en->id(r)).second, e.id);
             TEST_ASSERT_EQUAL(r, Registry::enumIndex(e, e.en->id(r)));
         }

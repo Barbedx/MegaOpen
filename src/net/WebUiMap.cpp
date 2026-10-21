@@ -105,8 +105,8 @@ namespace
     }
 
     // ?meta=1: what the live page needs once — every signal's name, unit,
-    // decimals, yes/no, group, range and Ukrainian label ("" = the Raise
-    // field of that name has one). The alert rules are a settings-registry
+    // decimals, yes/no, group, range, and an empty slot where its Ukrainian
+    // label was (the page has the words: k.sig, k.raise). The alert rules are a settings-registry
     // table: GET/POST /api/settings `alerts`, described by the catalog.
     void putMeta(ChunkOut& out)
     {
@@ -117,7 +117,7 @@ namespace
             out.put(b, fit(snprintf(b, sizeof(b), "%s[\"%s\",\"%s\",%u,%d,%u,%s,%s,\"%s\"]", s ? "," : "", m.name, m.unit,
                                     (unsigned)m.decimals, m.boolean ? 1 : 0, (unsigned)m.group,
                                     dec(lo, sizeof(lo), m.min, m.decimals), dec(hi, sizeof(hi), m.max, m.decimals),
-                                    Vehicle::label(s)),
+                                    ""),   // the name: the page's (k.sig / k.raise in web/i18n)
                            sizeof(b)));
         }
         out.put("]");

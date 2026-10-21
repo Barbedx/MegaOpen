@@ -42,7 +42,7 @@ namespace Sinks
             Hybrid = 2,
         };
         // Spin's rows for /api/catalog (enums.resSpin), in enum order.
-        static constexpr const char* SPIN_TITLES[] = {"імпульс на клац", "стиснення", "утримання"};
+        static constexpr const char* SPIN_TITLES[] = {nullptr, nullptr, nullptr};
 
         struct Timing {
             // 50 ms is what a shipping digipot adapter (bigevtaylor/arduino-swc)

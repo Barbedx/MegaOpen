@@ -12,7 +12,7 @@ const LV_SRC={c:['CAN','ok'],k:['стала','warn'],p:['закріплено','
    POST /api/map {confirm:{sig,on}}; «Заводські прив'язки» повертають гіпотези. */
 const LV_CONF=[['Підтвердити: сигнал перевірено в машині, «?» зникне всюди (меню, екран авто, G-метр). «Заводські прив\'язки» повернуть його в гіпотези.',true],
  ['Скасувати підтвердження: сигнал знову гіпотеза, з «?».',false]];
-const lvName=m=>m[7]||((CAT.raise||[]).find(t=>t.id===m[0])||{}).name||m[0];
+const lvName=m=>tHas('k.sig.'+m[0])?t('k.sig.'+m[0]):((CAT.raise||[]).find(r=>r.id===m[0])||{}).name||m[7]||m[0];
 const lvUnit=m=>m[1]&&!/^-?\d|^raw$/.test(m[1])?' '+m[1]:'';
 const lvVal=(m,v)=>v==null?DASH:m[3]?(+v?'так':'ні'):v+lvUnit(m);
 const lvAge=a=>a==null?DASH:a<1000?'<1 с':a<60000?Math.round(a/1000)+' с':Math.round(a/60000)+' хв';

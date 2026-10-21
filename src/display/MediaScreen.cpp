@@ -94,35 +94,35 @@ namespace MegaOpen
     // NVS and the web UI store ids, not indexes; /api/catalog serves these rows
     // as they are. Order must match the enum.
     static const UiName kStyles[] = {
-        {"classic",  "класичний"},
-        {"minimal",  "мінімал"},
-        {"bar",      "смуга"},
-        {"bigtitle", "велика назва"},
-        {"ticker",   "тікер"},
-        {"split",    "виконавець зверху"},
-        {"pulse",    "пульс"},
-        {"scanner",  "сканер"},
-        {"clock",    "великий годинник"},
-        {"vu",       "рівень"},
-        {"flow",     "потік"},
-        {"plain",    "просто текст"},
-        {"winamp",   "вінамп"},
-        {"tape",     "касета"},
-        {"typewriter", "друкарка"},
+        {"classic",  nullptr},
+        {"minimal",  nullptr},
+        {"bar",      nullptr},
+        {"bigtitle", nullptr},
+        {"ticker",   nullptr},
+        {"split",    nullptr},
+        {"pulse",    nullptr},
+        {"scanner",  nullptr},
+        {"clock",    nullptr},
+        {"vu",       nullptr},
+        {"flow",     nullptr},
+        {"plain",    nullptr},
+        {"winamp",   nullptr},
+        {"tape",     nullptr},
+        {"typewriter", nullptr},
     };
     static_assert(sizeof(kStyles) / sizeof(kStyles[0]) == MediaScreen::STYLE_COUNT,
                   "style names and the Style enum have drifted apart");
 
     // The settings each layout reads, as the page's form. Text draws no style
     // (compose() ignores it); only Menu carries the scroll-arrow byte.
-    static constexpr UiField kStyle  = uiEnum("style", "Стиль", "styles");
-    static constexpr UiField kScroll = uiEnum("scroll", "Стрілки прокрутки", "arrows");
-    static constexpr UiField kTitle  = uiNum("scrollMsTitle", "Прокрутка назви, мс", 0, 5000, 50, "0 = стоїть");
-    static constexpr UiField kArtist = uiNum("scrollMsArtist", "Прокрутка виконавця, мс", 0, 5000, 50);
-    static constexpr UiField kSplash = uiNum("splashMs", "Заставка нового треку, мс", 0, 20000, 500,
-                                             "0 = вимк. На весь екран, 22 символи");
+    static constexpr UiField kStyle  = uiEnum("style", nullptr, "styles");
+    static constexpr UiField kScroll = uiEnum("scroll", nullptr, "arrows");
+    static constexpr UiField kTitle  = uiNum("scrollMsTitle", nullptr, 0, 5000, 50, nullptr);
+    static constexpr UiField kArtist = uiNum("scrollMsArtist", nullptr, 0, 5000, 50);
+    static constexpr UiField kSplash = uiNum("splashMs", nullptr, 0, 20000, 500,
+                                             nullptr);
     static const UiField kTextParams[] = {
-        uiNum("scrollMsTitle", "Біжучий рядок, мс на крок", 0, 5000, 50, "0 = стоїть"), kSplash};
+        uiNum("scrollMsTitle", nullptr, 0, 5000, 50, nullptr), kSplash};
     static const UiField kInfoParams[] = {kStyle, kTitle, kArtist, kSplash};
     static const UiField kMenuParams[] = {kStyle, kScroll, kTitle, kArtist};
     static const UiField kFullParams[] = {kStyle, kTitle, kArtist};
@@ -130,10 +130,10 @@ namespace MegaOpen
 
     // In the order the page lists them: cheapest on the wire first.
     static const MediaScreen::LayoutRow kLayouts[] = {
-        {MediaScreen::Layout::Text,       "text",       "Текст · 8×1",            PARAMS(kTextParams)},
-        {MediaScreen::Layout::Info,       "info",       "Інфо · 8×3 + картинка",  PARAMS(kInfoParams)},
-        {MediaScreen::Layout::Menu,       "menu",       "Меню · 22×3",            PARAMS(kMenuParams)},
-        {MediaScreen::Layout::Fullscreen, "fullscreen", "Повний екран · 22×3",    PARAMS(kFullParams)},
+        {MediaScreen::Layout::Text,       "text",       nullptr,            PARAMS(kTextParams)},
+        {MediaScreen::Layout::Info,       "info",       nullptr,  PARAMS(kInfoParams)},
+        {MediaScreen::Layout::Menu,       "menu",       nullptr,            PARAMS(kMenuParams)},
+        {MediaScreen::Layout::Fullscreen, "fullscreen", nullptr,    PARAMS(kFullParams)},
     };
     #undef PARAMS
     static_assert(sizeof(kLayouts) / sizeof(kLayouts[0]) == MediaScreen::LAYOUT_COUNT,

@@ -40,7 +40,7 @@ namespace MegaOpen
         static const char* layoutName(Layout l);
         static Layout layoutFromName(const char* s);
 
-        // One row per layout for /api/catalog: id, Ukrainian name, and the
+        // One row per layout for /api/catalog: id, name (nullptr: k.layout.*), and the
         // settings it reads as the page's form fields.
         struct LayoutRow {
             Layout         layout;
@@ -90,7 +90,7 @@ namespace MegaOpen
 
         // The name, not the number, is stored (web UI, NVS).
         static const char* styleName(Style s);
-        static const char* styleTitle(Style s);      // Ukrainian, for /api/catalog
+        static const char* styleTitle(Style s);      // nullptr: the page's k.style.*
         static Style styleFromName(const char* s);
         static bool styleAnimates(Style s);
 

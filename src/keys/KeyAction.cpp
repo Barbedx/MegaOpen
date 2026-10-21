@@ -8,22 +8,22 @@ namespace Keys
     static const UiName kNames[] = {
         {"None",      "—"},
         {"Load",      "Load"},
-        {"SrcNext",   "Джерело ▶"},
-        {"SrcPrev",   "Джерело ◀"},
-        {"VolUp",     "Гучність +"},
-        {"VolDown",   "Гучність −"},
-        {"Mute",      "Тиша"},
-        {"EncCw",     "Крок ▶"},
-        {"EncCcw",    "Крок ◀"},
+        {"SrcNext",   nullptr},
+        {"SrcPrev",   nullptr},
+        {"VolUp",     nullptr},
+        {"VolDown",   nullptr},
+        {"Mute",      nullptr},
+        {"EncCw",     nullptr},
+        {"EncCcw",    nullptr},
         {"Ok",        "OK"},
-        {"Phone",     "Телефон"},
-        {"Voice",     "Голос"},
+        {"Phone",     nullptr},
+        {"Voice",     nullptr},
         {"Mode",      "MODE"},
         {"Radio",     "RADIO"},
         {"EncPhaseA", ""},
         {"EncPhaseB", ""},
         {"EncPhaseC", ""},
-        {"Menu",      "Меню на щитку"},
+        {"Menu",      nullptr},
     };
     static_assert(sizeof(kNames) / sizeof(kNames[0]) == (size_t)Action::_Count,
                   "an Action has no row in kNames");
@@ -68,10 +68,10 @@ namespace Keys
 
     // Row i is the class 1 << i.
     static const UiName kClasses[CLASS_BITS] = {
-        {"transport", "треки"},
-        {"volume",    "гучність"},
-        {"phone",     "телефон"},
-        {"ui",        "меню"},
+        {"transport", nullptr},
+        {"volume",    nullptr},
+        {"phone",     nullptr},
+        {"ui",        nullptr},
     };
 
     static int classIndex(uint8_t bit) {

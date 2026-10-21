@@ -5,10 +5,10 @@ namespace { const MediaInfo kEmpty{}; }
 
 // Ids match the sources' name(); "none" is sourceName() with no source.
 const MediaRouter::SourceRow MediaRouter::SOURCES[SOURCE_ROWS] = {
-    {"auto", "авто",   true,  false, Mode::Auto},
-    {"hu",   "ГУ",     true,  false, Mode::Hu},
+    {"auto", nullptr,   true,  false, Mode::Auto},
+    {"hu",   nullptr,     true,  false, Mode::Hu},
     {"ams",  "iPhone", true,  true,  Mode::Ams},
-    {"none", "нічого", false, false, Mode::Ams},
+    {"none", nullptr, false, false, Mode::Ams},
 };
 
 // The pickable rows of SOURCES, as Modes; anything else is AMS.

@@ -19,8 +19,8 @@ namespace Vehicle
 {
     enum AlertCond : uint8_t { AC_ABOVE = 0, AC_BELOW, AC_RISES, AC_FALLS, AC_CHANGES, AC_COUNT };
     inline constexpr UiName ALERT_COND[] = {
-        {"above", "вище"}, {"below", "нижче"}, {"rises", "зʼявилось"},
-        {"falls", "зникло"}, {"changes", "змінилось"},
+        {"above", nullptr}, {"below", nullptr}, {"rises", nullptr},
+        {"falls", nullptr}, {"changes", nullptr},
     };
     static_assert(sizeof(ALERT_COND) / sizeof(ALERT_COND[0]) == AC_COUNT, "ALERT_COND is out of step");
 

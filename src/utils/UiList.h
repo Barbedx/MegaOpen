@@ -8,7 +8,8 @@
 // new style or action is one row there and nothing in the page. Pure: the
 // native build writes the simulator's catalog from the same tables.
 
-// `id` is what NVS and the API store; `name` is what the page shows (Ukrainian).
+// `id` is what NVS and the API store; `name` only where the id is not a word
+// ("VU", "GRB"): nullptr otherwise, the page has the words (web/i18n k.*).
 struct UiName {
     const char* id;
     const char* name;

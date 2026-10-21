@@ -105,9 +105,11 @@ address) and reloads the page.
   the Raise list `k.raise.<v>`; `k.rgroup.<id>` and `k.unit.<unit>` for the
   Raise rows' section and unit (ids and terse English units from the
   firmware); `k.layout.*`, `k.style.*`, `k.scene.*`, `k.con.*`, `k.dest.*`,
-  `k.action.*`, `k.pkey.*`, `k.class.*` for the other lists. The settings
-  carry no `label` any more; `tools/check_i18n.py` fails on a catalog name with
-  no words (it derives the keys the same way from `build/catalog.json`).
+  `k.action.*`, `k.pkey.*`, `k.class.*` for the other lists. The firmware sends
+  ids: no setting `label`, and a `name` only where the id is not a word
+  (`AF-RDS`, `125k`, `VU`); the page falls back to the id. `test_catalog` fails
+  on any Cyrillic in the catalog; `tools/check_i18n.py` fails on a catalog name
+  with no words (it derives the keys the same way from `build/catalog.json`).
 - The firmware sends codes, not prose (English stays in the log only):
   `/api/health` chains carry `code` (`w.<code>`), error replies are codes
   (`e.<code>`, see the API contract), and the page has the words.

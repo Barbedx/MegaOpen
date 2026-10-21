@@ -908,7 +908,9 @@ void test_raise_targets_ids_are_unique_and_name_real_signals()
         const Canbox::TargetView t = RT::at(i);
         TEST_ASSERT_NOT_NULL(t.id);
         TEST_ASSERT_TRUE_MESSAGE(t.min <= t.max, t.id);
-        TEST_ASSERT_TRUE_MESSAGE(t.group && *t.group && t.name && *t.name && t.cmd && (*t.cmd || !t.fw), t.id);
+        // The name is the page's (k.raise.<id>); a row keeps one only when it is
+        // the protocol's own word (AUTO, ECO).
+        TEST_ASSERT_TRUE_MESSAGE(t.group && *t.group && t.cmd && (*t.cmd || !t.fw), t.id);
         TEST_ASSERT_EQUAL_INT_MESSAGE(i, RT::find(t.id), t.id);          // unique
         if (t.sig < SIG_COUNT) TEST_ASSERT_EQUAL_STRING(meta(t.sig).name, t.id);
         // A field the firmware sends has a signal to hold its value.

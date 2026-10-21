@@ -9,7 +9,7 @@
 //
 // A row names its Vehicle::Sig and the Rav4Emitter message that carries it;
 // name, unit, range and decimals come from the signal's own metadata
-// (Signals.cpp), so only the Ukrainian label and the wire command are here.
+// (Signals.cpp), so only the wire command is here; the page has the words (k.raise.*).
 // ADDING A TOYOTA FUNCTION: a Sig, a builder in Rav4Emitter, and one row here.
 //
 // A row with fw=false is a car value protocol 112 has no field for (the

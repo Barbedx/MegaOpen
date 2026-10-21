@@ -227,12 +227,12 @@ namespace Knobs
 
     // Row i is the enum value i; row 0 is the fallback for a name nobody knows.
     const UiName REACT_NAMES[] = {
-        {"none", "нема"}, {"level", "рівень"}, {"flash", "спалах"},
-        {"spin", "обертання"}, {"sweep", "розмах"}, {"trail", "зі шлейфом"},
+        {"none", nullptr}, {"level", nullptr}, {"flash", nullptr},
+        {"spin", nullptr}, {"sweep", nullptr}, {"trail", nullptr},
     };
-    const UiName ANIM_NAMES[]  = {{"static", "статично"}, {"breathe", "дихання"}, {"rainbow", "веселка"}};
+    const UiName ANIM_NAMES[]  = {{"static", nullptr}, {"breathe", nullptr}, {"rainbow", nullptr}};
     const UiName ORDER_NAMES[] = {{"grb", "GRB"}, {"rgb", "RGB"}, {"grbw", "RGBW (SK6812)"}};
-    const UiName KNOB_KEYS[]   = {{"KR", "Ручка П"}, {"KL", "Ручка Л"}};
+    const UiName KNOB_KEYS[]   = {{"KR", nullptr}, {"KL", nullptr}};
 
     const char* reactName(React r)          { return uiId(REACT_NAMES, (uint8_t)r); }
     React       reactFromName(const char* s) { return (React)uiIndex(REACT_NAMES, s); }

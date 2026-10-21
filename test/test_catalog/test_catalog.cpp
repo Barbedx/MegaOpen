@@ -134,11 +134,22 @@ static void test_required_keys()
         const V* l = e->get(k);
         TEST_ASSERT_NOT_NULL_MESSAGE(l, k);
         TEST_ASSERT_TRUE_MESSAGE(l->t == V::Arr && !l->a.empty(), k);
-        for (const auto& r : l->a) {
-            TEST_ASSERT_NOT_NULL_MESSAGE(r->get("v"), k);
-            TEST_ASSERT_NOT_NULL_MESSAGE(r->get("name"), k);
-        }
+        for (const auto& r : l->a) TEST_ASSERT_NOT_NULL_MESSAGE(r->get("v"), k);
     }
+}
+
+// The page has the words (web/i18n, both languages): the firmware sends ids,
+// and a name only where it is not a word (AF-RDS, 125k, VOL+). Cyrillic in
+// UTF-8 leads with 0xD0..0xD3.
+static void test_no_ukrainian_in_the_catalog()
+{
+    size_t at = std::string::npos;
+    for (size_t i = 0; i < g_json.size(); ++i) {
+        const unsigned char c = (unsigned char)g_json[i];
+        if (c >= 0xD0 && c <= 0xD3) { at = i; break; }
+    }
+    const std::string near = at == std::string::npos ? "" : g_json.substr(at > 60 ? at - 60 : 0, 120);
+    TEST_ASSERT_TRUE_MESSAGE(at == std::string::npos, near.c_str());
 }
 
 static void unique(const char* listKey, const char* idKey)
@@ -170,7 +181,6 @@ static void fieldsResolve(const V& fields, const char* where)
 {
     for (const auto& f : fields.a) {
         TEST_ASSERT_NOT_NULL_MESSAGE(f->get("n"), where);
-        TEST_ASSERT_NOT_NULL_MESSAGE(f->get("label"), where);
         const V* en = f->get("enum");
         if (!en) continue;
         const bool found = cat().get("enums")->get(en->s.c_str()) || en->s == "styles";
@@ -221,7 +231,7 @@ static void test_raise_rows_are_complete()
     TEST_ASSERT_TRUE(l.a.size() > 90);
     for (const auto& r : l.a) {
         const std::string id = strOf(r->get("id"));
-        for (const char* k : {"group", "name", "unit", "cmd", "kind"}) {
+        for (const char* k : {"group", "unit", "cmd", "kind"}) {
             const V* v = r->get(k);
             TEST_ASSERT_TRUE_MESSAGE(v && v->t == V::Str, (id + ": " + k).c_str());
         }
@@ -376,6 +386,7 @@ int main(int, char**)
         RUN_TEST(test_wire_hold_only_on_the_detents);
         RUN_TEST(test_fixed_ids_the_page_uses);
         RUN_TEST(test_raise_rows_are_complete);
+        RUN_TEST(test_no_ukrainian_in_the_catalog);
         RUN_TEST(test_settings_list);
         RUN_TEST(test_features);
         RUN_TEST(writeForTheSimulator);

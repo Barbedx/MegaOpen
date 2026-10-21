@@ -46,7 +46,7 @@ namespace Cfg
                 return i < MediaPane::SCENE_COUNT ? MediaPane::sceneName((MediaPane::Scene)i) : "auto";
             },
             [](uint8_t i) {
-                return i < MediaPane::SCENE_COUNT ? MediaPane::sceneTitle((MediaPane::Scene)i) : "карусель";
+                return i < MediaPane::SCENE_COUNT ? MediaPane::sceneTitle((MediaPane::Scene)i) : nullptr;
             },
             "scene",
         };
@@ -71,15 +71,11 @@ namespace Cfg
         };
 
         // A car screen row: row 0 is "none" (SIG_COUNT), row i the signal i-1.
-        // The id is the signal's ASCII name; the page shows its Ukrainian label.
+        // The id is the signal's ASCII name; the page has its words (k.sig, k.raise).
         const SEnum kSignals = {
             [] { return (uint8_t)(Vehicle::SIG_COUNT + 1); },
             [](uint8_t i) { return i ? Vehicle::meta((uint8_t)(i - 1)).name : "none"; },
-            [](uint8_t i) {
-                if (!i) return "нічого";
-                const char* l = Vehicle::label((uint8_t)(i - 1));
-                return *l ? l : Vehicle::meta((uint8_t)(i - 1)).name;
-            },
+            [](uint8_t) -> const char* { return nullptr; },   // k.sig / k.raise (web/i18n)
             "sig",
         };
         int32_t sigRowOf(uint8_t sig) { return sig < Vehicle::SIG_COUNT ? sig + 1 : 0; }
@@ -89,7 +85,7 @@ namespace Cfg
         const SEnum kCarPresets = {
             [] { return (uint8_t)CarPreset::_Count; },
             [](uint8_t i) { return i == (uint8_t)CarPreset::Trip ? "trip" : "custom"; },
-            [](uint8_t i) { return i == (uint8_t)CarPreset::Trip ? "Поїздка" : "Свої рядки"; },
+            [](uint8_t) -> const char* { return nullptr; },
             "carPreset",
         };
 #endif
@@ -129,7 +125,7 @@ namespace Cfg
         const SEnum kRates = {
             [] { return (uint8_t)(Bus::Autobaud::N_RATES + 1); },
             rateId,
-            [](uint8_t i) { return i ? rateId(i) : "авто"; },
+            [](uint8_t i) -> const char* { return i ? rateId(i) : nullptr; },
             "rate",
         };
 
@@ -158,17 +154,17 @@ namespace Cfg
         // it changes nothing.
         struct Preset { const char* id; const char* name; Knobs::Rgb c; };
         const Preset kPresets[] = {
-            {"custom", "свій",        {0, 0, 0}},
-            {"white",  "білий",       {255, 255, 255}},
-            {"red",    "червоний",    {255, 0, 0}},
-            {"orange", "помаранч.",   {255, 80, 0}},
-            {"amber",  "бурштин",     {255, 140, 0}},
-            {"yellow", "жовтий",      {255, 220, 0}},
-            {"green",  "зелений",     {0, 255, 0}},
-            {"cyan",   "бірюзовий",   {0, 255, 255}},
-            {"blue",   "синій",       {0, 0, 255}},
-            {"purple", "фіолетовий",  {160, 0, 255}},
-            {"pink",   "рожевий",     {255, 0, 120}},
+            {"custom", nullptr,        {0, 0, 0}},
+            {"white",  nullptr,       {255, 255, 255}},
+            {"red",    nullptr,    {255, 0, 0}},
+            {"orange", nullptr,   {255, 80, 0}},
+            {"amber",  nullptr,     {255, 140, 0}},
+            {"yellow", nullptr,      {255, 220, 0}},
+            {"green",  nullptr,     {0, 255, 0}},
+            {"cyan",   nullptr,   {0, 255, 255}},
+            {"blue",   nullptr,       {0, 0, 255}},
+            {"purple", nullptr,  {160, 0, 255}},
+            {"pink",   nullptr,     {255, 0, 120}},
         };
         constexpr uint8_t PRESETS = sizeof(kPresets) / sizeof(kPresets[0]);
         const SEnum kColors = {
@@ -217,11 +213,7 @@ namespace Cfg
         const SEnum kAlertSigs = {
             [] { return (uint8_t)(Vehicle::SIG_COUNT + 1); },
             [](uint8_t i) { return i < Vehicle::SIG_COUNT ? Vehicle::meta(i).name : ""; },
-            [](uint8_t i) {
-                if (i >= Vehicle::SIG_COUNT) return "—";
-                const char* l = Vehicle::label(i);
-                return *l ? l : Vehicle::meta(i).name;
-            },
+            [](uint8_t i) -> const char* { return i >= Vehicle::SIG_COUNT ? "—" : nullptr; },
             "sig",
         };
 
@@ -266,7 +258,7 @@ namespace Cfg
         // ---- the head-unit emitter's tuning (Canbox::Tuning) ----------------
         // 0x28 carries one of two messages: the row is the stored value.
         struct IdName { const char* id; const char* name; };
-        const IdName kCmd28[] = {{"temp", "t° зовні"}, {"ac", "клімат"}};
+        const IdName kCmd28[] = {{"temp", nullptr}, {"ac", nullptr}};
         // FUEL_UNITS / TRIP_UNITS rows, with ASCII ids; the row stores its `v`.
         const char* const kFuelIds[] = {"l100km", "kml", "mpg"};
         const char* const kTripIds[] = {"km", "miles", "hide"};

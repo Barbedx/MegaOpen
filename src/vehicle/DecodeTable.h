@@ -18,7 +18,7 @@
 namespace Vehicle
 {
     // /api/map rows' `src`, served as the catalog's enums.mapSrc.
-    inline constexpr UiName MAP_SRC[] = {{"can", "CAN A"}, {"const", "стала"}, {"off", "вимк"}};
+    inline constexpr UiName MAP_SRC[] = {{"can", "CAN A"}, {"const", nullptr}, {"off", nullptr}};
     enum MapSrc : uint8_t { SRC_CAN = 0, SRC_CONST, SRC_OFF };
 
     struct DecodeConst {

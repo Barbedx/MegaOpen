@@ -65,7 +65,7 @@ namespace CapFormat
     enum Kind : uint8_t { FRAME = 0, KEYFRAME = 1, MARKER = 2, STATS = 3, GAP = 4, BITRATE = 5, MODE = 6 };
     enum Mode : uint8_t { MODE_CHANGE = 0, MODE_FULL = 1 };
     // The API's names for Mode (/api/cap, /api/catalog capModes); row i = Mode i.
-    inline constexpr UiName MODE_NAMES[] = {{"change", "лише зміни"}, {"full", "усі кадри"}};
+    inline constexpr UiName MODE_NAMES[] = {{"change", nullptr}, {"full", nullptr}};
 
     constexpr uint32_t ID_MASK   = 0x1FFFFFFFu;
     constexpr uint8_t  BUS_SHIFT = 29;

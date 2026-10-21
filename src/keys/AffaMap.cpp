@@ -17,14 +17,14 @@ namespace Keys
 
     // Ids as the API stores them; names as /api/catalog shows them.
     static const UiName kKeyNames[AffaMap::KEYS] = {
-        {"Load",     "Load (знизу)"},
-        {"SrcNext",  "Джерело ▶"},
-        {"SrcPrev",  "Джерело ◀"},
-        {"VolUp",    "Гучність +"},
-        {"VolDown",  "Гучність −"},
-        {"Pause",    "Пауза"},
-        {"RollUp",   "Коліщатко ▲"},
-        {"RollDown", "Коліщатко ▼"},
+        {"Load",     nullptr},
+        {"SrcNext",  nullptr},
+        {"SrcPrev",  nullptr},
+        {"VolUp",    nullptr},
+        {"VolDown",  nullptr},
+        {"Pause",    nullptr},
+        {"RollUp",   nullptr},
+        {"RollDown", nullptr},
     };
 
     uint8_t AffaMap::indexOf(affa::Key k)

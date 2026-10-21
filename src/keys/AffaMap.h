@@ -31,7 +31,7 @@ namespace Keys
         static uint8_t indexOf(affa::Key k);
         static affa::Key keyAt(uint8_t i);
         static const char* keyName(uint8_t i);
-        static const char* keyTitle(uint8_t i);     // Ukrainian, for /api/catalog
+        static const char* keyTitle(uint8_t i);     // nullptr unless a non-word; words: k.pkey.*
         // A held wheel detent has no wire form (0x0101|0xC0 == 0x0141|0xC0):
         // the library refuses to transmit one.
         static bool wireHold(affa::Key k) {

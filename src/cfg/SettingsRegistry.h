@@ -66,7 +66,8 @@ namespace Cfg
     };
 
     // An enum's rows: id is what is stored and sent (ASCII, so the panel can
-    // show it), name is the page's Ukrainian label.
+    // show it); name only where the id is not a word (a baud rate), else
+    // nullptr: the page has the words (k.<dom>.<id>, web/i18n).
     struct SEnum {
         uint8_t     (*count)();
         const char* (*id)(uint8_t i);

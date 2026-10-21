@@ -46,15 +46,16 @@ NEED = object()
 
 def catalog_keys(c):
     """(key, what) for every name the page translates, the way i18nCat() does:
-    what is the firmware's text, or NEED where a key is needed whatever it says."""
+    what is the firmware's text, or NEED where a key is needed whatever it says
+    (a name or label the firmware left out: the page has the words)."""
     out = []
     def rows(lst, dom, base):
         for r in lst or []:
             v = str(r.get("v"))
             if dom == "sig":
-                out.append((("k.sig." + v, "k.raise." + v), r.get("name")))
+                out.append((("k.sig." + v, "k.raise." + v), r.get("name", NEED)))
             else:
-                out.append((("k.%s.%s" % (dom, v)) if dom else ("%s.%s" % (base, v)), r.get("name")))
+                out.append((("k.%s.%s" % (dom, v)) if dom else ("%s.%s" % (base, v)), r.get("name", NEED)))
     for st in c.get("settings", []):
         out.append(("k.set." + st["id"], NEED))   # no label in the catalog: the page has the words
         rows(st.get("enum"), st.get("dom"), "k.set." + st["id"])
@@ -64,22 +65,22 @@ def catalog_keys(c):
     for n, lst in (c.get("enums") or {}).items():
         rows(lst, n, None)
     for l in c.get("layouts", []):
-        out.append(("k.layout." + l["id"], l.get("name")))
+        out.append(("k.layout." + l["id"], l.get("name", NEED)))
         for prm in l.get("params", []):
-            out.append(("k.layout.%s.%s" % (l["id"], prm["n"]), prm.get("label")))
+            out.append(("k.layout.%s.%s" % (l["id"], prm["n"]), prm.get("label", NEED)))
             out.append(("k.layout.%s.%s.h" % (l["id"], prm["n"]), prm.get("hint")))
     for lst, d in (("styles", "style"), ("scenes", "scene"), ("bleModes", "ble"), ("panels", "panel"),
                    ("dests", "dest"), ("actions", "action"), ("panelKeys", "pkey")):
         for x in c.get(lst, []):
-            out.append(("k.%s.%s" % (d, x["id"]), x.get("name")))
+            out.append(("k.%s.%s" % (d, x["id"]), x.get("name", NEED)))
     for x in c.get("classes", []):
-        out.append(("k.class.%s" % x["bit"], x.get("name")))
+        out.append(("k.class.%s" % x["bit"], x.get("name", NEED)))
     for x in c.get("console", []):
-        out.append(("k.con." + x["cmd"], x.get("name")))
+        out.append(("k.con." + x["cmd"], x.get("name", NEED)))
         for f in x.get("fields", []):
-            out.append(("k.con.%s.%s" % (x["cmd"], f["n"]), f.get("label")))
+            out.append(("k.con.%s.%s" % (x["cmd"], f["n"]), f.get("label", NEED)))
     for x in c.get("raise", []):
-        out.append(("k.raise." + x["id"], x.get("name")))
+        out.append(("k.raise." + x["id"], x.get("name", NEED)))
         out.append(("k.raise.%s.why" % x["id"], x.get("why")))
         out.append(("k.rgroup." + x["group"], NEED))
         if x.get("unit"):
@@ -118,6 +119,8 @@ def main():
         code = strip_comments(src) if path.endswith(".js") else re.sub(r"<!--.*?-->", "", src, flags=re.S)
         for m in lit.finditer(code):
             k = m.group(1) or m.group(2) or m.group(3)
+            if k.endswith("."):
+                continue                    # a prefix the code completes: t('k.sig.'+id)
             used.add(k)
             if k not in base:
                 errors.append("%s: names key %s, which uk.json does not have" % (os.path.relpath(path, ROOT), k))

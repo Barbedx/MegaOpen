@@ -520,7 +520,7 @@ static void writeForTheSimulator(const DecodeTable& t)
     for (uint8_t i = 0; i < SIG_COUNT; ++i) {
         const Meta& m = meta(i);
         snprintf(b, sizeof(b), "%s[\"%s\",\"%s\",%u,%d,%u,%ld,%ld,\"%s\"]", i ? "," : "", m.name, m.unit,
-                 (unsigned)m.decimals, m.boolean ? 1 : 0, (unsigned)m.group, (long)m.min, (long)m.max, label(i));
+                 (unsigned)m.decimals, m.boolean ? 1 : 0, (unsigned)m.group, (long)m.min, (long)m.max, "");
         j += b;
     }
     j += "],\"derived\":[";

@@ -12,19 +12,20 @@ const enumOf=(n,v)=>enumList(n).find(e=>String(e.v!==undefined?e.v:e.id)===Strin
    name/label/group/unit, як і раніше. Ключ — з ідентифікатора: k.set.<налаштування>[.<колонка>],
    рядок переліку k.<dom>.<v> (dom — від прошивки, спільний для всіх списків тих самих речей) або
    k.set.<налаштування>.<v>; сигнал k.sig.<v>, а без нього — його назва в списку Raise, k.raise.<v>.
-   Нема ключа — лишається те, що прислала прошивка. tools/check_i18n.py рахує ключі тим самим способом */
+   Прошивка шле назву лише там, де вона не слово (AF-RDS, 125k); нема ключа — та назва, а нема й її —
+   сам ідентифікатор. tools/check_i18n.py рахує ключі тим самим способом */
 function i18nCat(c){
- const tr=(k,o,f='name')=>{if(o&&tHas(k))o[f]=t(k)};
- const rows=(list,dom,base)=>(list||[]).forEach(r=>tr(dom==='sig'&&!tHas('k.sig.'+r.v)?'k.raise.'+r.v:dom?'k.'+dom+'.'+r.v:base+'.'+r.v,r));
- for(const s of c.settings||[]){tr('k.set.'+s.id,s,'label');rows(s.enum,s.dom,'k.set.'+s.id);
-  for(const col of s.cols||[]){tr('k.set.'+s.id+'.'+col.id,col,'label');rows(col.enum,col.dom,'k.set.'+s.id+'.'+col.id)}}
+ const tr=(k,o,f,id)=>{if(!o)return;if(tHas(k))o[f]=t(k);else if(o[f]==null&&id!==undefined)o[f]=String(id)};
+ const rows=(list,dom,base)=>(list||[]).forEach(r=>tr(dom==='sig'&&!tHas('k.sig.'+r.v)?'k.raise.'+r.v:dom?'k.'+dom+'.'+r.v:base+'.'+r.v,r,'name',r.v));
+ for(const s of c.settings||[]){tr('k.set.'+s.id,s,'label',s.id);rows(s.enum,s.dom,'k.set.'+s.id);
+  for(const col of s.cols||[]){tr('k.set.'+s.id+'.'+col.id,col,'label',col.id);rows(col.enum,col.dom,'k.set.'+s.id+'.'+col.id)}}
  for(const[n,list]of Object.entries(c.enums||{}))rows(list,n);
- for(const l of c.layouts||[]){tr('k.layout.'+l.id,l);for(const p of l.params||[]){tr('k.layout.'+l.id+'.'+p.n,p,'label');tr('k.layout.'+l.id+'.'+p.n+'.h',p,'hint')}}
+ for(const l of c.layouts||[]){tr('k.layout.'+l.id,l,'name',l.id);for(const p of l.params||[]){tr('k.layout.'+l.id+'.'+p.n,p,'label',p.n);tr('k.layout.'+l.id+'.'+p.n+'.h',p,'hint')}}
  for(const[l,d]of[['styles','style'],['scenes','scene'],['bleModes','ble'],['panels','panel'],['dests','dest'],['actions','action'],['panelKeys','pkey']])
-  for(const x of c[l]||[])tr('k.'+d+'.'+x.id,x);
- for(const x of c.classes||[])tr('k.class.'+x.bit,x);
- for(const x of c.console||[]){tr('k.con.'+x.cmd,x);for(const f of x.fields||[])tr('k.con.'+x.cmd+'.'+f.n,f,'label')}
- for(const x of c.raise||[]){tr('k.raise.'+x.id,x);tr('k.raise.'+x.id+'.why',x,'why');tr('k.rgroup.'+x.group,x,'group');tr('k.unit.'+x.unit,x,'unit')}
+  for(const x of c[l]||[])tr('k.'+d+'.'+x.id,x,'name',x.id);
+ for(const x of c.classes||[])tr('k.class.'+x.bit,x,'name',x.bit);
+ for(const x of c.console||[]){tr('k.con.'+x.cmd,x,'name',x.cmd);for(const f of x.fields||[])tr('k.con.'+x.cmd+'.'+f.n,f,'label',f.n)}
+ for(const x of c.raise||[]){tr('k.raise.'+x.id,x,'name',x.id);tr('k.raise.'+x.id+'.why',x,'why');tr('k.rgroup.'+x.group,x,'group');tr('k.unit.'+x.unit,x,'unit')}
  return c;
 }
 /* що є в цій збірці (CAT.features): екран питає лише маршрути, які прошивка зібрала,

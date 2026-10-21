@@ -524,6 +524,35 @@ void test_car_preset_in_the_registry()
     TEST_ASSERT_EQUAL_STRING("display.car", find("carScreen")->parent);
 }
 
+// The panel shows ASCII only: every row of every settings menu is a tag, a
+// value id or a number, never the web's words (the registry has no labels;
+// the page's are in web/i18n).
+void test_every_menu_row_is_ascii()
+{
+    Fixture f;
+    auto rows = [&](const char* where) {
+        for (uint8_t i = 0; i < f.e.count(); ++i) {
+            const std::string r = f.item(i);
+            for (unsigned char c : r) TEST_ASSERT_TRUE_MESSAGE(c >= 0x20 && c < 0x7F, (std::string(where) + ": " + r).c_str());
+        }
+    };
+    rows("root");
+    for (const char* g : {"Display", "Lights", "Service"}) {
+        TEST_ASSERT_TRUE_MESSAGE(f.go(g), g);
+        f.e.key(Cmd::Select);
+        rows(g);
+        if (!strcmp(g, "Display") && f.go("Car screen")) {
+            f.e.key(Cmd::Select);
+            rows("Car screen");
+            TEST_ASSERT_TRUE(f.go("< Back"));
+            f.e.key(Cmd::Select);
+        }
+        TEST_ASSERT_TRUE(f.go("< Back"));
+        f.e.key(Cmd::Select);
+        TEST_ASSERT_EQUAL(0, f.e.depth());
+    }
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -533,6 +562,7 @@ int main(int, char**)
     RUN_TEST(test_signal_row_is_exactly_the_width);
     RUN_TEST(test_car_rows_in_the_registry);
     RUN_TEST(test_root_rows);
+    RUN_TEST(test_every_menu_row_is_ascii);
     RUN_TEST(test_exit_row_closes);
     RUN_TEST(test_lights_hidden_without_knobs);
     RUN_TEST(test_web_only_settings_stay_out);

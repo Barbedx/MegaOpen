@@ -81,6 +81,6 @@ namespace Keys
     }
 
     const char* name(Action a);        // for the web UI and the log
-    const char* title(Action a);       // Ukrainian, for /api/catalog
+    const char* title(Action a);       // nullptr unless a non-word (OK, MODE); words: k.action.*
     Action      fromName(const char* s);
 }

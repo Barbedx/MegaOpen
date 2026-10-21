@@ -16,8 +16,8 @@ namespace Canbox
 {
     // Tuning::fuelUnit and tripUnit as the wire carries them, for /api/catalog.
     struct UnitRow { uint8_t v; const char* name; };
-    inline constexpr UnitRow FUEL_UNITS[] = {{2, "л/100 км"}, {1, "км/л"}, {0, "mpg"}};
-    inline constexpr UnitRow TRIP_UNITS[] = {{2, "км"}, {1, "милі"}, {0, "сховати"}};
+    inline constexpr UnitRow FUEL_UNITS[] = {{2, nullptr}, {1, nullptr}, {0, "mpg"}};
+    inline constexpr UnitRow TRIP_UNITS[] = {{2, nullptr}, {1, nullptr}, {0, nullptr}};
 
     // Every value the protocol sources disagree on, settable from the web UI and
     // persisted (they get resolved in a car). Defaults are the best-attested reading.
