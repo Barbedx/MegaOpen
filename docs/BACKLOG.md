@@ -223,14 +223,12 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   `Esp32CanLink`, §4.1 RX topology, TX queue depth 6 not 4, payload 119 not
   113, the missing `examples/19_owned_task`...). Ticket upstream, with the L1
   debug callback guard.
-- **Renault DDT data in the repo: a licence question, and the repo is public
-  now (2026-10-21).** `docs/signal-glossary.*` and `tools/can_corr.py` still
-  carry data derived from the Renault DDT database (ECU file names, field
-  encodings, French parameter names: 21 lines of signal-glossary.md alone).
-  The firmware and the other docs carry only byte/bit positions and English
-  names. The owner decides: keep, or strip the French names and file names.
 
 ## Done
+
+- **DDT-derived names kept in the public repo, owner's decision 2026-10-21.**
+  `docs/signal-glossary.*` and `tools/can_corr.py` keep the Renault DDT ECU
+  file names, field encodings and French parameter names; nothing stripped.
 
 - **A DNS name for the board** (owner, 2026-10-19): `megaopen.local`
   resolves at home, checked 2026-10-21 (`cfg` `mdns`/`mdnsOn`, default
