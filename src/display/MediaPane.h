@@ -41,12 +41,15 @@ namespace MegaOpen
             Stars,     // integer-perspective starfield
             Bounce,    // a box with a decaying trail
             Rings,     // three expanding circles
-            // Appended, never inserted: names are what is stored.
+            // Names are what is stored, so a new scene may go anywhere before
+            // Custom; Custom stays last (the carousel wraps at it).
             Spiral,    // three arms turning, pure function of the frame counter
             Scope,     // a Lissajous figure, its ratio changing every 96 frames
             Rain,      // twelve columns of falling dashes, Matrix-style
             Radar,     // a sweep with a fading trail, and blips it lights as it passes
             Life,      // Conway's Life on a torus, reseeded when it dies down
+            Tape,      // a cassette: reels turn while playing, tape wound by the position — REAL DATA
+            Tunnel,    // nested squares rushing outward from a drifting centre
             Custom,    // the owner's own 48x48 picture (POST /api/media bits=), still
             _Count
         };
@@ -61,7 +64,7 @@ namespace MegaOpen
         // Moves on its own? Media stops when paused and settled, Custom never
         // moves; the caller skips identical frames.
         static bool animates(Scene s);
-        // Shows real phone/head-unit data? Only Media.
+        // Shows real phone/head-unit data? Media, and Tape's position.
         static bool usesMedia(Scene s);
 
         // Stored by name, never by index.
@@ -148,6 +151,8 @@ namespace MegaOpen
         void drawRain(uint8_t* b) const;
         void drawRadar(uint8_t* b) const;
         void drawLife(uint8_t* b) const;
+        void drawTape(uint8_t* b) const;
+        void drawTunnel(uint8_t* b) const;
 
         // The spectrum is fake: there is no audio (AMS sends metadata, the head
         // unit sends text). A per-bar random walk with decaying peaks.
@@ -199,6 +204,7 @@ namespace MegaOpen
         static bool lit(const uint8_t* b, int x, int y);
 
         uint32_t _frame = 0;            // Rings, and anything else counting frames
+        uint32_t _tapeTurn = 0;         // Tape's reels: frames spent playing
 
         const uint8_t* _custom = nullptr;   // Scene::Custom, borrowed (setCustom)
 

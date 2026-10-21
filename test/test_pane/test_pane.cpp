@@ -153,16 +153,16 @@ static void test_setting_a_scene_out_of_range_falls_back_to_off()
     TEST_ASSERT_FALSE(p.on());
 }
 
-static void test_only_media_claims_to_use_media()
+static void test_only_media_and_tape_claim_to_use_media()
 {
     // The page says "оздоблення" on the strength of this. A scene that wrongly
     // claimed real data would be inviting somebody to read a level off a random
-    // walk.
+    // walk. Tape's packs are the real position.
     for (uint8_t i = 0; i < MediaPane::SCENE_COUNT; ++i) {
         const auto s = (MediaPane::Scene)i;
-        TEST_ASSERT_EQUAL_MESSAGE(s == MediaPane::Scene::Media,
+        TEST_ASSERT_EQUAL_MESSAGE(s == MediaPane::Scene::Media || s == MediaPane::Scene::Tape,
                                   MediaPane::usesMedia(s),
-                                  "usesMedia disagrees with the one real scene");
+                                  "usesMedia disagrees with the real scenes");
     }
     TEST_ASSERT_FALSE(MediaPane::animates(MediaPane::Scene::Off));
 }
@@ -486,6 +486,7 @@ static void test_every_decorative_scene_moves_when_stepped()
     for (uint8_t i = 0; i < MediaPane::SCENE_COUNT; ++i) {
         const auto s = (MediaPane::Scene)i;
         if (s == MediaPane::Scene::Off || s == MediaPane::Scene::Media ||
+            s == MediaPane::Scene::Tape ||
             s == MediaPane::Scene::Clock || s == MediaPane::Scene::Custom) continue;
         MediaPane p;
         p.setScene(s);
@@ -498,6 +499,63 @@ static void test_every_decorative_scene_moves_when_stepped()
         TEST_ASSERT_TRUE_MESSAGE(memcmp(a, b, MediaPane::BYTES) != 0,
                                  MediaPane::sceneName(s));
     }
+}
+
+// Tape: the reels turn while playing and stop when paused, like a deck.
+static void test_the_tape_turns_only_while_playing()
+{
+    MediaPane p;
+    p.setScene(MediaPane::Scene::Tape);
+    p.setProgress(60, 200);
+    p.setPlaying(true);
+    uint8_t a[MediaPane::BYTES], b[MediaPane::BYTES];
+    p.step();
+    composeGuarded(p, a);
+    TEST_ASSERT_TRUE(litPixels(a) > 0);
+    p.step(); p.step();
+    composeGuarded(p, b);
+    TEST_ASSERT_TRUE_MESSAGE(memcmp(a, b, MediaPane::BYTES) != 0, "playing, the reels stood still");
+    p.setPlaying(false);
+    composeGuarded(p, a);
+    for (int f = 0; f < 5; ++f) p.step();
+    composeGuarded(p, b);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, memcmp(a, b, MediaPane::BYTES), "paused, the reels turned");
+    // The head unit has no play state: turning, as Media's bars run.
+    p.setHasTransport(false);
+    for (int f = 0; f < 3; ++f) p.step();
+    composeGuarded(p, a);
+    TEST_ASSERT_TRUE(memcmp(a, b, MediaPane::BYTES) != 0);
+}
+
+// Lit pixels in a column band: the left reel lives in x 2..28, the right in
+// 19..45; their outer quarters are each reel's alone.
+static uint16_t litIn(const uint8_t* b, int x0, int x1)
+{
+    uint16_t n = 0;
+    for (int y = 7; y < 34; ++y)
+        for (int x = x0; x <= x1; ++x)
+            if (b[y * MediaPane::STRIDE + (x >> 3)] & (0x80 >> (x & 7))) ++n;
+    return n;
+}
+
+// The tape winds from left to right with the position: at the start the
+// left pack is the big one, at the end the right.
+static void test_the_tape_winds_with_the_position()
+{
+    MediaPane p;
+    p.setScene(MediaPane::Scene::Tape);
+    uint8_t a[MediaPane::BYTES], b[MediaPane::BYTES];
+    p.setProgress(0, 200);
+    composeGuarded(p, a);
+    p.setProgress(200, 200);
+    composeGuarded(p, b);
+    TEST_ASSERT_TRUE(litIn(a, 0, 8) > litIn(b, 0, 8));
+    TEST_ASSERT_TRUE(litIn(b, 39, 47) > litIn(a, 39, 47));
+    // Past the end (a seek, AMS rounding) is the end, not beyond it.
+    p.setProgress(500, 200);
+    uint8_t c[MediaPane::BYTES];
+    composeGuarded(p, c);
+    TEST_ASSERT_EQUAL_INT(0, memcmp(b, c, MediaPane::BYTES));
 }
 
 static void test_life_reseeds_rather_than_freezing()
@@ -701,7 +759,7 @@ int main(int, char**)
     RUN_TEST(test_every_scene_round_trips_through_its_name);
     RUN_TEST(test_an_unknown_or_null_scene_name_falls_back_to_off);
     RUN_TEST(test_setting_a_scene_out_of_range_falls_back_to_off);
-    RUN_TEST(test_only_media_claims_to_use_media);
+    RUN_TEST(test_only_media_and_tape_claim_to_use_media);
     RUN_TEST(test_no_scene_writes_outside_the_pane);
     RUN_TEST(test_a_pane_composed_before_it_was_ever_stepped_is_safe);
     RUN_TEST(test_off_composes_an_empty_pane);
@@ -721,5 +779,7 @@ int main(int, char**)
     RUN_TEST(test_compose_does_not_advance_the_animation);
     RUN_TEST(test_the_clock_face_reads_the_time_it_was_given);
     RUN_TEST(test_the_clock_wraps_a_day_rather_than_running_off_the_face);
+    RUN_TEST(test_the_tape_turns_only_while_playing);
+    RUN_TEST(test_the_tape_winds_with_the_position);
     return UNITY_END();
 }

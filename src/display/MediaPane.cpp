@@ -36,6 +36,8 @@ namespace MegaOpen
         {"rain",   "дощ"},
         {"radar",  "радар"},
         {"life",   "життя"},
+        {"tape",   "касета"},
+        {"tunnel", "тунель"},
         {"custom", "своя"},
     };
     static_assert(sizeof(kScenes) / sizeof(kScenes[0]) == (size_t)MediaPane::SCENE_COUNT,
@@ -67,7 +69,7 @@ namespace MegaOpen
         return s != Scene::Off && s != Scene::Custom;
     }
 
-    bool MediaPane::usesMedia(Scene s) { return s == Scene::Media; }
+    bool MediaPane::usesMedia(Scene s) { return s == Scene::Media || s == Scene::Tape; }
 
     MediaPane::Scene MediaPane::carouselNext(Scene s)
     {
@@ -331,12 +333,17 @@ namespace MegaOpen
                 if (++_lifeAge >= kLifeMaxAge || pop < kLifeMinPop) seedLife();
                 return;
             }
-            // Rings, Spiral, Scope and Radar are pure functions of _frame, Clock
+            // Tape turns its reels by a counter of its own, only while playing.
+            case Scene::Tape:
+                if (_hasTransport ? _playing : true) ++_tapeTurn;
+                return;
+            // Rings, Spiral, Scope, Radar and Tunnel are pure functions of _frame, Clock
             // of the time, and Off has nothing to advance.
             case Scene::Rings:
             case Scene::Spiral:
             case Scene::Scope:
             case Scene::Radar:
+            case Scene::Tunnel:
             case Scene::Clock:
             case Scene::Custom:
             case Scene::Off:
@@ -591,6 +598,68 @@ namespace MegaOpen
         memcpy(b, _life, BYTES);
     }
 
+    // A cassette seen face on: shell, label edge, two reels and the tape
+    // running down across the head. Each reel's pack of tape is its share of
+    // the track (left = to come, right = played), so the right one grows as
+    // the song goes. Spokes turn only while playing; with no position (the
+    // head unit) the packs split evenly.
+    void MediaPane::drawTape(uint8_t* b) const
+    {
+        rect(b, 0, 4, 47, 44, false);                    // the shell
+        hline(b, 2, 45, 6);                              // label edge
+        // The head opening, a trapezoid at the bottom.
+        line(b, 12, 44, 15, 38); line(b, 35, 44, 32, 38); hline(b, 15, 32, 38);
+        px(b, 3, 41); px(b, 44, 41);                     // screw holes
+
+        // Packs 0..7 px over a 5 px reel: at most 12 + 5, the 17 px between
+        // the hubs, so they touch and never cross.
+        constexpr int PACK = 7;
+        int right = PACK / 2, left = PACK - PACK / 2;
+        if (_hasTransport && _duration > 0) {
+            right = _elapsed >= _duration ? PACK : (int)((uint32_t)_elapsed * PACK / _duration);
+            left  = PACK - right;
+        }
+        const int cy = 20;
+        const int cxs[2] = {15, 32}, packs[2] = {left, right};
+        const int a0 = (int)(_tapeTurn * 20 % 360);
+        for (int r = 0; r < 2; ++r) {
+            const int cx = cxs[r];
+            circle(b, cx, cy, 4);                        // the hub
+            circle(b, cx, cy, 5 + packs[r]);             // the pack's edge
+            for (int k = 0; k < 3; ++k) {                // three spokes
+                const int a = a0 + k * 120;
+                line(b, cx + isin(a) / 1024, cy - icos(a) / 1024,
+                        cx + 4 * isin(a) / 1024, cy - 4 * icos(a) / 1024);
+            }
+        }
+        // The tape leaves each pack at its foot and runs across the head.
+        line(b, cxs[0], cy + 5 + left, 13, 36);
+        line(b, cxs[1], cy + 5 + right, 34, 36);
+        hline(b, 13, 34, 36);
+    }
+
+    // Squares rushing outward: each grows by a fixed ratio per step (it doubles
+    // every 24 phase units, so equal steps look like equal distances), and is
+    // reborn small at the back once it has passed the border. The far ones
+    // sit on a vanishing point that drifts on a slow Lissajous, the near ones
+    // on the pane's centre. A pure function of _frame.
+    void MediaPane::drawTunnel(uint8_t* b) const
+    {
+        // 256 * 2^(i/24).
+        static const uint16_t kExp[24] = {256, 264, 271, 279, 287, 296, 304, 313, 323, 332, 342, 352,
+                                          362, 373, 384, 395, 406, 418, 431, 443, 456, 470, 483, 497};
+        const int vx = 23 + 7 * isin((int)(_frame * 3)) / 1024;
+        const int vy = 23 + 7 * isin((int)(_frame * 5) + 90) / 1024;
+        constexpr int SQUARES = 8, SPAN = 12, CYCLE = SQUARES * SPAN;   // phase 0..95
+        for (int i = 0; i < SQUARES; ++i) {
+            const int ph = (int)((i * SPAN + _frame * 2) % CYCLE);
+            const int h = (3 << (ph / 24)) * kExp[ph % 24] / 256;      // half-size 3..47
+            const int near = h > 24 ? 24 : h;
+            const int x = vx + (23 - vx) * near / 24, y = vy + (23 - vy) * near / 24;
+            rect(b, x - h, y - h, x + h, y + h, false);
+        }
+    }
+
     void MediaPane::compose(uint8_t* out) const
     {
         clear(out);
@@ -607,6 +676,8 @@ namespace MegaOpen
             case Scene::Rain:   drawRain(out);   break;
             case Scene::Radar:  drawRadar(out);  break;
             case Scene::Life:   drawLife(out);   break;
+            case Scene::Tape:   drawTape(out);   break;
+            case Scene::Tunnel: drawTunnel(out); break;
             case Scene::Custom: if (_custom) memcpy(out, _custom, BYTES); break;
             // Off composes an empty pane: no capture shows a "remove layer"
             // command, so an all-zero image is the only way to blank the glass.

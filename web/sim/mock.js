@@ -151,6 +151,12 @@ function sceneBits(id,t){const p=new Uint8Array(2304),set=(x,y)=>{x=Math.round(x
   case 'rain':for(let s=0;s<30;s++){const x=(s*37)%48,y=((s*13)+f*12)%48;set(x,y);set(x,y+1)}break;
   case 'radar':{circ(24,24,22);circ(24,24,12);const a=f*1.5;for(let r=0;r<22;r++)set(24+r*Math.cos(a),24+r*Math.sin(a));break}
   case 'life':for(let y=0;y<48;y+=2)for(let x=0;x<48;x+=2)if(((x*7+y*13+Math.floor(f))%11)<3){set(x,y);set(x+1,y);set(x,y+1);set(x+1,y+1)}break;
+  case 'tape':{const tr=curTrack(),R=tr.duration?Math.min(7,Math.floor(tr.elapsed/tr.duration*7)):3,L=7-R,a=f*2;
+   for(let x=0;x<48;x++){set(x,4);set(x,44);set(x,6)}for(let y=4;y<45;y++){set(0,y);set(47,y)}
+   [[15,L],[32,R]].forEach(([cx,pk])=>{circ(cx,20,4);circ(cx,20,5+pk);for(let k=0;k<3;k++){const q=a+k*2.094;for(let r=1;r<5;r++)set(cx+r*Math.sin(q),20-r*Math.cos(q))}});
+   for(let x=13;x<35;x++)set(x,36);for(let x=15;x<33;x++)set(x,38);break}
+  case 'tunnel':{const vx=23+7*Math.sin(f*0.3),vy=23+7*Math.cos(f*0.5);for(let i=0;i<8;i++){const ph=(i*12+f*8)%96,h=Math.round(3*2**(ph/24)),n=Math.min(24,h)/24,x=vx+(23-vx)*n,y=vy+(23-vy)*n;
+   for(let k=-h;k<=h;k++){set(x+k,y-h);set(x+k,y+h);set(x-h,y+k);set(x+h,y+k)}}break}
   case 'custom':if(S.med.custom)p.set(S.med.custom);break}
  return p}
 const liveScene=()=>{const m=S.med;return m.paneAuto?CAROUSEL[Math.floor(now()/1000/m.paneCycleS)%CAROUSEL.length]:m.pane};
