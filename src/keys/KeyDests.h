@@ -73,6 +73,22 @@ namespace Keys
         return true;
     }
 
+    // Not in the first minute after boot: an Android head unit takes ~30 s to
+    // boot and say anything, and until then it would read as absent.
+    constexpr uint32_t VOL_FALLBACK_AFTER_MS = 60000;
+
+    // The fallback applied to the masks, exclusively: when on, VOLUME is added
+    // to AMS and taken off the UART (whose sink sends whether or not a head
+    // unit listens), so a press never steps both the phone and the head unit.
+    // True when on.
+    inline bool applyVolumeFallback(DestState (&d)[DEST_COUNT], uint32_t uptimeMs)
+    {
+        if (uptimeMs < VOL_FALLBACK_AFTER_MS || !volumeToAms(d)) return false;
+        d[DEST_AMS].mask  = (uint8_t)(d[DEST_AMS].mask | CLASS_VOLUME);
+        d[DEST_UART].mask = (uint8_t)(d[DEST_UART].mask & ~CLASS_VOLUME);
+        return true;
+    }
+
     // The last panel key, as the keys task resolved it: published through a
     // Snapshot<PanelKeyLast> for the wiring check (/api/affamap?live=1).
     struct PanelKeyLast {

@@ -1298,6 +1298,10 @@ static void keysApplyRouting(const App::KeysTask::Routing& r)
     g_keySink.setEnabled(r.uartOn);
     g_keySink.setClasses(r.uartCls);
     g_keySink.setPulseMs(r.pulseMs);
+#if FEATURE_BLE
+    // While volume falls back to the phone it is the phone's alone.
+    if (g_volToAms.load()) g_keySink.setClasses((uint8_t)(r.uartCls & ~Keys::CLASS_VOLUME));
+#endif
 #if FEATURE_RESISTIVE_KEYS
     // Only on a change: switching the ladder off also opens every rung.
     if (g_resSink.enabled() != r.resOn) g_resSink.setEnabled(r.resOn);
@@ -1318,7 +1322,8 @@ static void keysApplyRouting(const App::KeysTask::Routing& r)
 }
 
 #if FEATURE_BLE
-// Volume nothing live would take goes to the phone (Keys::volumeToAms): the
+// Volume nothing live would take goes to the phone, and only to it
+// (Keys::applyVolumeFallback; not in the first minute after boot): the
 // UART dest is live only while the head unit is heard, so a phone-only car,
 // or a head unit that went quiet, does not leave the volume keys dead. Every
 // keys pass (at most 100 ms apart); logged once per change, not per press.
@@ -1335,10 +1340,11 @@ static void keysVolumeFallback()
 #if FEATURE_USB_HID
     d[Keys::DEST_USB]  = {r.usbCls, true, true};
 #endif
-    const bool on = Keys::volumeToAms(d);
+    const bool on = Keys::applyVolumeFallback(d, millis());
     if (on == g_volToAms.load()) return;
     g_volToAms.store(on);
-    g_amsKeys.setClasses(r.amsCls | (on ? Keys::CLASS_VOLUME : 0));
+    g_amsKeys.setClasses(d[Keys::DEST_AMS].mask);
+    g_keySink.setClasses(d[Keys::DEST_UART].mask);
     if (on) LOGI("key", "vol -> ams (%s)", r.uartOn ? "hu silent" : "uart off");
     else    LOGI("key", "vol -> routing (ams no longer the fallback)");
 }

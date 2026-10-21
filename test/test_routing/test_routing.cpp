@@ -291,6 +291,41 @@ void test_any_live_volume_sink_blocks_the_fallback()
     TEST_ASSERT_FALSE(volumeToAms(d));
 }
 
+// The applied fallback is exclusive: on, the UART loses VOLUME as AMS gains
+// it, so the UART sink (which sends whether or not anyone listens) and the
+// phone never both step. Here the UART is counted live to show the mask.
+void test_the_applied_fallback_is_the_phones_alone()
+{
+    DestState d[DEST_COUNT];
+    factory(d, false, true);
+    TEST_ASSERT_TRUE(applyVolumeFallback(d, VOL_FALLBACK_AFTER_MS));
+    TEST_ASSERT_EQUAL_HEX8(0, d[DEST_UART].mask & CLASS_VOLUME);
+    TEST_ASSERT_EQUAL_HEX8(CLASS_VOLUME, d[DEST_AMS].mask & CLASS_VOLUME);
+    d[DEST_UART].live = true;
+    TEST_ASSERT_EQUAL_HEX8(1u << DEST_AMS, keyDests(Action::VolUp, false, d));
+    // Transport is untouched: still the UART's and the phone's.
+    TEST_ASSERT_EQUAL_HEX8((1u << DEST_UART) | (1u << DEST_AMS), keyDests(Action::SrcNext, false, d));
+}
+
+// Not in the first minute: an Android head unit boots silent for ~30 s.
+void test_no_fallback_in_the_first_minute()
+{
+    DestState d[DEST_COUNT];
+    factory(d, false, true);
+    TEST_ASSERT_FALSE(applyVolumeFallback(d, VOL_FALLBACK_AFTER_MS - 1));
+    TEST_ASSERT_EQUAL_HEX8(CLASS_VOLUME, d[DEST_UART].mask & CLASS_VOLUME);
+    TEST_ASSERT_EQUAL_HEX8(0, d[DEST_AMS].mask & CLASS_VOLUME);
+}
+
+// A heard head unit: the masks are left as the user set them, UART only.
+void test_a_heard_head_unit_leaves_the_masks_alone()
+{
+    DestState d[DEST_COUNT];
+    factory(d, true, true);
+    TEST_ASSERT_FALSE(applyVolumeFallback(d, 600000));
+    TEST_ASSERT_EQUAL_HEX8(1u << DEST_UART, keyDests(Action::VolUp, false, d));
+}
+
 // AMS already masked for volume: nothing to add.
 void test_ams_with_volume_needs_no_fallback()
 {
@@ -351,6 +386,9 @@ int main(int, char**)
     RUN_TEST(test_no_phone_no_fallback);
     RUN_TEST(test_any_live_volume_sink_blocks_the_fallback);
     RUN_TEST(test_ams_with_volume_needs_no_fallback);
+    RUN_TEST(test_the_applied_fallback_is_the_phones_alone);
+    RUN_TEST(test_no_fallback_in_the_first_minute);
+    RUN_TEST(test_a_heard_head_unit_leaves_the_masks_alone);
     RUN_TEST(test_as_long_is_refused_by_ble_and_usb);
     RUN_TEST(test_dest_ids_are_the_catalogs);
     return UNITY_END();
