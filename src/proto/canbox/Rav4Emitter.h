@@ -95,6 +95,7 @@ namespace Canbox
             MSG_HYBRID,      // 0x1F        hybrid energy status
             MSG_VERSION,     // 0x30        version string
             MSG_COOLANT,     // 0x7D 09     coolant on the dashboard channel — EXP_COOLANT
+            MSG_GEAR,        // 0x7D 06     D2 low nibble, the PRND probe — EXP_GEAR
             MSG_COUNT
         };
 
@@ -161,13 +162,17 @@ namespace Canbox
         // Experiments on fields the head unit decodes but no capture has shown
         // in use (docs/hu-decoder.md §2b, §6). Each is its own switch, all OFF
         // by default (NVS "huExp"): only the tablet can say what they show.
-        // A test send from the map page ignores them, like the schedule.
+        // A test send from the map page ignores them, like the schedule, except
+        // EXP_GEAR: the PRND probe is never sent with it off.
         enum Exp : uint8_t {
             EXP_COOLANT  = 1 << 0,   // schedule 0x7D 09 [00][t+40] (1049 idx 2)
             EXP_FUEL_7D04 = 1 << 1,  // 0x7D 04 D4-D5 = fuel litres x10, not F2 08 (1049 idx 5)
             EXP_COMPUTED = 1 << 2,   // range / consumption from Derived when no
                                      // range / fuel_inst / fuel_avg is bound
-            EXP_ALL      = 0x07,
+            EXP_GEAR     = 1 << 3,   // 0x7D 06 [00][prnd & 0x0F] (1049 idx 4): the
+                                     // only way a 0x7D 06 goes out, test or not;
+                                     // a bench sweep finds which value is P/R/N/D
+            EXP_ALL      = 0x0F,
         };
         void    setExperiments(uint8_t m) { _exp = m & EXP_ALL; }
         uint8_t experiments() const { return _exp; }

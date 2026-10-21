@@ -288,10 +288,17 @@ Two more tables widen the search: `0x2A [code][state]` (`f3158q`, adds actions
 ## 6. Bench list this produces, cheapest first
 
 1. `0x24` len 2 with D1 = 0 — does a bonnet icon that was there go away?
-2. `0x7D 04` with D4-D5 ≠ `F2 08` — which dashboard number moves?
-3. `0x7D 09 [00][coolant+40]` — does a temperature appear?
+2. `0x7D 04` with D4-D5 ≠ `F2 08` — which dashboard number moves? (Ready:
+   the "пальне в 7D04" experiment.)
+3. `0x7D 09 [00][coolant+40]` — does a temperature appear? (Ready: the
+   "t° ОР" experiment.)
 4. `0x7D 05` — same icons as `0x24`, plus bonnet?
-5. `0x7D 06` D2 = 0…3 — PRND?
+5. `0x7D 06` D2 = 0…15 — PRND? Ready: switch on "селектор 7D06" (Авто →
+   RAV4 → ГУ → Експерименти ГУ, `EXP_GEAR`), then "Прогін селектора" sends
+   `0x7D 06 [00][n]` for n = 0…15, one value a step (3/5/8 s), through
+   `/api/map/test` with id `prnd`. Note the D2 at which the tablet shows P, R,
+   N or D; the emitter can then map `gear` onto it. Nothing builds a
+   `0x7D 06` with the switch off.
 6. `0x7D 01` with `b1`/`b2` — fog icons?
 7. `0x20` with the ten unexplored codes, then `0x2A`/`0x2F`/`0x33` — find mute and play/pause.
 

@@ -401,7 +401,7 @@ po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(
   if(r.src==='const'&&!(typeof r.k==='number'&&toInt(r.k,t.dec)>=toInt(t.min,t.dec)&&toInt(r.k,t.dec)<=toInt(t.max,t.dec)))return fail(400,r.id+': k: '+t.min+'..'+t.max);
   E.push([r,t])}
 
- if(q.exp!==undefined&&!(isInt(q.exp)&&q.exp>=0&&q.exp<=7))return fail(400,'exp: 0..7, the experiment bits');
+ if(q.exp!==undefined&&!(isInt(q.exp)&&q.exp>=0&&q.exp<=15))return fail(400,'exp: 0..15, the experiment bits');
  if(q.exp!==undefined){S.huExp=q.exp;emit(2,'HU','[map] head-unit experiments: '+q.exp)}
  if(q.send!==undefined){S.emitter=!!q.send;emit(2,'HU','[map] send to the head unit '+(S.emitter?'on':'off'))}
  if(q.units){if(q.units.fuel!=null)S.tun.fuelUnit=q.units.fuel;if(q.units.trip!=null)S.tun.tripUnit=q.units.trip}
@@ -413,6 +413,7 @@ const frameFor=(t,v)=>{const[c,sub0]=t.cmd.split(' '),sub=sub0&&sub0!=='A/C'?sub
 /* WebUiMap.cpp: перед тестом — чи носить 0x28 цю форму; ворота повідомлень (одометр, TPMS…) мок не моделює */
 po('/api/map/test',q=>{const t=C.raise.find(x=>x.id===q.id);if(!t)return fail(404,'no such field');if(!t.fw)return fail(409,t.id+': firmware does not send '+t.cmd+' yet');if(!S.set.uartEnabled)return fail(409,'head-unit UART is off');
  if(t.cmd==='28'&&S.tun.cmd28)return fail(409,t.id+': 0x28 carries the A/C form now: switch it in Service, Raise');
+ if(t.id==='prnd'&&!((S.huExp|0)&8))return fail(409,'prnd: switch on the selector experiment first');
  if(t.cmd==='28 A/C'&&!S.tun.cmd28)return fail(409,t.id+': 0x28 carries the outside temperature now: switch it in Service, Raise');
  const v=q.value;if(typeof v!=='number'||!(v>=t.min&&v<=t.max)||(t.kind==='b'&&v!==0&&v!==1))return fail(400,t.id+': value: '+t.min+'..'+t.max);
  S.tests[t.id]={v,until:now()+30000};const b=frameFor(t,v);uart('T',b);S.hu.txVeh++;emit(2,'HU','[map] test '+t.id+' = '+v+' -> '+b);return {ok:true,bytes:b}});

@@ -209,7 +209,7 @@ void WebUi::routesMap()
         const bool hasExp = !d["exp"].isNull();
         const int exp = d["exp"] | -1;
         if (hasExp && (!d["exp"].is<int>() || exp < 0 || exp > Canbox::Rav4Emitter::EXP_ALL))
-            return r->reply(400, "text/plain", "exp: 0..7, the experiment bits");
+            return r->reply(400, "text/plain", "exp: 0..15, the experiment bits");
 
         const bool hasUnits = d["units"].is<JsonObject>();
         int fuel = cfg.tuning.fuelUnit, trip = cfg.tuning.tripUnit;
@@ -322,10 +322,11 @@ void WebUi::routesMap()
             if (hasSend) _cfg->saveHuSend(send);
             if (hasExp) {
                 _cfg->saveHuExp((uint8_t)exp);
-                LogBus::printf("[map] head-unit experiments: coolant %s, fuel in 7D04 %s, computed %s",
+                LogBus::printf("[map] head-unit experiments: coolant %s, fuel in 7D04 %s, computed %s, selector %s",
                                exp & Canbox::Rav4Emitter::EXP_COOLANT ? "on" : "off",
                                exp & Canbox::Rav4Emitter::EXP_FUEL_7D04 ? "on" : "off",
-                               exp & Canbox::Rav4Emitter::EXP_COMPUTED ? "on" : "off");
+                               exp & Canbox::Rav4Emitter::EXP_COMPUTED ? "on" : "off",
+                               exp & Canbox::Rav4Emitter::EXP_GEAR ? "on" : "off");
             }
             if (hasSend) LogBus::printf("[map] send to the head unit %s", send ? "on" : "off");
         }
@@ -373,6 +374,9 @@ void WebUi::routesMap()
         App::Hu::EmitterCfg cfg;
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy, try again");
         if (const char* why = formWhy(t.msg, cfg.tuning.cmd28)) return bad(r, 409, id, why);
+        // An unknown frame to the tablet: only with its switch on, test or not.
+        if (t.msg == Canbox::Rav4Emitter::MSG_GEAR && !(cfg.exp & Canbox::Rav4Emitter::EXP_GEAR))
+            return bad(r, 409, id, "switch on the selector experiment first");
 
         int32_t v = 0;
         if (!d["value"].is<double>() || !RT::toInt(d["value"].as<double>(), t.dec, v) ||

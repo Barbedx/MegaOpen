@@ -113,6 +113,10 @@ namespace Canbox
             "Decoded by k0.a3 (D2 - 40 -> dashboard index 2), never seen in a capture: "
             "scheduled only with the coolant experiment on. Whether anything shows is for "
             "the tablet to say."},
+        /* MSG_GEAR        */ {Conf::Low,
+            "Decoded by k0.a3 (D2 low nibble -> dashboard index 4), never seen in a capture. "
+            "Built only with the selector experiment on, from the prnd probe the map page "
+            "sweeps 0-15; which value the tablet shows as P, R, N or D is still unknown."},
     };
     static_assert(sizeof(kMsgs) / sizeof(kMsgs[0]) == Rav4Emitter::MSG_COUNT,
                   "Rav4Catalog message table is out of step with Rav4Emitter::Msg — it is "

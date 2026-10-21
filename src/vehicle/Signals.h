@@ -222,6 +222,9 @@ namespace Vehicle
         SIG_RANGE_CALC,        // km, fuel_level over cons_avg
         SIG_TRIP_FUEL,         // L x100, since boot
         SIG_TRIP_KM,           // km x10, since boot
+        // A head-unit probe, not a car value: 0x7D 06 D2's low nibble, set by
+        // hand from the map page (Rav4Emitter::EXP_GEAR) to find PRND.
+        SIG_PRND,
 
         SIG_COUNT
     };

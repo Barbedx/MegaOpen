@@ -183,6 +183,7 @@ namespace Vehicle
         {"range_calc",      "km",   0,    9999, 0, false, GRP_TRIP},
         {"trip_fuel",       "L",    0, 9999999, 2, false, GRP_TRIP},
         {"trip_km",         "km",   0, 9999999, 1, false, GRP_TRIP},
+        {"prnd",            "0-15", 0,      15, 0, false, GRP_DRIVE},
     };
 
     static_assert(sizeof(kMeta) / sizeof(kMeta[0]) == SIG_COUNT,
@@ -237,6 +238,7 @@ namespace Vehicle
         "Прискорення вздовж", "Прискорення вбік", "Швидкість повороту (yaw)",
         "Передача", "Співвідношення км/год на 1000 об", "Витрата, л/год", "Витрата зараз",
         "Витрата середня", "Запас ходу (розрах.)", "Пальне за поїздку", "Пробіг за поїздку",
+        "ГУ: селектор, проба 0x7D 06",
     };
     static_assert(sizeof(kLabel) / sizeof(kLabel[0]) == SIG_COUNT - SIG_FUEL_LEVEL,
                   "kLabel is out of step with enum Sig");

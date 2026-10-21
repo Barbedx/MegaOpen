@@ -898,9 +898,9 @@ void test_raise_targets_ids_are_unique_and_name_real_signals()
         else      TEST_ASSERT_EQUAL_UINT8_MESSAGE(Canbox::NO_MSG, t.msg, t.id);
     }
     TEST_ASSERT_EQUAL_INT(-1, RT::find("nope"));
-    // The three the app decodes that the firmware does not send yet (eng_temp
-    // goes as the coolant experiment, 0x7D 09).
-    for (const char* id : {"bonnet", "prnd", "batt"}) {
+    // The two the app decodes that the firmware does not send yet (eng_temp
+    // goes as the coolant experiment, 0x7D 09; prnd as the selector one, 0x7D 06).
+    for (const char* id : {"bonnet", "batt"}) {
         const int i = RT::find(id);
         TEST_ASSERT_TRUE_MESSAGE(i >= 0, id);
         TEST_ASSERT_FALSE_MESSAGE(RT::at((uint8_t)i).fw, id);
@@ -913,6 +913,7 @@ void test_every_sent_raise_target_changes_its_message()
     // message's builder: the row is wired to the bytes it claims.
     namespace RT = Canbox::RaiseTargets;
     E e;
+    e.setExperiments(E::EXP_GEAR);                  // 0x7D 06 is built only with it
     for (uint8_t i = 0; i < RT::count(); ++i) {
         const Canbox::TargetView t = RT::at(i);
         if (!t.fw) continue;
@@ -932,14 +933,16 @@ void test_every_sent_raise_target_changes_its_message()
     }
     // And every signal the emitter reads has a row (only the 8 it does not
     // send are missing, and eng_temp is listed as not sent). The Mégane
-    // broadcast signals from SIG_FUEL_LEVEL on have no Raise field.
+    // broadcast signals from SIG_FUEL_LEVEL on have no Raise field, except
+    // the selector probe, SIG_PRND.
     bool listed[SIG_COUNT] = {};
     uint8_t n = 0;
     for (uint8_t i = 0; i < RT::count(); ++i) {
         const uint8_t sg = RT::at(i).sig;
         if (sg < SIG_COUNT && !listed[sg]) { listed[sg] = true; ++n; }
     }
-    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LEVEL - 7, n);
+    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LEVEL - 7 + 1, n);
+    TEST_ASSERT_TRUE(listed[SIG_PRND]);
 }
 
 void test_raise_values_place_the_decimal_point()
@@ -1015,10 +1018,51 @@ void test_experiments_are_off_by_default_and_each_switches_one_thing()
     TEST_ASSERT_EQUAL_HEX8_ARRAY(cool, frame, sizeof(cool));
 }
 
+static int g_sub06;
+static uint8_t g_gear[8];
+static void gearCapture(const uint8_t* f, uint8_t n, void*)
+{
+    if (f[1] == 0x7D && f[3] == 0x06) { ++g_sub06; if (n <= sizeof(g_gear)) memcpy(g_gear, f, n); }
+}
+
+// 0x7D 06 is an unknown frame to the tablet: nothing builds it, schedule or
+// test, until the selector experiment is on, and then only from the probe.
+void test_selector_probe_goes_out_only_with_its_experiment()
+{
+    State s;
+    E e;
+    e.begin(gearCapture, nullptr);
+    uint8_t frame[64], len = 0;
+    g_sub06 = 0;
+    s.pin(SIG_PRND, 2);
+    for (uint32_t t = 0; t < 5000; t += 100) e.tick(s, 1000 + t);
+    TEST_ASSERT_EQUAL_INT(0, g_sub06);
+    TEST_ASSERT_FALSE(e.preview(E::MSG_GEAR, s, frame, len));
+    TEST_ASSERT_FALSE(e.sendNow(E::MSG_GEAR, s));
+    // On: 0x7D 06 [00][02], and each new value goes out at once.
+    e.setExperiments(E::EXP_GEAR);
+    for (uint32_t t = 0; t < 2000; t += 100) e.tick(s, 10000 + t);
+    TEST_ASSERT_TRUE(g_sub06 > 0);
+    const uint8_t two[] = {0x2E, 0x7D, 0x03, 0x06, 0x00, 0x02};
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(two, g_gear, sizeof(two));
+    s.pin(SIG_PRND, 9);
+    e.tick(s, 12050);
+    TEST_ASSERT_EQUAL_HEX8(0x09, g_gear[5]);
+    // The probe is clamped to the nibble by its signal's range.
+    s.pin(SIG_PRND, 40);
+    TEST_ASSERT_TRUE(e.preview(E::MSG_GEAR, s, frame, len));
+    TEST_ASSERT_EQUAL_HEX8(0x0F, frame[5]);
+    // No probe value: nothing, even with the switch on.
+    s.unpin(SIG_PRND);
+    TEST_ASSERT_FALSE(s.has(SIG_PRND));
+    TEST_ASSERT_FALSE(e.preview(E::MSG_GEAR, s, frame, len));
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
     RUN_TEST(test_experiments_are_off_by_default_and_each_switches_one_thing);
+    RUN_TEST(test_selector_probe_goes_out_only_with_its_experiment);
     RUN_TEST(test_raise_targets_ids_are_unique_and_name_real_signals);
     RUN_TEST(test_every_sent_raise_target_changes_its_message);
     RUN_TEST(test_raise_values_place_the_decimal_point);

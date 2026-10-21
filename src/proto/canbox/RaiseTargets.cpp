@@ -19,6 +19,7 @@ namespace Canbox
         const char* const kMsgCmd[] = {
             "24", "28", "28 A/C", "29", "7D 01", "7D 03", "7D 04", "7D 0A", "21", "22", "23",
             "1E", "1D", "25", "26", "31", "32", "50", "52", "58", "1F", "30", "7D 09",
+            "7D 06",
         };
         static_assert(sizeof(kMsgCmd) / sizeof(kMsgCmd[0]) == M::MSG_COUNT, "kMsgCmd is out of step with Msg");
 
@@ -33,10 +34,9 @@ namespace Canbox
             int32_t     min, max;
             uint8_t     dec;
         };
-        enum : uint8_t { NF_BONNET = 0, NF_PRND, NF_ENG_TEMP, NF_BATT, NF_NONE = 0xFF };
+        enum : uint8_t { NF_BONNET = 0, NF_ENG_TEMP, NF_BATT, NF_NONE = 0xFF };
         const NoFw kNoFw[] = {
             {"bonnet", "7D 05", "",  true,  0, 1,   0},
-            {"prnd",   "7D 06", "",  false, 0, 4,   0},
             {nullptr,  "7D 09", "",  false, 0, 0,   0},
             {"batt",   "41 02", "В", false, 0, 160, 1},
         };
@@ -68,7 +68,7 @@ namespace Canbox
             T(SIG_AVG_SPEED, MSG_TRIP, G_DRIVE, "Середня швидкість"),   // also 7D 03, which needs speed
             T(SIG_RPM, MSG_RPM, G_DRIVE, "Оберти"),
             T(SIG_STEERING, MSG_STEER, G_DRIVE, "Кут керма"),
-            X(SIG_COUNT, G_DRIVE, "Селектор P R N D", NF_PRND),
+            T(SIG_PRND, MSG_GEAR, G_DRIVE, "Селектор P R N D (проба, експеримент)"),
 
             T(SIG_ODOMETER, MSG_ODO, G_TRIP, "Одометр"),
             T(SIG_TRIP1, MSG_ODO, G_TRIP, "Поїздка 1"),

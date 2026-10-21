@@ -20,6 +20,7 @@ namespace Canbox
         M_ILLUM = M::MSG_ILLUM,   M_VSET = M::MSG_VSET,
         M_SEATS = M::MSG_SEATS,   M_HYBRID = M::MSG_HYBRID,
         M_VERSION = M::MSG_VERSION, M_COOLANT = M::MSG_COOLANT,
+        M_GEAR = M::MSG_GEAR,
         M_COUNT = M::MSG_COUNT
     };
 
@@ -33,25 +34,26 @@ namespace Canbox
         "radar_rear 0x1E", "radar_front 0x1D", "tpms 0x25", "settings 0x26",
         "amplifier 0x31", "system 0x32", "illum_delay 0x50", "vset 0x52",
         "seats 0x58", "hybrid 0x1F", "version 0x30", "coolant 0x7D09",
+        "prnd 0x7D06",
     };
 
     static const uint8_t kCmd[M_COUNT] = {
         0x24, 0x28, 0x28, 0x29, 0x7D, 0x7D, 0x7D, 0x7D,
         0x21, 0x22, 0x23, 0x1E, 0x1D, 0x25, 0x26, 0x31,
-        0x32, 0x50, 0x52, 0x58, 0x1F, 0x30, 0x7D,
+        0x32, 0x50, 0x52, 0x58, 0x1F, 0x30, 0x7D, 0x7D,
     };
 
     static const uint32_t kInterval[M_COUNT] = {
         250, 5000, 1000, 200, 200, 500, 10000, 333,
         5000, 1000, 5000, 100, 100, 5000, 5000, 5000,
-        5000, 10000, 5000, 5000, 1000, 10000, 5000,
+        5000, 10000, 5000, 5000, 1000, 10000, 5000, 1000,
     };
 
     // On-change messages go out as soon as their payload changes, not on the timer.
     static const bool kOnChange[M_COUNT] = {
         true, false, true, false, true, false, false, false,
         false, false, false, true, true, false, true, true,
-        true, false, true, true, false, false, true,
+        true, false, true, true, false, false, true, true,
     };
 
     // 0x21/0x22/0x23 are big-endian, unlike the 0x7D family.
@@ -522,6 +524,15 @@ namespace Canbox
                 if (t > 255) t = 255;
                 cmd = 0x7D; len = 3;
                 p[0] = 0x09; p[1] = 0x00; p[2] = (uint8_t)t;
+                return true;
+            }
+            case M_GEAR: {
+                // D1 bits are other flags (codes 138/139, 1049 idx 12): left 0.
+                // D2's low nibble goes to 1049 idx 4, the shape of PRND
+                // (docs/hu-decoder.md §2b); the values are the bench's to find.
+                if (!(_exp & EXP_GEAR) || !s.has(SIG_PRND)) return false;
+                cmd = 0x7D; len = 3;
+                p[0] = 0x06; p[1] = 0x00; p[2] = nib(s.get(SIG_PRND), 15);
                 return true;
             }
             case M_VERSION: {
