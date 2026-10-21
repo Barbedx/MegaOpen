@@ -217,11 +217,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   samples the TWAI status, drains the frame trace, publishes `PanelStatus` and
   beats the task registry the OTA trial watches; `AffaTask` has no per-pass
   hook, and an owner loop on `waitRx()` + `WakePacer` is the supported shape.
-- **Move the AffaDisplay pin from `#v1.1.1` to `#v1.1.2`** with the next
-  release. v1.1.2 (2026-10-21) makes `Priority::Urgent` jobs FIFO among
-  themselves (they went out in reverse order; `setPower` is Urgent) and brings
-  its docs and comments in line with the code (the old "~12 places" list was
-  already fixed upstream).
 
 ## Done
 
