@@ -75,6 +75,15 @@ void test_ids_unique_and_findable()
     TEST_ASSERT_EQUAL(-1, Registry::indexOf(nullptr));
 }
 
+// POST /api/settings holds one change per entry in a fixed buffer: a request
+// that sets every setting at once (a settings import) must fit, and anything
+// past the buffer is a 400 (WebUi.cpp), never a silent drop.
+void test_one_request_can_change_every_setting()
+{
+    TEST_ASSERT_TRUE(Registry::count() <= Registry::MAX_CHANGES);
+    TEST_ASSERT_TRUE(Registry::MAX_CHANGES <= 255);   // the handler counts in a uint8_t
+}
+
 void test_tags_fit_the_panel()
 {
     for (size_t i = 0; i < Registry::count(); ++i) {
@@ -582,6 +591,7 @@ int main(int, char**)
 {
     UNITY_BEGIN();
     RUN_TEST(test_ids_unique_and_findable);
+    RUN_TEST(test_one_request_can_change_every_setting);
     RUN_TEST(test_tags_fit_the_panel);
     RUN_TEST(test_parents_are_groups_listed_before_their_children);
     RUN_TEST(test_enums_have_ascii_ids_and_names);

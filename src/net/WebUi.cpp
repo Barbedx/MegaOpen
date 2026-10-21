@@ -564,7 +564,8 @@ void WebUi::routes()
         // A Str's text stays in `d`, which outlives the apply below.
         struct Change { const Cfg::SEntry* e; int32_t v; const char* text; };
         // Static: httpd serves one request at a time, and 1 kB is not for its stack.
-        static Change ch[64];
+        // Room for every registry entry; more keys than that is a 400, never a drop.
+        static Change ch[Cfg::Registry::MAX_CHANGES];
         uint8_t n = 0;
         static char err[96];
         for (JsonPairConst kv : d.as<JsonObjectConst>()) {
@@ -638,7 +639,11 @@ void WebUi::routes()
                 snprintf(err, sizeof(err), "%s: %s", e->id, why);
                 return r->reply(400, "text/plain", err);
             }
-            if (n < sizeof(ch) / sizeof(ch[0])) ch[n++] = Change{e, v, text};
+            if (n >= sizeof(ch) / sizeof(ch[0])) {
+                snprintf(err, sizeof(err), "too many settings in one request: %u at most", (unsigned)(sizeof(ch) / sizeof(ch[0])));
+                return r->reply(400, "text/plain", err);
+            }
+            ch[n++] = Change{e, v, text};
         }
 
         // The rules first: a busy hand-off is the last refusal, so a refused
