@@ -72,7 +72,14 @@ void WebUi::routesGhOta()
 
     // Only reached when gateLocalOta()'s filter turned ElegantOTA's own
     // handlers away (PsychicHttp hands a filtered request to onNotFound).
-    auto refused = [](PsychicRequest* r) { return fwBusy(r, "a GitHub update owns the OTA slot"); };
+    // The file upload on the page shows this text as its error.
+    auto refused = [](PsychicRequest* r) {
+        GhOta::View v;
+        GhOta::view(v);
+        return fwBusy(r, v.phase == GhOta::Phase::Written
+                             ? "a GitHub update is written and waits for its reboot (Плата › З GitHub)"
+                             : "a GitHub check or download is running: try again when it ends");
+    };
     route("/ota/start", HTTP_GET, refused);
     route("/ota/upload", HTTP_POST, refused);
 }
