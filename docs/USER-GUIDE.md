@@ -11,8 +11,10 @@ labels below are written as the app shows them. Flashing and wiring:
 2. Open `http://192.168.4.1`. On **Плата → WiFi** add your home network.
 3. At home the board is at `http://megaopen.local` (or the IP your router
    gives it). Android before 12 does not resolve `.local`: use the IP.
-4. Change the AP password on **Плата**. It is also the OTA password; there is
-   no other lock.
+4. **Change the AP password on Плата now.** Until you do, anyone in WiFi range
+   of the car can join with the public default (`megaopen`) and flash the
+   board. It is also the OTA password; there is no other lock
+   ([SECURITY.md](../SECURITY.md)).
 
 The tabs: **Огляд** (status of every part), **Екран** (the car's display),
 **Кнопки** (keys and knobs), **Авто** (car CAN, head unit), **Плата** (WiFi,

@@ -83,8 +83,10 @@ factory signal rows show up (a saved map keeps the old set).
 2. Open `http://192.168.4.1`, go to the board page and add your WiFi.
 3. On your network the board is at `http://megaopen.local` (or the router's IP).
 
-OTA and the web API have no password of their own; the WiFi/AP password is the
-only lock. Change the AP password on the board page.
+> **Change the AP password at first boot** (board page). Until you do, anyone
+> in WiFi range of the car can join with the public default and flash the
+> board. OTA and the web API have no password of their own: the WiFi/AP
+> password is the only lock. See [SECURITY.md](SECURITY.md).
 
 ## Build
 

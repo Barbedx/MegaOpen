@@ -131,6 +131,15 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 
 ### Web UI
 
+- **Physical presence for the dangerous routes (security review 2026-10-21,
+  P3).** OTA (local and the GitHub install), factory reset and a settings
+  import allowed only within ~2 min of a panel-menu "Service › Allow update"
+  press (or a knob hold). Protects the home LAN, where the WiFi password is
+  not ours. ~80 lines + a menu row. SECURITY.md.
+- **Signed OTA images (security review 2026-10-21, P4).** Secure boot v2 or
+  app-signature verification with the key a CI secret, so only our releases
+  flash. Key management and the factory flash change: a project.
+
 - **`/api/knobs` stays out of the settings registry (decided 2026-10-21).**
   Slice 7 folded `/api/cap/settings`, `/api/loglevel`, `/api/routing`,
   `/api/messages/enable` and `/api/canbox/tuning` into `/api/settings` (9
