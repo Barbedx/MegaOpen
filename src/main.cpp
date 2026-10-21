@@ -12,6 +12,7 @@
 #include "sinks/UartTx.h"
 #include "proto/canbox/RaiseFramer.h"
 #include "proto/canbox/HuDialect.h"
+#include "display/PanelBusWatch.h"
 #include "proto/canbox/Rav4Emitter.h"
 // Knob codes: the second byte is a detent count, not a press state — no release.
 #include "proto/canbox/Rav4Profile.h"
@@ -549,6 +550,11 @@ static void onAncsNotification(const AppleNotificationService::NotificationInfo&
 //           or ACK, so it can never go bus-off or flood a car's bus with error
 //           frames. carLinkPump() drains it to the car task.
 static affa::TwaiLink g_twai;
+#if FEATURE_DISPLAY_CAN
+// Who else is on the panel bus (display/PanelBusWatch.h): fed by the raw tap,
+// read by panelWatchStep() on this task and by /api/health.
+static MegaOpen::PanelBusWatch g_panelWatch;
+#endif
 static uint32_t  g_canRx = 0;
 // The library's log lines (link and panel) into the LogBus.
 static MegaOpen::AffaLogSink g_affaLog;
@@ -1109,6 +1115,8 @@ static uint32_t          g_affaTracePrinted = 0;
 
 static void affaTap(const affa::Frame& f, affa::Direction d, void*)
 {
+    // Received frames only: what the rest of the bus says, never our own.
+    if (d != affa::Direction::Tx) g_panelWatch.onRx(f.id, f.len, f.data);
     // Feed the raw frame ring: the panel bus is not a car source.
     ringPut((d == affa::Direction::Tx) ? 'T' : 'R', f.id, f.data, f.len);
 
@@ -1941,6 +1949,12 @@ void setup()
              (unsigned)cfg.rxQueue);
     }
     memMark("can+display");
+    // Listen before talking: the TX gate stays shut until PanelBusWatch has
+    // heard the bus for LISTEN_MS without another master on it
+    // (panelWatchStep()), so an OEM radio is found before we send a sync.
+    g_twai.setTxEnabled(false);
+    g_panelWatch.begin(millis());
+    g_web.attachPanelWatch(&g_panelWatch);
     // Passive = a real radio owns the handshake; we send no sync or hello and
     // never register. Must be set if an OEM radio is on the bus.
     panel.setPassive(!g_cfg.s().funcReg);
@@ -2425,6 +2439,32 @@ static void loopWait()
 #endif
 }
 
+#if FEATURE_DISPLAY_CAN
+// The panel bus watch's verdicts, applied on the panel task after each poll().
+// Another master on the bus (an OEM radio): the stack goes silent for good,
+// passive (no sync, no hello, no registration), TX gate shut and the
+// controller listen-only (not even an ACK), logged once. Otherwise the TX
+// gate opens once the listen window has passed.
+static void panelWatchStep(uint32_t now)
+{
+    static bool s_silent = false;
+    if (s_silent) return;
+    if (g_panelWatch.foreignMaster()) {
+        s_silent = true;
+        App::Panel::lib().setPassive(true);
+        g_twai.setTxEnabled(false);
+        const bool lo = g_twai.setListenOnly(true);
+        LogBus::printf("[panel] another bus master on the panel bus (sync 0x%03X): MegaOpen stays silent "
+                       "(passive, TX off, listen-only%s) until reboot",
+                       (unsigned)g_panelWatch.masterId(), lo ? "" : " FAILED");
+        return;
+    }
+    // Once: after that the gate is whoever else's to shut.
+    static bool s_open = false;
+    if (!s_open && g_panelWatch.mayTransmit(now)) { s_open = true; g_twai.setTxEnabled(true); }
+}
+#endif
+
 void loop()
 {
     const uint32_t now = millis();
@@ -2478,6 +2518,7 @@ void loop()
     // its verdicts go back there from inside pump().
     if (App::Panel::present()) {
         App::Panel::pump(now);
+        panelWatchStep(now);
         lap("disp.poll");
     }
 #endif

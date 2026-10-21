@@ -987,10 +987,21 @@ void WebUi::routes()
             static constexpr Why W[] = {
                 {"panel_off", "FEATURE_DISPLAY_CAN is off"},
                 {"panel_unregistered", "registration lost — panel is not completing the handshake"},
-                {"panel_ok", ""}};
+                {"panel_ok", ""},
+                {"panel_foreign_master", "another radio drives this panel; MegaOpen stays silent (passive, listen-only)"},
+                {"panel_cluster_only", "only an instrument cluster answers on this bus, no AFFA panel"}};
             const bool reg = ps.attached && ps.registered;
-            const uint8_t i = !ps.attached ? 0 : reg ? 2 : 1;
-            JsonObject o = chain("panel", !ps.attached ? "off" : reg ? "ok" : "broken", W[i]);
+            // What else is on the bus (PanelBusWatch) explains a panel that
+            // never registers: an OEM radio has it (and we stay silent), or
+            // there is no panel at all.
+            const bool foreign = _panelWatch && _panelWatch->foreignMaster();
+            const bool cluster = !reg && _panelWatch && _panelWatch->clusterOnly();
+            const uint8_t i = !ps.attached ? 0 : foreign ? 3 : reg ? 2 : cluster ? 4 : 1;
+            JsonObject o = chain("panel", i == 0 ? "off" : i == 2 ? "ok" : i == 3 ? "idle" : "broken", W[i]);
+            if (_panelWatch) {
+                o["foreignMasters"] = _panelWatch->masters();
+                o["clusterPings"]   = _panelWatch->clusterPings();
+            }
             o["rxFrames"] = _canRx ? *_canRx : 0;
             o["rxPin"]    = (int)Board::PIN_CAN_RX;
             o["txPin"]    = (int)Board::PIN_CAN_TX;

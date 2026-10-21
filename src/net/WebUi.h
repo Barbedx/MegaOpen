@@ -27,6 +27,7 @@ static inline int replyPage(PsychicRequest* r, const uint8_t* gz, size_t len)
 }
 #include "Catalog.h"
 #include "../proto/canbox/HuDialect.h"
+#include "../display/PanelBusWatch.h"
 
 // A JSON body streamed in chunks from one static buffer rather than built as
 // one String: httpd serves one request at a time. /api/catalog, /api/logs?since=,
@@ -198,6 +199,8 @@ public:
     void attachHuMedia(HuMediaSource* hu) { _hu = hu; }
     // Which canbox profile the head unit speaks (health `hu`); hu task writes.
     void attachHuDialect(const Canbox::HuDialect* d) { _huDialect = d; }
+    // Who else is on the panel bus (health `panel`).
+    void attachPanelWatch(const MegaOpen::PanelBusWatch* w) { _panelWatch = w; }
 
     // BLE status string and bond reset. Function pointers so WebUi compiles
     // with FEATURE_BLE off (bluetooth.h drags NimBLE in).
@@ -427,4 +430,5 @@ private:
     Sinks::CanboxUartSink* _keySink = nullptr;
     Canbox::RxParser*      _huRx = nullptr;
     const Canbox::HuDialect* _huDialect = nullptr;
+    const MegaOpen::PanelBusWatch* _panelWatch = nullptr;
 };
