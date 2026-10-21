@@ -35,7 +35,13 @@ function setChip(el,st,t){if(typeof el==='string')el=$(el);if(!el)return;el.clas
 const CH={ok:'ok',idle:'warn',off:'off',broken:'bad'};
 const svOf=el=>{const c=el&&el.closest&&el.closest('.card');return c?$('.sv',c):null};
 function sv(el,st,t){if(!el)return;clearTimeout(el._t);el.className='sv '+st;el.textContent=st==='busy'?'…':(st==='ok'?'✓ ':'✗ ')+(t||(st==='ok'?'збережено':'помилка'));if(st==='ok')el._t=setTimeout(()=>{el.textContent='✓'},2600)}
-const errT=e=>(e.status?e.status+' · ':'')+(e.message||'помилка');
+/* текст помилки прошивки (англійський, text/plain) — українською для частих; решта як є: вона називає ключ і причину */
+const ERR_T={'busy, try again':'плата зайнята, спробуй ще раз','busy, retry':'плата зайнята, спробуй ще раз','busy':'плата зайнята',
+ 'bad json':'запит не прочитано','no memory':'плата без вільної памʼяті','not found':'на платі такого нема',
+ 'key queue full, try again':'черга клавіш повна, спробуй ще','uart queue full, try again':'черга UART повна, спробуй ще',
+ 'uart task busy, try again':'UART зайнятий, спробуй ще','head-unit UART is off':'ГУ по UART вимкнено'};
+const errMsgT=m=>ERR_T[m]||(/^no [a-z0-9 ]+$/.test(m||'')?'цього нема в збірці або воно вимкнене ('+m+')':m);
+const errT=e=>(e.status?e.status+' · ':'')+(errMsgT(e.message)||'помилка');
 async function run(btn,fn,okText){const s=svOf(btn);if(btn)btn.disabled=true;sv(s,'busy');try{const r=await fn();sv(s,'ok',okText||(r&&r.note)||'готово');return r}catch(e){sv(s,'bad',errT(e))}finally{if(btn)btn.disabled=false}}
 function val(el){if(!el)return;if(el.dataset.hex!==undefined){const n=parseInt(el.value,16);return isNaN(n)?0:n}if(el.classList.contains('seg'))return el.dataset.v;if(el.classList.contains('multi'))return el.dataset.v.split(',').filter(Boolean);
  if(el.type==='checkbox')return el.checked;if(el.type==='number'||el.type==='range'){const n=parseFloat(el.value);return isNaN(n)?undefined:n}
