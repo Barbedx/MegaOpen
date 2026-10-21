@@ -142,6 +142,8 @@ namespace Cfg
                 Change c;
                 c.e = e;
                 if (e->flags & F_RO)                 why = "read-only";
+                // Menu-only entries are set at the board, never by a request.
+                else if (!(e->flags & F_WEB))        why = "only from the panel menu";
                 else if (!Registry::available(m, *e))
                     why = (e->apply & (AP_CAR | AP_HU)) ? "busy, or not on this board" : "not on this board";
                 else if (e->type == SType::Table)  { readTable(m, *e, j, r, err); continue; }

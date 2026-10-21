@@ -1,5 +1,6 @@
 #include <unity.h>
 #include "app/OtaVerdict.h"
+#include "app/Presence.h"
 
 // The OTA trial's verdict (src/app/OtaVerdict.h). A wrong one either keeps a
 // build that hangs the keys, or throws away a good one on a bench with no
@@ -99,6 +100,40 @@ void test_one_verdict_per_boot()
     TEST_ASSERT_TRUE(run(w, T + 40, 2 * T, true) == Act::None);
 }
 
+// ---- physical presence (app/Presence.h) -------------------------------------
+
+// Never pressed: shut, whatever the time.
+void test_presence_is_shut_until_a_press()
+{
+    App::Presence p;
+    TEST_ASSERT_FALSE(p.allowed(0));
+    TEST_ASSERT_FALSE(p.allowed(600000));
+    TEST_ASSERT_EQUAL_UINT32(0, p.remainingMs(1000));
+}
+
+// A press opens WINDOW_MS, to the millisecond; a second press restarts it.
+void test_a_press_opens_the_window_for_two_minutes()
+{
+    App::Presence p;
+    p.press(5000);
+    TEST_ASSERT_TRUE(p.allowed(5000));
+    TEST_ASSERT_TRUE(p.allowed(5000 + App::Presence::WINDOW_MS - 1));
+    TEST_ASSERT_FALSE(p.allowed(5000 + App::Presence::WINDOW_MS));
+    TEST_ASSERT_EQUAL_UINT32(App::Presence::WINDOW_MS - 1000, p.remainingMs(6000));
+    p.press(200000);
+    TEST_ASSERT_TRUE(p.allowed(200000 + App::Presence::WINDOW_MS - 1));
+    TEST_ASSERT_EQUAL_UINT32(2, p.presses());
+}
+
+// Across a millis() wrap.
+void test_the_presence_window_survives_a_millis_wrap()
+{
+    App::Presence p;
+    p.press(0xFFFFF000u);
+    TEST_ASSERT_TRUE(p.allowed(0x00001000u));
+    TEST_ASSERT_FALSE(p.allowed(0xFFFFF000u + App::Presence::WINDOW_MS));
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -109,5 +144,8 @@ int main(int, char**)
     RUN_TEST(test_reverted_after_trial_ms_without_confirmation);
     RUN_TEST(test_healthy_too_late_is_still_reverted);
     RUN_TEST(test_one_verdict_per_boot);
+    RUN_TEST(test_presence_is_shut_until_a_press);
+    RUN_TEST(test_a_press_opens_the_window_for_two_minutes);
+    RUN_TEST(test_the_presence_window_survives_a_millis_wrap);
     return UNITY_END();
 }

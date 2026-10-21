@@ -21,6 +21,7 @@ namespace Cfg
 
         _s.mdnsName = _p.getString("mdns", "megaopen");
         _s.mdnsOn   = _p.isKey("mdnsOn") ? _p.getBool("mdnsOn", true) : true;
+        _s.presenceGate = _p.getBool("presGate", true);
         _s.apPass = _p.getString("apPass", MO_AP_PASS);
 
         _s.timing.debounceMs     = _p.getUShort("dbMs",   20);
@@ -136,6 +137,7 @@ namespace Cfg
 
         _p.putString("mdns", _s.mdnsName);
         _p.putBool  ("mdnsOn", _s.mdnsOn);
+        _p.putBool  ("presGate", _s.presenceGate);
         _p.putString("apPass", _s.apPass);
 
         _p.putUShort("dbMs",  _s.timing.debounceMs);

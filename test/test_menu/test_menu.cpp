@@ -92,14 +92,24 @@ void test_root_rows()
     Fixture f;
     TEST_ASSERT_TRUE(f.e.isOpen());
     TEST_ASSERT_EQUAL(0, f.e.depth());
-    TEST_ASSERT_EQUAL(6, f.e.count());
+    TEST_ASSERT_EQUAL(7, f.e.count());
     TEST_ASSERT_EQUAL_STRING("< Exit", f.item(0).c_str());
     TEST_ASSERT_EQUAL_STRING(pad("Display", ">").c_str(), f.item(1).c_str());
     TEST_ASSERT_EQUAL_STRING(pad("Lights", ">").c_str(), f.item(2).c_str());
     TEST_ASSERT_EQUAL_STRING(pad("Service", ">").c_str(), f.item(3).c_str());   // the log level
     TEST_ASSERT_EQUAL_STRING(pad("Car data", ">").c_str(), f.item(4).c_str());
-    TEST_ASSERT_EQUAL_STRING("Power off", f.item(5).c_str());
+    TEST_ASSERT_EQUAL_STRING("Allow update", f.item(5).c_str());
+    TEST_ASSERT_EQUAL_STRING("Power off", f.item(6).c_str());
     TEST_ASSERT_EQUAL(1, f.e.cursor());     // opens past "< Exit"
+}
+
+// "Allow update" shuts the menu and says so; the glue opens the window.
+void test_allow_update_closes_and_reports()
+{
+    Fixture f;
+    TEST_ASSERT_TRUE(f.go("Allow update"));
+    TEST_ASSERT_EQUAL(Out::AllowUpdate, f.e.key(Cmd::Select));
+    TEST_ASSERT_FALSE(f.e.isOpen());
 }
 
 void test_exit_row_closes()
@@ -116,7 +126,7 @@ void test_lights_hidden_without_knobs()
     Cfg::Model noKnobs{&f.s, nullptr};
     f.e.begin(&noKnobs, &f.car);
     f.e.open();
-    TEST_ASSERT_EQUAL(5, f.e.count());
+    TEST_ASSERT_EQUAL(6, f.e.count());
     TEST_ASSERT_TRUE(f.go("Car data"));
 }
 
@@ -316,7 +326,7 @@ void test_screen_window_and_marker()
     Fixture f;
     Engine::Screen s;
     f.e.screen(s);
-    TEST_ASSERT_EQUAL_STRING(pad("MENU", "2/6", COLS).c_str(), s.header);
+    TEST_ASSERT_EQUAL_STRING(pad("MENU", "2/7", COLS).c_str(), s.header);
     TEST_ASSERT_EQUAL('>', s.row[0][0]);
     TEST_ASSERT_EQUAL(' ', s.row[1][0]);
     TEST_ASSERT_TRUE(s.more_up);           // "< Exit" above
@@ -485,6 +495,7 @@ int main(int, char**)
     RUN_TEST(test_car_rows_in_the_registry);
     RUN_TEST(test_root_rows);
     RUN_TEST(test_exit_row_closes);
+    RUN_TEST(test_allow_update_closes_and_reports);
     RUN_TEST(test_lights_hidden_without_knobs);
     RUN_TEST(test_web_only_settings_stay_out);
     RUN_TEST(test_submenu_and_back_keep_the_cursor);

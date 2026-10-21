@@ -211,7 +211,11 @@ function health(){
  return {fw:S.fw,build:S.build,chains:ch,bleMode:S.set.bleMode};
 }
 g('/api/catalog',()=>deep(CATALOG));
-g('/api/status',()=>{const w=S.wifi;return {ip:w.ip,mode:w.mode,ssid:w.mode==='sta'?w.ssid:w.apName,rssi:w.mode==='sta'?w.rssi:0,uptimeMs:now()-S.bootAt,framesSent:S.hu.txKey,events:S.events,ghosts:0,encSteps:0,heap:S.heap,
+/* дозвіл на платі (app/Presence.h): у симуляторі вікно відкриває SIM.presence() — як меню щитка › Allow update чи BOOT */
+const PRES_MSG='needs someone at the board: panel menu > Allow update, or the BOOT button, then try again within 2 minutes';
+SIM.presence=()=>{S.presenceUntil=now()+120000};
+const presOk=()=>(S.presenceUntil||0)>now();
+g('/api/status',()=>{const w=S.wifi;return {presenceGate:true,presenceMs:Math.max(0,(S.presenceUntil||0)-now()),ip:w.ip,mode:w.mode,ssid:w.mode==='sta'?w.ssid:w.apName,rssi:w.mode==='sta'?w.rssi:0,uptimeMs:now()-S.bootAt,framesSent:S.hu.txKey,events:S.events,ghosts:0,encSteps:0,heap:S.heap,
  fw:S.fw,build:S.build,apName:w.apName}});   /* fw, build, apName — НОВЕ */
 g('/api/health',health);
 /* прошивка зберігає в cfg одразу, тож GET бачить збережене; діє воно після перезавантаження */
@@ -273,7 +277,7 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
 /* файл налаштувань (WebUi.cpp /api/config): налаштування без ro/volatile + ручки; POST — ті самі перевірки, ?dry=1 нічого не міняє */
 const fileSettings=()=>{const all=R['GET /api/settings'](),o={};for(const f of C.settings||[])if(f.type!=='group'&&!f.ro&&!f.volatile&&f.id in all)o[f.id]=all[f.id];return o};
 g('/api/config',()=>{const o={format:'megaopen-config',schema:1,fw:S.fw,build:S.build,settings:fileSettings()};if(C.features.knobs)o.knobs=R['GET /api/knobs']();return o});
-po('/api/config',q=>{if(!q||q.format!=='megaopen-config'||typeof q.settings!=='object')return fail(400,'not a MegaOpen settings file');
+po('/api/config',q=>{if(q.dry!=='1'&&!presOk())return fail(423,PRES_MSG);if(!q||q.format!=='megaopen-config'||typeof q.settings!=='object')return fail(400,'not a MegaOpen settings file');
  if(q.schema>1)return fail(400,'saved by a newer firmware (schema too new): update the board first');
  if(q.schema<1)return fail(400,'saved by an older firmware whose settings this one cannot read');
  const bad=['apPass','huForget'].filter(k=>k in q.settings);if(bad.length)return fail(400,bad.map(k=>k+': not allowed in a settings file').join('\n'));
@@ -365,7 +369,7 @@ function doBoot(){S.bootAt=now()+4000;S.heap=Math.round(rnd(79000,82000));const 
  if(n){S.wifi.mode='sta';S.wifi.ssid=n.ssid;S.wifi.ip=n.ssid==='HomeWiFi'?'192.168.1.50':'172.20.10.4';S.wifi.rssi=n.rssi}else{S.wifi.mode='ap';S.wifi.ip='192.168.4.1'}
  S.disp.registered=false;S.disp.resyncAt=now()+6000;S.cap.recording=S.cap.settings.autostart;S.emitter=false;S.tests={}}
 po('/api/reboot',()=>{setTimeout(doBoot,200);return ok});   /* НОВЕ */
-po('/api/factory',q=>{if(q.confirm!=='factory')return {__status:400,body:{ok:false,error:'factory reset WIPES NVS including WiFi credentials; the board returns in AP mode. Re-send with ?confirm=factory if that is what you want.'}};
+po('/api/factory',q=>{if(!presOk())return fail(423,PRES_MSG);if(q.confirm!=='factory')return {__status:400,body:{ok:false,error:'factory reset WIPES NVS including WiFi credentials; the board returns in AP mode. Re-send with ?confirm=factory if that is what you want.'}};
  S.set=defSet();S.set.ssid='';S.affa=defAffa();S.mac=defMacros();S.kn=defKnobs();S.tun=defTun();S.map=defMap();S.routing={uart:0x0F,ams:0x05,hid:0x02,res:0,usb:0x03};
  S.wifi2={ssid:''};S.wifi.apPass='megaopen';S.ble={bonded:false,connected:false,address:''};S.staged={};setTimeout(doBoot,200);return {ok:true,note:'AP mode after reboot'}});
 g('/api/can2',()=>{const c=S.can2;return {live:!c.quiet,listenOnly:true,autobaud:c.setting?'manual':c.quiet?'searching':'locked',bitrate:c.bitrate,detected:c.quiet||c.setting?0:c.detected,setting:c.setting,saved:c.saved,fps:c.quiet?0:c.fps,frames:c.frames,
@@ -524,7 +528,7 @@ po('/api/macros',q=>{const ms=q.macros;if(!Array.isArray(ms))return fail(400,'ma
 po('/api/macros/defaults',()=>{S.mac=defMacros();return ok});
 po('/api/macros/test',q=>{if(q.id===undefined)return fail(400,'id?');const i=parseInt(q.id,10);if(!(i>=0&&i<8))return fail(400,'id out of range');if(S.mac[i].effect==='none')return fail(409,'this row has no effect');
  S.macFires[i]++;S.macLive.fired++;emit(2,'MAC','test "'+S.mac[i].name+'"');return {__status:202,body:{ok:true,queued:true}}});
-g('/ota/start',()=>'OK');
+g('/ota/start',()=>presOk()?'OK':fail(423,PRES_MSG));
 /* GhOta (src/net/GhOta.cpp): check -> available (наступний патч), install -> поступ -> перезавантаження */
 const ghNext=()=>{const p=S.fw.split('.').map(Number);p[2]++;return p.join('.')};
 const ghView=()=>{const v=S.gh||(S.gh={phase:'idle',latest:'',asset:'',size:0,got:0,heapStart:0,heapMin:0,tlsInPsram:true});
@@ -537,8 +541,8 @@ g('/api/fw',ghView);
 po('/api/fw/check',()=>{const v=ghView();if(S.wifi.mode!=='sta')return fail(409,'the board is on its own access point: join it to a WiFi network with internet');
  if(v.phase==='written')return fail(409,'an update is written and waits for the reboot');if(v.phase==='checking'||v.phase==='downloading')return fail(409,'a check or an update is already running');Object.assign(S.gh,{phase:'checking',at:now(),err:undefined,heapStart:S.heap,heapMin:S.heap});return ok});
 po('/api/fw/reboot',()=>{const v=ghView();if(v.phase!=='written')return fail(409,'nothing written to reboot into');S.gh.phase='reboot';return ok});
-po('/api/fw/install',()=>{const v=ghView();if(v.phase!=='available')return fail(409,'no newer release: check first');Object.assign(S.gh,{phase:'downloading',at:now(),got:0});return ok});
-po('/ota/upload',q=>{if(!q.size)return fail(400,'empty file');S.build='ota '+new Date().toISOString().slice(0,16);setTimeout(doBoot,200);return 'OK'});
+po('/api/fw/install',()=>{if(!presOk())return fail(423,PRES_MSG);const v=ghView();if(v.phase!=='available')return fail(409,'no newer release: check first');Object.assign(S.gh,{phase:'downloading',at:now(),got:0});return ok});
+po('/ota/upload',q=>{if(!presOk())return fail(423,PRES_MSG);if(!q.size)return fail(400,'empty file');S.build='ota '+new Date().toISOString().slice(0,16);setTimeout(doBoot,200);return 'OK'});
 function uart(dir,b){const p=b.split(' ');S.hu.count++;S.uartRing.push({dir,cmd:p[1]||'00',len:Math.max(0,p.length-4),total:p.length,at:now(),data:p.slice(3,-1).join(''),ascii:'',u16:false});if(S.uartRing.length>40)S.uartRing.shift()}
 
 /* ---- живий двигун симуляції ---- */

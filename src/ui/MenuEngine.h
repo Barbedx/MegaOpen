@@ -13,6 +13,8 @@
 //   │  list of its available children; a child group opens another level
 //   ├─ Car data   one row per signal group the car has data for, then the
 //   │             signals of that group, read-only
+//   ├─ Allow update  opens the 2-minute window for an update, a factory reset
+//   │                or a settings file (app/Presence.h); the menu shuts
 //   └─ Power off
 //
 // Every level below the root starts with "< Back". Next/Prev move the cursor
@@ -48,6 +50,7 @@ namespace MenuUi
         Commit,     // a value to store: commitEntry() / commitValue(); redraw too
         Closed,     // the menu shut
         PowerOff,   // "Power off" chosen; the menu shut
+        AllowUpdate,// "Allow update" chosen; the menu shut
     };
 
     class Engine {
@@ -95,7 +98,7 @@ namespace MenuUi
         static constexpr uint8_t MAX_DEPTH = 4;
 
     private:
-        enum class Kind : uint8_t { Back, Exit, Group, Setting, CarRoot, CarGroup, Signal, PowerOff };
+        enum class Kind : uint8_t { Back, Exit, Group, Setting, CarRoot, CarGroup, Signal, PowerOff, AllowUpdate };
         struct Item { Kind kind; uint8_t ref; };   // ref: registry index, car group or signal
         struct Level { Kind kind; uint8_t ref; uint8_t cursor; };
 

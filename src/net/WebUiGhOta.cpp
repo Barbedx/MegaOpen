@@ -56,6 +56,7 @@ void WebUi::routesGhOta()
     });
 
     route("/api/fw/install", HTTP_POST, [this](PsychicRequest* r) {
+        if (!presenceOk()) return presenceRefused(r);
         if (!WiFi.isConnected())
             return fwBusy(r, "the board is on its own access point: join it to a WiFi network with internet");
         GhOta::attachCar(_state);
@@ -73,7 +74,8 @@ void WebUi::routesGhOta()
     // Only reached when gateLocalOta()'s filter turned ElegantOTA's own
     // handlers away (PsychicHttp hands a filtered request to onNotFound).
     // The file upload on the page shows this text as its error.
-    auto refused = [](PsychicRequest* r) {
+    auto refused = [this](PsychicRequest* r) {
+        if (!presenceOk()) return presenceRefused(r);
         GhOta::View v;
         GhOta::view(v);
         return fwBusy(r, v.phase == GhOta::Phase::Written

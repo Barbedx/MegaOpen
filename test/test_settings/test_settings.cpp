@@ -627,8 +627,8 @@ void test_settings_struct_unchanged()
         const SEntry& e = Registry::at(i);
         if (scalar(e) && !(e.flags & F_VOLATILE) && !(e.apply & (AP_KNOBS | AP_CAR | AP_CAP | AP_HU))) ++n;
     }
-    // 40 scalar/enum fields in Settings (carSig counts three), all in the registry.
-    TEST_ASSERT_EQUAL(40, n);
+    // 41 scalar/enum fields in Settings (carSig counts three), all in the registry.
+    TEST_ASSERT_EQUAL(41, n);
     (void)kNotInRegistry;
 }
 
@@ -825,6 +825,33 @@ void test_a_file_skips_what_this_board_does_not_have()
     TEST_ASSERT_EQUAL_UINT8(1, err2.n);
 }
 
+// presenceGate is set at the board only: neither the form nor a file may
+// switch off what guards against them.
+void test_a_menu_only_entry_is_refused_from_a_request()
+{
+    Fixture f;
+    const SEntry* e = Registry::find("presenceGate");
+    TEST_ASSERT_NOT_NULL(e);
+    TEST_ASSERT_FALSE(e->flags & F_WEB);
+    TEST_ASSERT_TRUE(e->flags & F_MENU);
+    JsonDocument in;
+    in["presenceGate"] = false;
+    for (bool file : {false, true}) {
+        static SettingsJson::Read r;
+        r = SettingsJson::Read{};
+        SettingsJson::Errors err;
+        SettingsJson::read(f.m, in.as<JsonObjectConst>(), r, err, file);
+        TEST_ASSERT_EQUAL_UINT8(1, err.n);
+        TEST_ASSERT_NOT_NULL(strstr(err.line[0], "presenceGate: only from the panel menu"));
+        TEST_ASSERT_EQUAL_UINT8(0, r.n);
+    }
+    TEST_ASSERT_TRUE(f.s.presenceGate);
+    // Not in GET /api/settings nor in a file either.
+    JsonDocument out;
+    SettingsJson::write(f.m, out.to<JsonObject>(), false);
+    TEST_ASSERT_TRUE(out["presenceGate"].isNull());
+}
+
 // Past MAX_CHANGES the refusal is one line, not one per key.
 void test_too_many_is_said_once()
 {
@@ -925,6 +952,7 @@ int main(int, char**)
     RUN_TEST(test_a_file_may_not_carry_the_password_or_a_reset);
     RUN_TEST(test_a_file_skips_what_this_board_does_not_have);
     RUN_TEST(test_too_many_is_said_once);
+    RUN_TEST(test_a_menu_only_entry_is_refused_from_a_request);
     RUN_TEST(test_pane_auto_is_its_own_row);
     RUN_TEST(test_splash_under_a_second_becomes_one);
     RUN_TEST(test_color_preset_paints_the_zone_and_custom_keeps_it);

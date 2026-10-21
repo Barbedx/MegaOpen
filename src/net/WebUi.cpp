@@ -1,5 +1,6 @@
 #include "WebUi.h"
 #include "../cfg/SettingsJson.h"
+#include "../app/Presence.h"
 #include "../proto/canbox/Rav4Profile.h"
 #include "../proto/canbox/Rav4Catalog.h"
 #include "Catalog.h"
@@ -245,12 +246,26 @@ RequestGate::Why WebUi::gateWhy(PsychicRequest* r)
 // gate (and stand down while a GitHub job owns OTA); its /update page cannot
 // send the header, so it is off and /update leads to the Плата page. A
 // refused request falls to onNotFound, where dispatch() says why.
+bool WebUi::presenceOk() const
+{
+    return !_cfg->s().presenceGate || App::presence().allowed(millis());
+}
+
+int WebUi::presenceRefused(PsychicRequest* r)
+{
+    return r->reply(423, "text/plain",
+                    "needs someone at the board: panel menu > Allow update, or the BOOT button, "
+                    "then try again within 2 minutes");
+}
+
 void WebUi::gateOta()
 {
     for (PsychicEndpoint* e : _server.*EndpointList::list()) {
         const String u = e->uri();
         if (u == "/ota/start" || u == "/ota/upload") {
             e->setFilter([this](PsychicRequest* r) {
+                // Refused here, answered by the /ota/* routes (presenceRefused).
+                if (!presenceOk()) return false;
 #if FEATURE_GH_OTA
                 if (GhOta::busy()) return false;
 #endif
@@ -707,6 +722,10 @@ void WebUi::routes()
         d["ghosts"]    = _ghosts ? *_ghosts : 0;
         d["encSteps"]  = _encSteps ? *_encSteps : 0;
         d["heap"]      = ESP.getFreeHeap();
+        // The update window (app/Presence.h): its remaining ms, and whether
+        // the gate is on at all (the panel menu's Service > Upd needs OK).
+        d["presenceGate"] = _cfg->s().presenceGate;
+        d["presenceMs"]   = App::presence().remainingMs(millis());
         String out; serializeJson(d, out);
         return replyJson(r, out);
     });
@@ -853,6 +872,9 @@ void WebUi::routes()
         if (chk != Cfg::SettingsJson::FileCheck::Ok)
             return r->reply(400, "text/plain", Cfg::SettingsJson::fileCheckText(chk));
         const bool dry = paramStr(r, "dry") == "1";
+        // The preview is free; applying a file takes the board over like an
+        // update does.
+        if (!dry && !presenceOk()) return presenceRefused(r);
 
         // The knobs first, onto a copy: a name that is no row is a refusal,
         // listed with the settings' own (settingsPost's `extra`), and what
@@ -911,6 +933,13 @@ void WebUi::routes()
         resp.addHeader("Location", "/#board");
         return resp.send();
     });
+
+#if !FEATURE_GH_OTA
+    // Reached when gateOta()'s filter turned ElegantOTA's handlers away; with
+    // GitHub OTA, routesGhOta() answers these paths (presence first).
+    route("/ota/start", HTTP_GET, [](PsychicRequest* r) { return presenceRefused(r); });
+    route("/ota/upload", HTTP_POST, [](PsychicRequest* r) { return presenceRefused(r); });
+#endif
 
     route("/api/reboot", HTTP_POST, [](PsychicRequest* r) {
         LogBus::line("[sys] reboot requested from the web");
@@ -1240,6 +1269,7 @@ void WebUi::routes()
     // Wipes NVS including the WiFi credentials: the board returns in AP mode at
     // http://192.168.4.1/ and the password is gone. Requires ?confirm=factory.
     route("/api/factory", HTTP_POST, [this](PsychicRequest* r) {
+        if (!presenceOk()) return presenceRefused(r);
         if (paramStr(r, "confirm") != "factory")
             return r->reply(400, "application/json",
                             "{\"ok\":false,\"error\":\"factory reset WIPES NVS including "

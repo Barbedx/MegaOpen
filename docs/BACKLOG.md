@@ -136,10 +136,12 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 ### Web UI
 
 - **Physical presence for the dangerous routes (security review 2026-10-21,
-  P3).** OTA (local and the GitHub install), factory reset and a settings
-  import allowed only within ~2 min of a panel-menu "Service › Allow update"
-  press (or a knob hold). Protects the home LAN, where the WiFi password is
-  not ours. ~80 lines + a menu row. SECURITY.md.
+  P3) — WRITTEN on the held branch held/presence, waiting for the owner.**
+  OTA (local and the GitHub install), factory reset and applying a settings
+  file are 423 unless the panel menu's root row "Allow update" or the BOOT
+  button was pressed within 2 min (`app/Presence.h`); `presenceGate` (menu
+  only) switches it off. The owner's call: it changes the phone-OTA routine
+  in the car.
 - **Signed OTA images (security review 2026-10-21, P4).** Secure boot v2 or
   app-signature verification with the key a CI secret, so only our releases
   flash. Key management and the factory flash change: a project.

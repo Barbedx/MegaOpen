@@ -28,6 +28,10 @@ namespace Cfg
         Str      mdnsName = "megaopen";     // -> http://megaopen.local
         // Off = no .local name; see WifiManager::startMdns().
         bool     mdnsOn   = true;
+        // An update, a factory reset or a settings file needs someone at the
+        // board (app/Presence.h). Set from the panel menu only: the web, the
+        // thing it guards against, cannot switch it off.
+        bool     presenceGate = true;
         Str      apName = "MegaOpen";
         Str      apPass = MO_AP_PASS;      // >= 8 chars or the AP comes up open
 

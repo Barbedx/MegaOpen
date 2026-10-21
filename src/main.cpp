@@ -13,6 +13,7 @@
 #include "proto/canbox/RaiseFramer.h"
 #include "proto/canbox/HuDialect.h"
 #include "display/PanelBusWatch.h"
+#include "app/Presence.h"
 #include "proto/canbox/Rav4Emitter.h"
 // Knob codes: the second byte is a detent count, not a press state — no release.
 #include "proto/canbox/Rav4Profile.h"
@@ -475,7 +476,16 @@ static void publishKeyLast(const Keys::AffaKeySource::Report& r, bool uartSends)
 // net_svc instead: priority 1, on core 0, never in front of the panel or a key.
 static void hkWeb(uint32_t now)
 {
-    (void)now;
+    // The board's BOOT button (GPIO0, pulled up, low while held) is someone
+    // at the board: it opens the update window (app/Presence.h).
+    if (digitalRead(0) == LOW) {
+        static uint32_t s_logged = 0;
+        App::presence().press(now);
+        if ((uint32_t)(now - s_logged) > 5000) {
+            s_logged = now;
+            LogBus::line("[ota] BOOT button: update allowed for 2 min");
+        }
+    }
     g_web.loop();
 #if FEATURE_DISPLAY_CAN
     // Values chosen in the panel menu: stored here, with every other setting.
@@ -2273,6 +2283,9 @@ void setup()
                       g_wifi.apSsid().c_str(),
                       g_wifi.ip().c_str(), mdns, (unsigned)g_cfg.s().uartBaud);
 
+    // GPIO0 is the BOOT button on the T-2CAN and the DevKit: read as the
+    // update window's second key (hkWeb). A strap pin only at reset.
+    pinMode(0, INPUT_PULLUP);
     // Started after every attach(): it calls into g_web immediately. The web,
     // WiFi, the heartbeat and the OTA verdict: none of them on the
     // panel's task any more (src/app/Housekeeping.h).

@@ -32,6 +32,7 @@ SCR.board={title:'Плата',async render(m){
  (B?card('Bluetooth',row('Роль',sel('rb:/api/settings|bleMode',CAT.bleModes.map(b=>[b.id,b.name]),se.bleMode,'data-str'+rbA('rb:',se.bleMode,'Роль Bluetooth')),`<span id="bHint">${esc(BLEHINT[se.bleMode]||'')}</span>`)+
   `<div id="bLive"${se.bleMode==='off'?' hidden':''}>${row('Стан','<span id="bSt" class="chip off">…</span>','<span id="bName"></span>')}<div class="fr"><button class="btn dng" type="button" id="bForget">Забути телефон</button></div></div>`):'')+
  card('Оновлення прошивки','<div class="kv"><div><small>Прошивка</small><b>'+esc(se.fw)+'</b></div><div><small>Збірка</small><b>'+esc(se.build)+'</b></div></div>'+
+  row('Дозвіл на платі','<span id="prChip" class="chip off">…</span>','','Оновлення, скидання до заводських і файл налаштувань приймаються лише 2 хв після дозволу на самій платі: меню щитка › Allow update або кнопка BOOT. Так пристрій у тій самій мережі не перепрошиє плату без тебе. Вимкнути — лише в меню щитка: Service › Upd needs OK.')+
   (has('ghota')?row('З GitHub','<span id="ghSt" class="chip off">…</span>','<span id="ghW"></span>','Остання стабільна версія з github.com/Barbedx/MegaOpen. Лише коли плата в мережі з інтернетом, лише з цієї кнопки й не під час руху. Образ перевіряється за SHA-256; якщо нова прошивка не стане здоровою за 3 хв, плата повернеться до попередньої.')+
    '<div class="fr"><button class="btn" type="button" id="ghChk">Перевірити</button><button class="btn pri" type="button" id="ghGo" hidden>Оновити</button><button class="btn pri" type="button" id="ghBoot" hidden>Перезавантажити</button></div><div class="pad" id="ghP" hidden><div class="bar big"><i id="ghBar"></i></div></div>'+row('','','або файлом .bin:'):'')+
   '<div class="fr"><input type="file" id="otaF" accept=".bin" class="in" style="flex:1"><button class="btn pri" type="button" id="otaGo">Оновити</button></div><div class="pad" id="otaP" hidden><div class="bar big"><i id="otaBar"></i></div></div>','cOta','custom')+
@@ -100,6 +101,8 @@ async gh(){const v=await API.get('/api/fw');if(!$('#ghSt'))return;this.ghTag=v.l
  if(v.phase==='rebooting'&&!REBOOTING)reboot(async()=>{},undefined,'оновлення '+v.latest+' з GitHub')},
 async tick(){const[st,ble]=await Promise.all([API.get('/api/status'),getIf(has('display')&&has('ble')&&!this.bleOff,'/api/ble')]);if(!$('#wNow'))return;
  if(has('ghota'))await this.gh();
+ const pr=$('#prChip');if(pr){if(st.presenceGate===false)setChip(pr,'warn','не потрібен (вимкнено в меню)');
+  else if(st.presenceMs>0)setChip(pr,'ok','є, ще '+Math.ceil(st.presenceMs/1000)+' с');else setChip(pr,'off','нема: меню › Allow update або BOOT')}
  wifiChip($('#wNow'),$('#wNowW'),st,'мереж не знайдено');
  if(this.bleOff||!ble)return;
  setChip('#bSt',ble.connected?'ok':ble.bonded?'warn':'off',ble.connected?'на зв’язку':ble.bonded?'спарено, не на зв’язку':'немає пари');

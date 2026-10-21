@@ -1,4 +1,5 @@
 #include "PanelMenu.h"
+#include "Presence.h"
 #if FEATURE_DISPLAY_CAN
 #include <atomic>
 #include <stdio.h>
@@ -274,6 +275,11 @@ namespace App
                     }
                     case MenuUi::Out::Closed:
                         closeMenu("");
+                        break;
+                    case MenuUi::Out::AllowUpdate:
+                        App::presence().press(now);
+                        closeMenu(": update allowed for 2 min");
+                        s_d.ops->postPopup("UPDATE OK 2 MIN");
                         break;
                     case MenuUi::Out::PowerOff:
                         // Only from Open: a hold that closed the menu in the

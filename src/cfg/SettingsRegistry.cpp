@@ -479,6 +479,10 @@ namespace Cfg
             {"logLevel", "Рівень логу", "Log level", "service", SType::Enum, WM | F_VOLATILE, AP_NONE,
              0, 0, 0, nullptr, &kLogLevels, [](const Model&) -> int32_t { return (int32_t)Log::level(); },
              [](Model&, int32_t v) { Log::setLevel((LogLevel)v); }},
+            // Menu only (no F_WEB): the web cannot switch off what guards
+            // against it. SettingsJson::read refuses it from a request.
+            {"presenceGate", "Оновлення лише з дозволу на платі", "Upd needs OK", "service", SType::Bool, F_MENU, AP_NONE,
+             0, 1, 0, nullptr, nullptr, S_GET(s.presenceGate), S_PUT(s.presenceGate = v != 0)},
             // Set by the page's «Режим розробника»; off at boot. Dev-only test
             // routes answer 403 without it (/api/display/inforaw).
             {"devMode", "Режим розробника", "Dev mode", "service", SType::Bool, W | F_VOLATILE, AP_NONE,

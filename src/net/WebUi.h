@@ -383,6 +383,11 @@ private:
 #endif
     // The routing destinations, for /api/health (keys.dest).
     void putDests(JsonObject out, const App::KeysTask::Routing& k) const;
+    // Someone at the board (app/Presence.h): an update, a factory reset or a
+    // settings file is allowed, or the owner switched the gate off in the
+    // panel menu. presenceRefused() is the 423 that says what to do.
+    bool presenceOk() const;
+    static int presenceRefused(PsychicRequest* r);
     // The registry's values (GET /api/settings; a settings file with forFile).
     void settingsOut(JsonObject out, bool forFile);
     // POST /api/settings and POST /api/config's settings: the HTTP status,

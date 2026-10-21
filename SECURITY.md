@@ -9,9 +9,16 @@ exposes and how to report a problem.
   access point, `MegaOpen-XXXX`. Its default password is `megaopen`, which is
   public. **Change it at first boot** (Плата page). At home the board joins
   your WiFi and is reachable by anything on that network.
-* **No login.** The web app, the API and OTA have no password of their own:
-  whoever is on the board's network can change settings, reset it and flash
-  firmware. The WiFi/AP password is the only lock.
+* **No login.** The web app and the API have no password of their own:
+  whoever is on the board's network can change settings. The WiFi/AP
+  password is the lock for those.
+* **Someone at the board.** Flashing firmware (a file or the GitHub
+  install), a factory reset and applying a settings file are refused (423)
+  unless someone was at the board within the last 2 minutes: the panel
+  menu's **Allow update** row, or the board's **BOOT** button. A device on
+  your home network cannot take the board over by itself. The gate is
+  switched off only in the panel menu (**Service › Upd needs OK**), never
+  from the web.
 * **Firmware.** An image flashed over WiFi is not signature-checked. Our
   firmware keeps the car's CAN bus (CAN A) listen-only, but that is enforced
   in software: a foreign image could transmit on it.
@@ -25,7 +32,7 @@ exposes and how to report a problem.
   never contains them.
 
 Work in progress (docs/BACKLOG.md): a per-board AP password shown only on
-the car's display, a physical "allow update" step, signed images, and a hardware mod that makes CAN A
+the car's display, signed images, and a hardware mod that makes CAN A
 receive-only (the TX line broken, docs/BACKLOG.md "Hardware").
 
 ## Reporting

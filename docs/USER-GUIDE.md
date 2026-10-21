@@ -121,6 +121,14 @@ the three colours have in common.
 
 ## Updating
 
+**First, allow it at the board.** An update (either way below), a factory
+reset or a settings file is accepted only within 2 minutes of **Allow
+update** in the panel menu (hold the right knob, then the row above
+**Power off**), or of pressing the board's **BOOT** button. **Плата →
+Оновлення прошивки → Дозвіл на платі** shows the time left. Without it the
+page says what to press. (To switch this off: the panel menu, **Service ›
+Upd needs OK**.)
+
 **From GitHub** (the board on a network with internet):
 **Плата → Оновлення прошивки → З GitHub**.
 
