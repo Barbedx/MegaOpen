@@ -55,8 +55,11 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   MediaSession, sending to the board over WiFi.
 
 - **Info list truncates to 8 characters** (`kInfoCells`), seen on camera with a
-  row box that is visibly wider. Same sweep: declared length 0x0B + offsets;
-  needs a raw-frame test route first (docs/glass-sweeps.md, step 6).
+  row box that is visibly wider. Sweep: docs/glass-sweeps.md steps 7-14,
+  through the dev-only `/api/display/inforaw` (declared length 0x0C..0x13).
+  With the owner's photos: give the library's `showInfoMenu` a cell count,
+  use it in MediaScreen's info layout, and DELETE `/api/display/inforaw`,
+  `Op::InfoRaw` and `display/InfoRaw.h`.
 - **Column widths are guesses elsewhere.** `MediaScreen::COLS_DEFAULT = 26`
   still drives the menu/fullscreen media layouts; the glass measured ~22 wide
   characters (capitals/digits) and ~21 lowercase. Proportional font, so the

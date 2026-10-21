@@ -1,5 +1,6 @@
 #include "PanelOps.h"
 #include <string.h>
+#include "InfoRaw.h"
 #include "../utils/LogBus.h"
 
 namespace MegaOpen
@@ -30,6 +31,7 @@ namespace MegaOpen
             case Op::MessageBox:     return "msgbox";
             case Op::SelectButton:   return "msgbox/select";
             case Op::InfoPopup:      return "info";
+            case Op::InfoRaw:        return "info/raw";
             case Op::Key:            return "key";
             case Op::Abort:          return "abort";
             case Op::Resync:         return "resync";
@@ -51,6 +53,7 @@ namespace MegaOpen
             case Op::MessageBox:
             case Op::SelectButton:
             case Op::InfoPopup:
+            case Op::InfoRaw:
                 return true;
             default:
                 return false;
@@ -108,6 +111,14 @@ namespace MegaOpen
     {
         Req r; r.op = Op::InfoPopup;
         copyStr(r.a, l1); copyStr(r.b, l2); copyStr(r.c, l3);
+        return accepted(submit(r));
+    }
+
+    bool PanelOps::postInfoRaw(const char* text, uint8_t len, uint8_t prefix, uint8_t offset)
+    {
+        Req r; r.op = Op::InfoRaw;
+        copyStr(r.a, text);
+        r.p[0] = len; r.p[1] = prefix; r.p[2] = offset;
         return accepted(submit(r));
     }
 
@@ -273,6 +284,21 @@ namespace MegaOpen
                 }
                 res = c->showMessageBox(r.a, r.b, r.p[0] ? lab : nullptr,
                                         r.p[0], r.p[1] == 0xFF ? 0 : r.p[1]);
+                break;
+            }
+            // DEV ONLY: through the library's public enqueue, like any render
+            // (the glass gate above it), never raw TWAI. The frame is built
+            // and bounded by InfoRaw::build; out of range is BadArgument.
+            case Op::InfoRaw: {
+                if (!_carminat) { res = affa::Submitted::refused(affa::Result::NotSupported); break; }
+                char t[InfoRaw::CELLS_MAX + 1];
+                affa::toAscii(r.a, t, sizeof(t));
+                uint8_t f[InfoRaw::FRAME_MAX];
+                const size_t n = InfoRaw::build(f, r.p[0], r.p[1], r.p[2], t);
+                if (!n) { res = affa::Submitted::refused(affa::Result::BadArgument); break; }
+                affa::TxOptions opt;
+                opt.coalesce = false;
+                res = _carminat->enqueue(0x151, f, (uint8_t)n, opt);
                 break;
             }
             // The pane: copied into the library's pool at the call.

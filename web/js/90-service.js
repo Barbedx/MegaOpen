@@ -8,6 +8,8 @@ const regOpts=id=>(regOf(id).enum||[]).map(o=>[o.v,o.name]);
 SCR.service={title:'Сервіс',async render(m){
  const D=has('display'),V=has('vehicle'),CP=has('capture');
  const[me,msgs,can,se]=await Promise.all([getIf(D,'/api/media'),API.get('/api/messages'),getIf(V,'/api/can'),API.get('/api/settings')]);
+ /* режим розробника живе в браузері; плата знає його лише до перезапуску (devMode) */
+ if(DEV&&!se.devMode)API.post('/api/settings',{devMode:true}).catch(()=>{});
  const MS=msgs.messages||[];this.n=0;this.paused=false;this.lines=[];this.tagF='all';this.since=0;this.busy=false;this.boot=undefined;this.drop=undefined;
  const PK=CAT.panelKeys.filter(k=>k.src==='wheel'),con=()=>CAT.console.find(c=>c.cmd===$('#cK').value)||{name:'',fields:[]};
  m.innerHTML=
@@ -61,6 +63,8 @@ SCR.service={title:'Сервіс',async render(m){
   ['fullscreen',{l1:RD.slice(0,22),l2:RD.slice(0,22),l3:RD.slice(0,22)},'Три рядки по 22: чи всі три цілі (кожен кінчається на B12)'],
   ['menu',{header:RD,row0:RD,row1:RW},'Меню: заголовок, рядок цифр, рядок W: останні видимі'],
   ['info',{l1:'12345678',l2:'WWWWWWWW',l3:'abcdefgh'},'Інфо: 8 знаків у кожному рядку; скільки ще місця праворуч у рамці'],
+  /* лише для розробника (inforaw, 403 без devMode): рядок 1 з довшою заявленою довжиною */
+  ...[0x0C,0x0D,0x0E,0x0F,0x10,0x11,0x12,0x13].map(n=>['inforaw',{len:'0x'+h2(n),offset:'0x41',text:'123456789ABCDEFG'},'Інфо, рядок 1, довжина 0x'+h2(n)+' ('+(n-3)+' знаків): скільки видно']),
  ];
  let swI=-1;const swStep=async b=>{swI++;if(swI>=SW.length){swI=-1;$('#swN').textContent='готово';$('#swW').textContent='';b.textContent='Почати';await API.post('/api/display/clear');return {note:'кінець, щиток повернуто'}}
   const[c,q,w]=SW[swI];$('#swN').textContent=(swI+1)+'/'+SW.length;$('#swW').textContent=w;b.textContent='Далі';await API.post('/api/display/'+c+'?'+new URLSearchParams(q));return {note:'крок '+(swI+1)+': фото'}};

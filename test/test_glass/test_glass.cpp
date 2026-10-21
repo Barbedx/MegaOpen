@@ -1,9 +1,11 @@
 #include <unity.h>
+#include <string.h>
 #include <mutex>
 #include <thread>
 #include <vector>
 #include "display/GlassGate.h"
 #include "display/PopupGate.h"
+#include "display/InfoRaw.h"
 
 using namespace MegaOpen;
 
@@ -137,6 +139,39 @@ void test_a_repaint_under_a_popup_is_held_then_sent()
     TEST_ASSERT_EQUAL_UINT32(4000, sent[1]);
 }
 
+// ---- the dev-only info row (src/display/InfoRaw.h) ------------------------------
+
+void test_inforaw_at_0x0B_is_the_librarys_row()
+{
+    uint8_t f[InfoRaw::FRAME_MAX];
+    // showInfoMenu's own form: 10 0B 76 60 41 + 8 space-padded cells.
+    const uint8_t want[] = {0x10, 0x0B, 0x76, 0x60, 0x41, 'A', 'U', 'X', ' ', ' ', ' ', ' ', ' '};
+    TEST_ASSERT_EQUAL_UINT32(sizeof(want), InfoRaw::build(f, 0x0B, 0x60, 0x41, "AUX"));
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(want, f, sizeof(want));
+}
+
+void test_inforaw_longer_rows_and_bounds()
+{
+    uint8_t f[InfoRaw::FRAME_MAX + 4];
+    memset(f, 0xEE, sizeof(f));
+    // 0x13: 16 cells, the text cut to them; nothing written past FRAME_MAX.
+    TEST_ASSERT_EQUAL_UINT32(2 + 0x13, InfoRaw::build(f, 0x13, 0x60, 0x44, "123456789ABCDEFGHIJK"));
+    TEST_ASSERT_EQUAL_HEX8(0x13, f[1]);
+    TEST_ASSERT_EQUAL_HEX8(0x44, f[4]);
+    TEST_ASSERT_EQUAL_MEMORY("123456789ABCDEFG", f + 5, 16);
+    TEST_ASSERT_EQUAL_HEX8(0xEE, f[InfoRaw::FRAME_MAX]);
+    // A length is clamped by the route; build() itself refuses what is out.
+    TEST_ASSERT_EQUAL_UINT8(0x0B, InfoRaw::clampLen(0));
+    TEST_ASSERT_EQUAL_UINT8(0x13, InfoRaw::clampLen(0xFF));
+    TEST_ASSERT_EQUAL_UINT8(0x0E, InfoRaw::clampLen(0x0E));
+    TEST_ASSERT_EQUAL_UINT32(0, InfoRaw::build(f, 0x0A, 0x60, 0x41, "x"));
+    TEST_ASSERT_EQUAL_UINT32(0, InfoRaw::build(f, 0x14, 0x60, 0x41, "x"));
+    TEST_ASSERT_EQUAL_UINT32(0, InfoRaw::build(f, 0x0B, 0x60, 0x50, "x"));    // offset
+    TEST_ASSERT_EQUAL_UINT32(0, InfoRaw::build(f, 0x0B, 0x3F, 0x41, "x"));    // prefix
+    TEST_ASSERT_EQUAL_UINT32(2 + 0x0B, InfoRaw::build(f, 0x0B, 0x60, 0x48, nullptr));
+    TEST_ASSERT_EQUAL_HEX8(' ', f[5]);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -147,5 +182,7 @@ int main(int, char**)
     RUN_TEST(test_a_screen_and_a_repaint_never_interleave);
     RUN_TEST(test_popup_gate_holds_until_the_deadline);
     RUN_TEST(test_a_repaint_under_a_popup_is_held_then_sent);
+    RUN_TEST(test_inforaw_at_0x0B_is_the_librarys_row);
+    RUN_TEST(test_inforaw_longer_rows_and_bounds);
     return UNITY_END();
 }

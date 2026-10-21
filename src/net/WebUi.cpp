@@ -4,6 +4,7 @@
 #include "Catalog.h"
 #include "../cfg/SettingsRegistry.h"
 #include "../keys/KeyDests.h"
+#include "../display/InfoRaw.h"
 #include <ArduinoJson.h>
 #include <ElegantOTA.h>
 #include <WiFi.h>
@@ -1281,6 +1282,22 @@ void WebUi::routesDisplay()
         const String l2 = paramStr(r, "l2");
         const String l3 = paramStr(r, "l3");
         return posted(r, _ops->postInfoPopup(l1.c_str(), l2.c_str(), l3.c_str()));
+    });
+
+    // DEV ONLY, for the glass sweep (docs/glass-sweeps.md step 7): one info row
+    // with a declared length of 0x0B..0x13 (8..16 cells), clamped; offset
+    // 0x40..0x4F and prefix 0x40..0x7F or 400. 403 unless the page's developer
+    // mode is on (devMode, RAM only). Goes when the library's showInfoMenu
+    // takes a cell count.
+    route("/api/display/inforaw", HTTP_POST, [this, posted](PsychicRequest* r) {
+        if (!_ops) return r->reply(503, "text/plain", "no display");
+        if (!_cfg->s().devMode) return r->reply(403, "text/plain", "developer mode is off (Плата › Інтерфейс)");
+        const uint8_t len = MegaOpen::InfoRaw::clampLen(paramU32(r, "len", "11", 0));
+        const uint32_t off = paramU32(r, "offset", "0x41", 0);
+        const uint32_t pre = paramU32(r, "prefix", "0x60", 0);
+        if (!MegaOpen::InfoRaw::offsetOk(off)) return r->reply(400, "text/plain", "offset: 0x40..0x4F");
+        if (!MegaOpen::InfoRaw::prefixOk(pre)) return r->reply(400, "text/plain", "prefix: 0x40..0x7F");
+        return posted(r, _ops->postInfoRaw(paramStr(r, "text").c_str(), len, (uint8_t)pre, (uint8_t)off));
     });
 
     // No hide: a fullscreen is not an overlay, setText() over it replaces it

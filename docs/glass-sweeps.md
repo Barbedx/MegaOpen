@@ -29,6 +29,7 @@ gives the width directly.
 | 4 | fullscreen, three rows of 22 digits | all three end in `B12`? |
 | 5 | menu: header digits, row 0 digits, row 1 W | last visible in each |
 | 6 | info list: `12345678`, `WWWWWWWW`, `abcdefgh` | how much empty room is left in each row's box, in characters |
+| 7-14 | info row 1 with a longer declared length, `0x0C` … `0x13` (9 … 16 cells of `123456789ABCDEFG`) | how many characters row 1 shows at each step, or if it stops drawing |
 
 Each step is the same as a web request, for a laptop instead of the page:
 
@@ -46,8 +47,10 @@ curl -X POST "$B/api/display/clear"
   W is narrower than the rest; the menu and fullscreen media layouts use it.
 * Step 4: three rows of 22 fit the 73-byte body (expected: yes).
 * Step 5: the menu layout's width and the header's.
-* Step 6: only the room in the box. The info list sends exactly 8 cells per
-  row (`10 0B 76 60 <offset> t0..t7`); whether the panel shows more needs
-  a longer declared length (`0x0B` → `0x0C`…`0x13`) and more text bytes,
-  which no route sends today (the library builds 8 cells). That sweep waits
-  for a raw-frame test route.
+* Step 6: the room in the box at the library's 8 cells
+  (`10 0B 76 60 <offset> t0..t7`).
+* Steps 7-14: the real cell count. They go through `POST
+  /api/display/inforaw?len=0x0C&offset=0x41&text=…`, a dev-only route
+  (403 unless **Режим розробника** is on; length clamped to `0x0B`…`0x13`,
+  offset `0x40`…`0x4F`, prefix `0x40`…`0x7F`). The result becomes a cell
+  count in the library's `showInfoMenu`, and the route goes.

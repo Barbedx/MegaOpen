@@ -163,6 +163,15 @@ If the iPhone will not pair while it is on the board's own WiFi, leave that
 WiFi and try again. For more detail: **Плата → Журнал запусків** (a log per
 boot), and **Сервіс → Лог** (live).
 
+## For developers
+
+**Плата → Інтерфейс → Режим розробника** shows the **Сервіс** tab and tells
+the board (until its next reboot) to accept the dev-only test routes:
+
+* `POST /api/display/inforaw?len=0x0B..0x13&offset=0x41&prefix=0x60&text=…`:
+  one info-list row with a longer declared length, for the glass sweep in
+  [glass-sweeps.md](glass-sweeps.md). It goes once the sweep has its answer.
+
 ## Coming next
 
 * **The board's IP on the display** when it joins a WiFi network, for phones

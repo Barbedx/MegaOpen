@@ -39,6 +39,10 @@ namespace MegaOpen
             Fullscreen,
             ConfirmBox, MessageBox, SelectButton,
             InfoPopup,
+            // DEV ONLY: one info row with its declared length (display/InfoRaw.h);
+            // r.a = text, r.p = {len, prefix, offset}. Goes when the library's
+            // showInfoMenu takes a cell count.
+            InfoRaw,
             Key, Abort,
             // Not renders. Resync re-runs the handshake (the library's begin());
             // Clear hands the glass back to the media screen: it is counted
@@ -114,6 +118,8 @@ namespace MegaOpen
         bool postTextStyled(const char* text, uint8_t icon, uint8_t srcIcon,
                             uint8_t fmt, uint8_t iconBank2);
         bool postInfoPopup(const char* l1, const char* l2, const char* l3);
+        // DEV ONLY (see Op::InfoRaw); the arguments are checked in InfoRaw::build.
+        bool postInfoRaw(const char* text, uint8_t len, uint8_t prefix, uint8_t offset);
         // wire=false: as if the panel sent it (KeySource::Local). wire=true:
         // transmit the panel's key frame on the bus (KeySource::Wire), for a
         // factory radio sharing it; carried in p[0].
