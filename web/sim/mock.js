@@ -216,7 +216,8 @@ g('/api/status',()=>{const w=S.wifi;return {ip:w.ip,mode:w.mode,ssid:w.mode==='s
 g('/api/health',health);
 /* прошивка зберігає в cfg одразу, тож GET бачить збережене; діє воно після перезавантаження */
 /* кожен id реєстру, якого нема в defSet, — з першого значення (enum) або min (int) */
-const regDef=f=>f.type==='bool'?false:f.type==='int'?f.min:f.enum[0].v;
+/* str (raise.version) has no enum: '' until RAISE fills it */
+const regDef=f=>f.type==='bool'?false:f.type==='int'?f.min:f.type==='str'?'':f.enum[0].v;
 /* cap.* реєстру живуть у S.cap.settings, як у прошивці — у рекордера (свій простір NVS) */
 const CAPK=['ring','fill','fileMB','autoProtect','mode','autostart'];
 const mRouteId=d=>'route'+d[0].toUpperCase()+d.slice(1);
