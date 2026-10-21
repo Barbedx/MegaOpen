@@ -47,6 +47,10 @@ namespace Cfg
                 _s.carSig[i] = v <= Vehicle::SIG_COUNT ? v : (uint8_t)Vehicle::SIG_COUNT;
             }
         }
+        {
+            const uint8_t v = _p.isKey("carPre") ? _p.getUChar("carPre", 0) : 0;
+            _s.carPreset = v < (uint8_t)CarPreset::_Count ? v : 0;
+        }
 
         _s.ancsPopup   = _p.getBool ("ancsPop", false);
         _s.mediaLayout = _p.getString("medLay", "fullscreen");
@@ -155,6 +159,7 @@ namespace Cfg
         _p.putUChar ("carSig0",  _s.carSig[0]);
         _p.putUChar ("carSig1",  _s.carSig[1]);
         _p.putUChar ("carSig2",  _s.carSig[2]);
+        _p.putUChar ("carPre",   _s.carPreset);
 
         _p.putBool  ("ancsPop", _s.ancsPopup);
         _p.putString("medLay",  _s.mediaLayout);

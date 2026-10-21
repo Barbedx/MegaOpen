@@ -72,6 +72,7 @@ namespace App
             // ---- the car screen: three signals, instead of now-playing --------
             bool     g_carScreen = false;
             uint8_t  g_carSig[3] = {Vehicle::SIG_COUNT, Vehicle::SIG_COUNT, Vehicle::SIG_COUNT};
+            uint8_t  g_carPreset = 0;   // Cfg::CarPreset
             char     s_carSent[3][MegaOpen::PanelOps::STR_MAX] = {};
             uint32_t s_carPaintMs = 0, s_carFullMs = 0;
 
@@ -449,6 +450,7 @@ namespace App
                 if (m.carScreen != g_carScreen) { s_carSent[0][0] = 0; g_media3.invalidate(); }
                 g_carScreen  = m.carScreen;
                 memcpy(g_carSig, m.carSig, sizeof(g_carSig));
+                g_carPreset  = m.carPreset;
 
                 // A pane choice, once: "auto" starts the carousel without moving
                 // the live scene (from Media if the pane was off); a scene stops it.
@@ -901,7 +903,16 @@ namespace App
                     PanelOps::Req r;
                     r.op = PanelOps::Op::Fullscreen;
                     char* rows[3] = {r.a, r.b, r.c};
-                    for (uint8_t i = 0; i < 3; ++i) {
+                    auto val = [&](uint8_t sg) {
+                        return MenuUi::TripVal{s_d.car->get(sg),
+                                               s_d.car->has(sg) && s_d.car->ageMs(sg, now) <= MenuUi::STALE_MS,
+                                               Vehicle::verified(sg)};
+                    };
+                    if (g_carPreset == (uint8_t)Cfg::CarPreset::Trip)
+                        MenuUi::tripRows(rows, PanelOps::STR_MAX, MegaOpen::FS_COLS,
+                                         val(Vehicle::SIG_CONS_INST), val(Vehicle::SIG_CONS_AVG),
+                                         val(Vehicle::SIG_RANGE_CALC), val(Vehicle::SIG_TRIP_KM));
+                    else for (uint8_t i = 0; i < 3; ++i) {
                         const uint8_t sg = g_carSig[i];
                         // An empty row is one space: the library skips an empty
                         // string, which would move the rows below it up.
@@ -976,6 +987,25 @@ namespace App
                             g_pane.setClockSecs((uint32_t)tmNow.tm_hour * 3600u +
                                                 (uint32_t)tmNow.tm_min * 60u +
                                                 (uint32_t)tmNow.tm_sec);
+                    }
+
+                    // The G-meter: 0x2A0's two accelerations, shown moving only when
+                    // both are fresh and verified (a hypothesis decode stays a dotted
+                    // ring, never a guess in motion).
+                    if (g_pane.scene() == MegaOpen::MediaPane::Scene::GMeter) {
+                        bool live = false;
+                        int32_t lat = 0, lon = 0;
+                        if (s_d.car) {
+                            auto ok = [&](uint8_t sg) {
+                                return s_d.car->has(sg) && s_d.car->ageMs(sg, now) <= MenuUi::STALE_MS &&
+                                       Vehicle::verified(sg);
+                            };
+                            live = ok(Vehicle::SIG_ACCEL_LAT) && ok(Vehicle::SIG_ACCEL_LONG);
+                            lat  = s_d.car->get(Vehicle::SIG_ACCEL_LAT);
+                            lon  = MegaOpen::MediaPane::mgFromMs2x100(s_d.car->get(Vehicle::SIG_ACCEL_LONG));
+                        }
+                        auto mg = [](int32_t v) { return (int16_t)(v > 30000 ? 30000 : v < -30000 ? -30000 : v); };
+                        g_pane.setAccel(mg(lat), mg(lon), live, now);
                     }
 
                     // Several steps per image: the wire delivers ~2 images/s.
@@ -1159,6 +1189,7 @@ namespace App
             g_mediaAuto = s.mediaScreen;
             g_carScreen = s.carScreen;
             memcpy(g_carSig, s.carSig, sizeof(g_carSig));
+            g_carPreset = s.carPreset;
             g_media3.setLayout(MegaOpen::MediaScreen::layoutFromName(s.mediaLayout.c_str()));
             // Width follows the layout (8 columns beside the pane).
             g_media3.setCols(MegaOpen::MediaScreen::colsFor(g_media3.layout()));
@@ -1201,6 +1232,7 @@ namespace App
             m.autoTime       = g_autoTime;
             m.carScreen      = g_carScreen;
             memcpy(m.carSig, g_carSig, sizeof(m.carSig));
+            m.carPreset      = g_carPreset;
             s_settings.init(m);
             publish();
         }
@@ -1327,6 +1359,7 @@ namespace App
                 m.autoTime   = s.autoTime;
                 m.carScreen  = s.carScreen;
                 memcpy(m.carSig, s.carSig, sizeof(m.carSig));
+                m.carPreset  = s.carPreset;
             });
             g_keyPopup   = s.keyPopup;
             g_keyPopupMs = s.keyPopupMs;

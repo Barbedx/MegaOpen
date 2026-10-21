@@ -76,10 +76,16 @@ if the condition is over by then.
 
 ## The car screen
 
-Three car values on the display instead of now playing: **Екран авто замість
-аудіо**, and **Екран авто: рядок 1-3** for which signals. In the panel menu
-under **Display**, or on **Плата → Усі налаштування**. `?` after a value: not
-yet checked in a car; `--`: no fresh value.
+Three car values on the display instead of now playing. **Екран → Екран авто**,
+or in the panel menu under **Display › Car screen**:
+
+* **Показувати замість музики** turns it on.
+* **Що показувати:** **Свої рядки** (the three signals you pick in **Рядок 1-3**)
+  or **Поїздка**: consumption now / average (L/100km), range, and the trip
+  distance since the board started.
+
+`?` after a value: not yet checked in a car; `--`: no fresh value (standing
+still, consumption now is `--`).
 
 ## Media on the display
 
@@ -95,8 +101,12 @@ yet checked in a car; `--`: no fresh value.
   while it sends text, otherwise the iPhone).
 * **Картинка 48×48** (beside Текст and Інфо): one scene, or **карусель**
   through them all. Scenes: медіа, VU, хвиля, годинник, зорі, м'ячик, кола,
-  спіраль, осцилограф, дощ, радар, життя, касета, тунель, своя (draw it under
-  **Намалювати свою**).
+  спіраль, осцилограф, дощ, радар, життя, касета, тунель, G-метр, своя (draw
+  it under **Намалювати свою**). G-метр and своя are not in the carousel.
+* **G-метр:** the car's sideways and forward pull as a dot (right = right, up =
+  speeding up), a short trail, a ring at 0.5 g and the strongest pull held for
+  3 s. Until the acceleration signals are checked in a car, or when they stop,
+  it shows a dotted ring and nothing moves.
 
 ## Keys
 

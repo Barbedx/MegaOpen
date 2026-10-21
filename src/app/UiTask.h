@@ -78,6 +78,7 @@ namespace App
             // SIG_COUNT = an empty row (Cfg::Settings::carSig).
             bool     carScreen = false;
             uint8_t  carSig[3] = {0, 0, 0};
+            uint8_t  carPreset = 0;         // MenuUi::CarPreset
             MediaPoke poke;
             uint16_t pokeSeq = 0;           // moves with each poke
         };

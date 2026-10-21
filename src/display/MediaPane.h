@@ -41,8 +41,9 @@ namespace MegaOpen
             Stars,     // integer-perspective starfield
             Bounce,    // a box with a decaying trail
             Rings,     // three expanding circles
-            // Names are what is stored, so a new scene may go anywhere before
-            // Custom; Custom stays last (the carousel wraps at it).
+            // Names are what is stored, so a new carousel scene may go anywhere
+            // before GMeter; GMeter and Custom stay last (the carousel wraps at
+            // GMeter).
             Spiral,    // three arms turning, pure function of the frame counter
             Scope,     // a Lissajous figure, its ratio changing every 96 frames
             Rain,      // twelve columns of falling dashes, Matrix-style
@@ -50,15 +51,17 @@ namespace MegaOpen
             Life,      // Conway's Life on a torus, reseeded when it dies down
             Tape,      // a cassette: reels turn while playing, tape wound by the position — REAL DATA
             Tunnel,    // nested squares rushing outward from a drifting centre
+            GMeter,    // the car's lateral/longitudinal g (0x2A0): a dot, its trail, the peak — REAL DATA
             Custom,    // the owner's own 48x48 picture (POST /api/media bits=), still
             _Count
         };
         static constexpr uint8_t SCENE_COUNT = (uint8_t)Scene::_Count;
 
-        // Carousel: every scene but Off and Custom, in enum order, wrapping.
-        // Custom stays out: a still picture the owner picks on purpose, not a
-        // decoration to rotate through. The ui task owns the timing
-        // (Cfg::Settings::paneCycleS).
+        // Carousel: every scene but Off, GMeter and Custom, in enum order,
+        // wrapping. Custom stays out: a still picture the owner picks on
+        // purpose, not a decoration to rotate through; GMeter likewise (most
+        // boards have no car data, and it would show a dotted ring). The ui
+        // task owns the timing (Cfg::Settings::paneCycleS).
         static Scene carouselNext(Scene s);
 
         // Moves on its own? Media stops when paused and settled, Custom never
@@ -96,6 +99,18 @@ namespace MegaOpen
         // of the pane (the web's Mirror) carries the pointer too, and must
         // NOT compose Custom: the buffer is the ui task's. Null draws dark.
         void setCustom(const uint8_t* bits) { _custom = bits; }
+
+        // The G-meter's input, in milli-g: + lateral draws right, + longitudinal
+        // (speeding up) draws up. `live` = fresh and verified; when it is not,
+        // the scene is a dotted ring and nothing moves, and the trail and the
+        // peak are dropped. Each live call is one trail point (the ui task calls
+        // once per image, ~2/s); the peak is held PEAK_MS of nowMs.
+        void setAccel(int16_t latMg, int16_t longMg, bool live, uint32_t nowMs);
+        // accel_long is m/s² x100; the meter works in milli-g.
+        static int32_t mgFromMs2x100(int32_t v) { return v * 1000 / 981; }
+        static constexpr int16_t  G_FULL_MG = 1000;   // the dot's reach, G_R px
+        static constexpr int8_t   G_R       = 22;
+        static constexpr uint32_t PEAK_MS   = 3000;
 
         // BYTES as 2*BYTES lowercase hex characters plus NUL, and back. fromHex
         // takes exactly 2*BYTES hex digits (either case) and nothing more; it
@@ -153,6 +168,7 @@ namespace MegaOpen
         void drawLife(uint8_t* b) const;
         void drawTape(uint8_t* b) const;
         void drawTunnel(uint8_t* b) const;
+        void drawGMeter(uint8_t* b) const;
 
         // The spectrum is fake: there is no audio (AMS sends metadata, the head
         // unit sends text). A per-bar random walk with decaying peaks.
@@ -207,6 +223,15 @@ namespace MegaOpen
         uint32_t _tapeTurn = 0;         // Tape's reels: frames spent playing
 
         const uint8_t* _custom = nullptr;   // Scene::Custom, borrowed (setCustom)
+
+        // GMeter: pixel offsets from the centre, newest first; the peak.
+        static constexpr uint8_t kGTrail = 6;
+        int8_t   _gx[kGTrail] = {0}, _gy[kGTrail] = {0};
+        uint8_t  _gn = 0, _gSeq = 0;
+        bool     _gLive = false, _gHavePeak = false;
+        int8_t   _gpx = 0, _gpy = 0;
+        int32_t  _gpMag = 0;
+        uint32_t _gpMs = 0;
 
         Scene    _scene    = Scene::Off;
         bool     _playing  = false;

@@ -375,9 +375,9 @@ static void test_two_panes_stepped_alike_draw_alike()
 
 static void test_the_carousel_visits_every_scene_but_off_and_custom_and_wraps()
 {
-    // Twelve stops, each once, never Off or Custom, and back to the start —
+    // Each stop once, never Off, GMeter or Custom, and back to the start —
     // the ui task trusts this for the ring and only supplies the clock.
-    constexpr uint8_t STOPS = MediaPane::SCENE_COUNT - 2;   // all but Off and Custom
+    constexpr uint8_t STOPS = MediaPane::SCENE_COUNT - 3;   // all but Off, GMeter and Custom
     bool seen[MediaPane::SCENE_COUNT] = {false};
     MediaPane::Scene s = MediaPane::Scene::Media;
     for (uint8_t i = 0; i < STOPS; ++i) {
@@ -385,13 +385,17 @@ static void test_the_carousel_visits_every_scene_but_off_and_custom_and_wraps()
                                       "the carousel stopped on Off");
         TEST_ASSERT_NOT_EQUAL_MESSAGE((uint8_t)MediaPane::Scene::Custom, (uint8_t)s,
                                       "the carousel stopped on Custom");
+        TEST_ASSERT_NOT_EQUAL_MESSAGE((uint8_t)MediaPane::Scene::GMeter, (uint8_t)s,
+                                      "the carousel stopped on GMeter");
         TEST_ASSERT_FALSE_MESSAGE(seen[(uint8_t)s], "a scene came round twice in one turn");
         seen[(uint8_t)s] = true;
         s = MediaPane::carouselNext(s);
     }
     TEST_ASSERT_EQUAL_UINT8((uint8_t)MediaPane::Scene::Media, (uint8_t)s);
-    for (uint8_t i = 1; i < (uint8_t)MediaPane::Scene::Custom; ++i)
+    for (uint8_t i = 1; i < (uint8_t)MediaPane::Scene::GMeter; ++i)
         TEST_ASSERT_TRUE_MESSAGE(seen[i], "a scene was never visited");
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)MediaPane::Scene::Media,
+                            (uint8_t)MediaPane::carouselNext(MediaPane::Scene::GMeter));
     TEST_ASSERT_FALSE(seen[(uint8_t)MediaPane::Scene::Off]);
     // From Off — a pane switched on into "auto" — the first stop is Media; from
     // Custom too: "auto" chosen while the picture shows keeps it until the
@@ -486,7 +490,7 @@ static void test_every_decorative_scene_moves_when_stepped()
     for (uint8_t i = 0; i < MediaPane::SCENE_COUNT; ++i) {
         const auto s = (MediaPane::Scene)i;
         if (s == MediaPane::Scene::Off || s == MediaPane::Scene::Media ||
-            s == MediaPane::Scene::Tape ||
+            s == MediaPane::Scene::Tape || s == MediaPane::Scene::GMeter ||
             s == MediaPane::Scene::Clock || s == MediaPane::Scene::Custom) continue;
         MediaPane p;
         p.setScene(s);
@@ -499,6 +503,116 @@ static void test_every_decorative_scene_moves_when_stepped()
         TEST_ASSERT_TRUE_MESSAGE(memcmp(a, b, MediaPane::BYTES) != 0,
                                  MediaPane::sceneName(s));
     }
+}
+
+// ---- the G-meter (0x2A0) ------------------------------------------------
+static bool on(const uint8_t* b, int x, int y)
+{
+    return b[y * MediaPane::STRIDE + (x >> 3)] & (0x80 >> (x & 7));
+}
+
+static void test_the_gmeter_without_live_data_is_a_still_dotted_ring()
+{
+    // Stale or unverified: a dotted 0.5 g ring and the centre, and the same
+    // bytes however long it runs or whatever values arrive. Never motion.
+    MediaPane p;
+    p.setScene(MediaPane::Scene::GMeter);
+    uint8_t a[MediaPane::BYTES], b[MediaPane::BYTES];
+    composeGuarded(p, a);
+    TEST_ASSERT_TRUE(on(a, 23, 23));
+    TEST_ASSERT_TRUE(on(a, 33, 23));            // 0 degrees, r 11 (isin tops at 1016): lit
+    TEST_ASSERT_FALSE(on(a, 45, 23));           // no 1 g tick
+    const uint16_t dim = litPixels(a);
+    for (int i = 0; i < 10; ++i) {
+        p.setAccel((int16_t)(i * 90), (int16_t)(-i * 70), false, (uint32_t)i * 500);
+        p.step();
+    }
+    composeGuarded(p, b);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, memcmp(a, b, MediaPane::BYTES), "a stale G-meter moved");
+    // Dimmer than the live ring: about half its points.
+    p.setAccel(0, 0, true, 0);
+    composeGuarded(p, b);
+    TEST_ASSERT_TRUE(dim < litPixels(b));
+}
+
+static void test_the_gmeter_draws_the_dot_where_the_pull_is()
+{
+    MediaPane p;
+    p.setScene(MediaPane::Scene::GMeter);
+    uint8_t b[MediaPane::BYTES];
+    // At rest: the 3x3 dot on the centre, the solid ring, the 1 g ticks.
+    p.setAccel(0, 0, true, 0);
+    composeGuarded(p, b);
+    for (int y = 22; y <= 24; ++y)
+        for (int x = 22; x <= 24; ++x) TEST_ASSERT_TRUE(on(b, x, y));
+    TEST_ASSERT_TRUE(on(b, 33, 23));
+    TEST_ASSERT_TRUE(on(b, 13, 23));
+    TEST_ASSERT_TRUE(on(b, 1, 23));
+    TEST_ASSERT_TRUE(on(b, 45, 23));
+    TEST_ASSERT_TRUE(on(b, 23, 1));
+    TEST_ASSERT_TRUE(on(b, 23, 45));
+    // 0.5 g to the right: the dot sits on the ring, 11 px right.
+    MediaPane q;
+    q.setScene(MediaPane::Scene::GMeter);
+    q.setAccel(500, 0, true, 0);
+    composeGuarded(q, b);
+    for (int y = 22; y <= 24; ++y)
+        for (int x = 33; x <= 35; ++x) TEST_ASSERT_TRUE(on(b, x, y));
+    TEST_ASSERT_FALSE(on(b, 22, 22));           // the centre is only its pixel now
+    // Speeding up at 1 g draws up, to the top tick; past 1 g clamps there.
+    MediaPane r;
+    r.setScene(MediaPane::Scene::GMeter);
+    r.setAccel(0, 2000, true, 0);
+    composeGuarded(r, b);
+    TEST_ASSERT_TRUE(on(b, 23, 1));
+    TEST_ASSERT_TRUE(on(b, 22, 2));
+    TEST_ASSERT_TRUE(on(b, 24, 0));
+}
+
+static void test_the_gmeter_holds_the_peak_for_three_seconds()
+{
+    MediaPane p;
+    p.setScene(MediaPane::Scene::GMeter);
+    uint8_t b[MediaPane::BYTES];
+    p.setAccel(1000, 0, true, 0);             // the peak: 1 g right, x = 45
+    p.setAccel(0, 0, true, 1000);
+    p.setAccel(0, 0, true, 2000);
+    p.setAccel(0, 0, true, 2900);
+    composeGuarded(p, b);
+    TEST_ASSERT_TRUE_MESSAGE(on(b, 44, 22) && on(b, 46, 22) && on(b, 44, 24) && on(b, 46, 24),
+                             "no peak x at 2.9 s");
+    // A weaker pull does not replace it; 3 s after it, the peak lets go.
+    p.setAccel(300, 0, true, 3000);
+    composeGuarded(p, b);
+    TEST_ASSERT_FALSE(on(b, 44, 22));
+    TEST_ASSERT_FALSE(on(b, 46, 24));
+}
+
+static void test_the_gmeter_drops_its_trail_when_the_data_goes()
+{
+    MediaPane p, fresh;
+    p.setScene(MediaPane::Scene::GMeter);
+    fresh.setScene(MediaPane::Scene::GMeter);
+    for (int i = 0; i < 6; ++i) p.setAccel((int16_t)(i * 150), (int16_t)(i * 100), true, (uint32_t)i * 500);
+    p.setAccel(0, 0, false, 3000);
+    uint8_t a[MediaPane::BYTES], b[MediaPane::BYTES];
+    composeGuarded(p, a);
+    composeGuarded(fresh, b);
+    TEST_ASSERT_EQUAL_INT(0, memcmp(a, b, MediaPane::BYTES));
+    // Back: one point, no old trail and no old peak.
+    p.setAccel(0, 0, true, 3500);
+    fresh.setAccel(0, 0, true, 3500);
+    composeGuarded(p, a);
+    composeGuarded(fresh, b);
+    TEST_ASSERT_EQUAL_INT(0, memcmp(a, b, MediaPane::BYTES));
+}
+
+static void test_accel_long_converts_to_milli_g()
+{
+    TEST_ASSERT_EQUAL_INT32(1000, MediaPane::mgFromMs2x100(981));
+    TEST_ASSERT_EQUAL_INT32(-499, MediaPane::mgFromMs2x100(-490));
+    TEST_ASSERT_EQUAL_INT32(0, MediaPane::mgFromMs2x100(0));
+    TEST_ASSERT_EQUAL_INT32(2803, MediaPane::mgFromMs2x100(2750));   // the matrix's top
 }
 
 // Tape: the reels turn while playing and stop when paused, like a deck.
@@ -781,5 +895,10 @@ int main(int, char**)
     RUN_TEST(test_the_clock_wraps_a_day_rather_than_running_off_the_face);
     RUN_TEST(test_the_tape_turns_only_while_playing);
     RUN_TEST(test_the_tape_winds_with_the_position);
+    RUN_TEST(test_the_gmeter_without_live_data_is_a_still_dotted_ring);
+    RUN_TEST(test_the_gmeter_draws_the_dot_where_the_pull_is);
+    RUN_TEST(test_the_gmeter_holds_the_peak_for_three_seconds);
+    RUN_TEST(test_the_gmeter_drops_its_trail_when_the_data_goes);
+    RUN_TEST(test_accel_long_converts_to_milli_g);
     return UNITY_END();
 }

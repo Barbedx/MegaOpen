@@ -38,6 +38,7 @@ namespace MegaOpen
         {"life",   "життя"},
         {"tape",   "касета"},
         {"tunnel", "тунель"},
+        {"gmeter", "G-метр"},
         {"custom", "своя"},
     };
     static_assert(sizeof(kScenes) / sizeof(kScenes[0]) == (size_t)MediaPane::SCENE_COUNT,
@@ -74,8 +75,8 @@ namespace MegaOpen
     MediaPane::Scene MediaPane::carouselNext(Scene s)
     {
         uint8_t i = (uint8_t)((uint8_t)s + 1);
-        // Wrap past Off, never onto it; Custom is not a stop.
-        if (i >= (uint8_t)Scene::Custom) i = 1;
+        // Wrap past Off, never onto it; GMeter and Custom are not stops.
+        if (i >= (uint8_t)Scene::GMeter) i = 1;
         return (Scene)i;
     }
 
@@ -338,12 +339,13 @@ namespace MegaOpen
                 if (_hasTransport ? _playing : true) ++_tapeTurn;
                 return;
             // Rings, Spiral, Scope, Radar and Tunnel are pure functions of _frame, Clock
-            // of the time, and Off has nothing to advance.
+            // of the time, GMeter of setAccel(), and Off has nothing to advance.
             case Scene::Rings:
             case Scene::Spiral:
             case Scene::Scope:
             case Scene::Radar:
             case Scene::Tunnel:
+            case Scene::GMeter:
             case Scene::Clock:
             case Scene::Custom:
             case Scene::Off:
@@ -660,6 +662,61 @@ namespace MegaOpen
         }
     }
 
+    void MediaPane::setAccel(int16_t latMg, int16_t longMg, bool live, uint32_t nowMs)
+    {
+        if (!live) {
+            _gLive = false;
+            _gn = 0;
+            _gHavePeak = false;
+            return;
+        }
+        auto clampMg = [](int32_t v) {
+            return v > G_FULL_MG ? (int32_t)G_FULL_MG : v < -G_FULL_MG ? -(int32_t)G_FULL_MG : v;
+        };
+        const int32_t lat = clampMg(latMg), lon = clampMg(longMg);
+        for (uint8_t i = kGTrail - 1; i > 0; --i) { _gx[i] = _gx[i - 1]; _gy[i] = _gy[i - 1]; }
+        _gx[0] = (int8_t)(lat * G_R / G_FULL_MG);
+        _gy[0] = (int8_t)(-lon * G_R / G_FULL_MG);
+        if (_gn < kGTrail) ++_gn;
+        ++_gSeq;
+        _gLive = true;
+        // The peak: the strongest pull in the last PEAK_MS; a new one at least
+        // as strong takes its place and restarts the hold.
+        const int32_t mag = lat * lat + lon * lon;
+        if (!_gHavePeak || mag >= _gpMag || (uint32_t)(nowMs - _gpMs) >= PEAK_MS) {
+            _gpMag = mag; _gpMs = nowMs;
+            _gpx = _gx[0]; _gpy = _gy[0];
+            _gHavePeak = true;
+        }
+    }
+
+    // A ring at 0.5 g, ticks on the axes at 1 g, the dot (3x3), its trail
+    // (the two newest points solid, older ones every other image: dimmer),
+    // and the peak as an x. Not live: a dotted ring and the centre, still.
+    void MediaPane::drawGMeter(uint8_t* b) const
+    {
+        constexpr int C = 23, HALF = G_R / 2;
+        if (!_gLive) {
+            constexpr int step = 57 / HALF;
+            for (int a = 0, n = 0; a < 360; a += step, ++n)
+                if (!(n & 1)) px(b, C + HALF * icos(a) / 1024, C + HALF * isin(a) / 1024);
+            px(b, C, C);
+            return;
+        }
+        circle(b, C, C, HALF);
+        hline(b, C - G_R, C - G_R + 2, C); hline(b, C + G_R - 2, C + G_R, C);
+        vline(b, C, C - G_R, C - G_R + 2); vline(b, C, C + G_R - 2, C + G_R);
+        px(b, C, C);
+        for (uint8_t i = _gn; i-- > 1;)
+            if (i <= 2 || ((_gSeq + i) & 1)) px(b, C + _gx[i], C + _gy[i]);
+        if (_gHavePeak && (_gpx != _gx[0] || _gpy != _gy[0])) {
+            const int x = C + _gpx, y = C + _gpy;
+            px(b, x - 1, y - 1); px(b, x + 1, y - 1); px(b, x, y);
+            px(b, x - 1, y + 1); px(b, x + 1, y + 1);
+        }
+        rect(b, C + _gx[0] - 1, C + _gy[0] - 1, C + _gx[0] + 1, C + _gy[0] + 1, true);
+    }
+
     void MediaPane::compose(uint8_t* out) const
     {
         clear(out);
@@ -678,6 +735,7 @@ namespace MegaOpen
             case Scene::Life:   drawLife(out);   break;
             case Scene::Tape:   drawTape(out);   break;
             case Scene::Tunnel: drawTunnel(out); break;
+            case Scene::GMeter: drawGMeter(out); break;
             case Scene::Custom: if (_custom) memcpy(out, _custom, BYTES); break;
             // Off composes an empty pane: no capture shows a "remove layer"
             // command, so an all-zero image is the only way to blank the glass.

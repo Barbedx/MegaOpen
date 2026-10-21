@@ -21,4 +21,14 @@ namespace MenuUi
     // "name ... value" laid out on exactly `width` columns (cut to cap-1).
     void signalRow(char* out, size_t cap, size_t width, const Vehicle::Meta& m, int32_t v,
                    bool fresh, bool verified);
+
+    // The car screen's «Поїздка» preset (Cfg::CarPreset::Trip), three rows on
+    // `width` columns from the derived trip signals:
+    //   "L/100km    7.2/6.8"   cons_inst / cons_avg ("--" for either one missing)
+    //   "Range        420km"   range_calc
+    //   "Trip       123.4km"   trip_km
+    // "--" with no data; "?" after a value not yet verified, as everywhere else.
+    struct TripVal { int32_t v; bool fresh, verified; };
+    void tripRows(char* const rows[3], size_t cap, size_t width, const TripVal& inst,
+                  const TripVal& avg, const TripVal& range, const TripVal& km);
 }

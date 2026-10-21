@@ -21,6 +21,11 @@ namespace Cfg
     using Str = String;
 #endif
 
+    // The car screen's rows: the three chosen signals, or the trip computer
+    // (consumption now/average, range, trip distance; MenuUi::tripRows).
+    // Stored as the number, so new presets are appended.
+    enum class CarPreset : uint8_t { Custom = 0, Trip, _Count };
+
     struct Settings {
         // network
         Str      ssid = MO_WIFI_SSID;      // defaults: src/secrets.example.h
@@ -63,6 +68,8 @@ namespace Cfg
         // row; ids are stored, which is safe because signals are only appended.
         bool     carScreen = false;
         uint8_t  carSig[3] = {Vehicle::SIG_ENG_TEMP, Vehicle::SIG_BATT_V, Vehicle::SIG_FUEL_LEVEL};
+        // What the rows are: a CarPreset (0 = carSig, 1 = the trip rows).
+        uint8_t  carPreset = 0;
 
         // Three-row primitive for now-playing: "fullscreen" (0x21 mode 0x05) or
         // "menu" (mode 0x01). Persisted because leaving fullscreen needs an

@@ -21,6 +21,10 @@ SCR.screen={title:'Екран',async render(m){
   '<div id="lp">'+lpHTML(me)+'</div>'+
   row('Джерело тексту',seg('/api/settings|mediaSource',srcs,srcs.some(s=>s[0]===se.mediaSource)?se.mediaSource:srcs[0][0]),'<span id="srcNow"></span>',
    ams?'Авто: ГУ, поки він шле текст (15 с тиші = нема), інакше iPhone.':'BLE вимкнено, тому лише ГУ по UART.'),'cGlass','full')+
+ card('Екран авто',
+  row('Показувати замість музики',sw('/api/settings|carScreen',se.carScreen),'','Три рядки даних авто на весь щиток.')+
+  row('Що показувати',seg('/api/settings|carPreset',regOpts('carPreset'),se.carPreset),'','Поїздка: витрата зараз / середня, запас ходу, пробіг поїздки; «--» — даних нема.')+
+  `<div id="carRows"${se.carPreset==='trip'?' hidden':''}>${[1,2,3].map(i=>row('Рядок '+i,sel('/api/settings|carSig'+i,regOpts('carSig'+i),se['carSig'+i],'data-str'))).join('')}</div>`)+
  (hasPane?card('Картинка 48×48',
   row('Стан','<span id="paneSt" class="chip off">…</span>')+
   `<div class="pad">${seg('/api/media|pane',[['auto','карусель'],...CAT.scenes.map(s=>[s.id,s.name])],pv,'wrap')}</div>`+
@@ -41,6 +45,7 @@ SCR.screen={title:'Екран',async render(m){
   row('Плата реєструє функції',sw('rb:/api/display|funcReg',di.funcReg,rbA('rb:',di.funcReg,'Реєстрація функцій',true)),'',
    'Увімк: плата сама робить рукостискання з панеллю (штатного радіо нема). Вимк: рукостискання веде штатне радіо, плата лише підкладає текст.'));
  $$('.card',m).forEach(c=>saver(c,genericSave));
+ $('[data-k="/api/settings|carPreset"]').addEventListener('change',e=>$('#carRows').hidden=e.currentTarget.dataset.v==='trip');
  mk('layout').addEventListener('change',e=>{const cur={...this.me,layout:e.target.value};$('#lp').innerHTML=lpHTML(cur);this.me=cur;this.fill(cur)});
  $('#clkNow').onclick=e=>{const t=clockStr().replace(':','');run(e.target,()=>API.post('/api/display/clock?time='+t),'час '+clockStr())};
  if(hasPane)this.editor(me);

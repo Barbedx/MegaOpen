@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- Pane scene G-метр: the car's lateral/longitudinal g (0x2A0) as a dot with a trail, a 0.5 g ring and a 3 s peak; a dotted still ring while the signal is stale or unverified. Not in the carousel.
+- Car screen preset «Поїздка»: consumption now/average, range, trip distance (`--` with no data); Display › Car screen › Preset, `carPreset`, and a card on Екран.
+
+### Changed
+- Panel menu: the car screen settings moved into Display › Car screen.
+
 ### Fixed
 - AffaDisplay v1.1.2: urgent panel jobs (power on/off) go out in the order they were queued; two of them used to go out reversed.
 

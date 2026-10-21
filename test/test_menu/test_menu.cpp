@@ -477,9 +477,53 @@ void test_car_rows_in_the_registry()
     TEST_ASSERT_EQUAL(Vehicle::SIG_FUEL_LEVEL, s.carSig[1]);
 }
 
+// The «Поїздка» preset: consumption now/average, range, trip; "--" with no data.
+void test_trip_rows()
+{
+    char a[33], b[33], c[33];
+    char* const rows[3] = {a, b, c};
+    MenuUi::tripRows(rows, sizeof(a), 22, {72, true, true}, {68, true, true}, {420, true, true},
+                     {1234, true, true});
+    TEST_ASSERT_EQUAL_STRING("L/100km        7.2/6.8", a);
+    TEST_ASSERT_EQUAL_STRING("Range            420km", b);
+    TEST_ASSERT_EQUAL_STRING("Trip           123.4km", c);
+    // Standing still (no cons_inst), a fresh boot (nothing at all).
+    MenuUi::tripRows(rows, sizeof(a), 22, {0, false, true}, {68, true, true}, {0, false, false},
+                     {0, false, false});
+    TEST_ASSERT_EQUAL_STRING("L/100km         --/6.8", a);
+    TEST_ASSERT_EQUAL_STRING("Range               --", b);
+    TEST_ASSERT_EQUAL_STRING("Trip                --", c);
+    // Not yet verified: "?" once per row.
+    MenuUi::tripRows(rows, sizeof(a), 22, {95, true, false}, {70, true, false}, {380, true, false},
+                     {7, true, false});
+    TEST_ASSERT_EQUAL_STRING("L/100km       9.5/7.0?", a);
+    TEST_ASSERT_EQUAL_STRING("Range           380km?", b);
+    TEST_ASSERT_EQUAL_STRING("Trip            0.7km?", c);
+}
+
+// Display › Car screen › Preset, stored as its number, by name on the wire.
+void test_car_preset_in_the_registry()
+{
+    Cfg::Settings s;
+    Cfg::Model m{&s, nullptr};
+    const Cfg::SEntry* g = find("display.car");
+    TEST_ASSERT_NOT_NULL(g);
+    TEST_ASSERT_EQUAL_STRING("display", g->parent);
+    const Cfg::SEntry* e = find("carPreset");
+    TEST_ASSERT_NOT_NULL(e);
+    TEST_ASSERT_EQUAL_STRING("display.car", e->parent);
+    TEST_ASSERT_EQUAL_STRING("custom", Cfg::Registry::enumId(*e, Cfg::Registry::get(m, *e)));
+    TEST_ASSERT_TRUE(Cfg::Registry::set(m, *e, Cfg::Registry::enumIndex(*e, "trip")));
+    TEST_ASSERT_EQUAL((uint8_t)Cfg::CarPreset::Trip, s.carPreset);
+    TEST_ASSERT_EQUAL_STRING("display.car", find("carSig1")->parent);
+    TEST_ASSERT_EQUAL_STRING("display.car", find("carScreen")->parent);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_trip_rows);
+    RUN_TEST(test_car_preset_in_the_registry);
     RUN_TEST(test_signal_value_forms);
     RUN_TEST(test_signal_row_is_exactly_the_width);
     RUN_TEST(test_car_rows_in_the_registry);
