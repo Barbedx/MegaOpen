@@ -24,6 +24,7 @@
 #include "../keys/MacroEngine.h"
 #include "../vehicle/AlertRules.h"
 #include "Settings.h"
+#include "ApPass.h"
 
 // Everything the user can change, in NVS. Small values only; the CAN decode
 // table goes to the filesystem as JSON (ARCHITECTURE.md §7).
@@ -87,6 +88,15 @@ namespace Cfg
 #endif
         void factoryReset();
 
+        // The AP password (ApPass.h): what begin() decided, and the two ways
+        // out of Pending. Under the settings lock, like every Settings write.
+        ApPass::State apPassState() const { return _apState; }
+        // The candidate becomes the password (from the next start). False:
+        // nothing pending.
+        bool adoptApPass();
+        // An own password from the web: Pending ends. `p` is acceptable().
+        void setOwnApPass(const Str& p);
+
         // net_svc: the detected CAN A rate, only that key. Not save(): one NVS
         // write, and nothing else in Settings is touched from that task.
         void saveCan2Detected(uint32_t bps);
@@ -129,6 +139,8 @@ namespace Cfg
         void migrate();
 
         uint8_t     _ver = 0;      // what is stored now, after migrate()
+        ApPass::State _apState = ApPass::State::Own;
+        void loadApPass();
         uint8_t     _verWas = 0;   // what was stored when this boot started
         Preferences _p;
         Settings    _s;

@@ -41,6 +41,10 @@ namespace App
             // ui: the media screen, pane, popups. media: the track-name source.
             void (*stageUi)(const Cfg::Settings& s) = nullptr;
             void (*stageMedia)(const Cfg::Settings& s) = nullptr;
+            // The "WiFi pass" row (null: no row): the AP's name, and the
+            // fullscreen that shows it (App::Ui::queueNotification).
+            const char* (*apSsid)() = nullptr;
+            void (*notify)(const char* title, const char* text) = nullptr;
         };
 
         // setup(), before the keys and ui tasks start.

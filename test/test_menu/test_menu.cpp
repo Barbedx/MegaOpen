@@ -477,9 +477,23 @@ void test_car_rows_in_the_registry()
     TEST_ASSERT_EQUAL(Vehicle::SIG_FUEL_LEVEL, s.carSig[1]);
 }
 
+void test_wifi_row_only_when_asked_and_closes()
+{
+    Fixture f;
+    TEST_ASSERT_FALSE(f.go("WiFi pass"));                        // off by default
+    f.e.setWifiRow(true);
+    f.e.open();
+    TEST_ASSERT_TRUE(f.go("WiFi pass"));
+    // Just above "Power off".
+    TEST_ASSERT_EQUAL_STRING("Power off", f.item((uint8_t)(f.e.cursor() + 1)).c_str());
+    TEST_ASSERT_EQUAL(Out::WifiPass, f.e.key(Cmd::Select));
+    TEST_ASSERT_FALSE(f.e.isOpen());
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_wifi_row_only_when_asked_and_closes);
     RUN_TEST(test_signal_value_forms);
     RUN_TEST(test_signal_row_is_exactly_the_width);
     RUN_TEST(test_car_rows_in_the_registry);

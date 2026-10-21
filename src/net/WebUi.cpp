@@ -428,8 +428,8 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         // The AP password, which is also the OTA password. Empty = unchanged.
         // Never from a file (SettingsJson::read refuses it there).
         const String apPass = file ? String() : String(d["apPass"] | "");
-        if (apPass.length() && (apPass.length() < 8 || apPass.length() > 63))
-            { out = "apPass: 8 to 63 characters"; return 400; }
+        if (apPass.length() && !ApPass::acceptable(apPass.c_str()))
+            { out = "apPass: 8 to 63 characters, and not the public default"; return 400; }
 
         // The alert rules and the emitter's settings are edited on copies of
         // what their tasks hold now (rows and cells not sent keep their
@@ -606,7 +606,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         if (ap & Cfg::AP_CAP) Capture::setSettings(cs);
 #endif
 
-        if (apPass.length()) { restart = restart || apPass != s.apPass; s.apPass = apPass; }
+        if (apPass.length()) { restart = restart || apPass != s.apPass; _cfg->setOwnApPass(apPass); }
 
         _cfg->save();
         LogBus::printf("settings saved: %u value(s)%s%s", (unsigned)rd.n, file ? " from a file" : "",

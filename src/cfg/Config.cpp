@@ -21,7 +21,7 @@ namespace Cfg
 
         _s.mdnsName = _p.getString("mdns", "megaopen");
         _s.mdnsOn   = _p.isKey("mdnsOn") ? _p.getBool("mdnsOn", true) : true;
-        _s.apPass = _p.getString("apPass", MO_AP_PASS);
+        loadApPass();
 
         _s.timing.debounceMs     = _p.getUShort("dbMs",   20);
         _s.timing.fastDebounceMs = _p.getUShort("fdbMs",  2);
@@ -357,6 +357,65 @@ namespace Cfg
         if (!n || n > sizeof(blob) || !k.fromBlob(blob, (uint8_t)n)) k = Knobs::Config{};
     }
 #endif
+
+    // Security review P1 (ApPass.h). Runs before the seed, so save() then
+    // writes what was decided here.
+    void Config::loadApPass()
+    {
+        const bool has = _p.isKey("apPass");
+        const String stored = has ? _p.getString("apPass", "") : String();
+        _apState = ApPass::decide(has ? stored.c_str() : nullptr, MO_AP_PASS);
+#if !FEATURE_DISPLAY_CAN
+        // No panel to show a made-up password on: the old behaviour, and the
+        // owner is told to change it (README, SECURITY.md).
+        if (_apState == ApPass::State::Fresh) _apState = ApPass::State::Own;
+#endif
+        char gen[ApPass::LEN + 1];
+        switch (_apState) {
+            case ApPass::State::Own:
+                _s.apPass = has ? stored : String(MO_AP_PASS);
+                break;
+            case ApPass::State::Fresh:
+                ApPass::generate(gen, [] { return esp_random(); });
+                _s.apPass = gen;
+                _p.putString("apPass", _s.apPass);
+                break;
+            case ApPass::State::Pending:
+                _s.apPass = stored;
+                _s.apPassNext = _p.getString("apPassNx", "");
+                if (!ApPass::acceptable(_s.apPassNext.c_str())) {
+                    ApPass::generate(gen, [] { return esp_random(); });
+                    _s.apPassNext = gen;
+                    _p.putString("apPassNx", _s.apPassNext);
+                }
+                break;
+        }
+        // Never the value: LogBus is readable from the web.
+        LogBus::printf("[wifi] AP password: %s", _apState == ApPass::State::Fresh   ? "made up at this boot, on the panel"
+                                               : _apState == ApPass::State::Pending ? "PUBLIC DEFAULT, a new one waits on the panel"
+                                                                                    : "own");
+    }
+
+    bool Config::adoptApPass()
+    {
+        Guard g(*this);
+        if (_apState != ApPass::State::Pending || !ApPass::acceptable(_s.apPassNext.c_str())) return false;
+        _s.apPass = _s.apPassNext;
+        _s.apPassNext = "";
+        _p.putString("apPass", _s.apPass);
+        _p.remove("apPassNx");
+        _apState = ApPass::State::Own;
+        _gen.fetch_add(1, std::memory_order_release);
+        return true;
+    }
+
+    void Config::setOwnApPass(const Str& p)
+    {
+        Guard g(*this);
+        _s.apPass = p;
+        if (_apState == ApPass::State::Pending) { _s.apPassNext = ""; _p.remove("apPassNx"); }
+        _apState = ApPass::State::Own;
+    }
 
     void Config::factoryReset()
     {

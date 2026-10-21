@@ -76,6 +76,8 @@ namespace App
             // net_svc -> ui task: a commit was applied (or refused): once the
             // queue is through, re-read the knobs and the settings.
             std::atomic<bool>    s_applied{false};
+            // ui task -> net_svc: adopt the waiting AP password (Config::adoptApPass).
+            std::atomic<bool>    s_adoptReq{false};
             // The menu's copies carry its own commits ahead of net_svc
             // (MenuEngine::begin); while any is still queued they are newer
             // than what is stored and are not re-read.
@@ -275,6 +277,24 @@ namespace App
                     case MenuUi::Out::Closed:
                         closeMenu("");
                         break;
+                    case MenuUi::Out::WifiPass: {
+                        closeMenu("");
+                        if (!s_d.notify) break;
+                        // From the menu's copy of the settings; never logged.
+                        char title[32], text[48];
+                        snprintf(title, sizeof(title), "WiFi %s", s_d.apSsid ? s_d.apSsid() : "");
+                        if (s_snap.apPassNext.length()) {
+                            // Still the public default: this press adopts the
+                            // board's own, from the next start.
+                            snprintf(text, sizeof(text), "pass %s from the next start", s_snap.apPassNext.c_str());
+                            s_adoptReq.store(true, std::memory_order_release);
+                        } else {
+                            snprintf(text, sizeof(text), "pass %s", s_snap.apPass.c_str());
+                        }
+                        s_d.notify(title, text);
+                        LogBus::line("[menu] WiFi password shown on the panel");
+                        break;
+                    }
                     case MenuUi::Out::PowerOff:
                         // Only from Open: a hold that closed the menu in the
                         // meantime wins, and the panel stays on.
@@ -306,6 +326,7 @@ namespace App
                 s_carView.row = sigRow;
             }
             s_menu.begin(&s_model, d.car ? &s_carView : nullptr);
+            s_menu.setWifiRow(d.notify != nullptr);
         }
 
         bool filter(const Keys::Event& e)
@@ -385,6 +406,15 @@ namespace App
 
         void applyPending()
         {
+            // The waiting AP password, adopted under the settings lock; it is
+            // the AP's from the next start (WifiManager reads it at begin).
+            if (s_adoptReq.load(std::memory_order_acquire) && s_d.cfg->tryLock()) {
+                s_adoptReq.store(false, std::memory_order_relaxed);
+                const bool ok = s_d.cfg->adoptApPass();
+                s_d.cfg->unlock();
+                LogBus::printf("[wifi] AP password: %s", ok ? "the board's own, from the next start" : "nothing waiting");
+                s_applied.store(true, std::memory_order_release);
+            }
             for (;;) {
                 const uint8_t t = s_cTail.load(std::memory_order_relaxed);
                 if (t == s_cHead.load(std::memory_order_acquire)) return;

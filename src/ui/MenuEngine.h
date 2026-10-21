@@ -48,6 +48,7 @@ namespace MenuUi
         Commit,     // a value to store: commitEntry() / commitValue(); redraw too
         Closed,     // the menu shut
         PowerOff,   // "Power off" chosen; the menu shut
+        WifiPass,   // "WiFi pass" chosen (setWifiRow): the owner shows it; the menu shut
     };
 
     class Engine {
@@ -63,6 +64,9 @@ namespace MenuUi
         void open();
         void close();
         bool isOpen() const { return _open; }
+        // A root row "WiFi pass" before "Power off": the board's AP password,
+        // shown on the glass (being in the car is the proof). Off by default.
+        void setWifiRow(bool on) { _wifiRow = on; }
         bool editing() const { return _editing; }
 
         Out key(Cmd c);
@@ -95,7 +99,7 @@ namespace MenuUi
         static constexpr uint8_t MAX_DEPTH = 4;
 
     private:
-        enum class Kind : uint8_t { Back, Exit, Group, Setting, CarRoot, CarGroup, Signal, PowerOff };
+        enum class Kind : uint8_t { Back, Exit, Group, Setting, CarRoot, CarGroup, Signal, PowerOff, WifiPass };
         struct Item { Kind kind; uint8_t ref; };   // ref: registry index, car group or signal
         struct Level { Kind kind; uint8_t ref; uint8_t cursor; };
 
@@ -106,6 +110,7 @@ namespace MenuUi
         void title(char* out, size_t cap) const;
 
         Cfg::Model*       _m = nullptr;
+        bool              _wifiRow = false;
         const CarView*    _car = nullptr;
         bool    _open = false;
         bool    _editing = false;

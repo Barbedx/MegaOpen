@@ -30,6 +30,9 @@ namespace Cfg
         bool     mdnsOn   = true;
         Str      apName = "MegaOpen";
         Str      apPass = MO_AP_PASS;      // >= 8 chars or the AP comes up open
+        // The per-board password waiting to replace the public default
+        // (ApPass.h, State::Pending); empty otherwise. NVS "apPassNx".
+        Str      apPassNext;
 
         // input timing
         Input::KeyDebouncer::Params timing;

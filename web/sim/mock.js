@@ -236,7 +236,7 @@ g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type
  if(st.bleMode)o.bleMode=st.bleMode;if(st.wifi)o.ssid=st.wifi.ssid;return o});
 /* НОВЕ (план, зріз 4): перезапуск не побічний ефект, а pendingReboot; apPass */
 po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass);
- if(ap&&(ap.length<8||ap.length>63))return fail(400,'apPass: 8 to 63 characters');
+ if(ap&&(ap.length<8||ap.length>63||ap==='megaopen'))return fail(400,'apPass: 8 to 63 characters, and not the public default');
  let rb=typeof q.mdnsOn==='boolean'&&q.mdnsOn!==s.mdnsOn;
  /* таблиці реєстру (WebUi.cpp): рядок = клітинки в порядку колонок; рядок чи клітинка, яких не прислали
     (або null), лишаються як були; ті самі тексти помилок */

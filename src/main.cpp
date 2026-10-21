@@ -1726,6 +1726,9 @@ void setup()
         m.stageMedia = [](const Cfg::Settings& s) {
             g_media.setMode(MediaRouter::modeFromStr(s.mediaSource.c_str()));
         };
+        // The "WiFi pass" row: the AP password on the glass (cfg/ApPass.h).
+        m.apSsid = []() { return g_wifi.apSsid().c_str(); };
+        m.notify = App::Ui::queueNotification;
         App::PanelMenu::begin(m);
     }
 #endif
@@ -2254,6 +2257,21 @@ void setup()
 #endif
     g_web.begin(g_cfg, g_engine, g_map, g_keySink);
     memMark("web");
+#if FEATURE_DISPLAY_CAN
+    // The AP password on the glass (cfg/ApPass.h): a made-up one at the boot
+    // that made it; a waiting one at every boot until the menu adopts it.
+    // Owed until the panel is synced, like any notification. Never logged.
+    if (App::Panel::present() && g_cfg.apPassState() != ApPass::State::Own) {
+        Cfg::Config::Guard g(g_cfg);
+        char title[32], text[48];
+        snprintf(title, sizeof(title), "WiFi %s", g_wifi.apSsid().c_str());
+        if (g_cfg.apPassState() == ApPass::State::Fresh)
+            snprintf(text, sizeof(text), "pass %s", g_cfg.s().apPass.c_str());
+        else
+            snprintf(text, sizeof(text), "new pass %s: menu, WiFi pass", g_cfg.s().apPassNext.c_str());
+        App::Ui::queueNotification(title, text);
+    }
+#endif
     // The OTA trial's verdict comes from net_svc (Housekeeping).
     App::OtaTrial::begin();
 

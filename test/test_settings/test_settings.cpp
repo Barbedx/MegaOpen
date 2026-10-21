@@ -1,3 +1,4 @@
+#include "cfg/ApPass.h"
 #include "net/RequestGate.h"
 #include <unity.h>
 #include <string.h>
@@ -612,14 +613,15 @@ void test_unit_rows_store_the_wire_codes()
 
 // Settings fields with no registry entry, on purpose: strings the panel
 // cannot edit, which keep their own web handling.
-static const char* const kNotInRegistry[] = {"ssid", "pass", "mdnsName", "apName", "apPass"};
+static const char* const kNotInRegistry[] = {"ssid", "pass", "mdnsName", "apName", "apPass",
+                                             "apPassNext"};   // shown on the panel only (ApPass.h)
 
 // A new field in Cfg::Settings changes its size and lands here: give it a
 // registry entry (or add it to kNotInRegistry with the reason), then update
 // the number. Host layout: std::string fields.
 void test_settings_struct_unchanged()
 {
-    TEST_ASSERT_EQUAL_MESSAGE(sizeof(std::string) * 11 + 80, sizeof(Settings),
+    TEST_ASSERT_EQUAL_MESSAGE(sizeof(std::string) * 12 + 80, sizeof(Settings),
                               "Cfg::Settings changed: add a registry entry, then update this size");
     // Every other field: count the entries that write Settings.
     size_t n = 0;
@@ -902,9 +904,44 @@ void test_gate_header_on_every_change_and_ota_start()
     TEST_ASSERT_TRUE(*RequestGate::whyText(Why::Host));
 }
 
+// ---- the AP password (src/cfg/ApPass.h) ----------------------------------------
+
+void test_ap_pass_acceptable_and_generated()
+{
+    TEST_ASSERT_FALSE(ApPass::acceptable("megaopen"));           // the public default
+    TEST_ASSERT_FALSE(ApPass::acceptable("short"));
+    TEST_ASSERT_FALSE(ApPass::acceptable(nullptr));
+    TEST_ASSERT_TRUE(ApPass::acceptable("megaopen2"));
+    char p[ApPass::LEN + 1];
+    uint32_t n = 0;
+    ApPass::generate(p, [&] { return n++; });                    // 0, 1, 2 ...
+    TEST_ASSERT_EQUAL_UINT32(ApPass::LEN, strlen(p));
+    TEST_ASSERT_EQUAL_STRING("abcdefghjk", p);
+    TEST_ASSERT_TRUE(ApPass::acceptable(p));
+    // No look-alikes, ever; a draw past the even limit is drawn again.
+    for (const char* c = ApPass::ALPHABET; *c; ++c) TEST_ASSERT_NULL(strchr("0o1lI", *c));
+    uint32_t seq[] = {UINT32_MAX, 30};
+    uint8_t k = 0;
+    ApPass::generate(p, [&] { return k < 2 ? seq[k++] : 0u; });
+    TEST_ASSERT_EQUAL_CHAR('9', p[0]);                           // UINT32_MAX skipped, 30 -> '9'
+}
+
+void test_ap_pass_decide()
+{
+    using ApPass::State;
+    TEST_ASSERT_EQUAL(State::Fresh, ApPass::decide(nullptr, "megaopen"));   // fresh / factory reset
+    TEST_ASSERT_EQUAL(State::Fresh, ApPass::decide("", "megaopen"));
+    TEST_ASSERT_EQUAL(State::Own, ApPass::decide(nullptr, "devpreset1"));   // secrets.h preset
+    TEST_ASSERT_EQUAL(State::Pending, ApPass::decide("megaopen", "megaopen"));
+    TEST_ASSERT_EQUAL(State::Pending, ApPass::decide("megaopen", "devpreset1"));
+    TEST_ASSERT_EQUAL(State::Own, ApPass::decide("myownpass", "megaopen"));
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_ap_pass_acceptable_and_generated);
+    RUN_TEST(test_ap_pass_decide);
     RUN_TEST(test_gate_host_ip_and_own_name_only);
     RUN_TEST(test_gate_header_on_every_change_and_ota_start);
     RUN_TEST(test_ids_unique_and_findable);
