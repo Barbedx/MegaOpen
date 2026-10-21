@@ -73,8 +73,16 @@ namespace App
             constexpr uint8_t COMMITS = 8;
             Commit               s_commit[COMMITS];
             std::atomic<uint8_t> s_cHead{0}, s_cTail{0};
-            // net_svc -> ui task: a commit was applied, re-read the knobs.
+            // net_svc -> ui task: a commit was applied (or refused): once the
+            // queue is through, re-read the knobs and the settings.
             std::atomic<bool>    s_applied{false};
+            // The menu's copies carry its own commits ahead of net_svc
+            // (MenuEngine::begin); while any is still queued they are newer
+            // than what is stored and are not re-read.
+            bool commitsPending()
+            {
+                return s_cHead.load(std::memory_order_relaxed) != s_cTail.load(std::memory_order_acquire);
+            }
 
             // ---- keys task only ------------------------------------------------------
             MenuUi::InputFilter s_in;
@@ -205,6 +213,8 @@ namespace App
                 const uint8_t h = s_cHead.load(std::memory_order_relaxed);
                 if ((uint8_t)(h - s_cTail.load(std::memory_order_acquire)) >= COMMITS) {
                     LogBus::line("[menu] commit queue full: change dropped");
+                    // The copy already shows it: read the stored values back.
+                    s_applied.store(true, std::memory_order_release);
                     return;
                 }
                 s_commit[h % COMMITS] = Commit{index, value};
@@ -258,7 +268,7 @@ namespace App
                     case MenuUi::Out::Commit: {
                         const int idx = Cfg::Registry::indexOf(s_menu.commitEntry()->id);
                         if (idx >= 0) commit((uint8_t)idx, s_menu.commitValue());
-                        // Redrawn when net_svc has stored it (s_applied).
+                        // The menu's copy has it already (MenuEngine::begin).
                         s_dirty = true;
                         break;
                     }
@@ -346,15 +356,18 @@ namespace App
             if (!s_menu.isOpen()) { s_popupWas = popupUp; return; }
             if ((uint32_t)(now - s_lastKeyMs) >= IDLE_MS) { closeMenu(" (idle 45 s)"); return; }
 
-            if (s_applied.exchange(false, std::memory_order_acq_rel)) {
-                refreshKnobs();
-                refreshSnap();                  // applyPending saved or touched
-                s_dirty = true;
+            // Not while the menu's own commits are queued: its copies are newer.
+            if (!commitsPending()) {
+                if (s_applied.exchange(false, std::memory_order_acq_rel)) {
+                    refreshKnobs();
+                    s_snapOk = false;            // a refused commit bumps no generation
+                    s_dirty = true;
+                }
+                // A save from the menu or the web: read the new values. While the
+                // lock is busy the copy is not marked fresh and is retried.
+                if ((!s_snapOk || s_d.cfg->generation() != s_snapGen) && !s_menu.editing() && refreshSnap())
+                    s_dirty = true;
             }
-            // A save from the menu or the web: read the new values. While the
-            // lock is busy the copy is not marked fresh and is retried.
-            if (s_d.cfg->generation() != s_snapGen && !s_menu.editing() && refreshSnap())
-                s_dirty = true;
             // Live values and signals that came or went: redraw only what changed.
             if ((int32_t)(now - s_refreshAtMs) >= 0) {
                 s_refreshAtMs = now + REFRESH_MS;
@@ -381,7 +394,6 @@ namespace App
                 if (!s_d.cfg->tryLock()) return;
                 struct Held { Cfg::Config* c; ~Held() { c->unlock(); } } held{s_d.cfg};
                 const Commit c = s_commit[t % COMMITS];
-                s_cTail.store((uint8_t)(t + 1), std::memory_order_release);
 
                 const Cfg::SEntry& e = Cfg::Registry::at(c.index);
                 Knobs::Config kc;
@@ -390,17 +402,21 @@ namespace App
                 uint8_t ap = 0;
                 if (!Cfg::Registry::set(m, e, c.value, &ap)) {
                     LogBus::printf("[menu] %s = %ld refused", e.id, (long)c.value);
-                    continue;
+                } else {
+                    if ((ap & Cfg::AP_KNOBS) && s_d.knobsSet) s_d.knobsSet(kc);
+                    if ((ap & Cfg::AP_UI) && s_d.stageUi) s_d.stageUi(s_d.cfg->s());
+                    if ((ap & Cfg::AP_MEDIA) && s_d.stageMedia) s_d.stageMedia(s_d.cfg->s());
+                    if (ap & ~Cfg::AP_KNOBS) s_d.cfg->save();
+                    else s_d.cfg->touch();          // volatile or knobs only: no save, still news
+                    char v[24];
+                    Cfg::Registry::formatValue(e, c.value, v, sizeof(v));
+                    LogBus::printf("[menu] %s = %s%s", e.id, v, (ap & Cfg::AP_REBOOT) ? " (after a reboot)" : "");
                 }
-                if ((ap & Cfg::AP_KNOBS) && s_d.knobsSet) s_d.knobsSet(kc);
-                if ((ap & Cfg::AP_UI) && s_d.stageUi) s_d.stageUi(s_d.cfg->s());
-                if ((ap & Cfg::AP_MEDIA) && s_d.stageMedia) s_d.stageMedia(s_d.cfg->s());
-                if (ap & ~Cfg::AP_KNOBS) s_d.cfg->save();
-                else s_d.cfg->touch();          // volatile or knobs only: no save, still news
-                char v[24];
-                Cfg::Registry::formatValue(e, c.value, v, sizeof(v));
-                LogBus::printf("[menu] %s = %s%s", e.id, v, (ap & Cfg::AP_REBOOT) ? " (after a reboot)" : "");
+                // Stored (or refused): the ui task re-reads its copies once the
+                // queue is through. The slot is freed last, so "queued" covers
+                // the apply too and the copies are never re-read half-way.
                 s_applied.store(true, std::memory_order_release);
+                s_cTail.store((uint8_t)(t + 1), std::memory_order_release);
             }
         }
     }

@@ -52,8 +52,12 @@ namespace MenuUi
 
     class Engine {
     public:
-        // `m` is read for values and availability; never written here.
-        void begin(const Cfg::Model* m, const CarView* car = nullptr);
+        // `m` is read for values and availability, and a commit is written
+        // into it at once: it is the menu's own copy, so the row shows the new
+        // value, and a second press reads it, before the owner has stored the
+        // first (a Bool pressed twice toggles twice). The owner re-reads its
+        // copy once its commits are through.
+        void begin(Cfg::Model* m, const CarView* car = nullptr);
 
         // Opens at the root, cursor on the first row after "< Exit".
         void open();
@@ -101,7 +105,7 @@ namespace MenuUi
         void leave();
         void title(char* out, size_t cap) const;
 
-        const Cfg::Model* _m = nullptr;
+        Cfg::Model*       _m = nullptr;
         const CarView*    _car = nullptr;
         bool    _open = false;
         bool    _editing = false;

@@ -70,10 +70,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   (2026-09-27, ~20 s), fine in the next. Observe before acting; could be the
   carousel on an empty scene.
 
-- **A menu Bool pressed twice quickly toggles once (review, 2026-10-21).**
-  The engine takes the new value from the live setting, which net_svc has
-  not changed yet, so both commits carry the same value. Where:
-  `MenuEngine::key` (Kind::Setting, Bool) and `PanelMenu::applyPending`.
 - **Info layout: scroll arrows and row 1.** The panel draws its own scroll
   arrows beside the pane and the byte that hides them is unknown; whether row 1
   (the clock) is visible beside the pane was never answered. Ten minutes on
@@ -217,6 +213,10 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   debug callback guard.
 
 ## Done
+
+- **A menu Bool pressed twice toggles twice** (review, 2026-10-21): the
+  engine writes each commit into the menu's own copy at once, and the copy
+  is re-read only once the commit queue is through (refusals included).
 
 - **No automatic screen over a live popup** (2026-10-21): every now-playing
   layout, the car screen and the track splash wait for the popup's deadline

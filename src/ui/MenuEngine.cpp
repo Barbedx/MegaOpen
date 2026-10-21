@@ -31,7 +31,7 @@ namespace MenuUi
         }
     }
 
-    void Engine::begin(const Model* m, const CarView* car)
+    void Engine::begin(Model* m, const CarView* car)
     {
         _m = m;
         _car = car;
@@ -161,6 +161,7 @@ namespace MenuUi
             if (_editValue == Registry::get(*_m, e)) return Out::Redraw;
             _commitEntry = &e;
             _commitValue = _editValue;
+            Registry::set(*_m, e, _commitValue);
             return Out::Commit;
         }
 
@@ -184,6 +185,7 @@ namespace MenuUi
                 if (e.type == SType::Bool) {
                     _commitEntry = &e;
                     _commitValue = v ? 0 : 1;
+                    Registry::set(*_m, e, _commitValue);
                     return Out::Commit;
                 }
                 _editing = true;

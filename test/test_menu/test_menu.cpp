@@ -177,6 +177,24 @@ void test_bool_toggles_at_once()
     TEST_ASSERT_FALSE(f.e.editing());
 }
 
+// Two presses before the owner has stored the first: the second toggles the
+// pending value back, it does not repeat the first commit.
+void test_bool_pressed_twice_toggles_twice()
+{
+    Fixture f;
+    f.go("Display");
+    f.e.key(Cmd::Select);
+    f.go("Key popup");
+    TEST_ASSERT_EQUAL(Out::Commit, f.e.key(Cmd::Select));
+    TEST_ASSERT_EQUAL_INT32(0, f.e.commitValue());
+    TEST_ASSERT_EQUAL_STRING(pad("Key popup", "Off").c_str(), f.item(f.e.cursor()).c_str());
+    TEST_ASSERT_EQUAL(Out::Commit, f.e.key(Cmd::Select));
+    TEST_ASSERT_EQUAL_INT32(1, f.e.commitValue());
+    TEST_ASSERT_EQUAL_STRING(pad("Key popup", "On").c_str(), f.item(f.e.cursor()).c_str());
+    TEST_ASSERT_EQUAL(Out::Commit, f.e.key(Cmd::Select));
+    TEST_ASSERT_EQUAL_INT32(0, f.e.commitValue());
+}
+
 void test_int_edit_in_brackets_then_commit()
 {
     Fixture f;
@@ -194,7 +212,9 @@ void test_int_edit_in_brackets_then_commit()
     TEST_ASSERT_EQUAL(Out::Commit, f.e.key(Cmd::Select));
     TEST_ASSERT_EQUAL_PTR(find("paneCycleS"), f.e.commitEntry());
     TEST_ASSERT_EQUAL_INT32(40, f.e.commitValue());
-    TEST_ASSERT_EQUAL_STRING(pad("Carousel", "30s").c_str(), f.item(f.e.cursor()).c_str());
+    // The menu's copy takes it at once: the row shows what was chosen.
+    TEST_ASSERT_EQUAL(40, f.s.paneCycleS);
+    TEST_ASSERT_EQUAL_STRING(pad("Carousel", "40s").c_str(), f.item(f.e.cursor()).c_str());
 }
 
 void test_edit_back_to_same_value_is_no_commit()
@@ -470,6 +490,7 @@ int main(int, char**)
     RUN_TEST(test_submenu_and_back_keep_the_cursor);
     RUN_TEST(test_cursor_wraps);
     RUN_TEST(test_bool_toggles_at_once);
+    RUN_TEST(test_bool_pressed_twice_toggles_twice);
     RUN_TEST(test_int_edit_in_brackets_then_commit);
     RUN_TEST(test_edit_back_to_same_value_is_no_commit);
     RUN_TEST(test_enum_wraps_while_editing);
