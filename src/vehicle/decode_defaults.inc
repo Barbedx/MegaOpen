@@ -9,8 +9,10 @@
 //
 // DF_HYPOTHESIS = not measured on our Mégane II yet. The owner confirmed doors,
 // boot, lights and indicators in the car (2026-10-20): those rows are measured.
-// A 2-bit Renault state (0 no, 1 yes, 2-3 unavailable/invalid) is read as its
-// low bit where the signal is a yes/no, as 0x60D reverse always was.
+// A 2-bit Renault state (0 no, 1 yes, 2-3 reserved/not fitted/invalid) that is
+// a yes/no reads the whole field with DF_STATE2: 2 and 3 leave the signal as
+// it was, so an invalid frame never reads as "yes" (reverse, brake...). Where
+// the matrix gives every value a meaning (wipers, MIL, roof), the row is raw.
 //
 // Left out on purpose:
 //   0x60D b5         a second engine temperature; 0x551 b0 is the one used.
@@ -19,10 +21,10 @@
 { 0x0C2,   0, 2,  0, 0xFFFFu,     1, 1, -32767, SIG_STEERING,   DF_HYPOTHESIS,               0 },  // b1.0/16: 0.1 deg/LSB, -3276.7, so 0x7FFF is centre
 { 0x181,   0, 2,  0, 0xFFFFu,     1, 8,      0, SIG_RPM,        DF_HYPOTHESIS,               0 },  // raw / 8
 { 0x181,   3, 1,  0, 0xFFu,     423, 100,  -68, SIG_THROTTLE,   DF_HYPOTHESIS,               0 },  // pedal: % = raw x 0.423 - 6.768; 0x10 released
-{ 0x181,   5, 1,  0, 0x1u,        1, 1,      0, SIG_BRAKE,      DF_HYPOTHESIS,               0 },  // b6.6/2
-{ 0x181,   5, 1,  3, 0x1u,        1, 1,      0, SIG_CLUTCH,     DF_HYPOTHESIS,               0 },  // b6.3/2
-{ 0x215,   1, 1,  4, 0x1u,        1, 1,      0, SIG_NEUTRAL,    DF_HYPOTHESIS,               0 },  // b2.2/2
-{ 0x215,   1, 1,  6, 0x1u,        1, 1,      0, SIG_REVERSE_UPC, DF_HYPOTHESIS,              0 },  // b2.0/2
+{ 0x181,   5, 1,  0, 0x3u,        1, 1,      0, SIG_BRAKE,      DF_HYPOTHESIS | DF_STATE2,   0 },  // b6.6/2
+{ 0x181,   5, 1,  3, 0x3u,        1, 1,      0, SIG_CLUTCH,     DF_HYPOTHESIS | DF_STATE2,   0 },  // b6.3/2
+{ 0x215,   1, 1,  4, 0x3u,        1, 1,      0, SIG_NEUTRAL,    DF_HYPOTHESIS | DF_STATE2,   0 },  // b2.2/2
+{ 0x215,   1, 1,  6, 0x3u,        1, 1,      0, SIG_REVERSE_UPC, DF_HYPOTHESIS | DF_STATE2,  0 },  // b2.0/2
 { 0x2A0,   0, 1,  0, 0xFFu,       5, 1,  -1000, SIG_ACCEL_LONG, DF_HYPOTHESIS,               0 },  // 0.05 m/s2, -10
 { 0x2A0,   1, 2,  0, 0xFFFFu,     4, 1, -131068, SIG_ACCEL_LAT, DF_HYPOTHESIS,               0 },  // 0.004 g, -131.068
 { 0x2A0,   3, 2,  0, 0xFFFFu,     2, 1, -65534, SIG_YAW_RATE,   DF_HYPOTHESIS,               0 },  // 0.2 deg/s, -6553.4
@@ -61,7 +63,7 @@
 { 0x60D,   0, 3, 23, 0x1u,        1, 1,      0, SIG_BOOT,       0,                           0 },
 { 0x60D,   2, 1,  3, 0x3u,        1, 1,      0, SIG_LOCKED,     DF_HYPOTHESIS,               0 },  // b3.3/2
 { 0x60D,   4, 1,  0, 0xFFu,       1, 1,    -40, SIG_OUT_TEMP,   DF_HYPOTHESIS,               0 },  // raw - 40
-{ 0x60D,   6, 1,  4, 0x1u,        1, 1,      0, SIG_REVERSE,    DF_HYPOTHESIS,               0 },  // b6 bit4
+{ 0x60D,   6, 1,  4, 0x3u,        1, 1,      0, SIG_REVERSE,    DF_HYPOTHESIS | DF_STATE2,   0 },  // b7.2/2
 { 0x625,   0, 1,  0, 0x1u,        1, 1,      0, SIG_REAR_DEFROST, DF_HYPOTHESIS,             0 },  // b1.7/1
 { 0x625,   1, 1,  7, 0x1u,        1, 1,      0, SIG_AC_COMP_UPC, DF_HYPOTHESIS,              0 },  // b2.0/1
 { 0x625,   2, 1,  0, 0xFFu,      25, 4,      0, SIG_BATT_V,     DF_HYPOTHESIS,               0 },  // 0.0625 V/LSB -> V x100

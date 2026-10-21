@@ -98,6 +98,8 @@ namespace Vehicle
             ++matched;
             int32_t v;
             if (!extract(r, f.data, len, v)) { ++_short; continue; }
+            // Before the clamp, which would read 11 as a boolean's 1.
+            if ((r.flags & DF_STATE2) && (v < 0 || v > 1)) { ++_invalid; continue; }
 
             if (r.flags & DF_KEY) {
                 // A key is an edge, not a level: only a change is news.

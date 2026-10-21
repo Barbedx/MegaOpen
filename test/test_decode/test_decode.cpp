@@ -152,10 +152,11 @@ void test_x84_rows_match_the_matrix_positions()
         TEST_ASSERT_EQUAL_HEX16_MESSAGE(d.id, r->canId, meta(d.sig).name);
         TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, r->numBytes, meta(d.sig).name);
         TEST_ASSERT_EQUAL_UINT8_MESSAGE(d.n - 1, r->startByte, meta(d.sig).name);
-        // A yes/no read from a 2-bit state takes its low bit.
-        const bool lowBit = d.w == 2 && r->mask == 1;
         TEST_ASSERT_EQUAL_UINT8_MESSAGE(8 - d.o - d.w, r->shift, meta(d.sig).name);
-        TEST_ASSERT_EQUAL_HEX32_MESSAGE(lowBit ? 1u : (1u << d.w) - 1, r->mask, meta(d.sig).name);
+        TEST_ASSERT_EQUAL_HEX32_MESSAGE((1u << d.w) - 1, r->mask, meta(d.sig).name);
+        // A yes/no read from a 2-bit state is one; a raw 0-3 is not.
+        const bool state2 = d.w == 2 && meta(d.sig).boolean;
+        TEST_ASSERT_EQUAL_MESSAGE(state2, (r->flags & DF_STATE2) != 0, meta(d.sig).name);
     }
 }
 
@@ -984,7 +985,85 @@ void test_alert_text_places_the_decimal_point()
     TEST_ASSERT_EQUAL_STRING("clim_evap: -1.5 C", b);
 }
 
+// A Renault 2-bit state reads 01 yes and 00 no; 10/11 (reserved, invalid)
+// must not read as "yes": the signal keeps its last value and ages.
+void test_state2_invalid_leaves_the_signal_and_is_counted()
+{
+    CanDecode dec;
+    TEST_ASSERT_TRUE(dec.loadDefaults());
+    State s;
+    dec.apply(frame(0x181, {0, 0, 0, 0x10, 0, 0x01, 0, 0}), s, 10);   // brake 01
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_BRAKE));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_CLUTCH));
+    dec.apply(frame(0x181, {0, 0, 0, 0x10, 0, 0x00, 0, 0}), s, 20);   // brake 00
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_BRAKE));
+    dec.apply(frame(0x181, {0, 0, 0, 0x10, 0, 0x1B, 0, 0}), s, 30);   // both 11
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_BRAKE));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_CLUTCH));
+    TEST_ASSERT_EQUAL_UINT32(20, s.stamp(SIG_BRAKE));                  // not refreshed
+    TEST_ASSERT_EQUAL_UINT32(2, dec.invalid());
+    dec.apply(frame(0x181, {0, 0, 0, 0x10, 0, 0x02, 0, 0}), s, 40);   // brake 10
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_BRAKE));
+    TEST_ASSERT_EQUAL_UINT32(3, dec.invalid());
+    // 0x60D b7.2/2 reverse: 11 leaves it off, 01 is on.
+    dec.apply(frame(0x60D, {0, 0, 0, 0, 0x50, 0, 0x30, 0}), s, 50);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_REVERSE));
+    dec.apply(frame(0x60D, {0, 0, 0, 0, 0x50, 0, 0x10, 0}), s, 60);
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_REVERSE));
+}
+
+void test_invalid_reverse_or_neutral_does_not_change_the_gear()
+{
+    CanDecode dec;
+    TEST_ASSERT_TRUE(dec.loadDefaults());
+    Derived d;
+    State s;
+    uint32_t t = 100;
+    auto step = [&](uint8_t b215) {
+        t += 20;
+        dec.apply(frame(0x215, {0, b215, 0, 0, 0, 0, 0, 0}), s, t);
+        dec.apply(frame(0x354, {0x13, 0x88, 0, 0, 0, 0, 0, 0}), s, t);   // 50 km/h
+        dec.apply(frame(0x181, {0x39, 0xD0, 0, 0x10, 0, 0, 0, 0}), s, t); // 1850 rpm
+        d.update(s, t);
+        return s.get(SIG_GEAR);
+    };
+    TEST_ASSERT_EQUAL_INT32(4, step(0x00));
+    TEST_ASSERT_EQUAL_INT32(4, step(0xC0));      // reverse 11: invalid
+    TEST_ASSERT_EQUAL_INT32(4, step(0x80));      // reverse 10: reserved
+    TEST_ASSERT_EQUAL_INT32(4, step(0x30));      // neutral 11: invalid
+    TEST_ASSERT_EQUAL_INT32(4, step(0x20));      // neutral 10: not fitted
+    TEST_ASSERT_EQUAL_INT32(0, step(0x10));      // neutral 01
+    TEST_ASSERT_EQUAL_INT32(-1, step(0x40));     // reverse 01
+}
+
+void test_alert_on_brake_ignores_an_invalid_frame()
+{
+    AlertRules a;
+    a.factory();
+    a.r[0].on = false;
+    TEST_ASSERT_TRUE(a.set(1, AlertRules::C_SIG, SIG_BRAKE));
+    TEST_ASSERT_TRUE(a.set(1, AlertRules::C_COND, AC_RISES));
+    TEST_ASSERT_TRUE(a.set(1, AlertRules::C_ON, 1));
+    CanDecode dec;
+    TEST_ASSERT_TRUE(dec.loadDefaults());
+    AlertEval e;
+    State s;
+    AlertEval::Fire f;
+    auto at = [&](uint8_t b5, uint32_t t) {
+        dec.apply(frame(0x181, {0, 0, 0, 0x10, 0, b5, 0, 0}), s, t);
+        e.tick(a, s, t);
+        return e.take(a, s, true, f);
+    };
+    TEST_ASSERT_FALSE(at(0x00, 100));
+    TEST_ASSERT_FALSE(at(0x03, 200));            // 11: no rising edge
+    TEST_ASSERT_FALSE(at(0x02, 300));
+    TEST_ASSERT_FALSE(at(0x00, 400));
+    TEST_ASSERT_TRUE(at(0x01, 500));             // a real press still fires
+    TEST_ASSERT_EQUAL_UINT8(SIG_BRAKE, f.sig);
+}
+
 int main(int, char**)
+
 {
     UNITY_BEGIN();
     RUN_TEST(test_alert_factory_is_the_low_fuel_edge_alone);
@@ -996,6 +1075,9 @@ int main(int, char**)
     RUN_TEST(test_alert_text_places_the_decimal_point);
     RUN_TEST(test_alert_threshold_at_the_range_end_still_rearms);
     RUN_TEST(test_alert_cooldown_has_a_five_second_floor);
+    RUN_TEST(test_state2_invalid_leaves_the_signal_and_is_counted);
+    RUN_TEST(test_invalid_reverse_or_neutral_does_not_change_the_gear);
+    RUN_TEST(test_alert_on_brake_ignores_an_invalid_frame);
     RUN_TEST(test_gear_is_the_nearest_ratio_within_the_band);
     RUN_TEST(test_gear_from_speed_rpm_and_the_switches);
     RUN_TEST(test_fuel_rate_consumption_trip_and_range);

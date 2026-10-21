@@ -36,6 +36,9 @@ namespace Vehicle
         DF_EXT        = 1 << 4,  // the id is 29-bit; without it, 11-bit only
         DF_HYPOTHESIS = 1 << 5,  // not measured on our car yet: informational only,
                                  // decoded the same way (docs/megane-can-ids.md)
+        DF_STATE2     = 1 << 6,  // a Renault 2-bit state (mask 0x3): 00 no, 01 yes,
+                                 // 10/11 reserved or invalid, which leave the
+                                 // signal untouched (it ages) and are counted
     };
 
     struct DecodeRow {   // 24 B: packed by field order
@@ -85,6 +88,7 @@ namespace Vehicle
         uint32_t hits() const    { return _hits; }     // frames that matched a row
         uint32_t unknown() const { return _unknown; }  // frames that matched none
         uint32_t short_() const  { return _short; }    // rows skipped: frame too short
+        uint32_t invalid() const { return _invalid; }  // DF_STATE2 rows skipped: 10/11
 
     private:
         // The first row with this id, or _n.
@@ -98,6 +102,6 @@ namespace Vehicle
         int32_t  _held[MAX_ROWS] = {};
         KeyFn    _key = nullptr;
         void*    _keyCtx = nullptr;
-        uint32_t _hits = 0, _unknown = 0, _short = 0;
+        uint32_t _hits = 0, _unknown = 0, _short = 0, _invalid = 0;
     };
 }
