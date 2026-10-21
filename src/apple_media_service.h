@@ -105,6 +105,12 @@ namespace AppleMediaService
 
     bool StartMediaService(BLEClient *client);
 
+    // ble_svc, after the client is up: reads the whole of one track attribute
+    // whose Entity Update was cut to the notification's size (title, artist,
+    // album over ~20 bytes). Blocks for two GATT round trips; true when it
+    // did any work.
+    bool Process();
+
     // The phone's volume as last reported (0..1), and how many reports have
     // arrived since boot (0 = this phone never said). Any task: written on the
     // NimBLE host task, read by the key worker (sinks/AmsVolumeStep.h).

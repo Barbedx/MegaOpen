@@ -115,10 +115,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 
 ### BLE
 
-- **Long track titles are cut at the AMS entity-update size.** The entity
-  attribute characteristic (for the rest of a long value) is not used, and its
-  existence check looks up `APPLE_REMOTE_COMMAND_UUID` by mistake.
-  Where: `apple_media_service.cpp` ~line 95.
 - **ANCS control point can be freed under a write.** `requestAttributes()`
   now reads `gControlPoint` once, but a reconnect's `getClient()` ->
   `deleteServices()` can still free it between that read and `writeValue()`.

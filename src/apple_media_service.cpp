@@ -5,6 +5,7 @@
 
 #include <Arduino.h>
 #include <atomic>
+#include <mutex>
 #include "apple_media_service.h"
 #include <NimBLEDevice.h>
 #include <esp32-hal-log.h>
@@ -17,6 +18,9 @@
 #define APPLE_REMOTE_COMMAND_UUID "9B3C81D8-57B1-4A8A-B8DF-0E56F7CA51C2"
 #define APPLE_ENTITY_UPDATE_UUID "2F7CABCE-808D-411F-9A0C-BB92BA96C102"
 #define APPLE_ENTITY_ATTRIBUTE_UUID "C6B2F38C-23AB-46D8-A6AB-A3A870BBD5D7"
+
+// Entity Update flags: the value was cut to fit the notification.
+#define EntityUpdateFlagTruncated 0x01
 
 #define EntityIDPlayer 0
 #define EntityIDQueue 1
@@ -44,6 +48,15 @@ namespace AppleMediaService
     NotificationLevel gNotificationLevel;
     MediaInformation gMediaInformation;
     NimBLERemoteCharacteristic *remote_command_characteristic = nullptr;
+    // For the rest of a value an Entity Update cut short: write
+    // [entity, attribute], then read it whole. Null on a phone without it.
+    NimBLERemoteCharacteristic *entity_attribute_characteristic = nullptr;
+    // Track attributes whose last update was truncated (bit = attribute id),
+    // set by the host task's notify, read whole by Process() on ble_svc.
+    std::atomic<uint8_t> gTruncated{0};
+    // gMediaInformation is written by both: the host task's notify and
+    // Process()'s read.
+    std::mutex gInfoLock;
     // A write without response does not hold the BLE task for a round trip;
     // used only where the phone offers it.
     bool gNoResponse = false;
@@ -69,6 +82,102 @@ namespace AppleMediaService
   void Detach()
   {
     remote_command_characteristic = nullptr;
+    entity_attribute_characteristic = nullptr;
+    gTruncated.store(0, std::memory_order_relaxed);
+  }
+
+  // One attribute's value into gMediaInformation; true when the change is
+  // worth a callback. Under gInfoLock.
+  static bool applyAttribute(uint8_t entity_id, uint8_t attribute_id, const std::string &value)
+  {
+    bool notify = gNotificationLevel == NotificationLevel::All;
+    switch (entity_id)
+    {
+    case EntityIDPlayer:
+    {
+      switch (attribute_id)
+      {
+      case PlayerAttributeIDName:
+        gMediaInformation.mPlayerName = value;
+        break;
+      case PlayerAttributeIDPlaybackInfo: // A concatenation of three comma-separated values: //TODO:check later, gpt doubts 
+      {
+        auto comma_index = value.find(",");
+        if (comma_index != std::string::npos)
+        {
+          gMediaInformation.mPlaybackState =
+              static_cast<MediaInformation::PlaybackState>(String(value.substr(0, comma_index).c_str()).toInt());
+          auto second_comma = value.find(",", comma_index + 1);
+          if (second_comma != std::string::npos)
+          {
+            gMediaInformation.mPlaybackRate = String(value.substr(comma_index + 1, second_comma).c_str()).toFloat();
+            gMediaInformation.mElapsedTime = String(value.substr(second_comma + 1).c_str()).toFloat();
+          }
+        }
+         gMediaInformation.mLastPlaybackInfoMs = millis();
+        break;
+      }
+      case PlayerAttributeIDVolume: // float string, 0 (silent) to 1 (full)
+        gMediaInformation.mVolume = String(value.c_str()).toFloat();
+        gVolume.store(gMediaInformation.mVolume, std::memory_order_relaxed);
+        gVolumeReports.fetch_add(1, std::memory_order_relaxed);
+        break;
+      }
+      break;
+    }
+    case EntityIDQueue:
+    {
+      switch (attribute_id)
+      {
+      case QueueAttributeIDIndex:
+        gMediaInformation.mQueueIndex = String(value.c_str()).toInt();
+        break;
+      case QueueAttributeIDCount:
+        gMediaInformation.mQueueCount = String(value.c_str()).toInt();
+        break;
+      case QueueAttributeIDShuffleMode:
+        notify = true;
+        gMediaInformation.mShuffleMode = static_cast<MediaInformation::ShuffleMode>(String(value.c_str()).toInt());
+        break;
+      case QueueAttributeIDRepeatMode:
+        notify = true;
+        gMediaInformation.mRepeatMode = static_cast<MediaInformation::RepeatMode>(String(value.c_str()).toInt());
+        break;
+      }
+      break;
+    }
+    case EntityIDTrack:
+    {
+      switch (attribute_id)
+      {
+      case TrackAttributeIDArtist:
+        gMediaInformation.mArtist = value;
+        notify = true;
+        break;
+      case TrackAttributeIDAlbum:
+        gMediaInformation.mAlbum = value;
+        break;
+      case TrackAttributeIDTitle:
+        gMediaInformation.mTitle = value;
+        notify = true;
+        break;
+      case TrackAttributeIDDuration:
+        gMediaInformation.mDuration = String(value.c_str()).toFloat();
+        break;
+      }
+      break;
+    }
+    }
+    return notify;
+  }
+
+  // An attribute's value, delivered: applied and, if it matters, passed on.
+  // Any task (the host task's notify, ble_svc's long read).
+  static void deliver(uint8_t entity_id, uint8_t attribute_id, const std::string &value)
+  {
+    std::lock_guard<std::mutex> lock(gInfoLock);
+    if (applyAttribute(entity_id, attribute_id, value) && gCallback)
+      gCallback(gMediaInformation);
   }
 
   bool StartMediaService(BLEClient *client)
@@ -104,15 +213,10 @@ namespace AppleMediaService
          gNoResponse ? "without response" : "with response",
          (int)remote_command_characteristic->canWrite(), (int)gNoResponse);
 
-    // TODO: Add support for the entity attribute characteristic, which is only used for handling track attributes that are too long for
-    // entity update.
-    auto entity_attribute_characteristic = music_service->getCharacteristic(APPLE_REMOTE_COMMAND_UUID);
+    // Optional here: without it a long value stays cut, AMS still works.
+    entity_attribute_characteristic = music_service->getCharacteristic(APPLE_ENTITY_ATTRIBUTE_UUID);
     if (!entity_attribute_characteristic)
-    {
-      LOGE("AMS", "Apple entity attribute characteristic not found");
-      Detach();
-      return false;
-    }
+      LOGW("AMS", "entity attribute characteristic not found: long titles stay cut");
 
     auto entity_update = music_service->getCharacteristic(APPLE_ENTITY_UPDATE_UUID);
     if (!entity_update)
@@ -124,99 +228,22 @@ namespace AppleMediaService
 
     entity_update->subscribe(true, [](NimBLERemoteCharacteristic *characteristic, uint8_t *data, size_t length, bool is_notify)
                              {
-                               bool notify = gNotificationLevel == NotificationLevel::All;
                                if (length < 3)
                                {
                                  LOGW("AMS", "entity_update notification less than 3 bytes, ignoring.");
                                  return;
                                }
-                               uint8_t entity_id = data[0];
-                               uint8_t attribute_id = data[1];
-                               uint8_t flags = data[2];
+                               const uint8_t entity_id = data[0];
+                               const uint8_t attribute_id = data[1];
+                               const uint8_t flags = data[2];
                                std::string value(reinterpret_cast<char *>(data) + 3, length - 3);
 
                                LOGD("AMS", "entity update. id: %i, attribute: %i, flags: %i, value: %s", entity_id, attribute_id, flags, value.c_str());
-                               switch (entity_id)
-                               {
-                               case EntityIDPlayer:
-                               {
-                                 switch (attribute_id)
-                                 {
-                                 case PlayerAttributeIDName:
-                                   gMediaInformation.mPlayerName = value;
-                                   break;
-                                 case PlayerAttributeIDPlaybackInfo: // A concatenation of three comma-separated values: //TODO:check later, gpt doubts 
-                                 {
-                                   auto comma_index = value.find(",");
-                                   if (comma_index != std::string::npos)
-                                   {
-                                     gMediaInformation.mPlaybackState =
-                                         static_cast<MediaInformation::PlaybackState>(String(value.substr(0, comma_index).c_str()).toInt());
-                                     auto second_comma = value.find(",", comma_index + 1);
-                                     if (second_comma != std::string::npos)
-                                     {
-                                       gMediaInformation.mPlaybackRate = String(value.substr(comma_index + 1, second_comma).c_str()).toFloat();
-                                       gMediaInformation.mElapsedTime = String(value.substr(second_comma + 1).c_str()).toFloat();
-                                     }
-                                   }
-                                    gMediaInformation.mLastPlaybackInfoMs = millis();
-                                   break;
-                                 }
-                                 case PlayerAttributeIDVolume: // float string, 0 (silent) to 1 (full)
-                                   gMediaInformation.mVolume = String(value.c_str()).toFloat();
-                                   gVolume.store(gMediaInformation.mVolume, std::memory_order_relaxed);
-                                   gVolumeReports.fetch_add(1, std::memory_order_relaxed);
-                                   break;
-                                 }
-                                 break;
-                               }
-                               case EntityIDQueue:
-                               {
-                                 switch (attribute_id)
-                                 {
-                                 case QueueAttributeIDIndex:
-                                   gMediaInformation.mQueueIndex = String(value.c_str()).toInt();
-                                   break;
-                                 case QueueAttributeIDCount:
-                                   gMediaInformation.mQueueCount = String(value.c_str()).toInt();
-                                   break;
-                                 case QueueAttributeIDShuffleMode:
-                                   notify = true;
-                                   gMediaInformation.mShuffleMode = static_cast<MediaInformation::ShuffleMode>(String(value.c_str()).toInt());
-                                   break;
-                                 case QueueAttributeIDRepeatMode:
-                                   notify = true;
-                                   gMediaInformation.mRepeatMode = static_cast<MediaInformation::RepeatMode>(String(value.c_str()).toInt());
-                                   break;
-                                 }
-                                 break;
-                               }
-                               case EntityIDTrack:
-                               {
-                                 switch (attribute_id)
-                                 {
-                                 case TrackAttributeIDArtist:
-                                   gMediaInformation.mArtist = value;
-                                   notify = true;
-                                   break;
-                                 case TrackAttributeIDAlbum:
-                                   gMediaInformation.mAlbum = value;
-                                   break;
-                                 case TrackAttributeIDTitle:
-                                   gMediaInformation.mTitle = value;
-                                   notify = true;
-                                   break;
-                                 case TrackAttributeIDDuration:
-                                   gMediaInformation.mDuration = String(value.c_str()).toFloat();
-                                   break;
-                                 }
-                                 break;
-                               }
-                               }
-                               if (notify && gCallback)
-                               {
-                                 gCallback(gMediaInformation); 
-                               } });
+                               // Cut to the notification's size: shown as it is
+                               // for now, the whole value is read by Process().
+                               if ((flags & EntityUpdateFlagTruncated) && entity_id == EntityIDTrack && attribute_id < 8)
+                                 gTruncated.fetch_or((uint8_t)(1u << attribute_id), std::memory_order_relaxed);
+                               deliver(entity_id, attribute_id, value); });
 
     // Subscribe to all player, queue and track updates.
     uint8_t player_setup[] = {0, 0, 1, 2};
@@ -226,6 +253,36 @@ namespace AppleMediaService
     entity_update->writeValue(player_setup, sizeof(player_setup), true);
     entity_update->writeValue(queue_setup, sizeof(queue_setup), true);
     entity_update->writeValue(track_setup, sizeof(track_setup), true);
+    return true;
+  }
+
+  bool Process()
+  {
+    NimBLERemoteCharacteristic *attr = entity_attribute_characteristic;
+    const uint8_t bits = gTruncated.load(std::memory_order_relaxed);
+    if (!attr || !bits)
+      return false;
+    uint8_t id = 0;
+    while (!(bits & (1u << id)))
+      ++id;
+    // Cleared before the read: a newer truncated update during it asks again.
+    gTruncated.fetch_and((uint8_t)~(1u << id), std::memory_order_relaxed);
+    const uint8_t which[] = {EntityIDTrack, id};
+    if (!attr->writeValue(which, sizeof(which), true))
+    {
+      LOGW("AMS", "entity attribute %u: select write failed", (unsigned)id);
+      return true;
+    }
+    // A long read: NimBLE follows it past one ATT payload.
+    const std::string whole = attr->readValue();
+    LOGI("AMS", "track attribute %u read whole: %u bytes", (unsigned)id, (unsigned)whole.size());
+    {
+      std::lock_guard<std::mutex> lock(gInfoLock);
+      applyAttribute(EntityIDTrack, id, whole);
+      // The album changes no callback on its own; the whole of it is news.
+      if (gCallback)
+        gCallback(gMediaInformation);
+    }
     return true;
   }
 

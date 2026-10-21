@@ -97,6 +97,9 @@ namespace Bluetooth
         if (Connected && Client && Client->isConnected())
             AppleNotificationService::Process();
 #endif
+        // The whole of a track attribute AMS cut short, one per pass.
+        if (AmsUp && Client && Client->isConnected())
+            AppleMediaService::Process();
 
         if (millis() - lastSetupAttempt < 800)
             return;
