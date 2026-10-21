@@ -17,5 +17,5 @@ function glassDraw(me){const c=$('#glass');if(!c)return;const L=layoutOf(me.layo
  if(clk){x.fillStyle=v('--glassT');x.font='600 19px '+v('--mono');x.fillText(me.clock||'--:--',W-pad-clk/2+cw/2,H/2+1)}
  if(pane&&me.pane&&me.pane.bits&&me.pane.on!==false){const px=hex2px(me.pane.bits),ox=W-pad-pane,oy=(H-pane)/2,s=pane/48;x.fillStyle=v('--glassD');x.globalAlpha=.25;x.fillRect(ox,oy,pane,pane);x.globalAlpha=1;x.fillStyle=v('--glassT');
   for(let i=0;i<2304;i++)if(px[i])x.fillRect(ox+(i%48)*s,oy+Math.floor(i/48)*s,s,s)}
- $('#glassW').textContent=`${cols}×${rows}`+(pane?' + картинка 48×48':'')+(clk?' + годинник панелі':'')+' · так щиток покаже зараз';
+ $('#glassW').textContent=`${cols}×${rows}`+(pane?t('gl.pane'):'')+(clk?t('gl.clock'):'');
 }

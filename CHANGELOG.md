@@ -6,12 +6,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [Unreleased]
 
 ### Added
-- Web page in English: the EN / UA switch in the header (per browser; `?lang=en` in the address too). Words live in `web/i18n/uk.json` and `en.json`; the English file is fetched only by a viewer who picks it. This release: Огляд, the header, the tabs and the shared controls; the other screens follow.
+- Web page in English: the EN / UA switch in the header (per browser; `?lang=en` in the address too). Words live in `web/i18n/uk.json` and `en.json`; the English file is fetched only by a viewer who picks it. So far: Огляд, Екран, Плата, the header, the tabs and the shared controls; Кнопки, Авто and Сервіс follow.
 
 ### Changed
 - `/api/health` chains carry only `code` (no English `why`): the page has the words in both languages. Огляд no longer tells you to turn the knobs or watch the rings.
 - The catalog's names (settings, their choices, signals, Raise rows, layouts, styles, scenes, console) are in the page's dictionaries, so they follow the language switch. `/api/catalog` sends ids: no setting `label`, a `name` only where the id is not a word (`AF-RDS`, `125k`), enum lists name their kind (`dom`), Raise rows a section id and an English unit; `/api/map?meta=1` leaves the label slot empty. No Ukrainian text is left in the firmware outside comments. Signal lists show a name for every signal the Raise list names (they showed its id, `speed`), and doors and radar sensors say which ones.
 - Error replies are codes, one refusal a line (`pulseMs: number`, `param exp`, `busy`), not English sentences; the page shows them in its language. A refused macro now marks its row again (the reply said `row 3: …`, the page looked for `3: …`).
+
+### Fixed
+- Плата › Усі налаштування: a number setting showed its unit twice ("Брязкіт, мс, ms"), and the canbox version (text) was a number box.
 
 ## [1.4.0] - 2026-10-21
 
