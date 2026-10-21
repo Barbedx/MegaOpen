@@ -97,7 +97,8 @@ the live car page and alerts, media, keys, updates, troubleshooting.
 [ARCHITECTURE.md](ARCHITECTURE.md) · [CHANGELOG.md](CHANGELOG.md) ·
 [docs/raise-protocol.md](docs/raise-protocol.md) ·
 [docs/megane-can-ids.md](docs/megane-can-ids.md) ·
-[docs/BACKLOG.md](docs/BACKLOG.md)
+[docs/BACKLOG.md](docs/BACKLOG.md) ·
+[docs/RELEASING.md](docs/RELEASING.md)
 
 > Hobby project. It never writes to the car's bus, but you wire it into your own
 > car at your own risk. Do not operate the menus while driving.
