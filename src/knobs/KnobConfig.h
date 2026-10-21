@@ -52,7 +52,30 @@ namespace Knobs
         _Count
     };
 
-    enum class Order : uint8_t { GRB = 0, RGB, _Count };    // WS2812B is GRB
+    // The strip's chips, by their wire order. WS2812B is GRB; SK6812 RGBW
+    // strips take four bytes a LED, G R B W.
+    enum class Order : uint8_t { GRB = 0, RGB, GRBW, _Count };
+
+    inline constexpr uint8_t bytesPerLed(Order o) { return o == Order::GRBW ? 4 : 3; }
+
+    // `count` R,G,B triplets into the chips' wire bytes; returns how many
+    // bytes. RGBW: the white LED carries what the three have in common,
+    // w = min(r, g, b), taken off each, so a colour keeps its hue and white
+    // is the white LED's own (the RGB mix of it is bluish and costs three
+    // channels). `out` holds count * bytesPerLed(o). Pure: host-tested.
+    inline uint16_t packWire(const uint8_t* rgb, uint8_t count, Order o, uint8_t* out)
+    {
+        uint16_t n = 0;
+        for (uint16_t i = 0; i < (uint16_t)count * 3; i += 3) {
+            const uint8_t r = rgb[i], g = rgb[i + 1], b = rgb[i + 2];
+            if (o == Order::RGB) { out[n++] = r; out[n++] = g; out[n++] = b; continue; }
+            if (o == Order::GRB) { out[n++] = g; out[n++] = r; out[n++] = b; continue; }
+            const uint8_t w = r < g ? (r < b ? r : b) : (g < b ? g : b);
+            out[n++] = (uint8_t)(g - w); out[n++] = (uint8_t)(r - w);
+            out[n++] = (uint8_t)(b - w); out[n++] = w;
+        }
+        return n;
+    }
 
     struct Rgb {
         uint8_t r = 0, g = 0, b = 0;

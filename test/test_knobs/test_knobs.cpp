@@ -984,6 +984,49 @@ void test_v4_blob_gets_the_menu_on_the_right_hold()
     TEST_ASSERT_TRUE(b.enc[ENC_RIGHT].hold.action == Keys::Action::Voice);
 }
 
+
+// ---- the strip's wire bytes (packWire) ---------------------------------------
+
+// WS2812B wants green first; an RGB strip takes the bytes as they are.
+void test_wire_bytes_for_grb_and_rgb()
+{
+    const uint8_t rgb[] = {10, 20, 30,  200, 0, 7};
+    uint8_t w[8] = {0};
+    TEST_ASSERT_EQUAL_UINT16(6, packWire(rgb, 2, Order::GRB, w));
+    const uint8_t grb[] = {20, 10, 30,  0, 200, 7};
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(grb, w, 6);
+    TEST_ASSERT_EQUAL_UINT16(6, packWire(rgb, 2, Order::RGB, w));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(rgb, w, 6);
+}
+
+// SK6812 RGBW: four bytes a LED, G R B W, the white LED carrying what the
+// three have in common. Pure white is the white LED alone; a saturated
+// colour leaves it dark; a pastel splits.
+void test_wire_bytes_for_rgbw_take_white_out_of_the_mix()
+{
+    const uint8_t rgb[] = {255, 255, 255,  255, 0, 0,  200, 120, 150,  0, 0, 0};
+    uint8_t w[16] = {0};
+    TEST_ASSERT_EQUAL_UINT16(16, packWire(rgb, 4, Order::GRBW, w));
+    const uint8_t want[] = {0, 0, 0, 255,   0, 255, 0, 0,   0, 80, 30, 120,   0, 0, 0, 0};
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(want, w, 16);
+    TEST_ASSERT_EQUAL_UINT8(4, bytesPerLed(Order::GRBW));
+    TEST_ASSERT_EQUAL_UINT8(3, bytesPerLed(Order::GRB));
+}
+
+// The strip type is stored by name and survives the blob.
+void test_rgbw_is_a_strip_type_by_name_and_in_the_blob()
+{
+    TEST_ASSERT_EQUAL_STRING("grbw", orderName(Order::GRBW));
+    TEST_ASSERT_TRUE(orderFromName("grbw") == Order::GRBW);
+    Config a;
+    a.order = Order::GRBW;
+    uint8_t blob[Config::BLOB_SIZE];
+    a.toBlob(blob);
+    Config b;
+    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
+    TEST_ASSERT_TRUE(b.order == Order::GRBW);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -1043,5 +1086,8 @@ int main(int, char**)
     RUN_TEST(test_limiter_leaves_a_frame_under_the_cap_alone);
     RUN_TEST(test_limiter_covers_the_knob_rings_too);
     RUN_TEST(test_feet_rainbow_runs_the_length_of_the_strip);
+    RUN_TEST(test_wire_bytes_for_grb_and_rgb);
+    RUN_TEST(test_wire_bytes_for_rgbw_take_white_out_of_the_mix);
+    RUN_TEST(test_rgbw_is_a_strip_type_by_name_and_in_the_blob);
     return UNITY_END();
 }

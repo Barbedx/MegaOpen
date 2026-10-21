@@ -210,7 +210,7 @@ namespace Knobs
         {"spin", "обертання"}, {"sweep", "розмах"}, {"trail", "зі шлейфом"},
     };
     const UiName ANIM_NAMES[]  = {{"static", "статично"}, {"breathe", "дихання"}, {"rainbow", "веселка"}};
-    const UiName ORDER_NAMES[] = {{"grb", "GRB"}, {"rgb", "RGB"}};
+    const UiName ORDER_NAMES[] = {{"grb", "GRB"}, {"rgb", "RGB"}, {"grbw", "RGBW (SK6812)"}};
     const UiName KNOB_KEYS[]   = {{"KR", "Ручка П"}, {"KL", "Ручка Л"}};
 
     const char* reactName(React r)          { return uiId(REACT_NAMES, (uint8_t)r); }

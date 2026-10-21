@@ -12,17 +12,23 @@ namespace Knobs
 
     // 80 MHz APB / 2 = 25 ns per tick. WS2812B wants 0.4/0.85 us for a zero and
     // 0.8/0.45 us for a one, +-150 ns — so these have room on both sides.
+    // SK6812 wants 0.3/0.9 and 0.6/0.6: its one-high tops out at 0.75 us, so
+    // an RGBW strip gets its own (0.35/0.9, 0.7/0.55, inside both specs); the
+    // WS2812B rings keep the timing they were proven on.
     static constexpr uint8_t  CLK_DIV = 2;
     static constexpr uint32_t T0H = 16, T0L = 34, T1H = 32, T1L = 18;
+    static constexpr uint32_t S0H = 14, S0L = 36, S1H = 28, S1L = 22;
 
     // An rmt_item32_t, spelled as its raw word: duration0 | level0 << 15 |
     // duration1 << 16 | level1 << 31. High first, then low.
-    static constexpr uint32_t ITEM_ZERO = T0H | (1u << 15) | (T0L << 16);
-    static constexpr uint32_t ITEM_ONE = T1H | (1u << 15) | (T1L << 16);
+    static constexpr uint32_t item(uint32_t hi, uint32_t lo) { return hi | (1u << 15) | (lo << 16); }
+    // Read by the refill ISR; set in show() only between frames.
+    static volatile uint32_t s_zero = item(T0H, T0L);
+    static volatile uint32_t s_one  = item(T1H, T1L);
 
     // Bytes in wire order. Not the caller's buffer: the driver reads it for the
-    // whole frame while the caller repaints.
-    static uint8_t s_wire[MAX_LEDS * 3];
+    // whole frame while the caller repaints. Four a LED for RGBW.
+    static uint8_t s_wire[MAX_LEDS * 4];
 
     // Bytes -> RMT items, called by the driver from its ISR as memory drains
     // (480 bytes for 160 LEDs instead of ~15 kB of pre-built items).
@@ -35,7 +41,7 @@ namespace Knobs
         // Whole bytes only: eight items or none.
         while (size < srcSize && num + 8 <= wanted) {
             const uint8_t v = *p++;
-            for (int8_t bit = 7; bit >= 0; --bit, ++dest) dest->val = (v >> bit) & 1 ? ITEM_ONE : ITEM_ZERO;
+            for (int8_t bit = 7; bit >= 0; --bit, ++dest) dest->val = (v >> bit) & 1 ? s_one : s_zero;
             num += 8;
             ++size;
         }
@@ -91,16 +97,14 @@ namespace Knobs
         // Still sending the last one: skip this frame, the next is 20 ms away.
         if (rmt_wait_tx_done(CH, 0) != ESP_OK) { ++_busy; return false; }
 
-        if (order == Order::GRB) {
-            for (uint16_t i = 0; i < (uint16_t)count * 3; i += 3) {
-                s_wire[i] = rgb[i + 1]; s_wire[i + 1] = rgb[i]; s_wire[i + 2] = rgb[i + 2];
-            }
-        } else {
-            memcpy(s_wire, rgb, (size_t)count * 3);
-        }
+        const uint16_t n = packWire(rgb, count, order, s_wire);
+        const bool sk = order == Order::GRBW;
+        s_zero = sk ? item(S0H, S0L) : item(T0H, T0L);
+        s_one  = sk ? item(S1H, S1L) : item(T1H, T1L);
 
-        // Idles low after; the >= 15 ms gap far exceeds the 50 us latch time.
-        if (rmt_write_sample(CH, s_wire, (size_t)count * 3, false) != ESP_OK) return false;
+        // Idles low after; the >= 15 ms gap far exceeds the 50 us (WS2812B) /
+        // 80 us (SK6812) latch time.
+        if (rmt_write_sample(CH, s_wire, n, false) != ESP_OK) return false;
         ++_frames;
         return true;
     }

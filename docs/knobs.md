@@ -177,5 +177,8 @@ enabled, so wiring can be proven with nothing bound to anything.
 
 ## 6. Not done
 
-* SK6812 **RGBW** (four bytes per pixel) is not supported — WS2812B/RGB only.
+* SK6812 **RGBW**: Кнопки › Підсвітка › Тонко › Порядок кольорів = «RGBW (SK6812)».
+  Four bytes a pixel, G R B W; the white LED carries min(r, g, b), taken off the
+  three, and the strip gets SK6812 timing. The current limiter still counts
+  three channels, so it over-estimates an RGBW strip (the safe side).
 * The LEDs react to their own knob, not to volume keys from the stalk.
