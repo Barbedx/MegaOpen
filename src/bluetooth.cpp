@@ -118,8 +118,9 @@ namespace Bluetooth
     void ServiceAms()
     {
 #if FEATURE_ANCS
-        // Drive deferred ANCS Control Point writes from this (loop) task.
-        if (Connected && Client && Client->isConnected())
+        // Drive deferred ANCS Control Point writes from this (loop) task;
+        // a write with response, so not while key work is owed (SetKeysBusy).
+        if (!KeysBusy && Connected && Client && Client->isConnected())
             AppleNotificationService::Process();
 #endif
         // The whole of a track attribute AMS cut short, one per pass, and
