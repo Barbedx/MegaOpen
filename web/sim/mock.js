@@ -130,7 +130,7 @@ function preview(){
   split:[A,Ti,pos],pulse:[Ti,A,' '.repeat(tick%w)+'*'],scanner:[Ti,A,' '.repeat(Math.abs(tick%(2*w-2)-(w-1)))+'█'],clock:[ck.padStart(Math.floor((w+5)/2)),Ti,A],
   vu:[Ti,A,'▮'.repeat(1+Math.floor(Math.random()*(w-1)))],flow:[(w>8?'['+ck+'] > '+pos:ck),tr.title.slice(0,w),tr.title.slice(w,2*w)||A],
   plain:[Ti,A,tr.album||''],winamp:[ck+' '+Array.from({length:w},()=>' .:|'[Math.floor(Math.random()*4)]).join(''),sc(tr.artist+' - '+tr.title+' *** ',m.scrollMsTitle||300),tr.album||''],
-  tape:(()=>{const c=w>=16?ck+' ':'',n=Math.max(0,w-c.length-6),sp=Math.floor(now()/250)%2?'x':'+',hd=tr.duration?Math.min(n-1,Math.floor(tr.elapsed/tr.duration*n)):-1;
+  tape:(()=>{const c=w>=16?ck+' ':'',n=Math.max(0,w-c.length-6),sp=tr.transport!==false&&tr.state===1&&Math.floor(now()/250)%2?'x':'+',hd=tr.duration?Math.min(n-1,Math.floor(tr.elapsed/tr.duration*n)):-1;
    return [c+'('+sp+')'+Array.from({length:n},(_,i)=>i===hd?'o':'=').join('')+'('+sp+')',Ti,A]})(),
   typewriter:[A,Ti,(w>8?'['+ck+'] > '+pos:ck)]}[m.style]||[Ti,A,''];
  return r.map(x=>String(x).slice(0,w));

@@ -132,8 +132,8 @@ namespace MegaOpen
     static const MediaScreen::LayoutRow kLayouts[] = {
         {MediaScreen::Layout::Text,       "text",       "Текст · 8×1",            PARAMS(kTextParams)},
         {MediaScreen::Layout::Info,       "info",       "Інфо · 8×3 + картинка",  PARAMS(kInfoParams)},
-        {MediaScreen::Layout::Menu,       "menu",       "Меню · 26×3",            PARAMS(kMenuParams)},
-        {MediaScreen::Layout::Fullscreen, "fullscreen", "Повний екран · 26×3",    PARAMS(kFullParams)},
+        {MediaScreen::Layout::Menu,       "menu",       "Меню · 22×3",            PARAMS(kMenuParams)},
+        {MediaScreen::Layout::Fullscreen, "fullscreen", "Повний екран · 22×3",    PARAMS(kFullParams)},
     };
     #undef PARAMS
     static_assert(sizeof(kLayouts) / sizeof(kLayouts[0]) == MediaScreen::LAYOUT_COUNT,
@@ -723,14 +723,19 @@ namespace MegaOpen
     // Row 1: "12:34 (+)==o====(+)": the clock, then a cassette across the rest.
     // The reels' spokes turn while playing ('+' and 'x', both in every panel
     // font; a backslash is not), and the play head 'o' rides the tape at the
-    // position. No clock below 16 columns; at 8 it is the cassette alone.
+    // position. Only a source that reports play state turns them: the head
+    // unit sends none, and reels turning for a parked car's radio title
+    // would repaint the glass four times a second for nothing. No clock below
+    // 16 columns; at 8 it is the cassette alone. Never wider than the glass
+    // (COLS_DEFAULT), or the right reel is drawn where nobody sees it.
     void MediaScreen::tape(uint32_t nowMs, char* row1, char* row2, char* row3) const
     {
-        const uint8_t w = _cols;
+        const uint8_t w = _cols < COLS_DEFAULT ? _cols : COLS_DEFAULT;
         char line[ROW_MAX];
         uint8_t n = 0;
         if (_clock[0] && w >= 16) n = (uint8_t)snprintf(line, sizeof(line), "%s ", _clock);
-        const char spoke = (moving() && (nowMs / 250) % 2) ? 'x' : '+';
+        const bool turning = _title[0] && _hasTransport && _state == State::Playing;
+        const char spoke = (turning && (nowMs / 250) % 2) ? 'x' : '+';
         const uint8_t inner = (uint8_t)(w - n > 6 ? w - n - 6 : 0);   // tape between the reels
         int8_t head = -1;
         if (_hasTransport && _duration > 0 && inner) {

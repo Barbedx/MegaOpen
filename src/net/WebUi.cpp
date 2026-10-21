@@ -1717,7 +1717,7 @@ void WebUi::routesMedia()
             }
             if (pk.has) ++m.pokeSeq;
 
-            if (d["cols"].is<int>()) m.cols = (uint8_t)(d["cols"] | 26);
+            if (d["cols"].is<int>()) m.cols = (uint8_t)(d["cols"] | MegaOpen::MediaScreen::COLS_DEFAULT);
             if (d["bar"].is<int>())  m.bar  = (uint8_t)(d["bar"] | 10);
             // `scrollMs` sets both rows, so it goes before the per-row values.
             if (d["scrollMs"].is<int>())
@@ -1730,7 +1730,7 @@ void WebUi::routesMedia()
             // Persisted. Unknown names must not map to Fullscreen (it hides the pane).
             if (d["layout"].is<const char*>()) {
                 m.layout = MegaOpen::MediaScreen::layoutFromName(d["layout"]);
-                // Width follows the layout (8 beside the pane, 26 elsewhere) unless
+                // Width follows the layout (8 beside the pane, 22 elsewhere) unless
                 // the same request carries `cols`.
                 if (!d["cols"].is<int>()) m.cols = MegaOpen::MediaScreen::colsFor(m.layout);
                 _cfg->s().mediaLayout = MegaOpen::MediaScreen::layoutName(m.layout);

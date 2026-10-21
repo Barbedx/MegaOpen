@@ -5,7 +5,7 @@
 
 // The now-playing screen as three rows of ASCII. Pure (no Arduino), host-tested.
 //
-// Layout, at the default 26-column row:
+// Layout, at the default 22-column row:
 //
 //     [12:34] > 1:23/3:45 [##--]    row 1: clock, transport, position, progress
 //     Bohemian Rhapsody             row 2: title,  marquee if it does not fit
@@ -95,7 +95,10 @@ namespace MegaOpen
         static bool styleAnimates(Style s);
 
         static constexpr uint8_t ROW_MAX = 32;      // buffer size, including NUL
-        static constexpr uint8_t COLS_DEFAULT = 26; // usable Carminat window row
+        // What the glass shows of a full-width row: camera-measured, and the
+        // library's fullRowChars (AffaDisplay v1.1.0). Characters past it are
+        // sent and cut.
+        static constexpr uint8_t COLS_DEFAULT = 22;
 
         void setTitle(const char* s);
         void setArtist(const char* s);
@@ -104,8 +107,9 @@ namespace MegaOpen
         const char* album() const { return _album; }
 
         // Typewriter: one letter of a new title per step. Each step is a
-        // repaint, so it types at most a row's worth, then the marquee takes over.
-        static constexpr uint32_t TYPE_MS = 120;
+        // repaint, so it types at most a row's worth, then the marquee takes
+        // over. The ui task's paint floor, so every letter is seen.
+        static constexpr uint32_t TYPE_MS = 200;
 
         // Flow page durations; every flip is a ~14-frame repaint.
         static constexpr uint32_t FLOW_TITLE_MS = 6000;
@@ -206,7 +210,7 @@ namespace MegaOpen
         void winamp(uint32_t now, char* r1, char* r2, char* r3) const;
         void tape(uint32_t now, char* r1, char* r2, char* r3) const;
         void typewriter(uint32_t now, char* r1, char* r2, char* r3) const;
-        // Tape and Winamp move while a title is up and nothing says paused.
+        // Winamp moves while a title is up and nothing says paused.
         bool moving() const;
 
         // Classic/Flow row 1; the clock alone when the source has no transport.

@@ -54,6 +54,7 @@ void test_short_strings_are_shown_whole_and_do_not_move()
 void test_the_header_carries_state_time_and_a_bar()
 {
     MediaScreen s;
+    s.setCols(26);                   // the header logic, past the glass width
     s.setState(MediaScreen::State::Playing);
     s.setProgress(83, 225);          // 1:23 of 3:45
     s.setBarWidth(10);
@@ -83,6 +84,7 @@ void test_unknown_duration_drops_the_total_and_leaves_the_bar_empty()
 void test_the_bar_tracks_progress_and_never_overruns()
 {
     MediaScreen s;
+    s.setCols(26);                   // the header logic, past the glass width
     s.setBarWidth(10);
     s.setState(MediaScreen::State::Playing);
 
@@ -319,6 +321,7 @@ void test_the_last_byte_of_the_buffer_stays_a_terminator()
 void test_the_clock_leads_the_header_when_it_is_set()
 {
     MediaScreen s;
+    s.setCols(26);                   // the header logic, past the glass width
     s.setState(MediaScreen::State::Playing);
     s.setProgress(83, 225);
     s.setBarWidth(10);
@@ -336,6 +339,7 @@ void test_the_clock_leads_the_header_when_it_is_set()
 void test_no_clock_leaves_the_header_untouched()
 {
     MediaScreen s;
+    s.setCols(26);                   // the header logic, past the glass width
     s.setState(MediaScreen::State::Playing);
     s.setProgress(83, 225);
     s.setBarWidth(10);
@@ -558,8 +562,9 @@ void test_the_tape_fits_eight_columns_and_needs_no_position()
     fillTypical(s);
     s.setHasTransport(false);
     TEST_ASSERT_EQUAL_STRING("(+)==(+)", draw(s, 0).r1);
-    // No state from the head unit: a title is enough to turn the reels.
-    TEST_ASSERT_EQUAL_STRING("(x)==(x)", draw(s, 250).r1);
+    // No play state from the head unit: the reels stand, nothing repaints.
+    TEST_ASSERT_EQUAL_STRING("(+)==(+)", draw(s, 250).r1);
+    TEST_ASSERT_FALSE(s.dirty(250) && (s.markRendered(0), s.dirty(250)));
 }
 
 // Typewriter: a new title types in a letter per TYPE_MS behind a caret, then
@@ -589,6 +594,33 @@ void test_the_typewriter_types_a_new_title_then_scrolls_from_the_start()
 }
 
 // No track change seen (boot, a style switched mid-song): nothing to type.
+// A row wider than the glass (cols set past it) still draws the cassette
+// within the glass, so the right reel is seen.
+// At the glass's 22 columns Classic keeps the clock and the position; the
+// bar needs four more cells than are left with a clock, so it goes (on the
+// old 26-column row it was sent past the glass edge and cut there anyway).
+void test_classic_at_the_glass_width_keeps_the_clock_and_the_time()
+{
+    MediaScreen s;
+    fillTypical(s);
+    const Rows r = draw(s, 0);
+    assertFits(r, MediaScreen::COLS_DEFAULT);
+    TEST_ASSERT_EQUAL_STRING("[12:34] > 1:23/3:45", r.r1);
+    s.setClock("");
+    TEST_ASSERT_NOT_NULL(strchr(draw(s, 0).r1, '['));   // without the clock the bar is back
+}
+
+void test_the_tape_never_runs_past_the_glass()
+{
+    MediaScreen s;
+    s.setStyle(MediaScreen::Style::Tape);
+    s.setCols(26);
+    fillTypical(s);
+    const Rows r = draw(s, 0);
+    TEST_ASSERT_EQUAL_UINT(MediaScreen::COLS_DEFAULT, strlen(r.r1));
+    TEST_ASSERT_EQUAL_STRING("(+)", r.r1 + MediaScreen::COLS_DEFAULT - 3);
+}
+
 void test_the_typewriter_without_a_track_change_shows_the_title()
 {
     MediaScreen s;
@@ -726,6 +758,7 @@ void test_the_clock_accepts_both_spellings_and_rejects_junk()
 void test_the_bar_shrinks_to_fit_rather_than_disappearing()
 {
     MediaScreen s;
+    s.setCols(26);                   // the header logic, past the glass width
     s.setState(MediaScreen::State::Playing);
     s.setProgress(0, 225);
     s.setBarWidth(10);
@@ -847,6 +880,7 @@ static MediaScreen flowScreen()
 {
     MediaScreen s;
     s.setStyle(MediaScreen::Style::Flow);
+    s.setCols(26);                       // the wrap logic, with room to show it
     s.setClock("1234");
     s.setState(MediaScreen::State::Playing);
     s.setProgress(83, 225);
@@ -855,7 +889,7 @@ static MediaScreen flowScreen()
 
 void test_flow_opens_with_exactly_classics_header()
 {
-    MediaScreen c; c.setStyle(MediaScreen::Style::Classic);
+    MediaScreen c; c.setStyle(MediaScreen::Style::Classic); c.setCols(26);
     c.setClock("1234"); c.setState(MediaScreen::State::Playing); c.setProgress(83, 225);
     c.setTitle("Kashmir"); c.setArtist("Led Zeppelin");
     MediaScreen f = flowScreen();
@@ -957,13 +991,14 @@ void test_flow_does_not_print_an_album_that_is_just_the_title_again()
 // ---- the track splash, and the width that makes it necessary -------------------
 static const char* ltrim(const char* s) { while (*s == ' ') ++s; return s; }
 
-void test_the_info_layout_is_eight_columns_and_the_others_twenty_six()
+void test_the_info_layout_is_eight_columns_and_the_others_twenty_two()
 {
-    // Measured on glass: `Potyag na Pivden` read `Potyag n` beside the pane.
+    // Measured on glass: `Potyag na Pivden` read `Potyag n` beside the pane,
+    // and a full-width row shows 22 (AffaDisplay's fullRowChars).
     TEST_ASSERT_EQUAL_UINT8(8,  MediaScreen::colsFor(MediaScreen::Layout::Info));
     TEST_ASSERT_EQUAL_UINT8(8,  MediaScreen::colsFor(MediaScreen::Layout::Text));
-    TEST_ASSERT_EQUAL_UINT8(26, MediaScreen::colsFor(MediaScreen::Layout::Fullscreen));
-    TEST_ASSERT_EQUAL_UINT8(26, MediaScreen::colsFor(MediaScreen::Layout::Menu));
+    TEST_ASSERT_EQUAL_UINT8(22, MediaScreen::colsFor(MediaScreen::Layout::Fullscreen));
+    TEST_ASSERT_EQUAL_UINT8(22, MediaScreen::colsFor(MediaScreen::Layout::Menu));
     // The two eight-column layouts are exactly the two that share the glass
     // with the pane, and the splash gate in main.cpp keys off this.
     TEST_ASSERT_TRUE(MediaScreen::sharesWithPane(MediaScreen::Layout::Info));
@@ -1060,9 +1095,9 @@ void test_the_splash_is_full_width_even_when_the_screen_is_eight_columns()
 
     // The regular screen cannot show it...
     TEST_ASSERT_TRUE(strlen(draw(s, 0).r2) <= 8);
-    // ...and the splash shows all three, whole, centred in twenty-six.
+    // ...and the splash shows all three, whole, centred in twenty-two.
     Rows r; s.composeSplash(r.r1, r.r2, r.r3);
-    TEST_ASSERT_EQUAL_UINT(26, strlen(r.r1));
+    TEST_ASSERT_EQUAL_UINT(22, strlen(r.r1));
     TEST_ASSERT_EQUAL_STRING_LEN("Potyag na Pivden", ltrim(r.r1), 16);
     TEST_ASSERT_EQUAL_STRING_LEN("Zwyntar", ltrim(r.r2), 7);
     TEST_ASSERT_EQUAL_STRING_LEN("Dykyi Skhid", ltrim(r.r3), 11);
@@ -1075,9 +1110,11 @@ void test_the_splash_gives_a_long_title_two_rows_and_moves_the_artist_down()
     s.setTitle("The Rain Song (Remastered 2014 Version)"); s.setArtist("Led Zeppelin");
     s.setAlbum("Houses of the Holy");
     Rows r; s.composeSplash(r.r1, r.r2, r.r3);
-    assertFits(r, 26);
-    TEST_ASSERT_EQUAL_STRING_LEN("The Rain Song (Remastered", ltrim(r.r1), 25);
-    TEST_ASSERT_EQUAL_STRING_LEN("2014 Version)", ltrim(r.r2), 13);
+    assertFits(r, 22);
+    // No space leaves a second row that fits 22, so it is cut at the edge,
+    // never truncated (wrapTwo's rule).
+    TEST_ASSERT_EQUAL_STRING_LEN("The Rain Song (Remaste", ltrim(r.r1), 22);
+    TEST_ASSERT_EQUAL_STRING_LEN("red 2014 Version)", ltrim(r.r2), 17);
     TEST_ASSERT_EQUAL_STRING_LEN("Led Zeppelin", ltrim(r.r3), 12);
 }
 
@@ -1169,7 +1206,7 @@ int main(int, char**)
     RUN_TEST(test_flow_cuts_mid_word_only_when_no_space_leaves_a_row_that_fits);
     RUN_TEST(test_flow_holds_the_opening_and_scrolls_the_rest_past_two_rows);
     RUN_TEST(test_flow_does_not_print_an_album_that_is_just_the_title_again);
-    RUN_TEST(test_the_info_layout_is_eight_columns_and_the_others_twenty_six);
+    RUN_TEST(test_the_info_layout_is_eight_columns_and_the_others_twenty_two);
     RUN_TEST(test_the_text_layout_is_one_scrolling_row_whatever_the_style_says);
     RUN_TEST(test_a_new_track_starts_the_marquee_at_its_first_character);
     RUN_TEST(test_prefold_maps_apostrophes_and_drops_emoji);
@@ -1182,5 +1219,7 @@ int main(int, char**)
     RUN_TEST(test_the_tape_fits_eight_columns_and_needs_no_position);
     RUN_TEST(test_the_typewriter_types_a_new_title_then_scrolls_from_the_start);
     RUN_TEST(test_the_typewriter_without_a_track_change_shows_the_title);
+    RUN_TEST(test_the_tape_never_runs_past_the_glass);
+    RUN_TEST(test_classic_at_the_glass_width_keeps_the_clock_and_the_time);
     return UNITY_END();
 }
