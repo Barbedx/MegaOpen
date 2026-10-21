@@ -17,6 +17,7 @@
 #include "../proto/canbox/Rav4Emitter.h"
 #include "../proto/canbox/RaiseTargets.h"
 #include "../vehicle/DecodeTable.h"
+#include "../sinks/ResistiveMap.h"
 #if FEATURE_DISPLAY_CAN
 #include <AffaDisplay.h>
 #include "../display/MediaScreen.h"
@@ -386,6 +387,12 @@ namespace Catalog
             j.endArr();
 
             names(j, "capModes", CapFormat::MODE_NAMES);
+
+            // The KEY1/KEY2 ladder's spin modes, by the number /api/res uses.
+            j.k("resSpin").arr();
+            for (uint8_t i = 0; i < sizeof(Sinks::ResistiveMap::SPIN_TITLES) / sizeof(Sinks::ResistiveMap::SPIN_TITLES[0]); ++i)
+                j.obj().kn("v", i).ks("name", Sinks::ResistiveMap::SPIN_TITLES[i]).endObj();
+            j.endArr();
 
             auto units = [&](const char* key, const Canbox::UnitRow* t, size_t n) {
                 j.k(key).arr();

@@ -100,7 +100,7 @@ const S={
  sniff:false,ids:{},
  can:{state:'running',txErr:0,rxErr:0,busErr:0,arbLost:0,twaiRx:4410233,twaiTxOk:982113,twaiTxFail:0,rxMissed:0},
  affa:defAffa(),unm:{count:0,last:0,hold:false,known:true},affaEvents:0,last:{seq:0},
- routing:{uart:0x0F,ams:0x05,hid:0x02,res:0,usb:0x03},
+ routing:{uart:0x0F,ams:0x01,hid:0x02,res:0,usb:0x03},
  kn:defKnobs(),knl:{enc:{detents:0,errors:0,btn:false,clicks:0,holds:0,a:false,b:false,key:false,edges:[0,0,0]},enc2:{detents:0,errors:0,btn:false,clicks:0,holds:0,a:false,b:false,key:false,edges:[0,0,0]},led:{ok:true,frames:0,mA:64,mAWanted:64,busy:0},dropped:0},
  mac:defMacros(),macFires:Array(8).fill(0),macLive:{fired:17,swallowed:21,replayed:4,down:[]},
  ntf:[{uid:1,category:'Social',app:'Telegram',appId:'ph.telegra.Telegraph',title:'Олег',message:'Буду о 19:30'},{uid:2,category:'Navigation',app:'Карти',appId:'com.apple.Maps',title:'Поворот',message:'Через 300 м праворуч'}],
@@ -449,6 +449,43 @@ g('/api/can/ids',()=>{if(S.sniff&&!S.can2.quiet)SNIFF_IDS.forEach((id,i)=>{let x
  return {overflow:false,ids:Object.values(S.ids).sort((a,b)=>a.id-b.id).map(x=>({id:x.id,count:x.count,len:8,changed:x.data.reduce((m,b,i)=>b!==x.base[i]?m|1<<i:m,0),data:x.data.map(h2).join('')}))}});
 po('/api/can/baseline',()=>{Object.values(S.ids).forEach(x=>x.base=[...x.data]);return ok});
 po('/api/can/reset',()=>{S.ids={};return ok});
+/* ---- direct: матриця 3×3 (/api/keymap, WebUi.cpp) і драбина KEY1/KEY2 (/api/res*, WebUiRes.cpp) ---- */
+const KM_DEF=['VolDown','Mode','VolUp','SrcNext','Radio','Mute','EncPhaseA','EncPhaseB','EncPhaseC'];
+const huHex=id=>parseInt((C.actions.find(a=>a.id===id)||{}).hu||'0',16)||0;
+const km=()=>S.km||(S.km={slots:KM_DEF.map(a=>({action:a,code:0})),encCw:0,encCcw:0,encInverted:false});
+g('/api/keymap',()=>{const k=km();return {slots:k.slots.map((x,pos)=>({pos,action:x.action,code:x.code,effective:x.code||huHex(x.action)})),
+ encCw:k.encCw||huHex('EncCw'),encCcw:k.encCcw||huHex('EncCcw'),encInverted:k.encInverted}});
+po('/api/keymap',q=>{const k=km();for(const o of q.slots||[])if(o.pos>=0&&o.pos<9)k.slots[o.pos]={action:o.action||'None',code:o.code|0};
+ k.encCw=q.encCw|0;k.encCcw=q.encCcw|0;k.encInverted=!!q.encInverted;emit(2,'KEY','keymap saved');return ok});
+po('/api/keymap/defaults',()=>{S.km=null;km();emit(2,'KEY','keymap reset to Megane defaults');return ok});
+/* драбина: ноги паралельно, щабель = маска ніг, опір = паралель + послідовний */
+const resSt=()=>S.res||(S.res={enabled:false,activeHigh:false,spin:2,timing:{pulseMs:60,gapMs:50,maxHoldMs:3000,holdAfter:3,repeatStartMs:500,repeatMs:120},
+ ch:[{legs:3,series:0,leg:[1000,2200,4700,0,0]},{legs:2,series:220,leg:[3300,6800,0,0,0]}],slot:{},presses:0,detents:0,live:[0,0],learnUntil:[0,0]});
+const rOhms=(c,m)=>{let g=0;for(let i=0;i<c.legs;i++)if(m>>i&1&&c.leg[i])g+=1/c.leg[i];return g?Math.round(1/g)+c.series:65535};
+const rungs=c=>{const o=[];for(let m=1;m<(1<<c.legs);m++){const v=rOhms(c,m);if(v!==65535)o.push({mask:m,ohms:v})}return o};
+const resWant=()=>{const w=['VolUp','VolDown'];for(const x of km().slots)if(!/^EncPhase/.test(x.action)&&x.action!=='None'&&!w.includes(x.action))w.push(x.action);
+ if(km().slots.some(x=>/^EncPhase/.test(x.action)))w.push('EncCw','EncCcw');return w};
+g('/api/res',()=>{const r=resSt(),w=resWant(),sl=a=>r.slot[a]||{ch:0,mask:0,longMask:0};
+ const used=[0,1].map(c=>w.map(sl).filter(x=>x.ch===c).flatMap(x=>[x.mask,x.longMask]).filter(Boolean));
+ return {enabled:r.enabled,activeHigh:r.activeHigh,spin:r.spin,classes:S.routing.res||0,timing:{...r.timing},
+  ch:r.ch.map(c=>({legs:c.legs,series:c.series,inWindow:true,leg:[...c.leg],pins:c.legs===3?[25,26,27]:[32,33],rungs:rungs(c)})),
+  actions:w.map(a=>{const x=sl(a);return {name:a,ch:x.ch,mask:x.mask,longMask:x.longMask,ohms:x.mask?rOhms(r.ch[x.ch],x.mask):65535,enc:a==='EncCw'||a==='EncCcw'}}),
+  sep:used.some(u=>u.length>1)?18:255,
+  free:[0,1].flatMap(c=>rungs(r.ch[c]).filter(g=>!used[c].includes(g.mask)).map(g=>({ch:c,...g})))}});
+g('/api/res/live',()=>{const r=resSt(),t=now();return {ch:[0,1].map(c=>{const m=t<r.learnUntil[c]?r.live[c]:0;return {mask:m,ohms:m?rOhms(r.ch[c],m):65535,queue:0,learn:t<r.learnUntil[c]}}),
+ presses:r.presses,detents:r.detents,dropped:0,preempts:0,longs:0,stuck:0}});
+po('/api/res',q=>{const r=resSt();if(typeof q.activeHigh==='boolean')r.activeHigh=q.activeHigh;if(q.spin>=0&&q.spin<=2)r.spin=q.spin|0;
+ [0,1].forEach(c=>{if(Array.isArray((q.legs||[])[c]))q.legs[c].forEach((v,i)=>{if(i<5&&v>=0)r.ch[c].leg[i]=v|0});if((q.series||[])[c]>=0)r.ch[c].series=q.series[c]|0});
+ if(q.timing)for(const k in r.timing)if(q.timing[k]>=0)r.timing[k]=q.timing[k]|0;
+ r.timing.pulseMs=Math.max(50,r.timing.pulseMs);r.timing.gapMs=Math.max(20,r.timing.gapMs);if(typeof q.enabled==='boolean')r.enabled=q.enabled;
+ emit(2,'KEY','res: '+(r.enabled?'on':'off'));return ok});
+po('/api/res/map',q=>{if(!C.actions.some(a=>a.id===q.action))return fail(400,'unknown action');const r=resSt(),x={...(r.slot[q.action]||{ch:0,mask:0,longMask:0})};
+ for(const k of ['ch','mask','longMask'])if(q[k]>=0)x[k]=q[k]|0;r.slot[q.action]=x;return ok});
+po('/api/res/auto',q=>{const r=resSt(),c=q.ch|0,g=rungs(r.ch[c]).sort((a,b)=>a.ohms-b.ohms),w=resWant();let n=0;
+ w.forEach((a,i)=>{if(i<g.length){r.slot[a]={ch:c,mask:g[i].mask,longMask:0};n++}});emit(2,'KEY','res: auto-assign ch'+c+' placed '+n+' of '+w.length);return {ok:true,wanted:w.length,placed:n}});
+po('/api/res/learn',q=>{const r=resSt();if(q.stop){r.learnUntil=[0,0];return ok}const ms=q.ms||4000;
+ if(q.action){const x=r.slot[q.action];if(!x||!x.mask)return fail(409,'no rung, or its legs are not fitted');r.live[x.ch]=x.mask;r.learnUntil[x.ch]=now()+ms;return ok}
+ if(!q.mask)return fail(400,'mask?');const c=q.ch|0;if(rOhms(r.ch[c],q.mask)===65535)return fail(409,'those legs are not fitted');r.live[c]=q.mask;r.learnUntil[c]=now()+ms;return ok});
 g('/api/knobs',()=>({board:'T-2CAN',pins:{},pullup:{},maxLeds:160,...deep(S.kn),enc:{fitted:true,...deep(S.kn.enc)},enc2:{fitted:true,...deep(S.kn.enc2)},pot:{mode:'off',inverted:false,zones:8,min:0,max:4095,up:bind('None'),down:bind('None')}}));
 g('/api/knobs/live',()=>deep(S.knl));
 po('/api/knobs',q=>{for(const k of ['enc','enc2'])if(q[k])Object.assign(S.kn[k],deep(q[k]));if(q.led){const l=deep(q.led);Object.assign(S.kn.led,l)}return ok});

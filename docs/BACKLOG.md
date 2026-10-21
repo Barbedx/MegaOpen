@@ -132,12 +132,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   `GET`/`POST /api/config`, which the firmware never had (404). The plan lists
   it as the one route that replaces nothing. Where: `src/net/WebUi.cpp`,
   `web/js/80-board.js`, `web/sim/mock.js`.
-- **The direct tier has no web screens for the matrix keymap or the KEY1/KEY2
-  ladder.** The old `/res` page went with the ui-v2 cutover; only the API is
-  left: `/api/keymap*` (FEATURE_MATRIX) and `/api/res`, `/api/res/live`,
-  `/api/res/map`, `/api/res/auto`, `/api/res/learn` (FEATURE_RESISTIVE_KEYS),
-  both on only in `direct`. The owner plans an OLED for that tier.
-  Where: `web/js/60-keys.js`, `src/net/WebUiRes.cpp`, `WebUi.cpp` keymap.
 - **New UI (owner, 2026-10-16): show the board's IP on the display when WiFi
   connects.** `megaopen.local` answers now (see Done), but Android before 12
   has no `.local`, so the address can still be unknown without a router or

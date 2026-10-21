@@ -41,6 +41,8 @@ namespace Sinks
             // unit's key repeat deliver the rest. See startNextDetent().
             Hybrid = 2,
         };
+        // Spin's rows for /api/catalog (enums.resSpin), in enum order.
+        static constexpr const char* SPIN_TITLES[] = {"імпульс на клац", "стиснення", "утримання"};
 
         struct Timing {
             // 50 ms is what a shipping digipot adapter (bigevtaylor/arduino-swc)

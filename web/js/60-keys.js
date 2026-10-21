@@ -44,19 +44,21 @@ const macVis=c=>{const fx=enumOf('macroEffects',$('[data-f="effect"]',c).value)|
 /* порожній рядок таблиці прошивки: тригер вимк, без назви, без ефекту */
 const macEmpty=x=>!x.name&&!x.enabled&&!(enumOf('macroEffects',x.effect)||{}).field;
 SCR.keys={title:'Кнопки',async render(m){
- const D=has('display'),K=has('knobs');
- const[am,rt,se,kn,mc]=await Promise.all([getIf(D,'/api/affamap'),API.get('/api/health').then(kRt),API.get('/api/settings'),getIf(K,'/api/knobs'),API.get('/api/macros')]);
+ const D=has('display'),K=has('knobs'),MX=has('matrix'),RS=has('res');
+ const[am,rt,se,kn,mc,km,rs]=await Promise.all([getIf(D,'/api/affamap'),API.get('/api/health').then(kRt),API.get('/api/settings'),getIf(K,'/api/knobs'),API.get('/api/macros'),getIf(MX,'/api/keymap'),getIf(RS,'/api/res')]);
  this.kn=kn;this.seq=((am||{}).last||{}).seq;this.macCap=mc.macros.length;
  const DS=CAT.dests,off=d=>!d.built||!rt.dest[d.id];
  const shown=mc.macros.map((x,i)=>({...x,i})).filter(x=>!macEmpty(x));
- m.innerHTML=`<div class="jump">${[...(D?[['kWheel','Кермо']]:[]),['kRoute','Куди'],...(K?[['k_enc2','Ручки']]:[]),['kMac','Макроси']].map(([i,t])=>`<button class="btn sm" type="button" data-jump="${i}">${t}</button>`).join('')}</div>`+
+ m.innerHTML=`<div class="jump">${[...(D?[['kWheel','Кермо']]:[]),...(MX?[['kMat','Матриця']]:[]),['kRoute','Куди'],...(RS?[['kRes','KEY1/KEY2']]:[]),...(K?[['k_enc2','Ручки']]:[]),['kMac','Макроси']].map(([i,t])=>`<button class="btn sm" type="button" data-jump="${i}">${t}</button>`).join('')}</div>`+
  (D?card('Кермо → дія',
   `<div class="row"><div class="l"><b>Остання</b>${hintBtn('Натисни на кермі: рядок засвітиться (синій клік, жовтий утримання). Засвітився не той рядок — переплутано дроти джойстика. ▶ робить те саме, що натискання.')}<small id="kLastW">натисни кнопку на кермі</small><small class="hint" hidden>Натисни на кермі: рядок засвітиться (синій — клік, жовтий — утримання). Засвітився не той рядок — переплутано дроти джойстика. ▶ = те саме, що натискання: дія піде маршрутами нижче.</small></div><div class="c"><span id="kLast" class="chip off">—</span></div></div>`+
   `<div class="krow" id="kHead" style="padding-top:4px;padding-bottom:4px"><div class="kgrid muted" style="font-size:12px;font-weight:800;text-transform:uppercase"><span>клік</span><span>утримання</span></div></div>`+
-  `<div id="affa">${CAT.panelKeys.filter(k=>k.wire).map(k=>kRow(k,am.rows)).join('')}</div><div class="fr"><button class="btn dng" type="button" id="affaDef">Скинути до типових</button></div>`,'kWheel','custom full kwide'):notBuilt('Кермо → дія','панелі (кермо по CAN)'))+
+  `<div id="affa">${CAT.panelKeys.filter(k=>k.wire).map(k=>kRow(k,am.rows)).join('')}</div><div class="fr"><button class="btn dng" type="button" id="affaDef">Скинути до типових</button></div>`,'kWheel','custom full kwide'):MX?'':notBuilt('Кермо → дія','панелі (кермо по CAN)'))+
+ (MX?kmCard(km):'')+
  card('Куди йдуть натискання',`<div class="tw"><table class="grid"><tr><th></th>${DS.map(d=>`<th>${esc(d.name)}<br><span class="chip off" data-live="${esc(d.id)}">…</span></th>`).join('')}</tr>
   ${CAT.classes.map(c=>`<tr><td>${esc(c.name)}</td>${DS.map(d=>`<td><input type="checkbox" class="cb" data-f="${esc(d.id)}:${c.bit}"${rt.dest[d.id]&&rt.dest[d.id].mask&(1<<c.bit)?' checked':''}${off(d)||!(d.classes>>c.bit&1)?' disabled':''} aria-label="${esc(d.name)} ${esc(c.name)}"></td>`).join('')}</tr>`).join('')}</table></div><div id="rtWhy"></div>`+
   `<div id="rtSet">${row('ГУ по UART',sw('/api/settings|uartEnabled',se.uartEnabled))}${row('Довжина натиску в ГУ, мс',num('/api/settings|pulseMs',se.pulseMs,'min="40" max="500" step="10"'))}${row('Показувати натискання на щитку, мс',num('/api/settings|keyPopupMs',se.keyPopup?se.keyPopupMs:0,'min="0" max="10000" step="100"'),'0 = не показувати')}</div>`,'kRoute','custom')+
+ (RS?resCard(rs):'')+
  (K?knobCard(kn.enc2,kn.led.zones[0],'Ручка ліва','enc2',0)+knobCard(kn.enc,kn.led.zones[1],'Ручка права','enc',1)+
  card('Підсвітка',row('Увімкнено',sw('@led.enabled',kn.led.enabled))+row('Яскравість',`<input type="range" min="0" max="255" data-kf="led.brightness" value="${kn.led.brightness}" aria-label="Яскравість">`)+
   row('Струм зараз / межа, мА','<span id="kMa" class="chip off">…</span>'+num('@led.maxMilliamps',kn.led.maxMilliamps,'min="0" max="20000" step="50"'))+
@@ -71,6 +73,8 @@ SCR.keys={title:'Кнопки',async render(m){
  affa.addEventListener('change',e=>{if(e.target.dataset.f==='action')$('[data-f="code"]',e.target.closest('.ka')).placeholder=huOf(e.target.value)});
  affa.addEventListener('click',e=>{const b=e.target.closest('[data-test]');if(!b)return;const r=am.rows.find(x=>x.index===+b.closest('.ka').dataset.i);run(b,()=>API.post('/api/display/key?code=0x'+r.wire.toString(16)+'&hold='+(r.hold?1:0)),nameOf(CAT.panelKeys,r.key)+(r.hold?' утрим.':''))});
  $('#affaDef').onclick=e=>ask(e.target,'Скинути всі '+am.rows.length+' призначень до типових?',()=>run(e.target,()=>API.post('/api/affamap/defaults')).then(()=>route()))}
+ if(MX)kmBind();
+ if(RS)resBind(rs);
  // маршрути
  saver($('#kRoute .tw'),()=>{const p={};DS.forEach(d=>p[routeId(d.id)]=0);$$('#kRoute [data-f]').forEach(c=>{const[d,b]=c.dataset.f.split(':');if(c.checked)p[routeId(d)]|=1<<+b});return API.post('/api/settings',p)},'[data-f]');
  saver($('#rtSet'),async ks=>{const v=val($('[data-k="/api/settings|keyPopupMs"]'));const q={};for(const k of ks){const f=k.split('|')[1];if(f==='keyPopupMs'){q.keyPopup=v>0;if(v>0)q.keyPopupMs=v}else q[f]=val($(`[data-k="${k}"]`))}return API.post('/api/settings',q)},'[data-k]');
@@ -103,7 +107,7 @@ SCR.keys={title:'Кнопки',async render(m){
  mAddOk();
  $('#mDef').onclick=e=>ask(e.target,'Замінити всі макроси прикладами?',()=>run(e.target,()=>API.post('/api/macros/defaults')).then(()=>route()));
  /* підсвітка натискань: окреме швидке опитування, лише поки відкрита вкладка */
- if(D||K){const fast=setInterval(()=>{if(D)this.live().catch(()=>{});if(K)API.get('/api/knobs/live').then(kl=>this.knobTest(kl)).catch(()=>{})},K?250:300);leave=()=>clearInterval(fast)}
+ if(D||K||RS){const fast=setInterval(()=>{if(D)this.live().catch(()=>{});if(K)API.get('/api/knobs/live').then(kl=>this.knobTest(kl)).catch(()=>{});if(RS)resLive().catch(()=>{})},K?250:300);leave=()=>clearInterval(fast)}
  this.n=0;await this.tick();
 },async live(){const r=await API.get('/api/affamap?live=1');const L=r.last;if(!L||L.seq===this.seq||!$('#affa'))return;this.seq=L.seq;
  $$('#affa .krow').forEach(x=>x.classList.remove('hitC','hitH'));$$('#affa .ka').forEach(x=>x.classList.remove('hit'));

@@ -96,6 +96,12 @@ input[type=range]{width:150px;accent-color:var(--acc)}
 .jump{position:sticky;top:56px;z-index:5;background:var(--bg);display:flex;gap:6px;padding:8px 0;overflow-x:auto}
 .jump button{flex:none}
 .krow{border-top:1px solid var(--line);padding:8px 12px;display:grid;gap:6px}
+/* direct: матриця 3x3 і лінії KEY1/KEY2 */
+.kmg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:8px 12px}
+.kmc{display:flex;flex-direction:column;gap:4px;min-width:0;border:1px solid var(--line);border-radius:8px;padding:6px}
+.kmc select{width:100%;min-width:0}
+.resch{border-top:1px solid var(--line)}
+.resch .fr label{display:flex;flex-direction:column;gap:2px;font-size:12px}
 .krow .kh{display:flex;align-items:center;gap:8px}
 .krow .kh b{flex:1;min-width:0}
 .tag{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--mute);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
