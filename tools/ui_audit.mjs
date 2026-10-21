@@ -15,7 +15,7 @@
 //     without X-MegaOpen as one).
 // Screenshots of failing pages go to outdir. Node 22+ (WebSocket, fetch).
 import { spawn } from 'node:child_process';
-import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { writeFileSync, appendFileSync, mkdirSync, rmSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -51,6 +51,17 @@ const profile = join(tmpdir(), 'mo-ui-audit-' + port);
 const chrome = spawn(CHROME, ['--headless=new', '--disable-gpu', '--no-sandbox', `--remote-debugging-port=${port}`,
   '--user-data-dir=' + profile, 'about:blank'], { stdio: 'ignore' });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// On GitHub Actions a failure is also an annotation and a line in the step
+// summary: both show on the run page without signing in, the log does not.
+const GH = !!process.env.GITHUB_ACTIONS;
+const ghEsc = s => String(s).replace(/%/g, '%25').replace(/\r/g, '').replace(/\n/g, '%0A');
+function ghError(title, lines) {
+  if (!GH) return;
+  console.log(`::error title=${ghEsc(title).replace(/[,:]/g, ' ')}::${ghEsc(lines.join('\n'))}`);
+  const sum = process.env.GITHUB_STEP_SUMMARY;
+  if (sum) appendFileSync(sum, `### ${title}\n\n` + lines.map(l => '- `' + l.replace(/`/g, "'") + '`').join('\n') + '\n\n');
+}
 
 let ws, nextId = 0;
 const pending = new Map(), listeners = [];
@@ -161,7 +172,10 @@ try {
         if (bad) {
           failed++;
           console.log(`FAIL ${key}`);
-          for (const k of ['overflow', 'small', 'contrast', 'errors']) for (const x of r[k].slice(0, 8)) console.log(`  ${k}: ${x}`);
+          const lines = [];
+          for (const k of ['overflow', 'small', 'contrast', 'errors']) for (const x of r[k].slice(0, 8)) lines.push(`${k}: ${x}`);
+          lines.forEach(l => console.log('  ' + l));
+          ghError('ui_audit ' + key, lines);
           const lm = await cmd('Page.getLayoutMetrics');
           await cmd('Emulation.setDeviceMetricsOverride', { width: w, height: Math.min(Math.ceil(lm.result.cssContentSize.height), 6000), deviceScaleFactor: 1, mobile: true });
           const shot = await cmd('Page.captureScreenshot', { format: 'png' });
@@ -172,6 +186,9 @@ try {
       }
     }
   }
+} catch (e) {
+  ghError('ui_audit crashed', [String(e?.stack || e)]);
+  throw e;
 } finally {
   writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 1));
   try { ws?.close(); } catch (e) {}
