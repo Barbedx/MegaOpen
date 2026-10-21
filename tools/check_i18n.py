@@ -1,7 +1,7 @@
 """The page's words: web/i18n/<lang>.json against each other and against web/.
 
     python tools/check_i18n.py            the checks below; exit 1 on an error
-    python tools/check_i18n.py --strict   also fails on Ukrainian left in the code
+    python tools/check_i18n.py --strict   also fails on Ukrainian left in the code (CI)
 
 Errors (always):
   * the languages have different keys, or a value is empty;
@@ -28,7 +28,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(ROOT, "web")
 LANGS = ("uk", "en")
 # Keys built at run time ('w.'+code, 's.'+state, 'e.'+code, a screen's title key).
-KEY_PREFIXES = ("w.", "s.", "e.", "k.", "nav.", "dr.t.", "kb.why.", "sc.panelHint.", "sc.clk.", "bd.ble.")
+KEY_PREFIXES = ("w.", "s.", "e.", "k.", "nav.", "dr.t.", "kb.why.", "sc.panelHint.", "sc.clk.", "bd.ble.",
+                "kb.cw", "kb.ccw", "kb.click", "kb.hold", "ca.hu.", "ca.hucmd.", "ca.hufld.", "ca.exp.",
+                "ca.battAt.", "lv.grp.", "lv.src.")
 CATALOG = os.path.join(ROOT, "build", "catalog.json")
 SRC = os.path.join(ROOT, "src")
 

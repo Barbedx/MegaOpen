@@ -6,7 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [Unreleased]
 
 ### Added
-- Web page in English: the EN / UA switch in the header (per browser; `?lang=en` in the address too). Words live in `web/i18n/uk.json` and `en.json`; the English file is fetched only by a viewer who picks it. So far: Огляд, Екран, Кнопки, Плата, Сервіс, the header, the tabs and the shared controls; Авто follows.
+- Web page in English: the EN / UA switch in the header (per browser; `?lang=en` in the address too). Words live in `web/i18n/uk.json` and `en.json`; the English file is fetched only by a viewer who picks it. Every screen.
 
 ### Changed
 - `/api/health` chains carry only `code` (no English `why`): the page has the words in both languages. Огляд no longer tells you to turn the knobs or watch the rings.

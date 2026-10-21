@@ -14,6 +14,8 @@ const enumOf=(n,v)=>enumList(n).find(e=>String(e.v!==undefined?e.v:e.id)===Strin
    k.set.<налаштування>.<v>; сигнал k.sig.<v>, а без нього — його назва в списку Raise, k.raise.<v>.
    Прошивка шле назву лише там, де вона не слово (AF-RDS, 125k); нема ключа — та назва, а нема й її —
    сам ідентифікатор. tools/check_i18n.py рахує ключі тим самим способом */
+/* одиниця прошивки (коротка англійська: km/h, ms) словами сторінки; невідома — як є */
+const unitT=u=>tHas('k.unit.'+u)?t('k.unit.'+u):u;
 function i18nCat(c){
  const tr=(k,o,f,id)=>{if(!o)return;if(tHas(k))o[f]=t(k);else if(o[f]==null&&id!==undefined)o[f]=String(id)};
  const rows=(list,dom,base)=>(list||[]).forEach(r=>tr(dom==='sig'&&!tHas('k.sig.'+r.v)?'k.raise.'+r.v:dom?'k.'+dom+'.'+r.v:base+'.'+r.v,r,'name',r.v));

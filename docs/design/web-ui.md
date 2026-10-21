@@ -116,9 +116,9 @@ address) and reloads the page.
 - English is written for someone who has never seen the Ukrainian: natural
   phrasing, not word for word.
 - `tools/check_i18n.py` (CI): same keys in both files, same `{n}` arguments,
-  no empty value, no literal key missing; warns on unused keys and counts the
-  Ukrainian still in `web/js` (`--strict` fails on it once every screen is
-  migrated).
+  no empty value, no literal key missing, no Ukrainian left in `web/js` or
+  `index.html` outside comments (`--strict`, as CI runs it); warns on unused
+  keys.
 
 With `?sim`, or in the simulator build, `10-api.js` routes `call()` to the mock. The board build never contains `mock.js`.
 

@@ -1,7 +1,6 @@
 /* ---------- Плата ---------- */
 /* пояснення ролі BLE — bd.ble.<id>; нової ролі в словнику нема — порожньо */
 const bleHint=id=>tHas('bd.ble.'+id)?t('bd.ble.'+id):'';
-const unitT=u=>tHas('k.unit.'+u)?t('k.unit.'+u):u;
 const bars=r=>{const n=r>-55?4:r>-67?3:r>-78?2:1;return `<span class="sig">${[1,2,3,4].map(i=>`<i class="${i<=n?'on':''}" style="height:${i*4}px"></i>`).join('')}</span>`};
 /* усі налаштування з реєстру прошивки (CAT.settings): ті самі, що в меню на щитку;
    ті, що вже є на сторінці (data-k в `have`), не дублюються; reboot -> смуга перезавантаження.
