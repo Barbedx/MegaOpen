@@ -53,12 +53,26 @@ namespace Cfg
             uint8_t  nTables = 0;
             // Keys this registry does not know (a newer file, or apPass).
             uint8_t  unknown = 0;
+            // A file: entries this board does not have (its knobs, its
+            // capture), skipped rather than refused, for the preview.
+            const SEntry* skipped[16];
+            uint8_t  nSkipped = 0;
+            bool     tooMany = false;
         };
 
         // Checks every key of `in` against the registry; collects changes into
         // `r` and refusals into `err`. Keys the registry does not know are
-        // counted, not refused. `skipVolatile` (a file) ignores RAM-only entries.
-        void read(Model& m, JsonObjectConst in, Read& r, Errors& err, bool skipVolatile = false);
+        // counted, not refused.
+        // `file` (a settings file): RAM-only entries are ignored; entries this
+        // board does not have are skipped (r.skipped), not refused; and the
+        // keys a file must never carry (FILE_FORBIDDEN: the AP/OTA password,
+        // the head unit's learner reset) are refused. The caller has made
+        // sure nothing is merely busy (a model part missing because a peek
+        // failed reads as "not on this board" here).
+        void read(Model& m, JsonObjectConst in, Read& r, Errors& err, bool file = false);
+
+        // Not registry entries, but read by POST /api/settings: never from a file.
+        inline constexpr const char* FILE_FORBIDDEN[] = {"apPass", "huForget"};
 
         // Writes what read() collected (only when it reported no errors);
         // ORs the apply bits, tables' included, into *ap.

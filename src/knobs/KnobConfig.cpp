@@ -36,24 +36,29 @@ namespace Knobs
         }
     }
 
-    void Config::sanitize()
+    uint16_t Config::sanitize()
     {
+        uint16_t c = 0;
+        // Sets `field` to `v` and the group bit, when they differ.
+        auto fix = [&c](auto& field, auto v, uint16_t bit) {
+            if (field != v) { field = v; c |= bit; }
+        };
         for (uint8_t k = 0; k < ENCODERS; ++k) {
             Enc& e = enc[k];
-            if (e.ppd != 1 && e.ppd != 2) e.ppd = 4;
-            if (e.holdMs < 200)  e.holdMs = 200;
-            if (e.holdMs > 5000) e.holdMs = 5000;
+            if (e.ppd != 1 && e.ppd != 2) fix(e.ppd, (uint8_t)4, CLAMP_ENC);
+            if (e.holdMs < 200)  fix(e.holdMs, (uint16_t)200, CLAMP_ENC);
+            if (e.holdMs > 5000) fix(e.holdMs, (uint16_t)5000, CLAMP_ENC);
         }
 
-        if ((uint8_t)potMode >= (uint8_t)PotMode::_Count) potMode = PotMode::Off;
-        if (potZones < 2)  potZones = 2;
-        if (potZones > 64) potZones = 64;
-        if (potMax > 4095) potMax = 4095;
-        if (potMax <= potMin) { potMin = 0; potMax = 4095; }
+        if ((uint8_t)potMode >= (uint8_t)PotMode::_Count) fix(potMode, PotMode::Off, CLAMP_POT);
+        if (potZones < 2)  fix(potZones, (uint8_t)2, CLAMP_POT);
+        if (potZones > 64) fix(potZones, (uint8_t)64, CLAMP_POT);
+        if (potMax > 4095) fix(potMax, (uint16_t)4095, CLAMP_POT);
+        if (potMax <= potMin) { fix(potMin, (uint16_t)0, CLAMP_POT); fix(potMax, (uint16_t)4095, CLAMP_POT); }
 
-        if ((uint8_t)order >= (uint8_t)Order::_Count) order = Order::GRB;
-        if (levelSteps < 4) levelSteps = 4;
-        if (animPeriod < 10) animPeriod = 10;           // a second, at the fastest
+        if ((uint8_t)order >= (uint8_t)Order::_Count) fix(order, Order::GRB, CLAMP_ORDER);
+        if (levelSteps < 4) fix(levelSteps, (uint8_t)4, CLAMP_LEVELS);
+        if (animPeriod < 10) fix(animPeriod, (uint8_t)10, CLAMP_LEVELS);   // a second, at the fastest
 
         // Never an encoder phase: those are matrix positions, not events.
         Binding* all[] = { &enc[0].cw, &enc[0].ccw, &enc[0].click, &enc[0].hold,
@@ -61,20 +66,36 @@ namespace Knobs
                            &potUp, &potDown };
         for (Binding* b : all) {
             if ((uint8_t)b->action >= (uint8_t)Keys::Action::_Count ||
-                Keys::isEncoderPhase(b->action)) *b = Binding{};
+                Keys::isEncoderPhase(b->action)) { *b = Binding{}; c |= CLAMP_BIND; }
         }
 
         for (uint8_t z = 0; z < ZONES; ++z) {
-            if ((uint8_t)zone[z].react >= (uint8_t)React::_Count) zone[z].react = React::None;
-            if ((uint8_t)zone[z].anim  >= (uint8_t)Anim::_Count)  zone[z].anim  = Anim::Static;
-            if (zone[z].count > ZONE_LEDS) zone[z].count = ZONE_LEDS;
+            if ((uint8_t)zone[z].react >= (uint8_t)React::_Count) fix(zone[z].react, React::None, CLAMP_ZONE);
+            if ((uint8_t)zone[z].anim  >= (uint8_t)Anim::_Count)  fix(zone[z].anim, Anim::Static, CLAMP_ZONE);
+            if (zone[z].count > ZONE_LEDS) fix(zone[z].count, (uint8_t)ZONE_LEDS, CLAMP_ZONE);
         }
 
-        if (feetCount > FEET_LEDS) feetCount = FEET_LEDS;
-        if ((uint8_t)feetAnim >= (uint8_t)Anim::_Count) feetAnim = Anim::Static;
+        if (feetCount > FEET_LEDS) fix(feetCount, (uint8_t)FEET_LEDS, CLAMP_FEET);
+        if ((uint8_t)feetAnim >= (uint8_t)Anim::_Count) fix(feetAnim, Anim::Static, CLAMP_FEET);
         // Floor: below it the limiter blacks out a merely idling chain.
-        if (maxMilliamps < 200)   maxMilliamps = 200;
-        if (maxMilliamps > 20000) maxMilliamps = 20000;
+        if (maxMilliamps < 200)   fix(maxMilliamps, (uint16_t)200, CLAMP_CURRENT);
+        if (maxMilliamps > 20000) fix(maxMilliamps, (uint16_t)20000, CLAMP_CURRENT);
+        return c;
+    }
+
+    const char* Config::clampName(uint16_t bit)
+    {
+        switch (bit) {
+            case CLAMP_ENC:     return "enc";
+            case CLAMP_POT:     return "pot";
+            case CLAMP_ORDER:   return "led.order";
+            case CLAMP_LEVELS:  return "led.levels";
+            case CLAMP_BIND:    return "bindings";
+            case CLAMP_ZONE:    return "led.zones";
+            case CLAMP_FEET:    return "led.feet";
+            case CLAMP_CURRENT: return "led.maxMilliamps";
+            default:            return "";
+        }
     }
 
     // ---- blob ---------------------------------------------------------------

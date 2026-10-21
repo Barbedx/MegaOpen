@@ -276,12 +276,13 @@ g('/api/config',()=>{const o={format:'megaopen-config',schema:1,fw:S.fw,build:S.
 po('/api/config',q=>{if(!q||q.format!=='megaopen-config'||typeof q.settings!=='object')return fail(400,'not a MegaOpen settings file');
  if(q.schema>1)return fail(400,'saved by a newer firmware (schema too new): update the board first');
  if(q.schema<1)return fail(400,'saved by an older firmware whose settings this one cannot read');
+ const bad=['apPass','huForget'].filter(k=>k in q.settings);if(bad.length)return fail(400,bad.map(k=>k+': not allowed in a settings file').join('\n'));
  const set={};for(const k in q.settings)if(!(C.settings||[]).some(f=>f.id===k&&f.volatile)&&q.settings[k]!==null)set[k]=q.settings[k];
  const was=fileSettings(),unknown=Object.keys(q.settings).filter(k=>!(C.settings||[]).some(f=>f.id===k)).length;
  if(q.dry==='1'){const snap=JSON.parse(JSON.stringify(S));const r=R['POST /api/settings'](set);for(const k of Object.keys(S))delete S[k];Object.assign(S,snap);
   if(r&&r.__status)return r;
   const changes=Object.keys(set).filter(k=>k in was&&JSON.stringify(was[k])!==JSON.stringify(set[k]));
-  return {ok:true,changes,reboot:changes.some(k=>((C.settings||[]).find(f=>f.id===k)||{}).reboot),unknown,knobs:!!(q.knobs&&C.features.knobs),fileFw:q.fw||''}}
+  return {ok:true,changes,reboot:changes.some(k=>((C.settings||[]).find(f=>f.id===k)||{}).reboot),unknown,skipped:[],knobs:!!(q.knobs&&C.features.knobs),clamped:[],fileFw:q.fw||''}}
  const r=R['POST /api/settings'](set);if(r&&r.__status)return r;if(q.knobs&&C.features.knobs)R['POST /api/knobs'](q.knobs);emit(2,'NET','settings set from a file');return r});
 g('/api/display',()=>{const d=S.disp,car=d.type==='carminat';return {type:d.type,funcReg:d.funcReg,canRx:S.can.twaiRx,attached:true,sync:d.registered?15:1,synced:d.registered,registered:d.registered,passive:!d.funcReg,busy:false,queued:0,lastResult:'Ok',
  supports:{text:true,time:car,power:car,menu:car,popup:car,fullscreen:car,confirm:car,info:car},phase:d.phase,lastRendered:'text',lastRenderedMs:1200,glassHoldMs:10000,glassHeldMs:0,

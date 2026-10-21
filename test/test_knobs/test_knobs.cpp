@@ -1027,6 +1027,20 @@ void test_rgbw_is_a_strip_type_by_name_and_in_the_blob()
     TEST_ASSERT_TRUE(b.order == Order::GRBW);
 }
 
+// sanitize() says what it had to bring into range, for a file's preview;
+// a config in range comes back with nothing to say.
+void test_sanitize_reports_what_it_clamped()
+{
+    Config c;
+    TEST_ASSERT_EQUAL_HEX16(0, c.sanitize());
+    c.maxMilliamps = 50;
+    c.enc[0].ppd = 3;
+    const uint16_t got = c.sanitize();
+    TEST_ASSERT_EQUAL_HEX16(Config::CLAMP_CURRENT | Config::CLAMP_ENC, got);
+    TEST_ASSERT_EQUAL_STRING("led.maxMilliamps", Config::clampName(Config::CLAMP_CURRENT));
+    TEST_ASSERT_EQUAL_HEX16(0, c.sanitize());
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -1089,5 +1103,6 @@ int main(int, char**)
     RUN_TEST(test_wire_bytes_for_grb_and_rgb);
     RUN_TEST(test_wire_bytes_for_rgbw_take_white_out_of_the_mix);
     RUN_TEST(test_rgbw_is_a_strip_type_by_name_and_in_the_blob);
+    RUN_TEST(test_sanitize_reports_what_it_clamped);
     return UNITY_END();
 }

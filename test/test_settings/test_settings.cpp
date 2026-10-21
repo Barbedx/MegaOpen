@@ -768,6 +768,76 @@ void test_a_value_with_no_row_round_trips_as_null()
     TEST_ASSERT_FALSE(err.any());
 }
 
+// A file never sets the AP/OTA password or resets the head unit's learner:
+// both are refused there and listed, while the form keeps them.
+void test_a_file_may_not_carry_the_password_or_a_reset()
+{
+    Fixture f;
+    JsonDocument in;
+    in["apPass"]   = "stolen-pass";
+    in["huForget"] = true;
+    in["pulseMs"]  = 100;
+    static SettingsJson::Read r;
+    r = SettingsJson::Read{};
+    SettingsJson::Errors err;
+    SettingsJson::read(f.m, in.as<JsonObjectConst>(), r, err, true);
+    TEST_ASSERT_EQUAL_UINT8(2, err.n);
+    char why[256];
+    err.join(why, sizeof(why));
+    TEST_ASSERT_NOT_NULL(strstr(why, "apPass: not allowed in a settings file"));
+    TEST_ASSERT_NOT_NULL(strstr(why, "huForget: not allowed in a settings file"));
+    // The form: not the registry's, counted, not refused.
+    r = SettingsJson::Read{};
+    SettingsJson::Errors err2;
+    SettingsJson::read(f.m, in.as<JsonObjectConst>(), r, err2, false);
+    TEST_ASSERT_FALSE(err2.any());
+    TEST_ASSERT_EQUAL_UINT8(2, r.unknown);
+}
+
+// A file from a board with knobs, onto one without: the knob entries are
+// skipped and listed, the rest applies.
+void test_a_file_skips_what_this_board_does_not_have()
+{
+    Fixture a;
+    JsonDocument d;
+    SettingsJson::write(a.m, d.to<JsonObject>(), true);
+    TEST_ASSERT_FALSE(d["ledR.anim"].isNull());
+    Fixture b;
+    Model noKnobs{&b.s, nullptr, &b.a, &b.c, &b.t, b.msg};
+    static SettingsJson::Read r;
+    r = SettingsJson::Read{};
+    SettingsJson::Errors err;
+    SettingsJson::read(noKnobs, d.as<JsonObjectConst>(), r, err, true);
+    char why[256];
+    err.join(why, sizeof(why));
+    TEST_ASSERT_FALSE_MESSAGE(err.any(), why);
+    TEST_ASSERT_TRUE(r.nSkipped > 0);
+    bool sawLed = false;
+    for (uint8_t i = 0; i < r.nSkipped; ++i) if (!strncmp(r.skipped[i]->id, "led", 3)) sawLed = true;
+    TEST_ASSERT_TRUE(sawLed);
+    // The form refuses them as before.
+    r = SettingsJson::Read{};
+    SettingsJson::Errors err2;
+    JsonDocument one;
+    one["ledR.anim"] = d["ledR.anim"];
+    SettingsJson::read(noKnobs, one.as<JsonObjectConst>(), r, err2, false);
+    TEST_ASSERT_EQUAL_UINT8(1, err2.n);
+}
+
+// Past MAX_CHANGES the refusal is one line, not one per key.
+void test_too_many_is_said_once()
+{
+    Fixture f;
+    static SettingsJson::Read r;
+    r = SettingsJson::Read{};
+    r.n = Registry::MAX_CHANGES;              // as if full already
+    JsonDocument in;
+    in["pulseMs"] = 100; in["debounceMs"] = 20; in["longMs"] = 800;
+    SettingsJson::Errors err;
+    SettingsJson::read(f.m, in.as<JsonObjectConst>(), r, err, false);
+    TEST_ASSERT_EQUAL_UINT8(1, err.n);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -786,6 +856,9 @@ int main(int, char**)
     RUN_TEST(test_every_refusal_is_listed);
     RUN_TEST(test_a_file_from_another_schema_is_refused);
     RUN_TEST(test_a_value_with_no_row_round_trips_as_null);
+    RUN_TEST(test_a_file_may_not_carry_the_password_or_a_reset);
+    RUN_TEST(test_a_file_skips_what_this_board_does_not_have);
+    RUN_TEST(test_too_many_is_said_once);
     RUN_TEST(test_pane_auto_is_its_own_row);
     RUN_TEST(test_splash_under_a_second_becomes_one);
     RUN_TEST(test_color_preset_paints_the_zone_and_custom_keeps_it);

@@ -81,6 +81,7 @@ private:
 #include "../utils/Mirror.h"
 #endif
 #include "../cfg/Config.h"
+#include "../cfg/SettingsJson.h"
 #include "WifiManager.h"
 #include "../keys/KeyEngine.h"
 #include "../keys/MacroEngine.h"
@@ -374,11 +375,14 @@ private:
     void settingsOut(JsonObject out, bool forFile);
     // POST /api/settings and POST /api/config's settings: the HTTP status,
     // body in out/type. dry: check and preview only; file: skip RAM-only keys.
-    int settingsPost(JsonObjectConst d, bool dry, bool file, String& out, const char*& type);
+    // `extra`: the caller's own refusals, listed with the registry's.
+    int settingsPost(JsonObjectConst d, bool dry, bool file, String& out, const char*& type,
+                     const Cfg::SettingsJson::Errors* extra = nullptr);
 #if FEATURE_KNOBS
     // GET /api/knobs's document, and what POST /api/knobs (or a file) sets.
     void knobsJson(const Knobs::Config& c, JsonObject out) const;
-    void knobsFromJson(JsonVariantConst in, Knobs::Config& c) const;
+    uint16_t knobsFromJson(JsonVariantConst in, Knobs::Config& c,
+                           Cfg::SettingsJson::Errors* err = nullptr) const;
 #endif
 #if FEATURE_BLE
     Sinks::BleKeyProxy*    _amsSink = nullptr;

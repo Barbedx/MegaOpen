@@ -45,12 +45,6 @@ static void knobBindOut(JsonObject parent, const char* key, const Binding& b)
     o["code"]   = b.code;
 }
 
-static void knobBindIn(JsonVariantConst v, Binding& b)
-{
-    if (v["action"].is<const char*>()) b.action = Keys::fromName(v["action"].as<const char*>());
-    if (v["code"].is<int>())           b.code   = (uint8_t)v["code"].as<int>();
-}
-
 // The knob configuration as GET /api/knobs sends it (and the settings file
 // carries it, GET /api/config).
 void WebUi::knobsJson(const Config& c, JsonObject d) const
@@ -140,10 +134,30 @@ void WebUi::knobsJson(const Config& c, JsonObject d) const
 
 // What POST /api/knobs (and a settings file) sets, onto `c`: keys not sent
 // keep their values; limits are enforced here (sanitize), not in the page.
-void WebUi::knobsFromJson(JsonVariantConst d, Config& c) const
+// With `err` (a settings file) a name that is no row (an action, a reaction,
+// an animation, a strip type, a pot mode) is a refusal there and leaves the
+// field as it was; without it (POST /api/knobs) it falls back as it always
+// has. Returns sanitize()'s Config::CLAMP_* bits.
+uint16_t WebUi::knobsFromJson(JsonVariantConst d, Config& c, Cfg::SettingsJson::Errors* err) const
 {
+    // A name the table has, or a refusal: false = leave the field alone.
+    auto known = [err](bool ok, const char* path, const char* v) {
+        if (ok || !err) return true;
+        err->add("knobs.%s: unknown value '%s'", path, v);
+        return false;
+    };
+    auto bind = [&](JsonVariantConst v, Binding& b, const char* path) {
+        if (v["action"].is<const char*>()) {
+            const char* n = v["action"].as<const char*>();
+            const Keys::Action a = Keys::fromName(n);
+            if (known(a != Keys::Action::None || !strcmp(n, Keys::name(Keys::Action::None)), path, n)) b.action = a;
+        }
+        if (v["code"].is<int>()) b.code = (uint8_t)v["code"].as<int>();
+    };
+    char path[40];
 
     static const char* const kEncKey[ENCODERS] = {"enc", "enc2"};
+    static const char* const kBindKey[4] = {"cw", "ccw", "click", "hold"};
     for (uint8_t k = 0; k < ENCODERS; ++k) {
         JsonVariantConst e = d[kEncKey[k]];
         if (e.isNull()) continue;
@@ -152,24 +166,32 @@ void WebUi::knobsFromJson(JsonVariantConst d, Config& c) const
         if (e["inverted"].is<bool>()) en.inverted = e["inverted"].as<bool>();
         if (e["ppd"].is<int>())       en.ppd      = (uint8_t)e["ppd"].as<int>();
         if (e["holdMs"].is<int>())    en.holdMs   = (uint16_t)e["holdMs"].as<int>();
-        knobBindIn(e["cw"], en.cw);
-        knobBindIn(e["ccw"], en.ccw);
-        knobBindIn(e["click"], en.click);
-        knobBindIn(e["hold"], en.hold);
+        Binding* bs[4] = {&en.cw, &en.ccw, &en.click, &en.hold};
+        for (uint8_t b = 0; b < 4; ++b) {
+            snprintf(path, sizeof(path), "%s.%s.action", kEncKey[k], kBindKey[b]);
+            bind(e[kBindKey[b]], *bs[b], path);
+        }
     }
 
     JsonVariantConst p = d["pot"];
-    if (p["mode"].is<const char*>()) c.potMode     = potModeFromName(p["mode"].as<const char*>());
+    if (p["mode"].is<const char*>()) {
+        const char* n = p["mode"].as<const char*>();
+        const PotMode m = potModeFromName(n);
+        if (known(!strcmp(potModeName(m), n), "pot.mode", n)) c.potMode = m;
+    }
     if (p["inverted"].is<bool>())    c.potInverted = p["inverted"].as<bool>();
     if (p["zones"].is<int>())        c.potZones    = (uint8_t)p["zones"].as<int>();
     if (p["min"].is<int>())          c.potMin      = (uint16_t)p["min"].as<int>();
     if (p["max"].is<int>())          c.potMax      = (uint16_t)p["max"].as<int>();
-    knobBindIn(p["up"], c.potUp);
-    knobBindIn(p["down"], c.potDown);
+    bind(p["up"], c.potUp, "pot.up.action");
+    bind(p["down"], c.potDown, "pot.down.action");
 
     JsonVariantConst l = d["led"];
     if (l["enabled"].is<bool>())      c.ledEnabled  = l["enabled"].as<bool>();
-    if (l["order"].is<const char*>()) c.order       = orderFromName(l["order"].as<const char*>());
+    if (l["order"].is<const char*>()) {
+        const char* n = l["order"].as<const char*>();
+        if (known(uiFind(ORDER_NAMES, n) >= 0, "led.order", n)) c.order = orderFromName(n);
+    }
     if (l["brightness"].is<int>())    c.brightness  = (uint8_t)l["brightness"].as<int>();
     if (l["holdMs"].is<int>())        c.reactHoldMs = (uint16_t)l["holdMs"].as<int>();
     if (l["levelSteps"].is<int>())    c.levelSteps  = (uint8_t)l["levelSteps"].as<int>();
@@ -180,8 +202,16 @@ void WebUi::knobsFromJson(JsonVariantConst d, Config& c) const
         JsonVariantConst o = l["zones"][z];
         if (o.isNull()) continue;
         if (o["count"].is<int>())         c.zone[z].count = (uint8_t)o["count"].as<int>();
-        if (o["react"].is<const char*>()) c.zone[z].react = reactFromName(o["react"].as<const char*>());
-        if (o["anim"].is<const char*>())  c.zone[z].anim  = animFromName(o["anim"].as<const char*>());
+        if (o["react"].is<const char*>()) {
+            const char* n = o["react"].as<const char*>();
+            snprintf(path, sizeof(path), "led.zones.%u.react", (unsigned)z);
+            if (known(uiFind(REACT_NAMES, n) >= 0, path, n)) c.zone[z].react = reactFromName(n);
+        }
+        if (o["anim"].is<const char*>()) {
+            const char* n = o["anim"].as<const char*>();
+            snprintf(path, sizeof(path), "led.zones.%u.anim", (unsigned)z);
+            if (known(uiFind(ANIM_NAMES, n) >= 0, path, n)) c.zone[z].anim = animFromName(n);
+        }
         // A short array leaves the rest alone (knobRgbIn ignores null).
         for (uint8_t i = 0; i < ZONE_LEDS; ++i) knobRgbIn(o["leds"][i], c.zone[z].led[i]);
         knobRgbIn(o["lo"], c.zone[z].lo);
@@ -190,13 +220,16 @@ void WebUi::knobsFromJson(JsonVariantConst d, Config& c) const
 
     JsonVariantConst f = l["feet"];
     if (f["count"].is<int>())        c.feetCount      = (uint8_t)constrain(f["count"].as<int>(), 0, (int)FEET_LEDS);
-    if (f["anim"].is<const char*>()) c.feetAnim       = animFromName(f["anim"].as<const char*>());
+    if (f["anim"].is<const char*>()) {
+        const char* n = f["anim"].as<const char*>();
+        if (known(uiFind(ANIM_NAMES, n) >= 0, "led.feet.anim", n)) c.feetAnim = animFromName(n);
+    }
     if (f["brightness"].is<int>())   c.feetBrightness = (uint8_t)f["brightness"].as<int>();
     knobRgbIn(f["color"], c.feetColor);
     if (l["maxMilliamps"].is<int>())
         c.maxMilliamps = (uint16_t)constrain(l["maxMilliamps"].as<int>(), 0, 20000);
 
-    c.sanitize();
+    return c.sanitize();
 }
 
 void WebUi::routesKnobs()

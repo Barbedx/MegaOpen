@@ -118,16 +118,26 @@ namespace Cfg
             }
         }
 
-        void read(Model& m, JsonObjectConst in, Read& r, Errors& err, bool skipVolatile)
+        void read(Model& m, JsonObjectConst in, Read& r, Errors& err, bool file)
         {
             for (JsonPairConst kv : in) {
-                const SEntry* e = Registry::find(kv.key().c_str());
+                const char* key = kv.key().c_str();
+                if (file) {
+                    bool forbidden = false;
+                    for (const char* f : FILE_FORBIDDEN) if (!strcmp(key, f)) forbidden = true;
+                    if (forbidden) { err.add("%s: not allowed in a settings file", key); continue; }
+                }
+                const SEntry* e = Registry::find(key);
                 if (!e || e->type == SType::Group) { ++r.unknown; continue; }
-                if (skipVolatile && (e->flags & F_VOLATILE)) continue;
+                if (file && (e->flags & F_VOLATILE)) continue;
                 const JsonVariantConst j = kv.value();
                 // A file carries null for a value with no id (see write());
                 // it means "as it is", like a cell.
-                if (skipVolatile && j.isNull()) continue;
+                if (file && j.isNull()) continue;
+                if (file && !(e->flags & F_RO) && !Registry::available(m, *e)) {
+                    if (r.nSkipped < sizeof(r.skipped) / sizeof(r.skipped[0])) r.skipped[r.nSkipped++] = e;
+                    continue;
+                }
                 const char* why = nullptr;
                 Change c;
                 c.e = e;
@@ -155,7 +165,8 @@ namespace Cfg
                 }
                 if (why) { err.add("%s: %s", e->id, why); continue; }
                 if (r.n >= Registry::MAX_CHANGES) {
-                    err.add("too many settings in one request: %u at most", (unsigned)Registry::MAX_CHANGES);
+                    if (!r.tooMany) err.add("too many settings in one request: %u at most", (unsigned)Registry::MAX_CHANGES);
+                    r.tooMany = true;
                     continue;
                 }
                 r.ch[r.n++] = c;

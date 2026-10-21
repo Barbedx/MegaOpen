@@ -357,11 +357,13 @@ void WebUi::settingsOut(JsonObject d, bool forFile)
 // key, then (unless `dry`) apply and hand each part to the task that owns it.
 // `file`: a settings file, whose volatile entries are skipped. Returns the
 // HTTP status; `out`/`type` are the body.
-int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, const char*& type)
+int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, const char*& type,
+                        const Cfg::SettingsJson::Errors* extra)
 {
         auto& s = _cfg->s();
         // The AP password, which is also the OTA password. Empty = unchanged.
-        const String apPass = d["apPass"] | "";
+        // Never from a file (SettingsJson::read refuses it there).
+        const String apPass = file ? String() : String(d["apPass"] | "");
         if (apPass.length() && (apPass.length() < 8 || apPass.length() > 63))
             { out = "apPass: 8 to 63 characters"; return 400; }
 
@@ -390,6 +392,11 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
 #else
         Cfg::Model m{&s, nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
 #endif
+        // A file skips what this board does not have, so a part that is
+        // merely busy (its owner held it for the peek) must not pass for
+        // missing: retry before anything is read or applied.
+        if (file && (!alp || (_emitter && !huOk))) { out = "busy, retry"; return 503; }
+
         // Everything that can be refused is checked before anything is applied
         // (the /api/map rule): a 400 lists every refusal and leaves the
         // settings as they were. Keys the registry does not know (apPass,
@@ -400,6 +407,11 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         rd = Cfg::SettingsJson::Read{};
         er = Cfg::SettingsJson::Errors{};
         Cfg::SettingsJson::read(m, d, rd, er, file);
+        // The caller's own refusals (a file's knobs), in the same list.
+        if (extra) {
+            for (uint8_t i = 0; i < extra->n; ++i) er.add("%s", extra->line[i]);
+            er.more = (uint16_t)(er.more + extra->more);
+        }
         if (er.any()) {
             static char err[Cfg::SettingsJson::Errors::MAX * Cfg::SettingsJson::Errors::LEN];
             er.join(err, sizeof(err));
@@ -422,6 +434,8 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
             for (uint8_t i = 0; i < rd.nTables; ++i) chg.add(rd.tables[i]->id);
             o["reboot"]  = reboot;
             o["unknown"] = rd.unknown;
+            JsonArray sk = o["skipped"].to<JsonArray>();
+            for (uint8_t i = 0; i < rd.nSkipped; ++i) sk.add(rd.skipped[i]->id);
             serializeJson(o, out);
             type = "application/json";
             return 200;
@@ -508,7 +522,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         }
         // "Throw away what you learned and watch again", for when the learner
         // latched onto a status frame that happened to look like text.
-        if (_hu && (d["huForget"] | false)) _hu->forget();
+        if (!file && _hu && (d["huForget"] | false)) _hu->forget();
 #endif
 
 #if FEATURE_KNOBS
@@ -528,6 +542,22 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         _cfg->save();
         LogBus::printf("settings saved: %u value(s)%s%s", (unsigned)rd.n, file ? " from a file" : "",
                        restart ? ", pending reboot" : "");
+        // A file reports a part that did not take as part of a 200, so its
+        // caller still applies the knobs and the page says exactly what
+        // stayed behind; the form keeps its statuses.
+        if (file) {
+            JsonDocument o;
+            o["ok"] = true;
+            if (restart) o["pendingReboot"] = true;
+            if (!alSaved || huBusy) {
+                JsonArray p = o["partial"].to<JsonArray>();
+                if (!alSaved) p.add("alerts: applied until the next boot only (NVS write failed)");
+                if (huBusy)   p.add("head unit: busy, its settings not applied");
+            }
+            serializeJson(o, out);
+            type = "application/json";
+            return 200;
+        }
         if (!alSaved) { out = "alerts: applied until the next boot only: NVS write failed"; return 500; }
         if (huBusy) { out = "head unit: busy, its part not applied; the rest saved"; return 503; }
         type = "application/json";
@@ -717,17 +747,33 @@ void WebUi::routes()
     // POST: such a file, through the same checks as POST /api/settings, all or
     // nothing; ?dry=1 answers what would change and changes nothing.
     route("/api/config", HTTP_GET, [this](PsychicRequest* r) {
-        JsonDocument d;
-        d["format"] = Cfg::SettingsJson::FORMAT;
-        d["schema"] = Cfg::SettingsJson::SCHEMA;
-        d["fw"]     = MEGAOPEN_VERSION;
-        d["build"]  = MegaOpen::buildId();
-        settingsOut(d["settings"].to<JsonObject>(), true);
+        // Streamed (ChunkOut): the settings and the knobs each as their own
+        // short-lived document, never the whole file as one String.
+        ChunkOut out(r);
+        struct Writer {
+            ChunkOut& o;
+            size_t write(uint8_t c) { const char ch = (char)c; o.put(&ch, 1); return 1; }
+            size_t write(const uint8_t* b, size_t n) { o.put(reinterpret_cast<const char*>(b), n); return n; }
+        } w{out};
+        char head[160];
+        snprintf(head, sizeof(head), "{\"format\":\"%s\",\"schema\":%d,\"fw\":\"%s\",\"build\":\"%s\",\"settings\":",
+                 Cfg::SettingsJson::FORMAT, Cfg::SettingsJson::SCHEMA, MEGAOPEN_VERSION, MegaOpen::buildId());
+        out.put(head);
+        {
+            JsonDocument d;
+            settingsOut(d.to<JsonObject>(), true);
+            serializeJson(d, w);
+        }
 #if FEATURE_KNOBS
-        if (_knobs) knobsJson(_knobs->config(), d["knobs"].to<JsonObject>());
+        if (_knobs) {
+            out.put(",\"knobs\":");
+            JsonDocument d;
+            knobsJson(_knobs->config(), d.to<JsonObject>());
+            serializeJson(d, w);
+        }
 #endif
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        out.put("}");
+        return out.finish();
     });
 
     route("/api/config", HTTP_POST, [this](PsychicRequest* r) {
@@ -738,39 +784,52 @@ void WebUi::routes()
         if (chk != Cfg::SettingsJson::FileCheck::Ok)
             return r->reply(400, "text/plain", Cfg::SettingsJson::fileCheckText(chk));
         const bool dry = paramStr(r, "dry") == "1";
-        // The knobs are lenient (clamped, never refused), so the settings
-        // decide the all-or-nothing; the knobs follow only when they applied.
+
+        // The knobs first, onto a copy: a name that is no row is a refusal,
+        // listed with the settings' own (settingsPost's `extra`), and what
+        // sanitize() had to bring into range is shown in the preview. The
+        // copy is applied only after the settings were.
         JsonVariantConst kj = d["knobs"];
+        static Cfg::SettingsJson::Errors kerr;
+        kerr = Cfg::SettingsJson::Errors{};
         bool knobs = false;
+        uint16_t clamped = 0;
 #if FEATURE_KNOBS
+        Knobs::Config kc;
         knobs = _knobs && kj.is<JsonObjectConst>();
+        if (knobs) {
+            kc = _knobs->config();
+            clamped = knobsFromJson(kj, kc, &kerr);
+        }
 #endif
         String out;
         const char* type = "text/plain";
-        const int st = settingsPost(d["settings"].as<JsonObjectConst>(), dry, true, out, type);
+        const int st = settingsPost(d["settings"].as<JsonObjectConst>(), dry, true, out, type, &kerr);
         if (st != 200) return r->reply(st, type, out.c_str());
+
+        JsonDocument o;
+        deserializeJson(o, out);
         if (dry) {
-            // The settings' preview, and whether the knobs would be replaced.
-            JsonDocument o;
-            deserializeJson(o, out);
             o["knobs"] = knobs;
+            JsonArray cl = o["clamped"].to<JsonArray>();
+#if FEATURE_KNOBS
+            for (uint16_t b = 1; b; b = (uint16_t)(b << 1))
+                if (clamped & b) cl.add(Knobs::Config::clampName(b));
+#else
+            (void)cl; (void)clamped;
+#endif
             o["fileFw"] = d["fw"] | "";
-            out = "";
-            serializeJson(o, out);
-            return replyJson(r, out);
         }
 #if FEATURE_KNOBS
-        if (knobs) {
-            Knobs::Config c = _knobs->config();
-            knobsFromJson(kj, c);
-            _knobs->setConfig(c);
-            _cfg->saveKnobs(c);
+        else if (knobs) {
+            _knobs->setConfig(kc);
+            _cfg->saveKnobs(kc);
             LogBus::line("[knobs] set from a settings file");
         }
-#else
-        (void)kj;
 #endif
-        return r->reply(st, type, out.c_str());
+        out = "";
+        serializeJson(o, out);
+        return replyJson(r, out);
     });
 
     route("/api/reboot", HTTP_POST, [](PsychicRequest* r) {

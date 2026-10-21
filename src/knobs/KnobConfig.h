@@ -166,7 +166,21 @@ namespace Knobs
         uint16_t maxMilliamps   = 400;
 
         Config();
-        void sanitize();
+        // Brings every field into its limits; returns which groups it had to
+        // change (CLAMP_* bits), so a settings file's preview can say so.
+        uint16_t sanitize();
+        enum : uint16_t {
+            CLAMP_ENC     = 0x0001,   // pulses per detent, hold time
+            CLAMP_POT     = 0x0002,
+            CLAMP_ORDER   = 0x0004,
+            CLAMP_LEVELS  = 0x0008,   // level steps, animation period
+            CLAMP_BIND    = 0x0010,   // a binding to an encoder phase or no action
+            CLAMP_ZONE    = 0x0020,   // react, idle animation, LED count
+            CLAMP_FEET    = 0x0040,
+            CLAMP_CURRENT = 0x0080,
+        };
+        // A CLAMP_* bit's name for the page (ASCII id), "" for none.
+        static const char* clampName(uint16_t bit);
 
         // Flat NVS blob, versioned; another layout is refused whole.
         // v4: the second encoder. A v3 blob is still read: its encoder lands in

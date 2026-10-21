@@ -76,12 +76,16 @@ cfgBind(){
   sv(svOf(e.target),'ok','перевірено');
   const ch=p.changes||[],fw=p.fileFw&&p.fileFw!==this.fw?row('Файл з іншої прошивки',chipH('warn',p.fileFw),'ключі, яких ця не знає, пропущено'):'';
   prev.innerHTML=fw+row(ch.length?'Зміниться: '+ch.length:'Нічого не зміниться',p.reboot?chipH('warn','потрібен перезапуск'):'',ch.map(lbl).map(esc).join(' · '))+
-   (p.knobs?row('Ручки й підсвітка','','замінено з файлу'):'')+(p.unknown?row('Пропущено ключів',chipH('off',String(p.unknown)),'немає в цій прошивці'):'')+
+   (p.knobs?row('Ручки й підсвітка','','замінено з файлу'+((p.clamped||[]).length?'; поза межами, обрізано: '+p.clamped.map(esc).join(', '):'')):'')+
+   ((p.skipped||[]).length?row('Пропущено: цієї частини на платі нема',chipH('off',String(p.skipped.length)),p.skipped.map(lbl).map(esc).join(' · ')):'')+
+   (p.unknown?row('Пропущено ключів',chipH('off',String(p.unknown)),'немає в цій прошивці'):'')+
    '<div class="fr"><button class="btn pri" type="button" id="cfgGo">Застосувати</button><button class="btn" type="button" id="cfgNo">Скасувати</button></div>';
   $('#cfgNo').onclick=()=>{prev.innerHTML='';e.target.value=''};
   $('#cfgGo').onclick=b=>run(b.target,async()=>{const r=await API.post('/api/config',doc);prev.innerHTML='';e.target.value='';
-   if(r&&r.pendingReboot){prev.innerHTML=row('Застосовано','<button class="btn" type="button" id="cfgRb">Перезавантажити</button>','частина — після перезапуску');$('#cfgRb').onclick=x=>reboot().catch(err=>sv(svOf(x.target),'bad',errT(err)))}
-   return {note:'застосовано'}})}},
+   const part=(r&&r.partial)||[];
+   if(part.length)prev.innerHTML=row('Застосовано не все',chipH('warn',String(part.length)),part.map(esc).join('<br>'));
+   if(r&&r.pendingReboot){prev.innerHTML+=row('Застосовано','<button class="btn" type="button" id="cfgRb">Перезавантажити</button>','частина — після перезапуску');$('#cfgRb').onclick=x=>reboot().catch(err=>sv(svOf(x.target),'bad',errT(err)))}
+   return {note:part.length?'застосовано частково':'застосовано'}})}},
 /* GhOta: стан з /api/fw; phase -> чип, підпис, кнопка, смуга. rebooting -> та сама заставка, що й після файлу */
 async gh(){const v=await API.get('/api/fw');if(!$('#ghSt'))return;this.ghTag=v.latest;
  const busy=v.phase==='checking'||v.phase==='downloading',pct=v.size?Math.floor(v.got/v.size*100):0;
