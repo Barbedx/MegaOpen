@@ -1,6 +1,6 @@
 # MegaOpen user guide
 
-For the T-2CAN car build, as of the v1.0.0 tag. The web app is in Ukrainian;
+For the T-2CAN car build, as of v1.1.0. The web app is in Ukrainian;
 labels below are written as the app shows them. Flashing and wiring:
 [README](../README.md).
 
@@ -82,17 +82,17 @@ yet checked in a car; `--`: no fresh value.
 **Екран → Щиток.**
 
 * **Розкладка:** **Текст** (8 characters, one row), **Інфо** (3 rows and the
-  picture), **Меню** and **Повний екран** (3 full-width rows). The
+  picture), **Меню** and **Повний екран** (3 rows of 22 characters). The
   preview shows what the glass will show.
 * **Стиль** (every layout but Текст): класичний, мінімал, смуга, велика назва,
   тікер, виконавець зверху, пульс, сканер, великий годинник, рівень, потік,
-  просто текст, вінамп.
+  просто текст, вінамп, касета, друкарка.
 * **Джерело тексту:** the head unit, the iPhone, or **авто** (the head unit
   while it sends text, otherwise the iPhone).
 * **Картинка 48×48** (beside Текст and Інфо): one scene, or **карусель**
   through them all. Scenes: медіа, VU, хвиля, годинник, зорі, м'ячик, кола,
-  спіраль, осцилограф, дощ, радар, життя, своя (draw it under **Намалювати
-  свою**).
+  спіраль, осцилограф, дощ, радар, життя, касета, тунель, своя (draw it under
+  **Намалювати свою**).
 
 ## Keys
 
@@ -106,18 +106,29 @@ bound on the same page (**Ручка ліва**, **Ручка права**).
 Defaults: the left knob is volume (press = mute), the right knob is the
 menu's knob (hold = menu).
 
+When the head unit is silent (switched off, or its wire to the board is
+loose), volume keys go to the iPhone instead, after the board's first minute
+of uptime, and back to the head unit as soon as it talks again. The grid then
+shows **ГУ** as not live, with the reason under it.
+
 ## Updating
 
-1. Download `megaopen-t2can-<ver>.bin` from
-   [Releases](https://github.com/Barbedx/MegaOpen/releases) (the latest
-   release; `-rcN` pre-releases have not run on a board yet).
-2. **Плата → Оновлення прошивки**: choose the file, **Оновити**.
-3. The board reboots into the new image on trial. It keeps it after 60 s of
-   running healthy; if it crashes or stays unhealthy, the next reboot goes
-   back to the old one.
+**From GitHub** (the board on a network with internet):
+**Плата → Оновлення прошивки → З GitHub**.
 
-Updating straight from GitHub, without downloading the file first, is
-planned.
+1. **Перевірити** shows the latest release and whether it is newer.
+2. **Оновити** downloads it and checks its SHA-256.
+3. When it is written, **Перезавантажити**. This is refused while the car is
+   moving; when the car stops, the board reboots into it by itself.
+
+**From a file:** download `megaopen-t2can-<ver>.bin` from
+[Releases](https://github.com/Barbedx/MegaOpen/releases) (`-rcN`
+pre-releases have not run on a board yet), then on the same card choose the
+file and **Оновити**.
+
+Either way the new image runs on trial: kept after 60 s of running healthy;
+if it crashes or is not healthy within 3 minutes, the board goes back to the
+old one.
 
 ### After an update
 
@@ -154,16 +165,5 @@ boot), and **Сервіс → Лог** (live).
 
 ## Coming next
 
-Done and waiting for the release after v1.0.0:
-
-* **Car signals:** brake, clutch, neutral and reverse no longer read "yes"
-  on an invalid frame. Belts and the passenger seat read 1 = buckled /
-  seated. Steering is centred per Renault's data.
-* **Gear on the head unit:** a test switch and a step-through (0x7D 06) to
-  find which value the tablet shows as P, R, N or D.
-* **Display:** no screen covers a volume popup in any layout. A menu switch
-  pressed twice switches twice.
-* **Keys and iPhone:** volume goes to the phone while the head unit is
-  silent; fewer Bluetooth commands per volume press; long track titles read
-  in full.
-* **Updates from GitHub** from the board's page.
+* **The board's IP on the display** when it joins a WiFi network, for phones
+  that cannot open `megaopen.local`.
