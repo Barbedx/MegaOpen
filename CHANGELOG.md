@@ -8,6 +8,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [1.5.1] - 2026-10-21
 
 ### Changed
+- Panel bus watch: with «Реєстрація функцій» off (passive, the OEM radio owns the handshake) MegaOpen draws over the radio again. The watch only reports it (health `panel_beside_radio`, state ok, one `[panel]` line) and the TX gate is open from the start (no 3 s listen). Going silent beside another radio is now only for FuncsReg on, where our registration would fight it.
 - A failed GitHub update (`/api/fw` `err`) and a recording error (`/api/cap` `error`) are codes too (`gh_rate`, `gh_http 503`, `cap_full`…); the detail stays in the log in English. USER-GUIDE's health table shows the page's Ukrainian words for each code.
 
 ## [1.5.0] - 2026-10-21

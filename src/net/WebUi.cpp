@@ -969,17 +969,21 @@ void WebUi::routes()
                 "panel_unregistered",
                 "panel_ok",
                 "panel_foreign_master",
-                "panel_cluster_only"};
+                "panel_cluster_only",
+                "panel_beside_radio"};
             const bool reg = ps.attached && ps.registered;
             // What else is on the bus (PanelBusWatch) explains a panel that
             // never registers: an OEM radio has it (and we stay silent), or
             // there is no panel at all.
             const bool foreign = _panelWatch && _panelWatch->foreignMaster(millis());
             const bool cluster = !reg && _panelWatch && _panelWatch->clusterOnly();
-            const uint8_t i = !ps.attached ? 0 : foreign ? 3 : reg ? 2 : cluster ? 4 : 1;
-            // A foreign master is "broken", not "idle": nothing is drawn, and it
-            // may be a false positive worth a look.
-            JsonObject o = chain("panel", i == 0 ? "off" : i == 2 ? "ok" : "broken", W[i]);
+            // FuncsReg off: the radio owns the handshake and we draw over it,
+            // so its sync is the expected bus, not a fault.
+            const bool overlay = foreign && _cfg && !_cfg->s().funcReg;
+            const uint8_t i = !ps.attached ? 0 : overlay ? 5 : foreign ? 3 : reg ? 2 : cluster ? 4 : 1;
+            // A foreign master with FuncsReg on is "broken", not "idle": nothing
+            // is drawn, and it may be a false positive worth a look.
+            JsonObject o = chain("panel", i == 0 ? "off" : (i == 2 || i == 5) ? "ok" : "broken", W[i]);
             if (_panelWatch) {
                 o["foreignMasters"] = _panelWatch->masters();
                 o["clusterPings"]   = _panelWatch->clusterPings();

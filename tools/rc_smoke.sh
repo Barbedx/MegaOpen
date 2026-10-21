@@ -168,7 +168,7 @@ has "  panel: clusterPings field" '"clusterPings"'
 has "  chains carry a code" '"code":"panel_\|"code":"hu_'
 hasnt "  no chain sends prose" '"code":"[a-z_]*","why"'
 has "  clock: src field" '"id":"clock"[^}]*"src"'
-for code in hu_dialect_vw panel_foreign_master panel_cluster_only; do
+for code in hu_dialect_vw panel_foreign_master panel_beside_radio panel_cluster_only; do
     if grep -q "\"$code\"" "$BODY"; then echo "NOTE  health reports $code"; fi
 done
 

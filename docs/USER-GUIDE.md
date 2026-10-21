@@ -187,7 +187,8 @@ words beside it are the page's (`w.<code>` in `web/i18n/uk.json`, English in
 | code | Огляд says | means | try |
 | --- | --- | --- | --- |
 | `panel_unregistered` | реєстрацію втрачено: панель не завершує рукостискання | the display is not finishing its handshake | check CAN B wiring and power; reboot the board |
-| `panel_foreign_master` | на шині синхронізація іншої магнітоли — MegaOpen мовчить (лише слухає); перевірить знову через 30 с після її тиші або після перезапуску | another radio's sync is on the display bus; MegaOpen is silent there (listens only) and checks again 30 s after it stops, or at a restart | remove the OEM radio from the display bus; if there is none, report it (a false detection) |
+| `panel_foreign_master` | на шині синхронізація іншої магнітоли, а «Реєстрація функцій» увімкнена — MegaOpen мовчить (лише слухає), щоб не битися з нею; вимкніть реєстрацію, щоб малювати поверх магнітоли | another radio drives the display bus and function registration is on; MegaOpen stays silent rather than fight it | turn «Реєстрація функцій» off to draw over the radio; with no OEM radio fitted, report it (a false detection) |
+| `panel_beside_radio` | магнітола веде шину, MegaOpen малює поверх неї (реєстрація функцій вимкнена) | the OEM radio owns the handshake, MegaOpen sends its text over it | nothing: this is the overlay setup |
 | `panel_cluster_only` | на цій шині лише щиток приладів, панелі AFFA нема | only an instrument cluster answers on this bus, no AFFA display | CAN B is wired to the wrong bus |
 | `media_off` | екран музики вимкнено | now playing switched off | **Екран → Показувати музику** |
 | `media_no_panel` | панель не зареєстрована, нема де малювати | nothing can be drawn | see `panel_unregistered` |

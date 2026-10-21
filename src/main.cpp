@@ -2000,10 +2000,11 @@ void setup()
              (unsigned)cfg.rxQueue);
     }
     memMark("can+display");
-    // Listen before talking: the TX gate stays shut until PanelBusWatch has
-    // listened for LISTEN_MS from the first poll() with no other master's
-    // sync (panelWatchStep()), so an OEM radio is found before we send one.
-    g_twai.setTxEnabled(false);
+    // Listen before talking, when we register: the TX gate stays shut until
+    // PanelBusWatch has listened for LISTEN_MS from the first poll() with no
+    // other master's sync (panelWatchStep()), so an OEM radio is found before
+    // we send one. With FuncsReg off we draw over the radio: no gate.
+    g_twai.setTxEnabled(!g_cfg.s().funcReg);
     g_web.attachPanelWatch(&g_panelWatch);
     // Passive = a real radio owns the handshake; we send no sync or hello and
     // never register. Must be set if an OEM radio is on the bus.
@@ -2491,16 +2492,27 @@ static void loopWait()
 
 #if FEATURE_DISPLAY_CAN
 // The panel bus watch's verdicts, applied on the panel task after each poll().
-// Another master on the bus (an OEM radio): the stack goes silent for good,
-// passive (no sync, no hello, no registration), TX gate shut and the
-// controller listen-only (not even an ACK), logged once. Otherwise the TX
-// gate opens once the listen window has passed.
+// FuncsReg off (passive, the radio owns the handshake): we draw over it, the
+// watch only reports (health, one log line). FuncsReg on: another master on
+// the bus (an OEM radio) would fight our registration, so the stack goes
+// silent, passive, TX gate shut and the controller listen-only (not even an
+// ACK), logged once; otherwise the TX gate opens once the listen window has
+// passed.
 static void panelWatchStep(uint32_t now)
 {
     static bool s_silent = false, s_open = false;
     // The window starts at the first poll(): only poll() drains the receive
     // queue, so before it nothing has been heard.
     g_panelWatch.begin(now);
+    if (!g_cfg.s().funcReg) {   // AP_REBOOT: fixed for this boot
+        static bool s_told = false;
+        if (!s_told && g_panelWatch.foreignMaster(now)) {
+            s_told = true;
+            LogBus::printf("[panel] another bus master on the panel bus (sync 0x%03X): FuncsReg off, "
+                           "MegaOpen draws over it", (unsigned)g_panelWatch.masterId());
+        }
+        return;
+    }
     if (g_panelWatch.foreignMaster(now)) {
         if (s_silent) return;
         s_silent = true;
