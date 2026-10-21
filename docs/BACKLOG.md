@@ -70,18 +70,10 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   (2026-09-27, ~20 s), fine in the next. Observe before acting; could be the
   carousel on an empty scene.
 
-- **The car screen paints over a key popup too (review, 2026-10-21).** It
-  has no popup gate: a row that changed is repainted within a second (its
-  1 s floor) and covers a volume popup, like the non-Text layouts below.
-  Where: `UiTask.cpp`, the car screen block (`g_carScreen`).
 - **A menu Bool pressed twice quickly toggles once (review, 2026-10-21).**
   The engine takes the new value from the live setting, which net_svc has
   not changed yet, so both commits carry the same value. Where:
   `MenuEngine::key` (Kind::Setting, Bool) and `PanelMenu::applyPending`.
-- **A popup is still painted over in the non-Text layouts.** Only the Text
-  layout stops repainting under a popup; the others are slowed to
-  `POPUP_PAINT_MS` (1 s) and the next screen covers the popup on this panel,
-  so a volume popup lives ~1 s. Where: `main.cpp` media repaint (`underPopup`).
 - **Info layout: scroll arrows and row 1.** The panel draws its own scroll
   arrows beside the pane and the byte that hides them is unknown; whether row 1
   (the clock) is visible beside the pane was never answered. Ten minutes on
@@ -225,6 +217,12 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   debug callback guard.
 
 ## Done
+
+- **No automatic screen over a live popup** (2026-10-21): every now-playing
+  layout, the car screen and the track splash wait for the popup's deadline
+  (`display/PopupGate.h`, one gate in `UiTask.cpp`) and go on the first pass
+  after it; a volume popup now lives its full `keyPopupMs`. Not seen on glass
+  yet.
 
 - **DDT-derived names kept in the public repo, owner's decision 2026-10-21.**
   `docs/signal-glossary.*` and `tools/can_corr.py` keep the Renault DDT ECU

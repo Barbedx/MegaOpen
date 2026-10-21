@@ -3,6 +3,7 @@
 #include <thread>
 #include <vector>
 #include "display/GlassGate.h"
+#include "display/PopupGate.h"
 
 using namespace MegaOpen;
 
@@ -98,6 +99,44 @@ static void test_a_screen_and_a_repaint_never_interleave()
     TEST_ASSERT_EQUAL_UINT16(SCREENS, g.seq());
 }
 
+// ---- the popup gate (src/display/PopupGate.h) --------------------------------
+
+void test_popup_gate_holds_until_the_deadline()
+{
+    TEST_ASSERT_FALSE(popupHolds(0, 1000));                 // no popup
+    TEST_ASSERT_TRUE(popupHolds(3000, 1000));               // live
+    TEST_ASSERT_TRUE(popupHolds(3000, 2999));
+    TEST_ASSERT_FALSE(popupHolds(3000, 3000));              // its deadline: released
+    TEST_ASSERT_FALSE(popupHolds(3000, 9000));              // past it, take-down or not
+    // Across the millis() wrap.
+    TEST_ASSERT_TRUE(popupHolds(0x00000100u, 0xFFFFFF00u));
+    TEST_ASSERT_FALSE(popupHolds(0xFFFFFF00u, 0x00000100u));
+}
+
+// The ui task's shape, in miniature: a screen that changed while a popup was
+// up is not sent under it, stays owed, and goes on the first pass at the
+// deadline; one pass is 50 ms.
+void test_a_repaint_under_a_popup_is_held_then_sent()
+{
+    uint32_t popupUntil = 0;
+    bool dirty = false;
+    std::vector<uint32_t> sent;
+    auto pass = [&](uint32_t now) {
+        if (dirty && !popupHolds(popupUntil, now)) { sent.push_back(now); dirty = false; }
+        if (popupUntil && (int32_t)(now - popupUntil) >= 0) popupUntil = 0;   // take-down
+    };
+    popupUntil = 1000 + 2000;                               // a volume popup at t = 1000, 2 s
+    for (uint32_t t = 1000; t < 2000; t += 50) pass(t);
+    dirty = true;                                           // the track changes at 2000
+    for (uint32_t t = 2000; t < 4000; t += 50) pass(t);
+    TEST_ASSERT_EQUAL_UINT32(1, (uint32_t)sent.size());
+    TEST_ASSERT_EQUAL_UINT32(3000, sent[0]);                // the deadline's pass, not before
+    dirty = true;                                           // no popup now: at once
+    pass(4000);
+    TEST_ASSERT_EQUAL_UINT32(2, (uint32_t)sent.size());
+    TEST_ASSERT_EQUAL_UINT32(4000, sent[1]);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -106,5 +145,7 @@ int main(int, char**)
     RUN_TEST(test_a_refused_persons_screen_does_not_hold_the_glass);
     RUN_TEST(test_neither_kind_does_not_take_the_lock);
     RUN_TEST(test_a_screen_and_a_repaint_never_interleave);
+    RUN_TEST(test_popup_gate_holds_until_the_deadline);
+    RUN_TEST(test_a_repaint_under_a_popup_is_held_then_sent);
     return UNITY_END();
 }

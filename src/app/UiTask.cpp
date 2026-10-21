@@ -7,6 +7,7 @@
 #include "../cfg/Config.h"
 #include "../diag/CanBench.h"
 #include "../display/PanelOps.h"
+#include "../display/PopupGate.h"
 #include "../display/TextFold.h"
 #include "../keys/KeyEngine.h"
 #include "../media/MediaRouter.h"
@@ -809,7 +810,8 @@ namespace App
                         !MegaOpen::MediaScreen::sharesWithPane(g_media3.layout())) {
                         g_splashDueMs = 0;                      // nothing to interrupt
                     } else if (!s_splashReq && ps.synced && !listenOnly && !busy() &&
-                               !glassHeld(now) && !splashUp(now)) {   // not over a notification
+                               !glassHeld(now) && !splashUp(now) &&   // not over a notification
+                               !MegaOpen::popupHolds(g_popupUntilMs, now)) {
                         char s1[MegaOpen::MediaScreen::ROW_MAX];
                         char s2[MegaOpen::MediaScreen::ROW_MAX];
                         char s3[MegaOpen::MediaScreen::ROW_MAX];
@@ -840,25 +842,19 @@ namespace App
 
                 // ---- the now-playing screen ------------------------------------------
                 // Gates: busy() (a menu is 13 ACKed frames; enqueueing over it only gets
-                // Aborted), dirty(), a paint floor (wider while a popup is up or the
-                // breaker has tripped), glassHeld(). synced(), not registered():
+                // Aborted), dirty(), a paint floor (wider when the breaker has tripped),
+                // glassHeld(), and a live popup (PopupGate.h: every layout covers it,
+                // so the rows wait and go at its deadline). synced(), not registered():
                 // registration is lazy and rides on a render, so gating on it deadlocks.
                 // The marquee position derives from the clock, so skipped ticks cost nothing.
                 // The car screen, when on, takes its place (below).
                 if (g_mediaAuto && !g_carScreen && ps.synced && !listenOnly && !busy() &&
-                    !glassHeld(now) && !splashUp(now)) {
+                    !glassHeld(now) && !splashUp(now) && !MegaOpen::popupHolds(g_popupUntilMs, now)) {
                     static constexpr uint32_t MIN_PAINT_MS = 200;
-                    static constexpr uint32_t POPUP_PAINT_MS = 1000;
                     static constexpr uint32_t TRIPPED_PAINT_MS = 4000;
                     const uint32_t minPaint = (failStreak >= kFailStreakTrip) ? TRIPPED_PAINT_MS
-                                            : g_popupUntilMs                  ? POPUP_PAINT_MS
                                                                               : MIN_PAINT_MS;
-                    // A setText under a popup is drawn inside the popup's frame, so the
-                    // Text layout waits; the others are only slowed.
-                    const bool underPopup = g_popupUntilMs &&
-                        g_media3.layout() == MegaOpen::MediaScreen::Layout::Text;
-                    if (!underPopup &&
-                        (uint32_t)(now - s_lastPaintMs) >= minPaint && g_media3.dirty(now)) {
+                    if ((uint32_t)(now - s_lastPaintMs) >= minPaint && g_media3.dirty(now)) {
                         // No hide between frames: each screen replaces the last (~190 ms,
                         // 14 frames). Info and Text leave room for the pane; Info is three
                         // messages, one per row. Text is one 8-char row (compose() did that).
@@ -896,9 +892,11 @@ namespace App
                 // Three signals as a fullscreen (src/ui/SignalText.h), in place of
                 // now-playing. Same gates; a 1 s floor (the values do not move faster
                 // on this glass), sent when a row changed, and every 10 s regardless,
-                // which also covers a session the panel lost.
+                // which also covers a session the panel lost. Not over a live popup
+                // (a volume key's): its fullscreen would cover it.
                 if (g_carScreen && s_d.car && ps.synced && !listenOnly && !busy() &&
                     !glassHeld(now) && !splashUp(now) && failStreak < kFailStreakTrip &&
+                    !MegaOpen::popupHolds(g_popupUntilMs, now) &&
                     (uint32_t)(now - s_carPaintMs) >= 1000) {
                     s_carPaintMs = now;
                     PanelOps::Req r;
