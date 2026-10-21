@@ -95,10 +95,18 @@ PlatformIO may not be on PATH: `~/.platformio/penv/Scripts/pio.exe`.
 
 ## Library
 
-AffaDisplay (`github.com/Barbedx/AffaDisplay`, pinned `#main` in
-`platformio.ini`) owns the AFFA protocol and the panel's CAN link
-(`affa::TwaiLink`, TX gate, bus-off recovery). Library bugs are fixed there,
-not patched in `.pio/libdeps`. Its known gaps are in its `CHANGELOG.md`.
+AffaDisplay (`github.com/Barbedx/AffaDisplay`, pinned by release tag, e.g.
+`#v1.0.0`, in `platformio.ini`) owns the AFFA protocol and the panel's CAN link
+(`affa::TwaiLink`, TX gate, bus-off recovery). Library bugs are fixed there and
+released as a new tag; MegaOpen then bumps the pin. Never patch
+`.pio/libdeps`. Its known gaps are in its `CHANGELOG.md`.
+
+## Releases
+
+Tag `vX.Y.Z-rcN` → CI publishes a prerelease (OTA `.bin`, `-factory.bin` for
+the first USB flash, `SHA256SUMS`). The rc's OTA asset is verified on a real
+board (`[ota] CONFIRMED`), then `vX.Y.Z` on the same commit republishes those
+exact files as latest. The tag must match `MEGAOPEN_VERSION` in `src/Version.h`.
 
 ## Docs
 
