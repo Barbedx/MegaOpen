@@ -107,6 +107,8 @@ namespace MegaOpen
         {"flow",     "потік"},
         {"plain",    "просто текст"},
         {"winamp",   "вінамп"},
+        {"tape",     "касета"},
+        {"typewriter", "друкарка"},
     };
     static_assert(sizeof(kStyles) / sizeof(kStyles[0]) == MediaScreen::STYLE_COUNT,
                   "style names and the Style enum have drifted apart");
@@ -178,8 +180,11 @@ namespace MegaOpen
     {
         // Ticker's band moves even when the strings fit a row; Winamp's
         // spectrum dances whenever a title is up.
+        // Tape's reels turn. Typewriter does not count: it types a new title
+        // in and then holds, like any still style with a marquee.
         return s == Style::Pulse || s == Style::Scanner ||
-               s == Style::Vu    || s == Style::Ticker || s == Style::Winamp;
+               s == Style::Vu    || s == Style::Ticker || s == Style::Winamp ||
+               s == Style::Tape;
     }
 
     // ---- shared pieces ------------------------------------------------------
@@ -284,6 +289,8 @@ namespace MegaOpen
             case Style::Flow:     flow(nowMs, row1, row2, row3);     return;
             case Style::Plain:    plain(nowMs, row1, row2, row3);    return;
             case Style::Winamp:   winamp(nowMs, row1, row2, row3);   return;
+            case Style::Tape:     tape(nowMs, row1, row2, row3);     return;
+            case Style::Typewriter: typewriter(nowMs, row1, row2, row3); return;
             default:              classic(nowMs, row1, row2, row3);  return;
         }
     }
@@ -676,7 +683,7 @@ namespace MegaOpen
 
         // Levels low to high; a hash of the instant, so dirty() is stable.
         static const char kBars[] = " .:|";
-        const bool moving = _title[0] && (!_hasTransport || _state != State::Paused);
+        const bool moving = this->moving();
         const uint32_t tick = moving ? nowMs / 120 : 0;
         for (uint8_t i = 0; n < w && n < ROW_MAX - 1; ++i) {
             uint32_t h = (tick * 131u + i * 2654435761u) ^ (tick >> 3);
@@ -704,6 +711,66 @@ namespace MegaOpen
         }
 
         window(_album, offsetFor((uint8_t)strlen(_album), nowMs, _scrollMsArtist), w, row3);
+    }
+
+    bool MediaScreen::moving() const
+    {
+        // The head unit sends no play state, so a title is enough there.
+        return _title[0] && (!_hasTransport || _state != State::Paused);
+    }
+
+    // ---- tape ---------------------------------------------------------------
+    // Row 1: "12:34 (+)==o====(+)": the clock, then a cassette across the rest.
+    // The reels' spokes turn while playing ('+' and 'x', both in every panel
+    // font; a backslash is not), and the play head 'o' rides the tape at the
+    // position. No clock below 16 columns; at 8 it is the cassette alone.
+    void MediaScreen::tape(uint32_t nowMs, char* row1, char* row2, char* row3) const
+    {
+        const uint8_t w = _cols;
+        char line[ROW_MAX];
+        uint8_t n = 0;
+        if (_clock[0] && w >= 16) n = (uint8_t)snprintf(line, sizeof(line), "%s ", _clock);
+        const char spoke = (moving() && (nowMs / 250) % 2) ? 'x' : '+';
+        const uint8_t inner = (uint8_t)(w - n > 6 ? w - n - 6 : 0);   // tape between the reels
+        int8_t head = -1;
+        if (_hasTransport && _duration > 0 && inner) {
+            const uint32_t at = (uint32_t)_elapsed * inner / _duration;
+            head = (int8_t)(at >= inner ? inner - 1 : at);
+        }
+        line[n++] = '('; line[n++] = spoke; line[n++] = ')';
+        for (uint8_t i = 0; i < inner; ++i) line[n++] = (int8_t)i == head ? 'o' : '=';
+        line[n++] = '('; line[n++] = spoke; line[n++] = ')';
+        line[n] = '\0';
+        window(line, 0, w, row1);
+        titleRow(nowMs, row2);
+        artistRow(nowMs, row3);
+    }
+
+    // ---- typewriter ---------------------------------------------------------
+    // Row 1 the artist, row 3 the transport (Classic's header). Row 2: after a
+    // track change (restartMarquee) the title types in a letter per TYPE_MS
+    // with a caret, up to a row's worth; then the usual marquee, its lead
+    // counted from the end of the typing so it does not start mid-string.
+    void MediaScreen::typewriter(uint32_t nowMs, char* row1, char* row2, char* row3) const
+    {
+        artistRow(nowMs, row1);
+        header(row3);
+
+        const char* t = _title[0] ? _title : "---";
+        const uint8_t len = (uint8_t)strlen(t);
+        // What gets typed: a row's worth, less the caret's cell.
+        const uint8_t typed = (uint8_t)(len < _cols ? len : _cols - 1);
+        const uint32_t typeMs = (uint32_t)typed * TYPE_MS;
+        const uint32_t since = nowMs - _marqueeT0;
+        if (_marqueeLead && since < typeMs) {
+            const uint8_t k = (uint8_t)(since / TYPE_MS);
+            memcpy(row2, t, k);
+            row2[k] = '_';
+            row2[k + 1] = '\0';
+            return;
+        }
+        const uint32_t shifted = _marqueeLead ? nowMs - typeMs : nowMs;
+        window(t, offsetFor(len, shifted, _scrollMsTitle), _cols, row2);
     }
 
     void MediaScreen::vu(uint32_t nowMs, char* row1, char* row2, char* row3) const

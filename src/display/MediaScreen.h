@@ -74,6 +74,13 @@ namespace MegaOpen
             // Winamp: clock + a dancing spectrum, then "Artist - Title *** "
             // looping, then the album.
             Winamp,
+            // A cassette: the clock, two reels that turn while playing and the
+            // tape between them with the play head at the position; then
+            // title and artist.
+            Tape,
+            // Artist on top; a new title types itself in, a letter every
+            // TYPE_MS with a caret, then scrolls as usual; the transport row.
+            Typewriter,
             _Count
         };
         static constexpr uint8_t STYLE_COUNT = (uint8_t)Style::_Count;
@@ -95,6 +102,10 @@ namespace MegaOpen
         // Only Flow draws it; often empty (the head unit never sends one).
         void setAlbum(const char* s);
         const char* album() const { return _album; }
+
+        // Typewriter: one letter of a new title per step. Each step is a
+        // repaint, so it types at most a row's worth, then the marquee takes over.
+        static constexpr uint32_t TYPE_MS = 120;
 
         // Flow page durations; every flip is a ~14-frame repaint.
         static constexpr uint32_t FLOW_TITLE_MS = 6000;
@@ -193,6 +204,10 @@ namespace MegaOpen
         void flow(uint32_t now, char* r1, char* r2, char* r3) const;
         void plain(uint32_t now, char* r1, char* r2, char* r3) const;
         void winamp(uint32_t now, char* r1, char* r2, char* r3) const;
+        void tape(uint32_t now, char* r1, char* r2, char* r3) const;
+        void typewriter(uint32_t now, char* r1, char* r2, char* r3) const;
+        // Tape and Winamp move while a title is up and nothing says paused.
+        bool moving() const;
 
         // Classic/Flow row 1; the clock alone when the source has no transport.
         void header(char* out) const;

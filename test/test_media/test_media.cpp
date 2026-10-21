@@ -527,6 +527,78 @@ void test_pulse_stands_still_when_paused()
     for (uint32_t t = 0; t <= 2000; t += 100) TEST_ASSERT_FALSE(s.dirty(t));
 }
 
+// Tape: clock, then two reels and the tape with the play head at the
+// position; the spokes turn while playing and hold when paused.
+void test_the_tape_reels_turn_only_while_playing()
+{
+    MediaScreen s;
+    s.setStyle(MediaScreen::Style::Tape);
+    s.setCols(22);
+    fillTypical(s);                       // 83 s of 225, clock 12:34
+    s.setProgress(0, 225);
+    Rows r = draw(s, 0);
+    // 22 - "12:34 " = 16: two 3-char reels and 10 of tape, head at its start.
+    TEST_ASSERT_EQUAL_STRING("12:34 (+)o=========(+)", r.r1);
+    TEST_ASSERT_EQUAL_STRING("Bohemian Rhapsody", r.r2);
+    TEST_ASSERT_EQUAL_STRING("Queen", r.r3);
+    TEST_ASSERT_EQUAL_STRING("12:34 (x)o=========(x)", draw(s, 250).r1);
+    s.setProgress(225, 225);              // the end: the head on the last cell
+    TEST_ASSERT_EQUAL_STRING("12:34 (+)=========o(+)", draw(s, 0).r1);
+    s.setState(MediaScreen::State::Paused);
+    TEST_ASSERT_EQUAL_STRING(draw(s, 0).r1, draw(s, 250).r1);
+}
+
+// At the info layout's 8 columns there is no room for the clock: the
+// cassette alone. With no transport (the head unit) there is no head.
+void test_the_tape_fits_eight_columns_and_needs_no_position()
+{
+    MediaScreen s;
+    s.setStyle(MediaScreen::Style::Tape);
+    s.setCols(8);
+    fillTypical(s);
+    s.setHasTransport(false);
+    TEST_ASSERT_EQUAL_STRING("(+)==(+)", draw(s, 0).r1);
+    // No state from the head unit: a title is enough to turn the reels.
+    TEST_ASSERT_EQUAL_STRING("(x)==(x)", draw(s, 250).r1);
+}
+
+// Typewriter: a new title types in a letter per TYPE_MS behind a caret, then
+// the marquee starts from its first character, not mid-string.
+void test_the_typewriter_types_a_new_title_then_scrolls_from_the_start()
+{
+    MediaScreen s;
+    s.setStyle(MediaScreen::Style::Typewriter);
+    s.setCols(10);
+    fillTypical(s);
+    s.setTitle("ABCDEFGHIJKLMNOP");       // longer than a row
+    s.setScrollMsTitle(100);
+    const uint32_t t0 = 5000;
+    s.restartMarquee(t0);
+    TEST_ASSERT_EQUAL_STRING("_", draw(s, t0).r2);
+    TEST_ASSERT_EQUAL_STRING("ABC_", draw(s, t0 + 3 * MediaScreen::TYPE_MS).r2);
+    // Nine letters (a row less the caret), then the marquee, held at the start
+    // for its lead.
+    const uint32_t typed = t0 + 9 * MediaScreen::TYPE_MS;
+    TEST_ASSERT_EQUAL_STRING("ABCDEFGHIJ", draw(s, typed).r2);
+    TEST_ASSERT_EQUAL_STRING("ABCDEFGHIJ", draw(s, typed + MediaScreen::MARQUEE_LEAD_MS - 1).r2);
+    TEST_ASSERT_EQUAL_STRING("BCDEFGHIJK", draw(s, typed + MediaScreen::MARQUEE_LEAD_MS + 100).r2);
+    // Artist on top, the transport below.
+    const Rows r = draw(s, typed);
+    TEST_ASSERT_EQUAL_STRING("Queen", r.r1);
+    TEST_ASSERT_EQUAL_INT('[', r.r3[0]);
+}
+
+// No track change seen (boot, a style switched mid-song): nothing to type.
+void test_the_typewriter_without_a_track_change_shows_the_title()
+{
+    MediaScreen s;
+    s.setStyle(MediaScreen::Style::Typewriter);
+    fillTypical(s);
+    TEST_ASSERT_EQUAL_STRING("Bohemian Rhapsody", draw(s, 0).r2);
+    TEST_ASSERT_FALSE(MediaScreen::styleAnimates(MediaScreen::Style::Typewriter));
+    TEST_ASSERT_TRUE(MediaScreen::styleAnimates(MediaScreen::Style::Tape));
+}
+
 void test_style_names_round_trip_and_reject_junk()
 {
     for (uint8_t i = 0; i < MediaScreen::STYLE_COUNT; ++i) {
@@ -1106,5 +1178,9 @@ int main(int, char**)
     RUN_TEST(test_the_splash_does_not_repeat_a_title_as_its_album);
     RUN_TEST(test_invalidate_forces_a_repaint_of_rows_that_did_not_change);
     RUN_TEST(test_flow_is_one_of_the_styles_by_name);
+    RUN_TEST(test_the_tape_reels_turn_only_while_playing);
+    RUN_TEST(test_the_tape_fits_eight_columns_and_needs_no_position);
+    RUN_TEST(test_the_typewriter_types_a_new_title_then_scrolls_from_the_start);
+    RUN_TEST(test_the_typewriter_without_a_track_change_shows_the_title);
     return UNITY_END();
 }
