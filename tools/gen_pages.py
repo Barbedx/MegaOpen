@@ -16,6 +16,14 @@ compiles with (src/Features.h defaults, this env's -D flags, and Features.h's
 
 Runs as a PlatformIO `extra_scripts = pre:` hook, and also standalone
 (`python tools/gen_pages.py`) for a look at the numbers.
+
+THE OUTPUT IS NOT IN GIT (.gitignore: src/net/gen/). The same pages gzip to
+different bytes under different Pythons: PlatformIO's own (3.11, zlib 1.2.13)
+and a newer one built with zlib-ng (3.14 on Windows) make different deflate
+streams from the same input, so a tracked PageGz.cpp flipped with whichever
+Python wrote it last, and every `pio run` after a hand run dirtied the tree
+(and the build stamp). Every build writes it before compiling; the checks
+that read it (check_pages, check_nav) say "build first" when it is missing.
 """
 import gzip, json, os, re
 

@@ -72,6 +72,10 @@ jobs:
           path: build/
       - name: pio run -e ${{ matrix.env }}
         run: pio run -e ${{ matrix.env }}
+      # A build writes only untracked files (src/net/gen/, build/): anything
+      # it changed in git would also stamp the image "-dirty".
+      - name: the build left the tree clean
+        run: git diff --exit-code --stat
       - name: check_nav
         run: python tools/check_nav.py ${{ matrix.env }}
       - name: check_pages

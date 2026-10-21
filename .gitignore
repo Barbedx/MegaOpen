@@ -11,3 +11,5 @@ logs/
 # tools/build_sim.py output (the UI simulator) and test_catalog's catalog.json
 build/
 src/secrets.h
+# tools/gen_pages.py output, written by every build (see its docstring)
+src/net/gen/
