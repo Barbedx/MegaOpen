@@ -15,8 +15,6 @@ exposes and how to report a problem.
 * **Firmware.** An image flashed over WiFi is not signature-checked. Our
   firmware keeps the car's CAN bus (CAN A) listen-only, but that is enforced
   in software: a foreign image could transmit on it.
-* **Bluetooth.** The iPhone link is bonded (pairing needs the phone's
-  confirmation).
 * **Not exposed:** no route returns a WiFi or AP password; the settings file
   never contains them.
 
