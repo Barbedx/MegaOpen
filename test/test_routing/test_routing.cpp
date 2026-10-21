@@ -224,6 +224,23 @@ void test_usb_takes_only_transport_and_volume()
     TEST_ASSERT_EQUAL_HEX8(0, keyDests(CLASS_UI, false, d));
 }
 
+// AMS and HID have no phone or ui commands, and AMS no mute: a mask that
+// says otherwise routes nothing there.
+void test_ble_sinks_take_only_what_they_have_commands_for()
+{
+    DestState d[DEST_COUNT];
+    d[DEST_AMS] = {CLASS_ALL, true, true};
+    d[DEST_HID] = {CLASS_ALL, true, true};
+    const uint8_t both = (1u << DEST_AMS) | (1u << DEST_HID);
+    TEST_ASSERT_EQUAL_HEX8(both, keyDests(CLASS_TRANSPORT, false, d));
+    TEST_ASSERT_EQUAL_HEX8(both, keyDests(CLASS_VOLUME, false, d));
+    TEST_ASSERT_EQUAL_HEX8(0, keyDests(CLASS_PHONE, false, d));
+    TEST_ASSERT_EQUAL_HEX8(0, keyDests(CLASS_UI, false, d));
+    TEST_ASSERT_EQUAL_HEX8(both, keyDests(Action::VolUp, false, d));
+    TEST_ASSERT_EQUAL_HEX8(1u << DEST_HID, keyDests(Action::Mute, false, d));
+    TEST_ASSERT_EQUAL_HEX8(0, keyDests(Action::Voice, false, d));
+}
+
 // An asLong row: BLE (AMS, HID) and USB refuse the Long, the UART takes it.
 void test_as_long_is_refused_by_ble_and_usb()
 {
@@ -269,6 +286,7 @@ int main(int, char**)
     RUN_TEST(test_a_long_reaches_only_the_sinks_that_take_one);
     RUN_TEST(test_no_class_goes_nowhere);
     RUN_TEST(test_usb_takes_only_transport_and_volume);
+    RUN_TEST(test_ble_sinks_take_only_what_they_have_commands_for);
     RUN_TEST(test_as_long_is_refused_by_ble_and_usb);
     RUN_TEST(test_dest_ids_are_the_catalogs);
     return UNITY_END();

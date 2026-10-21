@@ -1,6 +1,7 @@
 // Whole-body gate, like BleKeySinks.cpp: env:direct compiles every file in
 // sinks/ and has no NimBLE.
 #include "BleKeyProxy.h"
+#include "../keys/KeyDests.h"
 #if FEATURE_BLE
 #include <Arduino.h>
 #include <atomic>
@@ -44,7 +45,9 @@ namespace Sinks
         // Both are one-shot commands; acting on release would fire twice.
         if (e.state != Keys::State::Press && e.state != Keys::State::Repeat) return;
         const uint8_t c = Keys::classOf(e.action);
-        if (c == Keys::CLASS_NONE || (_mask & c) == 0) return;
+        const uint8_t dest = _target == BleCmd::Target::Ams ? Keys::DEST_AMS : Keys::DEST_HID;
+        if (c == Keys::CLASS_NONE || (_mask & Keys::DEST_CLASSES[dest] & c) == 0) return;
+        if (!Keys::destActs(dest, e.action)) return;
 
         BleCmd cmd;
         cmd.target = _target;

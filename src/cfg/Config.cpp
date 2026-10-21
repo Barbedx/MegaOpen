@@ -66,8 +66,7 @@ namespace Cfg
         _s.keyPopupMs  = _p.getUShort("keyPopMs", 2000);
 
         _s.routeUart   = _p.getUChar("rtUart", Keys::CLASS_ALL);
-        _s.routeAms    = _p.getUChar("rtAms",
-                                     Keys::CLASS_TRANSPORT | Keys::CLASS_PHONE);
+        _s.routeAms    = _p.getUChar("rtAms",  Keys::CLASS_TRANSPORT);
         _s.routeHid    = _p.getUChar("rtHid",  Keys::CLASS_VOLUME);
         _s.routeRes    = _p.getUChar("rtRes",  Keys::CLASS_NONE);
         _s.routeUsb    = _p.getUChar("rtUsb",  Keys::CLASS_TRANSPORT | Keys::CLASS_VOLUME);

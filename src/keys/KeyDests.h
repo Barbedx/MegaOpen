@@ -19,8 +19,23 @@ namespace Keys
         bool    pressOnly = false;
     };
 
-    // The classes the USB keyboard has usages for; phone and ui keys it drops.
-    constexpr uint8_t USB_CLASSES = CLASS_TRANSPORT | CLASS_VOLUME;
+    // The classes each sink has commands for: AMS, HID and the USB keyboard
+    // have transport and volume, no phone or ui keys. A mask bit outside
+    // them is never routed, so the routing cannot promise what a sink drops.
+    constexpr uint8_t DEST_CLASSES[DEST_COUNT] = {
+        CLASS_ALL,                          // uart
+        CLASS_TRANSPORT | CLASS_VOLUME,     // ams
+        CLASS_TRANSPORT | CLASS_VOLUME,     // hid
+        CLASS_ALL,                          // res
+        CLASS_TRANSPORT | CLASS_VOLUME,     // usb
+    };
+
+    // An action a sink has nothing for although its class is in: AMS has
+    // volume up and down but no mute.
+    inline constexpr bool destActs(uint8_t dest, Action a)
+    {
+        return !(dest == DEST_AMS && a == Action::Mute);
+    }
 
     // Bit i set: destination i takes the key. `cls` is classOf(action); `isLong`
     // is whether the key's first edge is a Long (an asLong row).
@@ -29,10 +44,19 @@ namespace Keys
         if (cls == CLASS_NONE) return 0;
         uint8_t out = 0;
         for (uint8_t i = 0; i < DEST_COUNT; ++i) {
-            if (i == DEST_USB && !(cls & USB_CLASSES)) continue;
+            if (!(cls & DEST_CLASSES[i])) continue;
             if (d[i].live && (d[i].mask & cls) && !(isLong && d[i].pressOnly))
                 out |= (uint8_t)(1u << i);
         }
+        return out;
+    }
+
+    // The same for one action: also drops the sinks that have no command for it.
+    inline uint8_t keyDests(Action a, bool isLong, const DestState (&d)[DEST_COUNT])
+    {
+        uint8_t out = keyDests(classOf(a), isLong, d);
+        for (uint8_t i = 0; i < DEST_COUNT; ++i)
+            if (!destActs(i, a)) out &= (uint8_t)~(1u << i);
         return out;
     }
 

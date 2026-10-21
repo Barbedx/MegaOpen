@@ -427,13 +427,14 @@ namespace Catalog
 
             // Every sink the routing matrix has; `built` false where this image
             // compiled it out, so the page greys it instead of hiding it.
+            // `classes`: the class bits the sink has commands for.
             j.k("dests").arr();
-            j.obj().ks("id", DEST_IDS[DEST_UART]).ks("name", "ГУ").kb("built", FEATURE_CANBOX_UART).endObj();
-            j.obj().ks("id", DEST_IDS[DEST_AMS]).ks("name", "iPhone").kb("built", FEATURE_BLE).endObj();
-            j.obj().ks("id", DEST_IDS[DEST_HID]).ks("name", "HID").kb("built", FEATURE_BLE).endObj();
-            j.obj().ks("id", DEST_IDS[DEST_RES]).ks("name", "Резистор").kb("built", FEATURE_RESISTIVE_KEYS).endObj();
+            j.obj().ks("id", DEST_IDS[DEST_UART]).ks("name", "ГУ").kb("built", FEATURE_CANBOX_UART).kn("classes", DEST_CLASSES[DEST_UART]).endObj();
+            j.obj().ks("id", DEST_IDS[DEST_AMS]).ks("name", "iPhone").kb("built", FEATURE_BLE).kn("classes", DEST_CLASSES[DEST_AMS]).endObj();
+            j.obj().ks("id", DEST_IDS[DEST_HID]).ks("name", "HID").kb("built", FEATURE_BLE).kn("classes", DEST_CLASSES[DEST_HID]).endObj();
+            j.obj().ks("id", DEST_IDS[DEST_RES]).ks("name", "Резистор").kb("built", FEATURE_RESISTIVE_KEYS).kn("classes", DEST_CLASSES[DEST_RES]).endObj();
 #if FEATURE_USB_HID
-            j.obj().ks("id", DEST_IDS[DEST_USB]).ks("name", "USB").kb("built", true).endObj();
+            j.obj().ks("id", DEST_IDS[DEST_USB]).ks("name", "USB").kb("built", true).kn("classes", DEST_CLASSES[DEST_USB]).endObj();
 #endif
             j.endArr();
 

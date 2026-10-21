@@ -107,11 +107,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   VOLUME` but `bleMode` defaults to `ams` (HID off), and `routeUart = ALL`
   assumes a head unit. A "phone only" preset exists on the index page; the
   default is a design call. Where: `cfg/Config.h` (`routeAms/Hid/Uart`, `bleMode`).
-- **`AmsKeySink` accepts classes it does nothing with.** Default `routeAms`
-  includes `CLASS_PHONE`; `Phone`/`Voice` (and `Mute`) fall into `default:
-  break`. The mask promises what the sink does not deliver.
-  Where: `sinks/BleKeySinks.cpp` `amsHasCommand` (the AMS half of
-  `BleKeyWorker`; the mask is applied in `sinks/BleKeyProxy.cpp`).
 - **The left (bare) encoder has never run.** Wired on 32/33/36 with R1 2k on
   GPIO36; watch `/api/knobs/live` while it turns. Where: `knobs/KnobSource`.
 - **SK6812 RGBW strips are not supported** (WS2812B GRB / RGB only).

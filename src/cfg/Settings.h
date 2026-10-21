@@ -114,7 +114,7 @@ namespace Cfg
         // Defaults: head unit takes everything, phone takes transport and calls,
         // HID takes volume. UART overlapping AMS on transport is deliberate.
         uint8_t  routeUart = Keys::CLASS_ALL;
-        uint8_t  routeAms  = Keys::CLASS_TRANSPORT | Keys::CLASS_PHONE;
+        uint8_t  routeAms  = Keys::CLASS_TRANSPORT;
         uint8_t  routeHid  = Keys::CLASS_VOLUME;
         // KEY1/KEY2: none by default, for safety. It puts a real voltage on a
         // wire into the head unit; an untaught rung is a phantom button press.

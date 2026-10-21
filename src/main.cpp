@@ -451,7 +451,7 @@ static void publishKeyLast(const Keys::AffaKeySource::Report& r, bool uartSends)
 #if FEATURE_USB_HID
         d[Keys::DEST_USB] = {g_usbKeys.classes(), true, true};
 #endif
-        k.dests = Keys::keyDests(Keys::classOf(r.action), isLong, d);
+        k.dests = Keys::keyDests(r.action, isLong, d);
     }
     g_keyLast.publish(k);
 }
