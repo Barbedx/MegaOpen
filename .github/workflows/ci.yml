@@ -34,6 +34,9 @@ jobs:
           key: pio-native-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-native-
       - run: pip install "platformio==${PLATFORMIO_VERSION}"
+      # env:native compiles with the host's own gcc/g++, not a PlatformIO
+      # toolchain: ubuntu-24.04 ships one. On Windows install w64devkit or
+      # MSYS2 MinGW and put its bin on PATH (README, Build).
       - name: pio test -e native
         run: pio test -e native
       - name: check_rules

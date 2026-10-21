@@ -40,8 +40,9 @@ Download from [Releases](https://github.com/Barbedx/MegaOpen/releases):
 | `SHA256SUMS` | checksums |
 
 `<env>` is `t2can` for the car board. The latest release has run on a board;
-`-rcN` pre-releases have not yet (their files carry the version without `-rc`,
-e.g. `v1.0.0-rc2` holds `megaopen-t2can-1.0.0.bin`). Check a download with
+`-rcN` pre-releases have not yet. Their files carry the version without
+`-rc` on purpose (`v1.0.0-rc2` holds `megaopen-t2can-1.0.0.bin`): the release
+reuses the last rc's files byte for byte. Check a download with
 `sha256sum -c SHA256SUMS --ignore-missing` (PowerShell:
 `Get-FileHash <file>`, compare with the line in `SHA256SUMS`).
 
