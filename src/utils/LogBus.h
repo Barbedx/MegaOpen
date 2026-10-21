@@ -22,6 +22,13 @@ namespace LogBus
     // ms = uptime when line() was called, not when the sink runs.
     using Sink = void (*)(const char* line, int len, uint32_t ms);
 
+    // First thing in setup(): on a board with PSRAM, the ring moves out of the
+    // small internal boot ring into LOGBUS_RING bytes of PSRAM (or, with no
+    // PSRAM found, LOGBUS_RING_INTERNAL bytes of heap), keeping every line.
+    // false: nothing could be allocated; the boot ring stays. A no-op without
+    // BOARD_HAS_PSRAM, where the ring is static.
+    bool grow();
+    bool ringInPsram();
     void addSink(Sink s);          // before startTask(); up to 4
 
     // A line for Serial only, never the web log: the [hu] echo of

@@ -27,9 +27,9 @@
 #include "../utils/LogFile.h"
 #include <LittleFS.h>
 #endif
-#include <esp_heap_caps.h>    // HEAP_HUNT, Scratch
+#include <esp_heap_caps.h>    // HEAP_HUNT
 #include <esp_system.h>
-#include <new>
+#include "../utils/Scratch.h"
 #if FEATURE_BLE && FEATURE_ANCS
 #include "../apple_notification_service.h"
 #endif
@@ -110,29 +110,6 @@ static esp_err_t replyAndRestart(PsychicRequest* r, const char* json)
     return ESP_OK;
 }
 
-// Per-request working space for the settings routes: in PSRAM where the
-// board has it, else the heap; constructed fresh (value-initialised) and
-// freed when the handler returns. Static buffers here cost internal RAM for
-// the life of the board; these exist only while a settings request runs.
-template <class T>
-class Scratch {
-public:
-    Scratch()
-    {
-        void* m = heap_caps_malloc(sizeof(T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!m) m = heap_caps_malloc(sizeof(T), MALLOC_CAP_8BIT);
-        _p = m ? new (m) T() : nullptr;
-    }
-    ~Scratch() { if (_p) { _p->~T(); heap_caps_free(_p); } }
-    Scratch(const Scratch&) = delete;
-    Scratch& operator=(const Scratch&) = delete;
-    explicit operator bool() const { return _p != nullptr; }
-    T* operator->() { return _p; }
-    T* get() { return _p; }
-
-private:
-    T* _p = nullptr;
-};
 
 uint8_t ChunkOut::s_buf[512];
 
@@ -977,10 +954,10 @@ void WebUi::routes()
         const App::Ui::UiStatus us = _ui.status ? _ui.status->read() : App::Ui::UiStatus{};
         App::Ui::MediaSettings ms;
         const bool haveMs = mediaSettings(ms);
-        // Static, not on the stack: ~320 bytes, and httpd serves one request
-        // at a time, so one copy is safe.
-        static MegaOpen::MediaScreen s_media;
-        const bool haveMedia = _ui.media && _ui.media->copy(s_media);
+        // ~320 bytes, not on the stack and not static: for this request only
+        // (Scratch). No memory reads as no media; every use checks haveMedia.
+        Scratch<MegaOpen::MediaScreen> box;
+        const bool haveMedia = box && _ui.media && _ui.media->copy(*box);
         // 1. The panel. Registered is the health signal; PeerAlive is omitted
         // because it toggles every second (sync 0x0A and 0x08 are both healthy).
         {
@@ -1019,7 +996,7 @@ void WebUi::routes()
         {
             const bool on    = haveMs && ms.mediaAuto;
             const bool reg   = ps.attached && ps.registered;
-            const bool haveT = haveMedia && s_media.title()[0];
+            const bool haveT = haveMedia && box->title()[0];
             static constexpr Why W[] = {
                 {"media_off", "media screen is switched off (mediaScreen)"},
                 {"media_no_panel", "panel is not registered — nothing can be drawn"},
@@ -1029,9 +1006,9 @@ void WebUi::routes()
             const uint8_t i = !on ? 0 : !reg ? 1 : !phone ? 2 : !haveT ? 3 : 4;
             JsonObject o = chain("media", !on ? "off" : i < 4 ? "idle" : "ok", W[i]);
             if (haveMedia) {
-                o["title"]  = s_media.title();
-                o["artist"] = s_media.artist();
-                o["clock"]  = s_media.clock();
+                o["title"]  = box->title();
+                o["artist"] = box->artist();
+                o["clock"]  = box->clock();
             }
             o["delivered"]  = ps.delivered;
             o["superseded"] = ps.superseded;
@@ -1042,7 +1019,7 @@ void WebUi::routes()
         //    the display off.
         {
             const bool want = haveMs && ms.autoTime;
-            const bool have = haveMedia && s_media.clock()[0];
+            const bool have = haveMedia && box->clock()[0];
             static constexpr Why W[] = {
                 {"clock_off", "autoTime is off"},
                 {"clock_no_phone", "no phone — CTS is the only time source"},
@@ -1050,7 +1027,7 @@ void WebUi::routes()
                 {"clock_ok", ""}};
             const uint8_t i = !want ? 0 : !phone ? 1 : !have ? 2 : 3;
             JsonObject o = chain("clock", !want ? "off" : (have ? "ok" : "idle"), W[i]);
-            if (haveMedia) o["hhmm"] = s_media.clock();
+            if (haveMedia) o["hhmm"] = box->clock();
         }
 #endif
 
@@ -1671,30 +1648,32 @@ void WebUi::routesMedia()
 {
     route("/api/media", HTTP_GET, [this](PsychicRequest* r) {
         if (!_ui.media || !_ui.settings) return r->reply(503, "text/plain", "no display");
-        // Copies only: the ui task owns the screen and the pane. Static, not on
-        // the stack (~320 + ~630 bytes on a 4 kB httpd stack); httpd serves one
-        // request at a time, so one set is safe.
-        static MegaOpen::MediaScreen s_media;
-        if (!_ui.media->copy(s_media)) return r->reply(503, "text/plain", "busy, try again");
+        // Copies only: the ui task owns the screen and the pane. Not on the
+        // stack (~320 + ~1200 bytes on a 4 kB httpd stack) and not static
+        // (internal RAM): for this request only (Scratch).
+        Scratch<MegaOpen::MediaScreen> box;
+        if (!box) return r->reply(503, "text/plain", "no memory");
+        MegaOpen::MediaScreen& media = *box;
+        if (!_ui.media->copy(media)) return r->reply(503, "text/plain", "busy, try again");
         App::Ui::MediaSettings ms;
         if (!mediaSettings(ms)) return r->reply(503, "text/plain", "busy, try again");
         const App::Ui::UiStatus us = _ui.status ? _ui.status->read() : App::Ui::UiStatus{};
 
         JsonDocument d;
         d["auto"]     = ms.mediaAuto;
-        d["title"]    = s_media.title();
-        d["artist"]   = s_media.artist();
+        d["title"]    = media.title();
+        d["artist"]   = media.artist();
         // Empty until the phone has reported a time.
-        d["clock"]    = s_media.clock();
+        d["clock"]    = media.clock();
         // Who set the panel's clock last (hu, cts, manual), and to what.
         d["clockSrc"] = App::Ui::clockSrcName(us.clockSrc);
         char at[6] = "";
         if (us.clockSrc != App::Ui::ClockSrc::None)
             snprintf(at, sizeof(at), "%02u:%02u", (unsigned)(us.clockAt >> 8), (unsigned)(us.clockAt & 0xFF));
         d["clockAt"]  = at;
-        d["state"]    = (uint8_t)s_media.state();
-        d["elapsed"]  = s_media.elapsed();
-        d["duration"] = s_media.duration();
+        d["state"]    = (uint8_t)media.state();
+        d["elapsed"]  = media.elapsed();
+        d["duration"] = media.duration();
         d["cols"]     = ms.cols;
         d["bar"]      = ms.bar;
         // `scrollMs` is the title row, kept for existing readers.
@@ -1706,16 +1685,16 @@ void WebUi::routesMedia()
 
         // The preview below is composed on the copy with the newest settings,
         // by the same code that drives the panel, so the page sees its own edit.
-        s_media.setLayout(ms.layout);
-        s_media.setCols(ms.cols);
-        s_media.setBarWidth(ms.bar);
-        s_media.setScrollMsTitle(ms.scrollMsTitle);
-        s_media.setScrollMsArtist(ms.scrollMsArtist);
-        s_media.setStyle(ms.style);
+        media.setLayout(ms.layout);
+        media.setCols(ms.cols);
+        media.setBarWidth(ms.bar);
+        media.setScrollMsTitle(ms.scrollMsTitle);
+        media.setScrollMsArtist(ms.scrollMsArtist);
+        media.setStyle(ms.style);
         d["style"] = MegaOpen::MediaScreen::styleName(ms.style);
         d["scroll"] = ms.scroll;
         // False when the head unit is the source: it reports no state or position.
-        d["hasTransport"] = s_media.hasTransport();
+        d["hasTransport"] = media.hasTransport();
 
         // ---- which source, and what the head unit has told us ---------------
         if (_router) {
@@ -1781,20 +1760,28 @@ void WebUi::routesMedia()
         char r1[MegaOpen::MediaScreen::ROW_MAX];
         char r2[MegaOpen::MediaScreen::ROW_MAX];
         char r3[MegaOpen::MediaScreen::ROW_MAX];
-        s_media.compose(millis(), r1, r2, r3);
+        media.compose(millis(), r1, r2, r3);
         JsonArray p = d["preview"].to<JsonArray>();
         p.add(r1); p.add(r2); p.add(r3);
 
         // ---- the graphic layer ------------------------------------------
         // The pane preview, composed on the board by the panel's code. 288 bytes
         // as 576 hex characters (readable, unlike base64).
-        static MegaOpen::MediaPane s_snap;
-        if (_ui.pane && _ui.pane->copy(s_snap)) {
+        // Its ~1.2 kB of working space for this request only (Scratch), in
+        // this scope because pn["bits"] points at pw->hex until serializeJson.
+        // No memory: the reply goes out without the pane.
+        struct PaneWork {
+            MegaOpen::MediaPane snap;
+            uint8_t bits[MegaOpen::MediaPane::BYTES];
+            char    hex[MegaOpen::MediaPane::BYTES * 2 + 1];
+        };
+        Scratch<PaneWork> pw;
+        if (pw && _ui.pane && _ui.pane->copy(pw->snap)) {
             JsonObject pn = d["pane"].to<JsonObject>();
-            pn["scene"]     = MegaOpen::MediaPane::sceneName(s_snap.scene());
-            pn["on"]        = s_snap.on();
-            pn["animates"]  = MegaOpen::MediaPane::animates(s_snap.scene());
-            pn["usesMedia"] = MegaOpen::MediaPane::usesMedia(s_snap.scene());
+            pn["scene"]     = MegaOpen::MediaPane::sceneName(pw->snap.scene());
+            pn["on"]        = pw->snap.on();
+            pn["animates"]  = MegaOpen::MediaPane::animates(pw->snap.scene());
+            pn["usesMedia"] = MegaOpen::MediaPane::usesMedia(pw->snap.scene());
             pn["sent"]      = us.panesSent;
             pn["failed"]    = us.panesFailed;
             // Animation steps per delivered image (the image rate is the wire's).
@@ -1806,7 +1793,7 @@ void WebUi::routesMedia()
             // Only setText and showInfoMenu leave the pane's half of the glass
             // alone; `menu` and `fullscreen` cover it while it is still delivered.
             pn["visible"] = MegaOpen::MediaScreen::sharesWithPane(ms.layout);
-            if (s_snap.on() && !MegaOpen::MediaScreen::sharesWithPane(ms.layout))
+            if (pw->snap.on() && !MegaOpen::MediaScreen::sharesWithPane(ms.layout))
                 pn["hiddenBy"] = MegaOpen::MediaScreen::layoutName(ms.layout);
 
             // Composing doesn't advance the animation; the copy is ours anyway.
@@ -1814,17 +1801,15 @@ void WebUi::routesMedia()
             // buffer (MediaPane::setCustom), which httpd must not read. The
             // picture comes from the staged copy, under its mutex, instead.
             // This is the only place httpd composes a pane.
-            static uint8_t s_bits[MegaOpen::MediaPane::BYTES];
-            static char    s_hex[MegaOpen::MediaPane::BYTES * 2 + 1];
-            if (s_snap.scene() == MegaOpen::MediaPane::Scene::Custom) {
-                memset(s_bits, 0, sizeof(s_bits));
+            if (pw->snap.scene() == MegaOpen::MediaPane::Scene::Custom) {
+                memset(pw->bits, 0, sizeof(pw->bits));
                 if (_ui.paneBits)
-                    _ui.paneBits->read([&](const App::Ui::PaneBits& p) { memcpy(s_bits, p.bits, sizeof(s_bits)); });
+                    _ui.paneBits->read([&](const App::Ui::PaneBits& p) { memcpy(pw->bits, p.bits, sizeof(pw->bits)); });
             } else {
-                s_snap.compose(s_bits);
+                pw->snap.compose(pw->bits);
             }
-            MegaOpen::MediaPane::toHex(s_bits, s_hex);
-            pn["bits"] = (const char*)s_hex;
+            MegaOpen::MediaPane::toHex(pw->bits, pw->hex);
+            pn["bits"] = (const char*)pw->hex;
         }
 
         String out; serializeJson(d, out);

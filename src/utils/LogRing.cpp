@@ -84,6 +84,19 @@ int LogRing::read(Cursor& c, char* out, uint32_t& ms, uint32_t& lost, uint32_t m
     return (int)n;
 }
 
+bool LogRing::moveTo(uint8_t* buf, uint32_t size)
+{
+    const uint32_t held = _kept + _used;
+    if (size < held || size <= HDR) return false;
+    get(_old, buf, held);              // unwrapped, oldest first
+    _b = buf;
+    _size = size;
+    _old = 0;
+    _tail = _kept;
+    _head = held == size ? 0 : held;
+    return true;
+}
+
 LogLine LogLine::parse(const char* s, uint32_t len)
 {
     LogLine r{(uint8_t)LogLevel::INF, (uint8_t)(Log::TAG_COUNT - 1), 0};

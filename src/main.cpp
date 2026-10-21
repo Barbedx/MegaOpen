@@ -37,6 +37,7 @@
 #include "app/CarTask.h"
 #include "utils/Staged.h"
 #include "utils/Snapshot.h"
+#include <esp_heap_caps.h>
 
 #if FEATURE_VEHICLE_CAN
 #include "vehicle/CanSniffer.h"
@@ -1104,7 +1105,10 @@ static void macroFire(const Keys::Macro& m, void*)
 // only pushes to a ring; loop() prints (a 40-char Serial write is ~3.5 ms at
 // 115200, enough to miss an ISO-TP deadline).
 struct AffaTrace { uint32_t id; uint32_t ms; uint8_t len; uint8_t dir; uint8_t data[8]; };
-static AffaTrace       g_affaTrace[64];
+// 64 records (1.3 kB), allocated the first time TRC is on (affaTraceDrain()),
+// PSRAM where there is some; null until then, and affaTap skips the ring. The
+// tap and the drain both run on the loop task, so no lock.
+static AffaTrace*      g_affaTrace = nullptr;
 static volatile uint8_t  g_affaTraceHead = 0;
 static volatile uint32_t g_affaTraceCount = 0;
 static uint32_t          g_affaTracePrinted = 0;
@@ -1129,6 +1133,7 @@ static void affaTap(const affa::Frame& f, affa::Direction d, void*)
         g_sniffer.ingest(f.id, f.data, f.len > 8 ? 8 : f.len, millis());
 #endif
 
+    if (!g_affaTrace) return;
     AffaTrace& t = g_affaTrace[g_affaTraceHead];
     t.id  = f.id;
     t.ms  = millis();
@@ -1143,6 +1148,13 @@ static void affaTap(const affa::Frame& f, affa::Direction d, void*)
 static void affaTraceDrain()
 {
     if (!AFFA_TRACE_ON()) { g_affaTracePrinted = g_affaTraceCount; return; }
+    if (!g_affaTrace) {
+        void* m = heap_caps_calloc(64, sizeof(AffaTrace), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!m) m = heap_caps_calloc(64, sizeof(AffaTrace), MALLOC_CAP_8BIT);
+        g_affaTrace = (AffaTrace*)m;
+        g_affaTracePrinted = g_affaTraceCount;
+        return;
+    }
     const uint32_t count = g_affaTraceCount;
     if (count - g_affaTracePrinted > 64) {
         logf("[affa] ... %u frames lost\n",
@@ -1616,6 +1628,8 @@ static void logBootReason()
 
 void setup()
 {
+    // The log ring into PSRAM before anything logs (LogBus::grow()).
+    const bool ringGrown = LogBus::grow();
     Serial.begin(115200);
 #if ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
     // USB-CDC console (T-2CAN): with no host reading, a write waits out the
@@ -1656,6 +1670,8 @@ void setup()
     App::Tasks::setHandle(g_logbusTaskId, LogBus::task());
     LogBus::onWake([](uint32_t busyUs) { App::Tasks::beat(g_logbusTaskId, busyUs); });
     logBootReason();
+    logf("[log] ring %d B in %s%s", LogBus::ringSize(), LogBus::ringInPsram() ? "PSRAM" : "internal RAM",
+         ringGrown ? "" : " (the boot ring: no memory for a bigger one)");
 #if FEATURE_LOGFS
     if (logfs)
         logf("[log] flash log /log/0.log (previous boot: /log/1.log), %u/%u kB used; "

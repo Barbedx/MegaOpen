@@ -40,6 +40,12 @@ public:
 
     uint32_t last() const { return _last; }   // the newest line's number; 0 before any
 
+    // Every line, kept and waiting, into buf (size bytes): numbers, order and the
+    // kept/waiting split stay as they were. Cursors point into the old buffer, so
+    // only before any reader exists (LogBus::grow(), first thing in setup()).
+    // false: buf cannot hold what the ring holds now; nothing changes.
+    bool moveTo(uint8_t* buf, uint32_t size);
+
 private:
     void     put(uint32_t& at, const uint8_t* p, uint32_t n);
     void     get(uint32_t at, uint8_t* p, uint32_t n) const;

@@ -4,6 +4,7 @@
 #include <LittleFS.h>
 #include "../capture/CanRecorder.h"
 #include "../capture/CapFormat.h"
+#include "../utils/Scratch.h"
 
 // ---------------------------------------------------------------------------
 // /api/cap — the CAN capture recorder (docs/design/event-tasks.md, Step 5b)
@@ -119,8 +120,12 @@ void WebUi::routesCap()
 
     // ---- files -----------------------------------------------------------------------
     route("/api/cap/list", HTTP_GET, [](PsychicRequest* r) {
-        static Capture::FileInfo files[128];   // httpd is one task: one caller
-        const size_t total = Capture::list(files, 128);
+        // 2.5 kB, for this request only (Scratch).
+        struct Files { Capture::FileInfo f[128]; };
+        Scratch<Files> box;
+        if (!box) return r->reply(503, "text/plain", "no memory");
+        const Capture::FileInfo* files = box->f;
+        const size_t total = Capture::list(box->f, 128);
         const size_t n = total < 128 ? total : 128;
         JsonDocument d;
         JsonArray a = d["files"].to<JsonArray>();

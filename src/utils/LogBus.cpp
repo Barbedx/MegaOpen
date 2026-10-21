@@ -3,6 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include <esp_heap_caps.h>
 
 // Ring size from the build: 4 kB fits the DevKit's heap budget; the T-2CAN has
 // RAM to hold a burst of seconds. The same bytes keep the lines already sent
@@ -11,12 +12,32 @@
 #define LOGBUS_RING 4096
 #endif
 
+// A board with PSRAM keeps the ring there (32 kB of internal RAM back on the
+// T-2CAN). Until setup() calls grow(), lines go to a small internal boot ring;
+// grow() moves them into the big one. With no PSRAM found, the ring is
+// LOGBUS_RING_INTERNAL bytes of internal heap. Without BOARD_HAS_PSRAM the ring
+// is static, as before.
+#if defined(BOARD_HAS_PSRAM)
+#define LOGBUS_GROWS 1
+#ifndef LOGBUS_BOOT_RING
+#define LOGBUS_BOOT_RING 1024
+#endif
+#ifndef LOGBUS_RING_INTERNAL
+#define LOGBUS_RING_INTERNAL 4096
+#endif
+#else
+#define LOGBUS_GROWS 0
+#define LOGBUS_BOOT_RING LOGBUS_RING
+#endif
+
 namespace LogBus
 {
     namespace
     {
-        uint8_t      g_buf[LOGBUS_RING];
-        LogRing      g_ring(g_buf, LOGBUS_RING);
+        uint8_t      g_buf[LOGBUS_BOOT_RING];
+        LogRing      g_ring(g_buf, LOGBUS_BOOT_RING);
+        uint32_t     g_size = LOGBUS_BOOT_RING;
+        bool         g_inPsram = false;
         portMUX_TYPE g_mux = portMUX_INITIALIZER_UNLOCKED;
         uint32_t     g_dropped = 0;
         Sink         g_sinks[4] = {};
@@ -89,6 +110,33 @@ namespace LogBus
         }
     }
 
+    bool grow()
+    {
+#if LOGBUS_GROWS
+        static bool s_grown = false;
+        if (s_grown) return true;
+        uint32_t size = LOGBUS_RING;
+        void* m = psramFound() ? heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) : nullptr;
+        const bool ps = m != nullptr;
+        if (!m) {
+            size = LOGBUS_RING_INTERNAL;
+            m = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        }
+        if (!m) return false;
+        portENTER_CRITICAL(&g_mux);
+        const bool ok = g_ring.moveTo((uint8_t*)m, size);
+        if (ok) { g_size = size; g_inPsram = ps; }
+        portEXIT_CRITICAL(&g_mux);
+        if (!ok) heap_caps_free(m);
+        s_grown = ok;
+        return ok;
+#else
+        return true;
+#endif
+    }
+
+    bool ringInPsram() { return g_inPsram; }
+
     void addSink(Sink s)
     {
         if (g_nSinks < 4) g_sinks[g_nSinks++] = s;
@@ -148,7 +196,7 @@ namespace LogBus
 
     uint32_t dropped() { return g_dropped; }
     uint32_t lines()   { return g_ring.last(); }
-    int      ringSize() { return LOGBUS_RING; }
+    int      ringSize() { return (int)g_size; }
 
     Cursor after(uint32_t since)
     {

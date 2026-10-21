@@ -218,6 +218,56 @@ void test_drops_keep_numbers_continuous()
     TEST_ASSERT_EQUAL_UINT32(0, lost);
 }
 
+// LogBus::grow(): the boot ring's lines move into the big one. A wrapped ring
+// with kept and waiting lines must come out with the same numbers, the same
+// split, and room to go on.
+void test_move_keeps_numbers_and_the_split()
+{
+    LogRing r(buf, sizeof(buf));
+    char out[64];
+    uint32_t ms, lost = 0;
+    for (int i = 1; i <= 13; i += 2) { pushN(r, i, i + 1); drain(r); }   // wrapped
+    pushN(r, 15, 16);                   // 7..14 kept, 15..16 waiting
+    static uint8_t big[512];
+    TEST_ASSERT_TRUE(r.moveTo(big, sizeof(big)));
+    TEST_ASSERT_EQUAL_UINT32(16, r.last());
+    // The kept lines are still there for a reader, from the oldest held.
+    LogRing::Cursor c{1, 0, 0};
+    TEST_ASSERT_EQUAL_INT(6, r.read(c, out, ms, lost, 100));
+    TEST_ASSERT_EQUAL_STRING("line07", out);
+    TEST_ASSERT_EQUAL_UINT32(70, ms);
+    TEST_ASSERT_EQUAL_UINT32(6, lost);
+    // The waiting lines still go to the sinks, once.
+    TEST_ASSERT_EQUAL_INT(6, r.take(out, ms));
+    TEST_ASSERT_EQUAL_STRING("line15", out);
+    TEST_ASSERT_EQUAL_INT(6, r.take(out, ms));
+    TEST_ASSERT_EQUAL_STRING("line16", out);
+    TEST_ASSERT_EQUAL_INT(-1, r.take(out, ms));
+    // The new size is used: 40 more lines (480 bytes) fit without losing 7.
+    pushN(r, 17, 40);
+    LogRing::Cursor d{7, 0, 0};
+    lost = 0;
+    int n = 0;
+    while (r.read(d, out, ms, lost, 100) >= 0) ++n;
+    TEST_ASSERT_EQUAL_INT(34, n);
+    TEST_ASSERT_EQUAL_STRING("line40", out);
+    TEST_ASSERT_EQUAL_UINT32(0, lost);
+}
+
+void test_move_refuses_a_buffer_too_small()
+{
+    LogRing r(buf, sizeof(buf));
+    char out[64];
+    uint32_t ms, lost = 0;
+    pushN(r, 1, 5);                     // 60 bytes held
+    static uint8_t small[48];
+    TEST_ASSERT_FALSE(r.moveTo(small, sizeof(small)));
+    LogRing::Cursor c{1, 0, 0};
+    TEST_ASSERT_EQUAL_INT(6, r.read(c, out, ms, lost, 100));   // untouched
+    TEST_ASSERT_EQUAL_STRING("line01", out);
+    TEST_ASSERT_EQUAL_INT(6, r.take(out, ms));
+}
+
 static const char* tagOf(const char* s, uint8_t* level = nullptr, uint16_t* msg = nullptr)
 {
     const LogLine l = LogLine::parse(s, (uint32_t)strlen(s));
@@ -270,5 +320,7 @@ int main(int, char**)
     RUN_TEST(test_empty_line);
     RUN_TEST(test_take_interleaved_with_a_reader_in_the_waiting_part);
     RUN_TEST(test_drops_keep_numbers_continuous);
+    RUN_TEST(test_move_keeps_numbers_and_the_split);
+    RUN_TEST(test_move_refuses_a_buffer_too_small);
     return UNITY_END();
 }

@@ -98,7 +98,9 @@ namespace Capture
             uint8_t  readers;
         };
         SemaphoreHandle_t g_mx = nullptr;
-        FileRec   g_files[MAX_FILES];
+        // MAX_FILES records, allocated with the ring in begin() (PSRAM where
+        // there is some): null before, when g_nFiles is 0 and no loop reads it.
+        FileRec*  g_files = nullptr;
         uint16_t  g_nFiles = 0;
         uint32_t  g_next = 1;
         Settings  g_set;
@@ -157,7 +159,7 @@ namespace Capture
         // Sorted by number: the oldest first.
         void insertLocked(const FileRec& f)
         {
-            if (g_nFiles >= MAX_FILES) return;
+            if (!g_files || g_nFiles >= MAX_FILES) return;
             uint16_t i = g_nFiles;
             while (i > 0 && g_files[i - 1].num > f.num) { g_files[i] = g_files[i - 1]; --i; }
             g_files[i] = f;
@@ -638,9 +640,11 @@ namespace Capture
         g_ring  = (Slot*)heap_caps_malloc(ringBytes, caps);
         g_chunk = (uint8_t*)heap_caps_malloc(CHUNK, caps);
         g_table = (ChangeFilter::Entry*)heap_caps_malloc(sizeof(ChangeFilter::Entry) * ids, caps);
-        if (!g_ring || !g_chunk || !g_table) {
+        g_files = (FileRec*)heap_caps_malloc(sizeof(FileRec) * MAX_FILES, caps);
+        if (!g_ring || !g_chunk || !g_table || !g_files) {
             heap_caps_free(g_ring); heap_caps_free(g_chunk); heap_caps_free(g_table);
-            g_ring = nullptr; g_chunk = nullptr; g_table = nullptr;
+            heap_caps_free(g_files);
+            g_ring = nullptr; g_chunk = nullptr; g_table = nullptr; g_files = nullptr;
             g_err = "no memory for the ring";
             LogBus::line("[cap] off: no memory for the ring");
             return;
