@@ -194,8 +194,9 @@ void test_unknown_stored_id_reads_as_row_zero()
     TEST_ASSERT_EQUAL_STRING(e->en->id(1), f.s.mediaStyle.c_str());
 }
 
-// uartBaud is a list of rates, not a free number; a rate saved by an older
-// build that the list lacks reads as the Raise rate and is kept until written.
+// uartBaud is a list of rates, not a free number. A rate the list lacks reads
+// as no row and is kept until written; writing 38400 then repairs it (it is
+// not "unchanged").
 void test_uart_baud_is_one_of_the_canbox_rates()
 {
     Fixture f;
@@ -208,8 +209,10 @@ void test_uart_baud_is_one_of_the_canbox_rates()
     TEST_ASSERT_TRUE(Registry::set(f.m, *e, r));
     TEST_ASSERT_EQUAL_UINT32(115200, f.s.uartBaud);
     f.s.uartBaud = 4800;
-    TEST_ASSERT_EQUAL_INT32(Registry::enumIndex(*e, "38400"), Registry::get(f.m, *e));
+    TEST_ASSERT_FALSE(Registry::valid(*e, Registry::get(f.m, *e)));
     TEST_ASSERT_EQUAL_UINT32(4800, f.s.uartBaud);
+    TEST_ASSERT_TRUE(Registry::set(f.m, *e, Registry::enumIndex(*e, "38400")));
+    TEST_ASSERT_EQUAL_UINT32(38400, f.s.uartBaud);
 }
 
 void test_pane_auto_is_its_own_row()

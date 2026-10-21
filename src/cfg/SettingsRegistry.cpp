@@ -119,15 +119,18 @@ namespace Cfg
             [](uint8_t i) { return i ? rateId(i) : "авто"; },
         };
 
-        // uartBaud: the rates canbox dialects use. Raise/RAV4 is 38400; a
-        // stored rate not in the list reads as that row, the profile's own.
+        // uartBaud: the rates canbox dialects use; Raise/RAV4 is 38400. A
+        // stored rate not in the list reads as no row (BAUDS, out of range:
+        // the page shows none chosen), so writing any row, 38400 included,
+        // is a change and repairs it; a row would hide the bad rate behind
+        // "unchanged" while Serial1 kept running at it.
         const uint32_t kBauds[] = {9600, 19200, 38400, 57600, 115200};
         constexpr uint8_t BAUDS = sizeof(kBauds) / sizeof(kBauds[0]);
         constexpr uint8_t BAUD_DEFAULT_ROW = 2;
         uint8_t baudIndex(uint32_t bps)
         {
             for (uint8_t i = 0; i < BAUDS; ++i) if (kBauds[i] == bps) return i;
-            return BAUD_DEFAULT_ROW;
+            return BAUDS;
         }
         const char* baudId(uint8_t i)
         {
