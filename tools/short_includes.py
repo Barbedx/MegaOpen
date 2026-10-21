@@ -39,7 +39,9 @@ def _short_inc(paths, env, rdirs, target=None, source=None):
     for d in rdirs(lst):
         p = str(d)
         norm = p.replace("\\", "/")
-        if root and norm.startswith(root):
+        # The root itself (an empty tail) stays a plain -I: a bare
+        # -iwithprefixbefore would take the next argument as its directory.
+        if root and norm.startswith(root) and len(norm) > len(root):
             if not prefixed:
                 out += ["-iprefix", root]
                 prefixed = True
