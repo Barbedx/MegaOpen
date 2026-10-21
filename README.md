@@ -106,10 +106,15 @@ pio run -e t2can -t factory      # + firmware-factory.bin for 0x0
 pio test -e native               # host tests
 ```
 
-* **Windows: clone into a short path** such as `C:\src\MegaOpen`. Deep in
-  `%TEMP%` or a long user folder the compiler fails with
-  `xtensa-esp32s3-elf-g++: error: CreateProcess: No such file or directory`
-  (the command line outgrows Windows' limit).
+* **Windows: the 32,767-character command line.** Each compile names the
+  ESP32 SDK's ~200 include directories; past Windows' limit the compiler
+  fails with `xtensa-esp32s3-elf-g++: error: CreateProcess: No such file or
+  directory`. `tools/short_includes.py` writes them as one `-iprefix` and
+  short `-iwithprefixbefore` names (same headers, same binary), which leaves
+  ~19 kB of room. Still prefer a short clone path such as `C:\src\MegaOpen`,
+  and if the error comes back, check `~/.platformio/packages` for a second
+  `framework-arduinoespressif32` (the pinned one then lives in a much longer
+  `...@3.20017.241212+sha...` folder).
 * **Host tests** (`native`) use your own C++ compiler, not PlatformIO's:
   `gcc`/`g++` on the PATH (Windows: [w64devkit](https://github.com/skeeto/w64devkit)
   or MSYS2 MinGW; Linux: `build-essential`; macOS: the Xcode command line tools).
