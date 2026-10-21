@@ -28,23 +28,27 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   CAN ground; +-4.096 V range. PWM-dimmed lighting (unknown on the Megane)
   wants ~1 uF. Bonus: a falling voltage at ignition off can flush the log and
   capture before power is lost (plan Q7). Skip it if the capture shows the
-  voltage and dimmer on the bus.
+  voltage and dimmer on the bus: both are decoded now as hypotheses (battery
+  `0x625` b3, 0.0625 V; dash backlight `0x645` b2), checked by step 8 of
+  docs/car-test-can-signals.md.
 - **CAN A runs unterminated: desolder RZ2** (fixed 120 R, channel A). Keep RZ1
   (panel). See hardware/schematic/t2can-wiring.artifact.html.
 
 ### Display (Carminat panel)
 
-- **Car data the head unit cannot get yet (2026-10-20, owner).**
-  - *Fuel level and battery volts:* no broadcast id known; diag 743 `2112`
-    returns both (KWP polling, see the diag memory). Or hunt the bus: log
-    listen-only across a refuel and diff the slow bytes (0x5C5 byte 0 is
-    partly unexplained). The RAV4 profile shows no battery volts anywhere;
-    the owner wants them visible even in a borrowed field (0x21 range, 7D 04
-    index 5, or a 0x23 bar), wrong unit label and all.
-  - *Coolant 7D 09:* the signal is decoded (0x551 b0 -40), only the
-    Rav4Emitter builder is missing.
-  - *Trip data* (avg speed, consumption, range): computed by the cluster,
-    not broadcast; derive from 0x551 and 0x5FD (signal-glossary.md 87-92).
+- **Car data on the head unit: decoded, not yet seen on the tablet
+  (2026-10-20, owner; rewritten 2026-10-21).** Fuel litres (`0x5C5` b8,
+  `0x715` b5), battery volts (`0x625` b3) and the low-fuel lamp are decoded
+  from the X84 broadcast matrix (daa4580); gear, consumption and range are
+  derived from `0x551` and speed/rpm (daa4580); coolant `0x7D 09`, fuel in
+  `0x7D 04` D4-D5 and the computed trip fields go out behind switches that
+  are off (88c6b9e). Left:
+  - every row is a hypothesis until docs/car-test-can-signals.md is run;
+  - what each experiment shows on the tablet (one at a time);
+  - battery volts on the tablet: protocol 112 has no field for them (`0x41`
+    decodes into the same codes as `0x7D`). Only a borrowed field (0x21
+    range, 7D 04 idx 5, a 0x23 bar) is left, wrong unit label and all; on
+    the glass and the live page they are there already.
 - **Track position, duration, play state from the head unit.** Protocol 112
   never sends them (com.syu.ms is a platform-signed system app, patching it
   needs root). Path: a user app with a NotificationListenerService reading
@@ -181,18 +185,11 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   both on only in `direct`. The owner plans an OLED for that tier.
   Where: `web/js/60-keys.js`, `src/net/WebUiRes.cpp`, `WebUi.cpp` keymap.
 - **New UI (owner, 2026-10-16): show the board's IP on the display when WiFi
-  connects.** mDNS fails on the T-2CAN, so after joining a home network the
-  address is unknown without a router or a LAN scan (first time: found
-  by ARP). A popup/splash with `IP 192.168.x.y` for a few
-  seconds on STA connect; in AP mode `192.168.4.1`. Part of the UI rework
-  (mockup: ui-audit workflow 2026-10-16).
-- **A DNS name for the board (owner, 2026-10-19).** Reach it as
-  `megaopen.local` instead of an IP found by ARP. NVS already has
-  `mdns`/`mdnsOn` (default `megaopen`, `cfg/Config.cpp`), but mDNS does not
-  answer on the T-2CAN (item above). First find out why: trimmed in the heap
-  work, not started in STA, or blocked by the network. If mDNS cannot work on
-  some phones (Android before 12 has no `.local`), a fixed DHCP lease on the
-  router is the fallback; say so on the Плата screen.
+  connects.** `megaopen.local` answers now (see Done), but Android before 12
+  has no `.local`, so the address can still be unknown without a router or
+  a LAN scan. A popup/splash with `IP 192.168.x.y` for a few seconds on STA
+  connect; in AP mode `192.168.4.1`. Part of the UI rework (mockup:
+  ui-audit workflow 2026-10-16).
 - **Firmware updates over the internet from GitHub Releases (owner,
   2026-10-19).** A tag builds `firmware-t2can.bin` (and the other envs) in
   GitHub Actions and attaches it to a Release with its SHA-256. The board, in
@@ -226,12 +223,27 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   `Esp32CanLink`, §4.1 RX topology, TX queue depth 6 not 4, payload 119 not
   113, the missing `examples/19_owned_task`...). Ticket upstream, with the L1
   debug callback guard.
-- **Renault DDT data in the repo: a licence question before it goes public.**
-  `docs/signal-glossary.*` and `tools/can_corr.py` carry data derived from the
-  Renault DDT database (ECU file names, field encodings, French parameter
-  names). Settle whether that may be published, or strip it, first.
+- **Renault DDT data in the repo: a licence question, and the repo is public
+  now (2026-10-21).** `docs/signal-glossary.*` and `tools/can_corr.py` still
+  carry data derived from the Renault DDT database (ECU file names, field
+  encodings, French parameter names: 21 lines of signal-glossary.md alone).
+  The firmware and the other docs carry only byte/bit positions and English
+  names. The owner decides: keep, or strip the French names and file names.
 
 ## Done
+
+- **A DNS name for the board** (owner, 2026-10-19): `megaopen.local`
+  resolves at home, checked 2026-10-21 (`cfg` `mdns`/`mdnsOn`, default
+  `megaopen`). A fixed DHCP lease stays the fallback for phones without
+  `.local`.
+- **Car CAN from the X84 broadcast matrix** (2026-10-20/21): 39 rows (fuel,
+  battery, pedals, belts, roof, climate, dynamics...) with Renault's
+  positions, gear/consumption/range derived, verified/age per signal
+  (daa4580); the live page `#live` and panel alert rules (52ea045, alerts in
+  `/api/settings` since be88f5b); head-unit experiments (88c6b9e). Review
+  fixes: steering centred on 0x7FFF, the 2-bit states' invalid values no
+  longer read as yes (`DF_STATE2`), belts and seat read 1 = yes
+  (`DF_STATE2_INV`). Car checks: docs/car-test-can-signals.md.
 
 - **OTA trial is a health check, not the display** (owner's call): any OTA
   image is confirmed after 60 s up with WiFi seen once and >20 kB heap; a crash
