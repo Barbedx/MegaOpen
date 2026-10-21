@@ -59,6 +59,11 @@ namespace GhOta
         // connection open.
         uint32_t heapCreated = 0, heapTask = 0, heapClient = 0, heapTls = 0;
         uint32_t stackFree = 0;        // the last job's unused stack, bytes
+        // The download in tenths: internal heap at its lowest in each (our
+        // own samples, and the system-wide low-water mark when it moved
+        // inside that tenth, which catches the dips while this task waits),
+        // and how long each tenth took. 0 = not reached.
+        uint32_t stepMin[10] = {}, stepMs[10] = {};
         bool     tlsInPsram = false;
     };
     void view(View& out);

@@ -42,6 +42,9 @@ void WebUi::routesGhOta()
         d["heapClient"] = v.heapClient;
         d["heapTls"]    = v.heapTls;
         d["stackFree"]  = v.stackFree;
+        JsonArray sm = d["stepMin"].to<JsonArray>();
+        JsonArray st = d["stepMs"].to<JsonArray>();
+        for (int i = 0; i < 10; ++i) { sm.add(v.stepMin[i]); st.add(v.stepMs[i]); }
         d["tlsInPsram"] = v.tlsInPsram;
         String out;
         serializeJson(d, out);

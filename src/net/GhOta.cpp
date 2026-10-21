@@ -340,8 +340,18 @@ namespace GhOta
             mbedtls_md_setup(&md, mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), 0);
             mbedtls_md_starts(&md);
 
-            uint32_t got = 0, lastPct = 0;
+            uint32_t got = 0;
             const char* broke = nullptr;
+            // Per tenth of the image: the lowest internal heap seen, ours and
+            // the allocator's own low-water mark, and its duration.
+            constexpr uint32_t CAPS = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+            uint8_t  step = 0;
+            uint32_t stepLow = heapNow(), stepBig = 0, stepAt = millis();
+            uint32_t sysLow = heap_caps_get_minimum_free_size(CAPS);
+            portENTER_CRITICAL(&s_mux);
+            memset(s_v.stepMin, 0, sizeof(s_v.stepMin));
+            memset(s_v.stepMs, 0, sizeof(s_v.stepMs));
+            portEXIT_CRITICAL(&s_mux);
             while (got < (uint32_t)len) {
                 const int k = esp_http_client_read(c, (char*)buf, CHUNK);
                 if (k <= 0) { broke = "the download broke off"; break; }
@@ -350,14 +360,32 @@ namespace GhOta
                 if (we != ESP_OK) { broke = esp_err_to_name(we); break; }
                 got += (uint32_t)k;
                 sampleHeap();
+                const uint32_t h = heapNow();
+                if (h < stepLow) { stepLow = h; stepBig = heap_caps_get_largest_free_block(CAPS); }
                 portENTER_CRITICAL(&s_mux);
                 s_v.got = got;
                 portEXIT_CRITICAL(&s_mux);
-                const uint32_t pct = (uint32_t)((uint64_t)got * 100 / (uint64_t)len);
-                if (pct >= lastPct + 25) {
-                    lastPct = pct - pct % 25;
-                    LogBus::printf("[ota] github: %u%%, internal heap %u (min %u)", (unsigned)pct,
-                                   (unsigned)heapNow(), (unsigned)s_v.heapMin);
+                const uint8_t tenth = (uint8_t)((uint64_t)got * 10 / (uint64_t)len);   // 0..10
+                while (step < tenth && step < 10) {
+                    // A low-water mark that moved during this tenth was a dip
+                    // this task did not see (it was waiting for the network).
+                    const uint32_t sys = heap_caps_get_minimum_free_size(CAPS);
+                    const uint32_t low = sys < sysLow ? sys : stepLow;
+                    const uint32_t now = millis();
+                    portENTER_CRITICAL(&s_mux);
+                    s_v.stepMin[step] = low;
+                    s_v.stepMs[step]  = now - stepAt;
+                    if (low < s_v.heapMin) s_v.heapMin = low;
+                    portEXIT_CRITICAL(&s_mux);
+                    LogBus::printf("[ota] github: %u%%, internal heap now %u, low %u%s (largest block %u), %u ms",
+                                   (unsigned)(step + 1) * 10, (unsigned)h, (unsigned)low,
+                                   sys < sysLow ? " system" : "", (unsigned)stepBig,
+                                   (unsigned)(now - stepAt));
+                    sysLow  = sys;
+                    stepLow = h;
+                    stepBig = 0;
+                    stepAt  = now;
+                    ++step;
                 }
             }
             uint8_t have[32];
