@@ -39,8 +39,10 @@ function sv(el,st,t){if(!el)return;clearTimeout(el._t);el.className='sv '+st;el.
 const ERR_T={'busy, try again':'плата зайнята, спробуй ще раз','busy, retry':'плата зайнята, спробуй ще раз','busy':'плата зайнята',
  'bad json':'запит не прочитано','no memory':'плата без вільної памʼяті','not found':'на платі такого нема',
  'key queue full, try again':'черга клавіш повна, спробуй ще','uart queue full, try again':'черга UART повна, спробуй ще',
- 'uart task busy, try again':'UART зайнятий, спробуй ще','head-unit UART is off':'ГУ по UART вимкнено'};
-const errMsgT=m=>ERR_T[m]||(/^no [a-z0-9 ]+$/.test(m||'')?'цього нема в збірці або воно вимкнене ('+m+')':m);
+ 'uart task busy, try again':'UART зайнятий, спробуй ще','head-unit UART is off':'ГУ по UART вимкнено',
+ 'no such capture file':'такого файлу запису вже нема','no such log':'такого журналу вже нема'};
+/* «no <частина>» від маршруту, частини якого збірка не має або вимкнула; лише відомі частини, а не будь-яке «no …» */
+const errMsgT=m=>ERR_T[m]||(/^no (display|ble|can2?|uart|uart ring|vehicle|keymap|knob service|resistive sink|macro engine|wifi manager)$/.test(m||'')?'цього нема в збірці або воно вимкнене ('+m+')':m);
 const errT=e=>(e.status?e.status+' · ':'')+(errMsgT(e.message)||'помилка');
 async function run(btn,fn,okText){const s=svOf(btn);if(btn)btn.disabled=true;sv(s,'busy');try{const r=await fn();sv(s,'ok',okText||(r&&r.note)||'готово');return r}catch(e){sv(s,'bad',errT(e))}finally{if(btn)btn.disabled=false}}
 function val(el){if(!el)return;if(el.dataset.hex!==undefined){const n=parseInt(el.value,16);return isNaN(n)?0:n}if(el.classList.contains('seg'))return el.dataset.v;if(el.classList.contains('multi'))return el.dataset.v.split(',').filter(Boolean);

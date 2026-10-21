@@ -28,9 +28,10 @@ SCR.home={title:'Огляд',async render(m){
  if(D)$('#hResync').onclick=e=>run(e.target,()=>API.post('/api/display/resync'));
  if(has('capture'))$('#hRec').onclick=e=>run(e.target,()=>API.post(e.target.classList.contains('on')?'/api/cap/stop':'/api/cap/start'),'').then(()=>this.tick());
  await this.tick();
-},async tick(){
- /* раз на 2 с: шість запитів щосекунди — забагато для плати, на якій ще й Bluetooth */
- this.n=(this.n||0)+1;if(this.n%2===0)return;
+},async tick(fromLoop){
+ /* з циклу (99-main) — раз на 2 с: шість запитів щосекунди забагато для плати, на якій ще й Bluetooth.
+    Оновлення одразу після дії (запис, мітка) не пропускається ніколи */
+ if(fromLoop){this.n=(this.n||0)+1;if(this.n%2===0)return}
  const D=has('display');
  const[h,st,me,c2,cp,di]=await Promise.all([API.get('/api/health'),API.get('/api/status'),getIf(D,'/api/media'),getIf(has('can2'),'/api/can2'),getIf(has('capture'),'/api/cap'),getIf(D,'/api/display')]);
  if(!$('#hHu'))return;

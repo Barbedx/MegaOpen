@@ -15,7 +15,7 @@ async function doRoute(){
 let busy=false,tickN=0;
 async function foot(){const st=await API.get('/api/status');$('#foot').textContent=[st.fw,st.build.split(' ')[0],'працює '+fmtUp(st.uptimeMs),'пам’ять '+Math.round(st.heap/1024)+' кБ',st.ip].join(' · ')}
 setInterval(async()=>{const L=$('#link');if(REBOOTING){setChip(L,'warn','перезапуск');L.hidden=false;return}if(!cur||busy||document.hidden)return;busy=true;const my=gen;
- try{if(cur.tick&&my===gen)await cur.tick();if(tickN++%5===0)await foot();L.hidden=true}catch(e){if(!e.status){setChip(L,'bad','нема зв’язку');L.hidden=false}}busy=false},1000);
+ try{if(cur.tick&&my===gen)await cur.tick(true);if(tickN++%5===0)await foot();L.hidden=true}catch(e){if(!e.status){setChip(L,'bad','нема зв’язку');L.hidden=false}}busy=false},1000);
 window.addEventListener('hashchange',()=>{if(CAT)route()});
 /* тема */
 const THEMES=['auto','light','dark'];let th='auto';try{th=localStorage.getItem('mo-theme')||'auto'}catch(e){}

@@ -1,7 +1,7 @@
 /* ---------- Кнопки ---------- */
 const destName=d=>nameOf(CAT.dests,d);
 /* чому призначення мертве: прошивка пише англійською (WebUi::putDests), сторінка — українською; невідоме — як є */
-const DEST_WHY={'uartEnabled is off':'ГУ по UART вимкнено','head unit silent (link timeout)':'ГУ мовчить (нема кадрів 150 с)',
+const DEST_WHY={'uartEnabled is off':'ГУ по UART вимкнено','head unit silent (link timeout)':'ГУ мовчить',
  'bleMode has no AMS role':'роль Bluetooth без iPhone','bleMode has no keyboard role':'роль Bluetooth без клавіатури (HID)','resEnabled is off':'KEY1/KEY2 вимкнено'};
 const destWhy=w=>DEST_WHY[w]||(/is off in this build$/.test(w||'')?'нема в цій збірці':w||'');
 /* маска й живість кожного призначення: ланцюг keys з /api/health (WebUi::putDests);
