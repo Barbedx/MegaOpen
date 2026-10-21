@@ -54,6 +54,9 @@ namespace AppleMediaService
     // Track attributes whose last update was truncated (bit = attribute id),
     // set by the host task's notify, read whole by Process() on ble_svc.
     std::atomic<uint8_t> gTruncated{0};
+    // Of those, the ones whose read has failed once already: one retry, then
+    // the cut value stays. A new truncated update clears it.
+    std::atomic<uint8_t> gRetried{0};
     // gMediaInformation is written by both: the host task's notify and
     // Process()'s read.
     std::mutex gInfoLock;
@@ -242,7 +245,10 @@ namespace AppleMediaService
                                // Cut to the notification's size: shown as it is
                                // for now, the whole value is read by Process().
                                if ((flags & EntityUpdateFlagTruncated) && entity_id == EntityIDTrack && attribute_id < 8)
+                               {
+                                 gRetried.fetch_and((uint8_t)~(1u << attribute_id), std::memory_order_relaxed);
                                  gTruncated.fetch_or((uint8_t)(1u << attribute_id), std::memory_order_relaxed);
+                               }
                                deliver(entity_id, attribute_id, value); });
 
     // Subscribe to all player, queue and track updates.
@@ -265,24 +271,47 @@ namespace AppleMediaService
     uint8_t id = 0;
     while (!(bits & (1u << id)))
       ++id;
+    const uint8_t bit = (uint8_t)(1u << id);
     // Cleared before the read: a newer truncated update during it asks again.
-    gTruncated.fetch_and((uint8_t)~(1u << id), std::memory_order_relaxed);
+    gTruncated.fetch_and((uint8_t)~bit, std::memory_order_relaxed);
     const uint8_t which[] = {EntityIDTrack, id};
-    if (!attr->writeValue(which, sizeof(which), true))
-    {
-      LOGW("AMS", "entity attribute %u: select write failed", (unsigned)id);
-      return true;
-    }
-    // A long read: NimBLE follows it past one ATT payload.
-    const std::string whole = attr->readValue();
-    LOGI("AMS", "track attribute %u read whole: %u bytes", (unsigned)id, (unsigned)whole.size());
+    const bool selected = attr->writeValue(which, sizeof(which), true);
+    // A long read: NimBLE follows it past one ATT payload. A failed one comes
+    // back empty, and a phone that answered from a stale entity may give less
+    // than the update did: neither may replace what is shown.
+    std::string whole;
+    if (selected)
+      whole = attr->readValue();
+    bool applied = false;
+    if (!whole.empty())
     {
       std::lock_guard<std::mutex> lock(gInfoLock);
-      applyAttribute(EntityIDTrack, id, whole);
-      // The album changes no callback on its own; the whole of it is news.
-      if (gCallback)
-        gCallback(gMediaInformation);
+      const std::string *cur = id == TrackAttributeIDTitle  ? &gMediaInformation.mTitle
+                             : id == TrackAttributeIDArtist ? &gMediaInformation.mArtist
+                             : id == TrackAttributeIDAlbum  ? &gMediaInformation.mAlbum
+                                                            : nullptr;
+      if (!cur || whole.size() >= cur->size())
+      {
+        applyAttribute(EntityIDTrack, id, whole);
+        // The album changes no callback on its own; the whole of it is news.
+        if (gCallback)
+          gCallback(gMediaInformation);
+        applied = true;
+      }
     }
+    if (applied)
+    {
+      gRetried.fetch_and((uint8_t)~bit, std::memory_order_relaxed);
+      LOGI("AMS", "track attribute %u read whole: %u bytes", (unsigned)id, (unsigned)whole.size());
+    }
+    else if (!(gRetried.fetch_or(bit, std::memory_order_relaxed) & bit))
+    {
+      gTruncated.fetch_or(bit, std::memory_order_relaxed);
+      LOGW("AMS", "track attribute %u: %s (%u bytes), once more", (unsigned)id,
+           selected ? "read short or empty" : "select write failed", (unsigned)whole.size());
+    }
+    else
+      LOGW("AMS", "track attribute %u: read failed again, the cut value stays", (unsigned)id);
     return true;
   }
 
