@@ -40,7 +40,6 @@ namespace MegaOpen
             ConfirmBox, MessageBox, SelectButton,
             InfoPopup,
             Key, Abort,
-            FullscreenGeom,   // the ui task's fullscreen, r.p = geometry (sendFullscreen)
             // Not renders. Resync re-runs the handshake (the library's begin());
             // Clear hands the glass back to the media screen: it is counted
             // (clears()) and the ui task acts on the count.
@@ -172,17 +171,7 @@ namespace MegaOpen
         GlassGate<GlassLock> _glass;
     };
 
-    // The Carminat fullscreen (0x21 05), built here so its geometry can be
-    // chosen. Measured on the bench panel:
-    //   * text is read from content byte 32; starting earlier loses characters;
-    //   * a row shows ~22 wide characters;
-    //   * header byte 5 is the body length, declLen - 0x20 (OEM: 0x69 / 0x49);
-    //   * the library's 0x60 leaves 64 bytes for three rows and starves row 3;
-    //     0x69 leaves 73.
-    // Rows are 0x0D-terminated; an empty row is skipped. b5 = 0 derives it from
-    // declLen; other values are for sweeping.
-    static constexpr uint8_t FS_COLS = 22;
-    affa::Submitted sendFullscreen(affa::CarminatDisplay& d, const char* l1, const char* l2,
-                                   const char* l3, uint8_t declLen = 0x69,
-                                   uint8_t b5 = 0, uint8_t start = 32);
+    // Wide characters per fullscreen row on a Carminat (camera-measured; the
+    // library's showFullscreenText lays rows out for it since v1.1.0).
+    static constexpr uint8_t FS_COLS = affa::carminat::kFullscreenCols;
 }

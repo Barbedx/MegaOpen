@@ -297,17 +297,16 @@ namespace App
                 return s.ticket;
             }
 
-            // Three rows as a fullscreen: the OEM geometry on a Carminat (rows
-            // read from byte 32, ~22 columns), the library's otherwise.
-            void fullscreenReq(PanelOps::Req& r, bool carminat,
-                               const char* l1, const char* l2, const char* l3)
+            // Three rows as a fullscreen. The library's showFullscreenText
+            // sends the OEM geometry on a Carminat (0x69 / 0x49, rows read
+            // from byte 32, ~22 columns) since AffaDisplay v1.1.0.
+            void fullscreenReq(PanelOps::Req& r, const char* l1, const char* l2, const char* l3)
             {
                 auto put = [](char* dst, const char* s) {
                     snprintf(dst, PanelOps::STR_MAX, "%s", s ? s : "");
                 };
-                r.op = carminat ? PanelOps::Op::FullscreenGeom : PanelOps::Op::Fullscreen;
+                r.op = PanelOps::Op::Fullscreen;
                 put(r.a, l1); put(r.b, l2); put(r.c, l3);
-                r.p[0] = 0x69; r.p[1] = 0; r.p[2] = 32;
                 r.deliberate = false;
             }
 
@@ -792,7 +791,7 @@ namespace App
                     const uint32_t seq = g_notifySeq;
                     portEXIT_CRITICAL(&g_notifyMux);
                     PanelOps::Req r;
-                    fullscreenReq(r, ps.carminat, rows[0], rows[1], rows[2]);
+                    fullscreenReq(r, rows[0], rows[1], rows[2]);
                     const Ticket id = submitTracked(r, T_NOTIFY, now);
                     if (id) {
                         s_notifyReq = id;
@@ -817,7 +816,7 @@ namespace App
                         char s3[MegaOpen::MediaScreen::ROW_MAX];
                         g_media3.composeSplash(s1, s2, s3, MegaOpen::FS_COLS);
                         PanelOps::Req r;
-                        fullscreenReq(r, ps.carminat, s1, s2, s3);
+                        fullscreenReq(r, s1, s2, s3);
                         r.yields = true;
                         r.epoch  = s_holdSeq;
                         const Ticket id = submitTracked(r, T_SPLASH, now);
@@ -904,7 +903,9 @@ namespace App
                     char* rows[3] = {r.a, r.b, r.c};
                     for (uint8_t i = 0; i < 3; ++i) {
                         const uint8_t sg = g_carSig[i];
-                        if (sg >= Vehicle::SIG_COUNT) { rows[i][0] = 0; continue; }
+                        // An empty row is one space: the library skips an empty
+                        // string, which would move the rows below it up.
+                        if (sg >= Vehicle::SIG_COUNT) { rows[i][0] = ' '; rows[i][1] = 0; continue; }
                         const bool fresh = s_d.car->has(sg) &&
                                            s_d.car->ageMs(sg, now) <= MenuUi::STALE_MS;
                         MenuUi::signalRow(rows[i], PanelOps::STR_MAX, MegaOpen::FS_COLS,

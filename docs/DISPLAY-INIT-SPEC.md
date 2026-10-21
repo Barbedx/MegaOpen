@@ -259,6 +259,6 @@ Nothing here needs the panel to display anything — each step is confirmable on
 * Before registration the only id it sends is `3CF 61 11 01`, at ~1570 frames/s.
 * Fullscreen (`21 05`): header byte 5 is the body length (declLen − 0x20); text is read
   from content byte 32; ~22 wide characters per row. The OEM pair 0x69/0x49 shows three
-  full rows (camera, 2026-09-27; `MegaOpen::sendFullscreen`).
+  full rows (camera, 2026-09-27); AffaDisplay's `showFullscreenText` sends it since v1.1.0.
 * Popup/setText icon byte: inverted mask; 0x55 = no icons, 0x09 lights i(TRAFFIC),
   AF-RDS and LIST (camera, 2026-09-27).

@@ -56,12 +56,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 
 - **Info list truncates to 8 characters** (`kInfoCells`), seen on camera with a
   row box that is visibly wider. Same sweep: declared length 0x0B + offsets.
-- **Fix the fullscreen in the library, then delete ours.** AffaDisplay v1.0.0
-  `showFullscreenText` declares 0x60 with byte 5 = 0x40 and prefixes two spaces:
-  row 1 is indented and row 3 is starved. `MegaOpen::sendFullscreen`
-  (PanelOps.cpp) uses the OEM 0x69 / 0x49 / text at 32 and replaces it for
-  notifications and the track splash. Upstream it as a new tag
-  (refresh the cache, do not retag v1.0.0).
 - **Column widths are guesses elsewhere.** `MediaScreen::COLS_DEFAULT = 26`
   still drives the menu/fullscreen media layouts; the glass measured ~22 wide
   characters (capitals/digits) and ~21 lowercase. Proportional font, so the

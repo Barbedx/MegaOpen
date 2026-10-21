@@ -32,7 +32,6 @@ namespace MegaOpen
             case Op::InfoPopup:      return "info";
             case Op::Key:            return "key";
             case Op::Abort:          return "abort";
-            case Op::FullscreenGeom: return "fullscreen/geom";
             case Op::Resync:         return "resync";
             case Op::Clear:          return "clear";
             case Op::NavBitmap:      return "pane";
@@ -52,7 +51,6 @@ namespace MegaOpen
             case Op::MessageBox:
             case Op::SelectButton:
             case Op::InfoPopup:
-            case Op::FullscreenGeom:
                 return true;
             default:
                 return false;
@@ -90,37 +88,6 @@ namespace MegaOpen
     {
         Req r; r.op = Op::Highlight; r.u16 = row;
         return accepted(submit(r));
-    }
-
-    affa::Submitted sendFullscreen(affa::CarminatDisplay& d, const char* l1, const char* l2,
-                                   const char* l3, uint8_t declLen, uint8_t b5, uint8_t start)
-    {
-        uint8_t p[2 + 0x70];
-        if (declLen < 34 || declLen > sizeof(p) - 2 || start < 32 || start >= declLen)
-            return affa::Submitted::refused(affa::Result::BadArgument);
-        memset(p, 0x00, sizeof(p));
-        p[0] = 0x10;                  // ISO-TP first frame
-        p[1] = declLen;
-        p[2] = 0x21;                  // screen command
-        p[3] = 0x05;                  // fullscreen
-        p[4] = 0xFF;
-        p[5] = 0x00;
-        p[6] = 0x00;
-        p[7] = b5 ? b5 : (uint8_t)(declLen - 0x20);
-        for (size_t k = 2 + 32; k < 2u + declLen; ++k) p[k] = 0x20;
-
-        size_t q = 2 + start;
-        const size_t end = 2u + declLen;
-        for (const char* row : {l1, l2, l3}) {
-            char t[40];
-            if (!row || !affa::toAscii(row, t, sizeof(t))) continue;
-            for (const char* c = t; *c && q < end - 1; ++c) p[q++] = (uint8_t)*c;
-            if (q < end) p[q++] = 0x0D;
-        }
-
-        affa::TxOptions opt;
-        opt.coalesce = false;
-        return d.enqueue(0x151, p, (uint8_t)end, opt);
     }
 
     bool PanelOps::postPopup(const char* text, uint8_t icon, uint8_t srcIcon, uint8_t fmt)
@@ -274,11 +241,6 @@ namespace MegaOpen
             case Op::Highlight:      res = d.highlightItem((uint8_t)r.u16); break;
             case Op::Popup:          res = d.showPopupText(r.a, r.p[0], r.p[1], r.p[2]); break;
             case Op::HidePopup:      res = d.hidePopup(); break;
-            case Op::FullscreenGeom:
-                res = _carminat ? sendFullscreen(*_carminat, r.a, r.b, r.c,
-                                                 r.p[0], r.p[1], r.p[2])
-                                : affa::Submitted::refused(affa::Result::NotSupported);
-                break;
             case Op::Fullscreen:     res = d.showFullscreenText(r.a, r.b, r.c); break;
             case Op::ConfirmBox:     res = d.showConfirmBox(r.a, r.b, r.c); break;
             case Op::InfoPopup:      res = d.showInfoPopup(r.a, r.b, r.c); break;
