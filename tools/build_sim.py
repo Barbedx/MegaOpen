@@ -103,7 +103,7 @@ def main():
         catalog = json.dumps(json.load(f), ensure_ascii=False, separators=(",", ":"))
     with open(DECODE, encoding="utf-8") as f:
         decode = json.dumps(json.load(f), ensure_ascii=False, separators=(",", ":"))
-    shell, css, app = gen_pages.app_parts()
+    shell, css, app = gen_pages.app_parts(gen_pages.LANGS)
     def rd(n):
         with open(os.path.join(SIM, n), encoding="utf-8") as f:
             return f.read()

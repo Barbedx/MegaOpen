@@ -18,8 +18,7 @@ namespace App
 
         struct ClockHealth {
             const char* state;   // "off" | "idle" | "ok"
-            const char* code;    // stable, the page keys its text on it
-            const char* why;     // English, for the log and the API
+            const char* code;    // stable; the page has the words for it
         };
 
         // want: autoTime is on. phone: the AMS/CTS link is up. src, sinceSetMs:
@@ -28,12 +27,12 @@ namespace App
         // while its minutes keep coming. A manual set is neither.
         inline ClockHealth clockHealth(bool want, bool phone, ClockSrc src, uint32_t sinceSetMs)
         {
-            if (!want) return {"off", "clock_off", "autoTime is off"};
-            if (src == ClockSrc::Cts && phone) return {"ok", "clock_phone", "from the phone (CTS)"};
+            if (!want) return {"off", "clock_off"};
+            if (src == ClockSrc::Cts && phone) return {"ok", "clock_phone"};
             if (src == ClockSrc::Hu && sinceSetMs <= HU_CLOCK_FRESH_MS)
-                return {"ok", "clock_hu", "from the head unit (0x9D)"};
-            if (phone) return {"idle", "clock_waiting", "phone connected, no time received yet"};
-            return {"idle", "clock_no_source", "no phone, and no clock from the head unit"};
+                return {"ok", "clock_hu"};
+            if (phone) return {"idle", "clock_waiting"};
+            return {"idle", "clock_no_source"};
         }
     }
 }

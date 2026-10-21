@@ -39,6 +39,10 @@ has() {           # NAME PATTERN (in BODY)
     if grep -q -- "$2" "$BODY"; then pass "$1"; else fail "$1" "no '$2' in $(head -c 160 "$BODY" | tr '\n' ' ')"; fi
 }
 
+hasnt() {         # NAME PATTERN (not in BODY)
+    if grep -q -- "$2" "$BODY"; then fail "$1" "'$2' in $(grep -o -- "$2.\{0,60\}" "$BODY" | head -1)"; else pass "$1"; fi
+}
+
 echo "rc_smoke: $BASE (mdns '$NAME')"
 
 # ---- reachable, and which build -------------------------------------------
@@ -140,9 +144,18 @@ has "  hu: notSupported field" '"notSupported"'
 has "  hu: climateChanges field" '"climateChanges"'
 has "  panel: foreignMasters field" '"foreignMasters"'
 has "  panel: clusterPings field" '"clusterPings"'
+# Codes only: the page has the words (web/i18n); a chain's "why" is gone.
+has "  chains carry a code" '"code":"panel_\|"code":"hu_'
+hasnt "  no chain sends prose" '"code":"[a-z_]*","why"'
+has "  clock: src field" '"id":"clock"[^}]*"src"'
 for code in hu_dialect_vw panel_foreign_master panel_cluster_only; do
     if grep -q "\"$code\"" "$BODY"; then echo "NOTE  health reports $code"; fi
 done
+
+# ---- the page's English words (web/i18n/en.json, gzipped) ----------------------
+req i18n GET /i18n/en.json --compressed
+expect_code "GET /i18n/en.json" 200
+has "  English words" '"nav.home":"Overview"'
 
 # ---- logs -----------------------------------------------------------------------
 req logs GET /api/logs

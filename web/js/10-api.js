@@ -24,12 +24,12 @@ async function call(m,path,params){
 const API={get:p=>call('GET',p),post:(p,params)=>call('POST',p,params)};
 /* файл з плати: браузер сам качає за посиланням. Повертає {note} для run() */
 async function download(path,name){
- if(window.SIM){await SIM.call('GET',path);return {note:'завантажено (симуляція) '+name}}
+ if(window.SIM){await SIM.call('GET',path);return {note:t('c.simDl',name)}}
  const a=document.createElement('a');a.href=path;a.download=name;document.body.append(a);a.click();a.remove();return {note:name};
 }
 /* текст зі сторінки у файл (лог, налаштування). Повертає текст для чипа */
 function saveText(name,text){
- if(window.SIM)return 'завантажено (симуляція) '+name;
+ if(window.SIM)return t('c.simDl',name);
  const u=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'})),a=document.createElement('a');
  a.href=u;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1000);return name;
 }
@@ -40,6 +40,6 @@ async function upload(file,onP){
  return new Promise((ok,no)=>{const x=new XMLHttpRequest();x.open('POST','/ota/upload');x.setRequestHeader('X-MegaOpen','1');
   x.upload.onprogress=e=>{if(e.lengthComputable)onP(Math.round(e.loaded/e.total*100))};
   x.onload=()=>x.status<300?ok({ok:true}):no(Object.assign(new Error(errMsg(x.responseText,x.status)),{status:x.status}));
-  x.onerror=()=>no(new Error('немає зв’язку з платою'));
+  x.onerror=()=>no(new Error(t('c.noBoard')));
   const fd=new FormData();fd.append('file',file,file.name);x.send(fd)});
 }

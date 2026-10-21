@@ -97,7 +97,6 @@ static uint32_t paramU32(PsychicRequest* r, const char* name, const char* dflt, 
 static const char kScrollWhy[] = "scroll: 0, 7, 11 or 3";
 
 // One /api/health verdict: a stable code for the page, an English why for people.
-struct Why { const char* code; const char* why; };
 
 // The only restarts httpd does (/api/reboot, /api/factory): the
 // reply goes out first, the 300 ms lets it leave, then the restart.
@@ -640,6 +639,10 @@ void WebUi::routes()
     route("/", HTTP_GET, [](PsychicRequest* r) {
         return replyPage(r, PAGE_APP_GZ, PAGE_APP_GZ_LEN);
     });
+    // The page's English words (web/i18n/en.json); Ukrainian is in the page.
+    route("/i18n/en.json", HTTP_GET, [](PsychicRequest* r) {
+        return replyPage(r, PAGE_I18N_EN_GZ, PAGE_I18N_EN_GZ_LEN, "application/json");
+    });
 
     // The page's lists (Catalog.h), ~11 kB: streamed (ChunkOut).
     route("/api/catalog", HTTP_GET, [](PsychicRequest* r) {
@@ -928,13 +931,13 @@ void WebUi::routes()
 
         // "ok" it works right now · "idle" wired up, nothing to do · "off"
         // deliberately switched off · "broken" should work and does not.
-        // `code` is stable (the page keys its own text on it); `why` is English.
-        auto chain = [&](const char* id, const char* state, const Why& w) {
+        // `code` is stable and the only explanation sent: the page has the
+        // words for it in both languages (web/i18n/*.json, "w.<code>").
+        auto chain = [&](const char* id, const char* state, const char* code) {
             JsonObject o = chains.add<JsonObject>();
             o["id"] = id;
             o["state"] = state;
-            o["code"] = w.code;
-            if (*w.why) o["why"] = w.why;
+            o["code"] = code;
             return o;
         };
 
@@ -960,12 +963,12 @@ void WebUi::routes()
         // 1. The panel. Registered is the health signal; PeerAlive is omitted
         // because it toggles every second (sync 0x0A and 0x08 are both healthy).
         {
-            static constexpr Why W[] = {
-                {"panel_off", "FEATURE_DISPLAY_CAN is off"},
-                {"panel_unregistered", "registration lost — panel is not completing the handshake"},
-                {"panel_ok", ""},
-                {"panel_foreign_master", "another radio's sync on this bus: MegaOpen is silent (passive, listen-only); it re-detects 30 s after the syncs stop, or at a restart"},
-                {"panel_cluster_only", "only an instrument cluster answers on this bus, no AFFA panel"}};
+            static constexpr const char* W[] = {
+                "panel_off",
+                "panel_unregistered",
+                "panel_ok",
+                "panel_foreign_master",
+                "panel_cluster_only"};
             const bool reg = ps.attached && ps.registered;
             // What else is on the bus (PanelBusWatch) explains a panel that
             // never registers: an OEM radio has it (and we stay silent), or
@@ -996,12 +999,12 @@ void WebUi::routes()
             const bool on    = haveMs && ms.mediaAuto;
             const bool reg   = ps.attached && ps.registered;
             const bool haveT = haveMedia && box->title()[0];
-            static constexpr Why W[] = {
-                {"media_off", "media screen is switched off (mediaScreen)"},
-                {"media_no_panel", "panel is not registered — nothing can be drawn"},
-                {"media_no_phone", "no phone connected"},
-                {"media_no_track", "phone connected but has reported no track yet"},
-                {"media_ok", ""}};
+            static constexpr const char* W[] = {
+                "media_off",
+                "media_no_panel",
+                "media_no_phone",
+                "media_no_track",
+                "media_ok"};
             const uint8_t i = !on ? 0 : !reg ? 1 : !phone ? 2 : !haveT ? 3 : 4;
             JsonObject o = chain("media", !on ? "off" : i < 4 ? "idle" : "ok", W[i]);
             if (haveMedia) {
@@ -1020,7 +1023,7 @@ void WebUi::routes()
             //    Sources: the phone and the head unit's 0x9D (ClockHealth.h).
             const App::Ui::ClockHealth h =
                 App::Ui::clockHealth(haveMs && ms.autoTime, phone, us.clockSrc, millis() - us.clockSetMs);
-            JsonObject o = chain("clock", h.state, Why{h.code, h.why});
+            JsonObject o = chain("clock", h.state, h.code);
             o["src"] = App::Ui::clockSrcName(us.clockSrc);
             if (haveMedia) o["hhmm"] = box->clock();
         }
@@ -1030,7 +1033,7 @@ void WebUi::routes()
         {
             const bool any = _keyEvents && *_keyEvents;
             JsonObject o = chain("keys", any ? "ok" : "idle",
-                                 any ? Why{"keys_ok", ""} : Why{"keys_none", "no key event since boot"});
+                                 any ? "keys_ok" : "keys_none");
             if (_keyEvents) o["events"] = *_keyEvents;
             App::KeysTask::Routing k;
             if (_st.routing && _st.routing->peek(k)) putDests(o["dest"].to<JsonObject>(), k);
@@ -1040,15 +1043,15 @@ void WebUi::routes()
         {
             const uint32_t n = _ancsCount ? *_ancsCount : 0;
 #if FEATURE_BLE && FEATURE_ANCS
-            static constexpr Why W[] = {
-                {"ancs_ok", ""},
-                {"ancs_no_phone", "no phone connected"},
-                {"ancs_waiting", "connected, nothing pushed yet"}};
+            static constexpr const char* W[] = {
+                "ancs_ok",
+                "ancs_no_phone",
+                "ancs_waiting"};
             JsonObject o = chain("ancs", n ? "ok" : "idle", W[n ? 0 : !phone ? 1 : 2]);
             o["count"] = n;
             o["popup"] = _cfg->s().ancsPopup;
 #else
-            chain("ancs", "off", Why{"ancs_off", "FEATURE_ANCS is off in this build"});
+            chain("ancs", "off", "ancs_off");
 #endif
         }
 
@@ -1056,13 +1059,13 @@ void WebUi::routes()
         //    HuMediaSource's link timeout. Builds without the panel have no
         //    HuMediaSource: hu_seen, a frame since boot, recency unknown.
         {
-            static constexpr Why W[] = {
-                {"hu_off", "uartEnabled is off"},
-                {"hu_silent", "no frame from the head unit since boot"},
-                {"hu_quiet", "head unit has gone quiet (link timeout)"},
-                {"hu_ok", ""},
-                {"hu_seen", "frames since boot; this build cannot tell how recent"},
-                {"hu_dialect_vw", "the head unit speaks the VW canbox profile; this firmware speaks Toyota RAV4"}};
+            static constexpr const char* W[] = {
+                "hu_off",
+                "hu_silent",
+                "hu_quiet",
+                "hu_ok",
+                "hu_seen",
+                "hu_dialect_vw"};
             const uint32_t n = _huRx ? _huRx->frames() : 0;
 #if FEATURE_DISPLAY_CAN
             const uint8_t live = !_hu ? 4 : _hu->heard(millis()) ? 3 : 2;
@@ -1097,8 +1100,8 @@ void WebUi::routes()
             const Knobs::Config c = _knobs->config();
             const bool found = !Board::KNOBS_I2C || v.expAddr;
             JsonObject o = chain("knobs", found ? "ok" : "broken",
-                                 found ? Why{"knobs_ok", ""}
-                                       : Why{"knobs_no_expander", "PCF8574 not found on I2C"});
+                                 found ? "knobs_ok"
+                                       : "knobs_no_expander");
             o["addr"]      = v.expAddr;
             o["i2cErrors"] = v.expErrors;
             o["right"]     = v.pos[0];
@@ -1107,9 +1110,9 @@ void WebUi::routes()
             o["lineErrors"] = v.encErrors + v.enc2Errors;
 
             JsonObject l = chain("lights", !c.ledEnabled ? "off" : v.stripOk ? "ok" : "broken",
-                                 !c.ledEnabled ? Why{"lights_off", "led.enabled is off"}
-                                 : v.stripOk   ? Why{"lights_ok", ""}
-                                               : Why{"lights_fail", "LED driver did not start"});
+                                 !c.ledEnabled ? "lights_off"
+                                 : v.stripOk   ? "lights_ok"
+                                               : "lights_fail");
             l["leds"]   = v.leds;
             l["frames"] = v.frames;
         }
@@ -1117,9 +1120,9 @@ void WebUi::routes()
 
         // 7. The phone link itself, last, because everything above cites it.
         chain("phone", phone ? "ok" : "idle",
-              phone ? Why{"phone_ok", ""}
-              : _cfg->s().bleMode == "off" ? Why{"phone_ble_off", "bleMode is off"}
-                                           : Why{"phone_advertising", "advertising — not connected"});
+              phone ? "phone_ok"
+              : _cfg->s().bleMode == "off" ? "phone_ble_off"
+                                           : "phone_advertising");
         d["bleMode"] = _cfg->s().bleMode;
 
         String out; serializeJson(d, out);

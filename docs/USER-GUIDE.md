@@ -22,6 +22,11 @@ The tabs: **Огляд** (status of every part), **Екран** (the car's displ
 Bluetooth, updates, all settings). **Сервіс** appears with **Плата →
 Інтерфейс → Режим розробника**.
 
+**EN / UA** in the header switches the page between Ukrainian and English, for
+this browser only; `?lang=en` in the address does the same. The English page
+is new and screen by screen: until every screen is done, some text stays
+Ukrainian.
+
 ## The panel menu
 
 Settings and car data on the car's own display.

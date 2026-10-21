@@ -47,6 +47,8 @@ jobs:
         run: pio test -e native
       - name: check_rules
         run: python tools/check_rules.py
+      - name: check_i18n
+        run: python tools/check_i18n.py
       # catalog.json, features.json and decode.json for check_nav and build_sim.
       - uses: actions/upload-artifact@v7
         with:

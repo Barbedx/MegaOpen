@@ -4,6 +4,11 @@ The app (docs/design/web-ui.md), served at "/", is web/ — a shell web/index.ht
 web/app.css and web/js/*.js — inlined into one page, PAGE_APP. web/sim/ is never
 read here.
 
+The page's words are in web/i18n/<lang>.json (key -> text). Ukrainian, the
+default, is inlined into the page as `const I18N={"uk":{...}}`; English is its
+own gzipped file, PAGE_I18N_EN, served at /i18n/en.json and fetched only by a
+viewer who picked English. tools/check_i18n.py checks the two agree.
+
 It is gzipped (level 9) into a byte array, PAGE_APP_GZ, and its length, in ONE
 translation unit — one copy in flash.
 
@@ -73,18 +78,31 @@ def write_env_features():
         with open(out, "w", encoding="utf-8", newline="\n") as fp:
             fp.write(text)
 
-def app_parts():
+LANGS = ("uk", "en")
+
+def i18n(lang):
+    """web/i18n/<lang>.json as a dict, in file order."""
+    with open(os.path.join(WEB, "i18n", lang + ".json"), encoding="utf-8") as f:
+        return json.load(f)
+
+def i18n_min(lang):
+    return json.dumps(i18n(lang), ensure_ascii=False, separators=(",", ":"))
+
+def app_parts(langs=("uk",)):
     """web/ as text: (shell, css, js). Shared with tools/build_sim.py, so the
     simulator artifact is built from exactly the bytes the board serves.
 
     The JS files are concatenated in FILE-NAME order into one script: plain
     browser JS, no modules and no bundler, so 00-util.js has to come first and
-    99-main.js last, and the name is the only thing that says so."""
+    99-main.js last, and the name is the only thing that says so. The
+    dictionaries of `langs` go first, as I18N: the board's page has only uk,
+    the simulator every language."""
     def rd(*p):
         with open(os.path.join(WEB, *p), encoding="utf-8") as f:
             return f.read()
     jsdir = os.path.join(WEB, "js")
     js = "\n".join(rd("js", n) for n in sorted(os.listdir(jsdir)) if n.endswith(".js"))
+    js = "const I18N={%s};\n" % ",".join('"%s":%s' % (l, i18n_min(l)) for l in langs) + js
     return rd("index.html"), rd("app.css"), js
 
 def app_inline(shell, css, scripts):
@@ -151,6 +169,7 @@ def main():
     total_raw = total_gz = 0
     def sources():
         yield "PAGE_APP", app_page()
+        yield "PAGE_I18N_EN", i18n_min("en")
     app_gz = 0
     for name, page in sources():
         raw = page.encode("utf-8")
@@ -175,7 +194,7 @@ def main():
             with open(out, "w", encoding="utf-8", newline="\n") as f:
                 f.write(text)
     write_env_features()
-    print("gen_pages: PAGE_APP %d B raw -> %d B gz" % (total_raw, app_gz))
+    print("gen_pages: PAGE_APP %d B gz, all pages %d B raw -> %d B gz" % (app_gz, total_raw, total_gz))
 
 # tools/build_sim.py imports this file for app_parts()/app_inline(), and that
 # import must not rewrite src/net/gen. Under PlatformIO's SCons and standalone

@@ -63,14 +63,46 @@ web/
     20-kit.js       row/card/sel/seg/sw, saver (autosave), reboot bar, ask()
     30-glass.js     the panel preview, driven by the catalog's layout geometry
     40-home.js … 90-service.js   one file per screen
-    99-main.js      router, poll loop, theme
+    99-main.js      router, poll loop, theme, language switch
+  i18n/
+    uk.json         every word the page shows, key -> text (the default)
+    en.json         the same keys in English
   sim/
     mock.js         the simulated board: state and routes
                     used by the simulator only, never shipped to the board
 tools/gen_pages.py  inlines web/index.html + app.css + js/* into PAGE_APP (gzip),
                     keeps the build-time feature gating
 tools/build_sim.py  the same app plus sim/mock.js, as one HTML file (the artifact)
+tools/check_i18n.py the dictionaries agree, and every key the code names exists
 ```
+
+## Languages
+
+The page speaks Ukrainian (default) and English; the switch in the header
+(EN / UA) is per browser (`localStorage` `mo-lang`, or `?lang=en` in the
+address) and reloads the page.
+
+- Every word is in `web/i18n/<lang>.json`, flat `"area.name": "text"` keys:
+  `nav.*` tabs, `m.*` header and restart bar, `c.*` shared words, `s.<state>`
+  and `w.<code>` for `/api/health`, then one prefix per screen (`h.*` Огляд).
+  `{0}`, `{1}` are arguments.
+- `t(key, ...args)` (`00-util.js`) looks the key up in the chosen language,
+  then in Ukrainian, then returns the key itself. Never at script load: the
+  English file arrives later (`i18nLoad()` in `start()`), so a screen's
+  `title` is a key and the router translates it.
+- Static text in `index.html` is `data-i18n="key"` / `data-i18n-aria="key"`,
+  filled by `i18nLoad()`.
+- The board's page inlines only `uk.json`; `en.json` is a separate gzipped
+  file at `GET /i18n/en.json`, fetched by an English viewer only. The
+  simulator inlines both.
+- The firmware sends codes, not prose (English stays in the log only):
+  `/api/health` chains carry `code`, and the page has the words.
+- English is written for someone who has never seen the Ukrainian: natural
+  phrasing, not word for word.
+- `tools/check_i18n.py` (CI): same keys in both files, same `{n}` arguments,
+  no empty value, no literal key missing; warns on unused keys and counts the
+  Ukrainian still in `web/js` (`--strict` fails on it once every screen is
+  migrated).
 
 With `?sim`, or in the simulator build, `10-api.js` routes `call()` to the mock. The board build never contains `mock.js`.
 
@@ -242,8 +274,8 @@ The simulator mock answers exactly what the firmware answers today. Examples:
 These fields are added; no route is added for them:
 - `GET /api/status` gains `fw` (`MEGAOPEN_VERSION`), `build` (`MegaOpen::buildId()`, the `tools/version.py` stamp) and `apName` (the AP's full name, with the MAC suffix).
 - `GET /api/health`:
-  - every chain carries a stable `code` next to the English `why`;
-  - a `hu` chain: `state`, `code`, `why` and `rxFrames`. It is `ok` while the head unit sent a frame within `HuMediaSource::linkTimeoutMs()` (15 s). Builds without the panel have no `HuMediaSource`: after the first frame they report `idle` with `hu_seen` (a frame since boot, recency unknown), never `ok`.
+  - every chain carries a stable `code` and no prose: the page has the words (`w.<code>`, see Languages);
+  - a `hu` chain: `state`, `code` and `rxFrames`. It is `ok` while the head unit sent a frame within `HuMediaSource::linkTimeoutMs()` (15 s). Builds without the panel have no `HuMediaSource`: after the first frame they report `idle` with `hu_seen` (a frame since boot, recency unknown), never `ok`.
   - The codes: `panel_off`, `panel_unregistered`, `panel_ok`; `media_off`, `media_no_panel`, `media_no_phone`, `media_no_track`, `media_ok`; `clock_off`, `clock_phone`, `clock_hu`, `clock_waiting`, `clock_no_source`; `keys_ok`, `keys_none`; `ancs_ok`, `ancs_no_phone`, `ancs_waiting`, `ancs_off`; `hu_off`, `hu_silent`, `hu_quiet`, `hu_ok`, `hu_seen`; `phone_ok`, `phone_ble_off`, `phone_advertising`.
 - `POST /api/macros` errors are `text/plain` `"<index>: <why>"`. The page marks the row whose number leads the message.
 
@@ -257,7 +289,7 @@ These fields are added; no route is added for them:
   - Rows the build compiled out are absent (no display: no layouts, styles, scenes, panels, wheel keys, console); `dests[].built` says which sinks exist, and `usb` is listed only where `FEATURE_USB_HID` is on.
   - `huKeys` is the whole `Rav4Catalog` table, the knob codes `81`–`86` included. `actions[].hu` is the bare code (`Mute` is `07`; the sink sends it as a long press).
 - **Slice 4 (settled):**
-  - `/api/health` `why` texts stay English in the firmware. The chains carry a stable `code`; the page owns the Ukrainian text per `code` in one table (`WHY_T`, `web/js/40-home.js`) and falls back to `why`.
+  - `/api/health` `why` texts stay English in the firmware. The chains carry a stable `code`; the page owns the Ukrainian text per `code` in one table (`WHY_T`, `web/js/40-home.js`) and falls back to `why`. *Superseded by Languages: `why` is gone, the words are `w.<code>` in `web/i18n`.*
 - **Slice 5 (settled):** `/api/routing` `dest` is exactly the catalog's `dests` (`usb` where `FEATURE_USB_HID`; NVS `rtUsb`), each `{mask,live,why}`; `live` = in the chain and switched on. `affamap.last.dests` = mask, `live`, and the sink's own verdict (UART needs a code; BLE and USB take no Long). A swallowing macro and a disconnected phone or USB host are not seen.
 - **Slice 6 (settled):**
   - `/api/media` gains `clockSrc` (`hu`, `cts`, `manual` or empty) and `clockAt` (`HH:MM`). The ui task records each set it applies: the head unit's 0x9D and the phone's CTS while `autoTime` is on, and `/api/display/clock` with a valid `HHMM` (the web posts it; the ui task only records it and puts it in the header). Published in `UiStatus`.

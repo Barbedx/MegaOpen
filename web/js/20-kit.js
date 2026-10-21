@@ -14,7 +14,7 @@ const has=f=>!!(CAT&&CAT.features&&CAT.features[f]);
 const getIf=(ok,p)=>ok?API.get(p):Promise.resolve(null);
 /* картка на екрані (хоч рядок видно): швидке опитування лише тоді — плата одна, а в машині ще й Bluetooth на тому ж радіо */
 const onScreen=el=>{if(!el)return false;const r=el.getBoundingClientRect();return r.bottom>0&&r.top<innerHeight&&r.height>0};
-const notBuilt=(title,what)=>card(title,`<div class="row muted">у цій збірці ${esc(what)} немає</div>`,'','custom');
+const notBuilt=(title,what)=>card(title,`<div class="row muted">${esc(t('c.notBuilt',what))}</div>`,'','custom');
 const noneAction=()=>(CAT.actions.find(a=>a.class==null)||{}).id;
 const byId=(list,id)=>(list||[]).find(x=>x.id===id);
 const nameOf=(list,id)=>{const x=byId(list,id);return x?x.name:id};
@@ -26,15 +26,15 @@ const txt=(k,v,ph='',cls='in',type='text',ex='')=>`<input class="${cls}" type="$
 const opt=o=>Array.isArray(o)?o:[o,o];
 const sel=(k,opts,v,ex='')=>`<select class="in" ${at(k)} ${ex}>${opts.map(o=>{const[a,b]=opt(o);return `<option value="${esc(a)}"${String(a)===String(v)?' selected':''}>${esc(b)}</option>`}).join('')}</select>`;
 const seg=(k,opts,v,cls='')=>`<div class="seg ${cls}" ${at(k)} data-v="${esc(v)}">${opts.map(o=>{const[a,b]=opt(o);return `<button type="button" data-val="${esc(a)}" class="${String(a)===String(v)?'on':''}">${esc(b)}</button>`}).join('')}</div>`;
-const row=(label,ctrl='',sub='',hint='',id='')=>`<div class="row"${id?` id="${id}"`:''}><div class="l"><b>${label}</b>${hint?'<button class="i" type="button" aria-label="Підказка">?</button>':''}${sub?`<small>${sub}</small>`:''}${hint?`<small class="hint" hidden>${esc(hint)}</small>`:''}</div>${ctrl?`<div class="c">${ctrl}</div>`:''}</div>`;
+const row=(label,ctrl='',sub='',hint='',id='')=>`<div class="row"${id?` id="${id}"`:''}><div class="l"><b>${label}</b>${hint?`<button class="i" type="button" aria-label="${t('c.hint')}">?</button>`:''}${sub?`<small>${sub}</small>`:''}${hint?`<small class="hint" hidden>${esc(hint)}</small>`:''}</div>${ctrl?`<div class="c">${ctrl}</div>`:''}</div>`;
 const card=(title,body,id='',cls='')=>`<section class="card ${cls}"${id?` id="${id}"`:''}><h2><span>${title}</span><span class="sv" aria-live="polite"></span></h2>${body}</section>`;
 const fold=(title,body,id='')=>`<details class="card"${id?` id="${id}"`:''}><summary><h2><span>${title}</span><span class="sv" aria-live="polite"></span></h2></summary>${body}</details>`;
 const chipH=(st,t)=>`<span class="chip ${st}">${esc(t)}</span>`;
-const hintBtn=t=>`<button class="i" type="button" aria-label="Підказка" title="${esc(t)}">?</button>`;
+const hintBtn=h=>`<button class="i" type="button" aria-label="${t('c.hint')}" title="${esc(h)}">?</button>`;
 function setChip(el,st,t){if(typeof el==='string')el=$(el);if(!el)return;el.className='chip '+st;el.textContent=t}
 const CH={ok:'ok',idle:'warn',off:'off',broken:'bad'};
 const svOf=el=>{const c=el&&el.closest&&el.closest('.card');return c?$('.sv',c):null};
-function sv(el,st,t){if(!el)return;clearTimeout(el._t);el.className='sv '+st;el.textContent=st==='busy'?'…':(st==='ok'?'✓ ':'✗ ')+(t||(st==='ok'?'збережено':'помилка'));if(st==='ok')el._t=setTimeout(()=>{el.textContent='✓'},2600)}
+function sv(el,st,msg){if(!el)return;clearTimeout(el._t);el.className='sv '+st;el.textContent=st==='busy'?'…':(st==='ok'?'✓ ':'✗ ')+(msg||(st==='ok'?t('c.saved'):t('c.error')));if(st==='ok')el._t=setTimeout(()=>{el.textContent='✓'},2600)}
 /* текст помилки прошивки (англійський, text/plain) — українською для частих; решта як є: вона називає ключ і причину */
 const ERR_T={'busy, try again':'плата зайнята, спробуй ще раз','busy, retry':'плата зайнята, спробуй ще раз','busy':'плата зайнята',
  'bad json':'запит не прочитано','no memory':'плата без вільної памʼяті','not found':'на платі такого нема',
@@ -45,15 +45,15 @@ const ERR_T={'busy, try again':'плата зайнята, спробуй ще �
  'battery in 0x21/0x23 and the computed range/consumption: the same field, choose one':'АКБ у 0x21/0x23 і розрах. витрата — одне поле: обери щось одне'};
 /* «no <частина>» від маршруту, частини якого збірка не має або вимкнула; лише відомі частини, а не будь-яке «no …» */
 const errMsgT=m=>ERR_T[m]||(/^no (display|ble|can2?|uart|uart ring|vehicle|keymap|knob service|resistive sink|macro engine|wifi manager)$/.test(m||'')?'цього нема в збірці або воно вимкнене ('+m+')':m);
-const errT=e=>(e.status?e.status+' · ':'')+(errMsgT(e.message)||'помилка');
-async function run(btn,fn,okText){const s=svOf(btn);if(btn)btn.disabled=true;sv(s,'busy');try{const r=await fn();sv(s,'ok',okText||(r&&r.note)||'готово');return r}catch(e){sv(s,'bad',errT(e))}finally{if(btn)btn.disabled=false}}
+const errT=e=>(e.status?e.status+' · ':'')+(errMsgT(e.message)||t('c.error'));
+async function run(btn,fn,okText){const s=svOf(btn);if(btn)btn.disabled=true;sv(s,'busy');try{const r=await fn();sv(s,'ok',okText||(r&&r.note)||t('c.done'));return r}catch(e){sv(s,'bad',errT(e))}finally{if(btn)btn.disabled=false}}
 function val(el){if(!el)return;if(el.dataset.hex!==undefined){const n=parseInt(el.value,16);return isNaN(n)?0:n}if(el.classList.contains('seg'))return el.dataset.v;if(el.classList.contains('multi'))return el.dataset.v.split(',').filter(Boolean);
  if(el.type==='checkbox')return el.checked;if(el.type==='number'||el.type==='range'){const n=parseFloat(el.value);return isNaN(n)?undefined:n}
  if(el.tagName==='SELECT'&&el.value!==''&&/^-?\d+$/.test(el.value)&&el.dataset.str===undefined)return +el.value;return el.value}
 function put(el,v){if(!el||v===undefined||el.dataset.dirty||el===document.activeElement||el.contains(document.activeElement))return;
  if(el.classList.contains('seg')){el.dataset.v=v;$$('button',el).forEach(b=>b.classList.toggle('on',b.dataset.val===String(v)));return}
  if(el.type==='checkbox'){el.checked=!!v;return}if(el.dataset.hex!==undefined)v=v?h2(v):'';if(String(el.value)!==String(v))el.value=v}
-function shown(el){if(el.tagName==='SELECT')return el.options[el.selectedIndex].text;if(el.type==='checkbox')return el.checked?'увімк':'вимк';if(el.type==='password')return '••••';return el.value}
+function shown(el){if(el.tagName==='SELECT')return el.options[el.selectedIndex].text;if(el.type==='checkbox')return el.checked?t('c.on'):t('c.off');if(el.type==='password')return '••••';return el.value}
 /* автозбереження: дебаунс 400 мс, чип секції … / ✓ / ✗ */
 function saver(scope,fn,selr='[data-k],[data-f],[data-kf]'){
  const s=svOf(scope);let t=null;const ks=new Set(),els=new Set();
@@ -68,11 +68,11 @@ function saver(scope,fn,selr='[data-k],[data-f],[data-kf]'){
 async function genericSave(ks,scope){
  const groups={};let rb=false;
  for(const k of ks){const el=scope.querySelector(`[data-k="${k}"]`);if(!el)continue;const[path,field]=k.split('|');
-  if(el.minLength>0&&el.value&&el.value.length<el.minLength)throw Object.assign(new Error('мін. '+el.minLength+' символів'),{status:400});
+  if(el.minLength>0&&el.value&&el.value.length<el.minLength)throw Object.assign(new Error(t('c.minChars',el.minLength)),{status:400});
   if(path.startsWith('rb:')){pendFrom(path.slice(3));rb=true;continue}
   const v=val(el);if(v===undefined)continue;(groups[path]=groups[path]||{})[field]=v}
  let last;for(const[p,params]of Object.entries(groups))last=await API.post(p,params);
- return rb&&!last?{note:'після перезавантаження'}:last;
+ return rb&&!last?{note:t('c.afterReboot')}:last;
 }
 /* смуга «Потребує перезавантаження» */
 const PEND={};
@@ -82,7 +82,7 @@ function pendFrom(path){
  const p={},labels=[];els.forEach(el=>{if(!ch.includes(el)&&el.dataset.always===undefined)return;const f=el.dataset.k.split('|')[1];setPath(p,f,val(el));if(ch.includes(el))labels.push(el.dataset.label+': '+shown(el))});
  PEND[key]={path,params:p,labels};rbar();
 }
-function rbar(){const L=Object.values(PEND).flatMap(x=>x.labels);$('#rbar').hidden=!L.length;$('#rbN').textContent=L.length+' зм.';$('#rbList').innerHTML=L.map(l=>`<li>${esc(l)}</li>`).join('');if(!L.length)$('#rbAsk').hidden=true}
+function rbar(){const L=Object.values(PEND).flatMap(x=>x.labels);$('#rbar').hidden=!L.length;$('#rbN').textContent=t('c.nChanges',L.length);$('#rbList').innerHTML=L.map(l=>`<li>${esc(l)}</li>`).join('');if(!L.length)$('#rbAsk').hidden=true}
 $('#rbGo').onclick=()=>{$('#rbAsk').hidden=!$('#rbAsk').hidden;$('#rbMsg').textContent=''};
 $('#rbUndo').onclick=()=>{for(const k in PEND)delete PEND[k];rbar();route()};
 $('#rbYes').onclick=async()=>{const b=$('#rbYes');b.disabled=true;$('#rbMsg').textContent='…';
@@ -97,7 +97,7 @@ async function reboot(path='/api/reboot',params,why=''){
 /* підтвердження в рядку (без confirm()) */
 function ask(btn,text,onYes,word){
  $$('.ask').forEach(a=>a.remove());const d=document.createElement('div');d.className='ask';
- d.innerHTML=`<span>${esc(text)}</span>${word?`<input class="in" autocomplete="off" autocapitalize="off" placeholder="введіть: ${esc(word)}">`:''}<button class="btn dng" type="button" data-y${word?' disabled':''}>Так</button><button class="btn" type="button" data-n>Ні</button>`;
+ d.innerHTML=`<span>${esc(text)}</span>${word?`<input class="in" autocomplete="off" autocapitalize="off" placeholder="${esc(t('c.typeWord',word))}">`:''}<button class="btn dng" type="button" data-y${word?' disabled':''}>${t('c.yes')}</button><button class="btn" type="button" data-n>${t('c.no')}</button>`;
  (btn.closest('.row,.fr,.mac,.krow')||btn).after(d);const inp=$('input',d),y=$('[data-y]',d);
  if(inp){inp.oninput=()=>y.disabled=inp.value.trim()!==word;inp.focus()}
  $('[data-n]',d).onclick=()=>d.remove();y.onclick=()=>{d.remove();onYes()};
@@ -112,9 +112,9 @@ function fieldCtrl(f,k,v){
 }
 const fieldLabel=f=>esc(f.label)+(f.max&&!f.num&&!f.enum?' · '+f.max:'');
 /* спільні чипи: WiFi (Огляд, Плата), CAN A і кнопка запису (Огляд, Авто) */
-function wifiChip(chip,sub,st,lost){if(st.mode==='ap'){setChip(chip,'warn','резервна точка');sub.textContent=(st.apName||st.ssid)+' · '+st.ip+' · '+lost}else{setChip(chip,'ok',st.ssid);sub.textContent=st.ip+' · '+st.rssi+' dBm'}}
-function canChip(chip,c2){if(c2.fps>0)setChip(chip,'ok',(c2.detected||c2.bitrate)/1000+'k · '+fmtN(c2.fps)+'/с');else if(c2.autobaud==='searching')setChip(chip,'warn','шукаю швидкість');else setChip(chip,'bad','мовчить')}
-function recBtn(b,cp){b.classList.toggle('on',cp.recording);b.textContent=cp.recording?'■ Стоп':'● Запис'}
+function wifiChip(chip,sub,st,lost){if(st.mode==='ap'){setChip(chip,'warn',t('c.ap'));sub.textContent=(st.apName||st.ssid)+' · '+st.ip+' · '+lost}else{setChip(chip,'ok',st.ssid);sub.textContent=st.ip+' · '+st.rssi+' dBm'}}
+function canChip(chip,c2){if(c2.fps>0)setChip(chip,'ok',(c2.detected||c2.bitrate)/1000+'k · '+t('c.perS',fmtN(c2.fps)));else if(c2.autobaud==='searching')setChip(chip,'warn',t('c.canSearch'));else setChip(chip,'bad',t('c.canSilent'))}
+function recBtn(b,cp){b.classList.toggle('on',cp.recording);b.textContent=cp.recording?t('c.recStop'):t('c.recStart')}
 /* глобальні кліки: сегменти, мультивибір, підказки */
 document.addEventListener('click',e=>{
  const sb=e.target.closest('.seg button');if(sb&&sb.dataset.val!==undefined){const sg=sb.parentElement;sg.dataset.v=sb.dataset.val;$$('button',sg).forEach(b=>b.classList.toggle('on',b===sb));sg.dispatchEvent(new Event('change',{bubbles:true}));return}

@@ -188,7 +188,7 @@ function destState(){const o={
  o.ams.volFallback=o.ams.live&&!(o.ams.mask&2)&&!Object.entries(o).some(([k,x])=>k!=='ams'&&x.live&&x.mask&2);return o}
 /* як WebUi::putDests: /api/health keys.dest */
 const strip=o=>{const x={...o};if(x.live)delete x.why;delete x.press;x.state=!o.live?'off':o.mask?'ok':'muted';return x};
-/* НОВЕ (зріз 4): кожен ланцюг має стабільний code; W — ті самі пари [code, why], що в WebUi.cpp */
+/* НОВЕ (зріз 4): кожен ланцюг має стабільний code; W — ті самі коди, що в WebUi.cpp (англійське why лише для читача; прошивка його не шле) */
 const W={panel:[['panel_unregistered','registration lost — panel is not completing the handshake'],['panel_ok','']],
  media:[['media_off','media screen is switched off (mediaScreen)'],['media_no_panel','panel is not registered — nothing can be drawn'],['media_no_phone','no phone connected'],['media_no_track','phone connected but has reported no track yet'],['media_ok','']],
  clock:[['clock_off','autoTime is off'],['clock_phone','from the phone (CTS)'],['clock_hu','from the head unit (0x9D)'],['clock_waiting','phone connected, no time received yet'],['clock_no_source','no phone, and no clock from the head unit']],
@@ -196,7 +196,7 @@ const W={panel:[['panel_unregistered','registration lost — panel is not comple
  hu:[['hu_off','uartEnabled is off'],['hu_silent','no frame from the head unit since boot'],['hu_quiet','head unit has gone quiet (link timeout)'],['hu_ok',''],['hu_seen','frames since boot; this build cannot tell how recent']],
  phone:[['phone_ok',''],['phone_ble_off','bleMode is off'],['phone_advertising','advertising — not connected']]};
 function health(){
- const d=S.disp,ch=[],chain=(id,state,i,x)=>{const[code,why]=W[id][i],o={id,state,code,...(x||{})};if(why)o.why=why;ch.push(o);return o};
+ const d=S.disp,ch=[],chain=(id,state,i,x)=>{const[code]=W[id][i],o={id,state,code,...(x||{})};ch.push(o);return o};
  const reg=d.registered,tr=curTrack(),ck=clockStrOrEmpty(),F=C.features;
  if(F.display){chain('panel',reg?'ok':'broken',reg?1:0,{rxFrames:S.can.twaiRx,rxPin:6,txPin:7,resyncs:d.sessionsLost,txGated:false});
  const mi=!S.med.auto?0:!reg?1:!phone()&&mediaSrc()!=='hu'?2:!tr.title?3:4;
@@ -204,13 +204,13 @@ function health(){
  {const ci=!S.set.autoTime?0:ck?(phone()?1:2):phone()?3:4;chain('clock',!ci?'off':ci<3?'ok':'idle',ci,{hhmm:ck,src:['','cts','hu','',''][ci]})}}
  const k=chain('keys',S.affaEvents?'ok':'idle',S.affaEvents?0:1,{events:S.events,dest:{}});
  for(const[id,x]of Object.entries(destState()))k.dest[id]=strip(x);
- if(!F.ancs)ch.push({id:'ancs',state:'off',code:'ancs_off',why:'FEATURE_ANCS is off in this build'});
+ if(!F.ancs)ch.push({id:'ancs',state:'off',code:'ancs_off'});
  else chain('ancs',S.ntf.length&&phone()?'ok':'idle',S.ntf.length&&phone()?0:!phone()?1:2,{count:S.ntf.length,popup:S.set.ancsPopup});
  const hi=!S.set.uartEnabled?0:!F.display?(S.hu.rx?4:1):!S.hu.connected?(S.hu.rx?2:1):3;
  chain('hu',hi===0?'off':hi===3?'ok':'idle',hi,{rxFrames:S.hu.rx,junk:0,badCs:0,dialect:S.hu.rx?'toyota':'unknown',notSupported:0});
  if(F.knobs){const kl=S.knl||{},e=kl.enc||{},e2=kl.enc2||{};
   ch.push({id:'knobs',state:'ok',code:'knobs_ok',addr:0x3F,i2cErrors:0,right:e.pos||0,left:e2.pos||0,clicks:(e.clicks||0)+(e2.clicks||0),lineErrors:0});
-  const on=S.kn.led&&S.kn.led.enabled;ch.push(on?{id:'lights',state:'ok',code:'lights_ok',leds:10,frames:0}:{id:'lights',state:'off',code:'lights_off',why:'led.enabled is off'})}
+  const on=S.kn.led&&S.kn.led.enabled;ch.push(on?{id:'lights',state:'ok',code:'lights_ok',leds:10,frames:0}:{id:'lights',state:'off',code:'lights_off'})}
  chain('phone',phone()?'ok':'idle',phone()?0:S.set.bleMode==='off'?1:2);
  return {fw:S.fw,build:S.build,chains:ch,bleMode:S.set.bleMode};
 }

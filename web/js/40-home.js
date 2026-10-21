@@ -1,32 +1,24 @@
 /* ---------- Огляд ---------- */
-/* слово для стану ланцюга з /api/health */
-const STATE_T={ok:'працює',idle:'чекає',off:'вимкнено',broken:'не працює',muted:'приглушено'};
-/* пояснення за стабільним code ланцюга; нового коду тут нема — показуємо англійське why прошивки */
-const WHY_T={panel_off:'панелі нема в цій збірці',
- panel_foreign_master:'на шині синхронізація іншої магнітоли — MegaOpen мовчить (лише слухає); перевірить знову через 30 с після її тиші або після перезапуску',panel_cluster_only:'на цій шині лише щиток приладів, панелі AFFA нема',panel_unregistered:'реєстрацію втрачено: панель не завершує рукостискання',
- media_off:'екран музики вимкнено',media_no_panel:'панель не зареєстрована, нема де малювати',media_no_phone:'телефон не підключено',media_no_track:'телефон підключено, трека ще нема',
- clock_off:'автоматичний час вимкнено',clock_hu:'час від магнітоли',clock_phone:'час з телефона',clock_no_source:'нема ні телефона, ні часу від магнітоли',clock_waiting:'телефон підключено, часу ще не надіслав',
- keys_none:'жодного натискання з запуску',ancs_off:'сповіщень нема в цій збірці',ancs_no_phone:'телефон не підключено',ancs_waiting:'підключено, сповіщень ще не було',
- hu_off:'UART до ГУ вимкнено',hu_silent:'від ГУ жодного кадру з запуску',hu_quiet:'ГУ замовкло',hu_seen:'від ГУ були кадри, але ця збірка не знає, як давно',
- hu_dialect_vw:'ГУ говорить профілем VW, а плата — Toyota RAV4: у налаштуваннях авто на ГУ вибери Toyota RAV4',
- phone_ble_off:'Bluetooth вимкнено',phone_advertising:'видно, але не підключено',
- knobs_no_expander:'PCF8574 не знайдено: кабель QWIIC 2, живлення перехідника',lights_off:'вимкнено: Кнопки → Підсвітка',lights_fail:'драйвер стрічки не запустився'};
-const whyT=c=>WHY_T[c.code]||c.why||'';
-SCR.home={title:'Огляд',async render(m){
+/* стан ланцюга з /api/health — s.<state>; пояснення за стабільним code — w.<code> (web/i18n).
+   Прошивка шле лише code; коду, якого словник ще не знає, показуємо сам код. Код «працює»
+   без слів (panel_ok…) — порожньо */
+const stateT=s=>tHas('s.'+s)?t('s.'+s):s;
+const whyT=c=>tHas('w.'+c.code)?t('w.'+c.code):c.state==='ok'?'':c.code||'';
+SCR.home={title:'nav.home',async render(m){
  const D=has('display');
- m.innerHTML=card('Стан',
-  (D?`<div class="row"><div class="l"><b>Панель</b>${hintBtn('Деталі реєстрації')}<small id="hPanelW"></small><small class="hint" id="hPanelD" hidden></small></div><div class="c"><span id="hPanel" class="chip off">…</span></div></div>`+
-  '<div class="fr" id="hResyncRow" hidden><button class="btn pri wide" id="hResync" type="button">Перереєструвати панель</button></div>':'')+
-  row('ГУ по UART','<span id="hHu" class="chip off">…</span>','<span id="hHuW"></span>')+
-  (has('can2')?row('CAN A (авто)','<span id="hCan" class="chip off">…</span>','<span id="hCanW"></span>'):'')+
-  (has('knobs')?row('Ручки','<span id="hKnob" class="chip off">…</span>','<span id="hKnobW"></span>')+
-  row('Підсвітка','<span id="hLed" class="chip off">…</span>','<span id="hLedW"></span>'):'')+
-  (D?row('Музика','<span id="hSrc" class="chip off">…</span>','<span id="hTrack"></span><span class="bar" style="display:block"><i id="hProg"></i></span>')+
-  row('Годинник','<span id="hClk" class="chip off">…</span>','<span id="hClkW"></span>'):'')+
-  (has('ble')?`<div id="hPhoneRow">${row('Телефон','<span id="hPhone" class="chip off">…</span>','<span id="hPhoneW"></span>')}</div>`:'')+
-  row('Кнопки → виходи','<span id="hKeys" class="chips"></span>')+
-  (has('capture')?row('Запис CAN A','<button class="btn rec" id="hRec" type="button">…</button>','<span id="hRecW"></span>'):'')+
-  row('WiFi','<span id="hWifi" class="chip off">…</span>','<span id="hWifiW"></span>'),'','full');
+ m.innerHTML=card(t('h.status'),
+  (D?`<div class="row"><div class="l"><b>${t('h.panel')}</b>${hintBtn(t('h.panelDet'))}<small id="hPanelW"></small><small class="hint" id="hPanelD" hidden></small></div><div class="c"><span id="hPanel" class="chip off">…</span></div></div>`+
+  `<div class="fr" id="hResyncRow" hidden><button class="btn pri wide" id="hResync" type="button">${t('h.resync')}</button></div>`:'')+
+  row(t('h.hu'),'<span id="hHu" class="chip off">…</span>','<span id="hHuW"></span>')+
+  (has('can2')?row(t('h.can'),'<span id="hCan" class="chip off">…</span>','<span id="hCanW"></span>'):'')+
+  (has('knobs')?row(t('h.knobs'),'<span id="hKnob" class="chip off">…</span>','<span id="hKnobW"></span>')+
+  row(t('h.lights'),'<span id="hLed" class="chip off">…</span>','<span id="hLedW"></span>'):'')+
+  (D?row(t('h.music'),'<span id="hSrc" class="chip off">…</span>','<span id="hTrack"></span><span class="bar" style="display:block"><i id="hProg"></i></span>')+
+  row(t('h.clock'),'<span id="hClk" class="chip off">…</span>','<span id="hClkW"></span>'):'')+
+  (has('ble')?`<div id="hPhoneRow">${row(t('h.phone'),'<span id="hPhone" class="chip off">…</span>','<span id="hPhoneW"></span>')}</div>`:'')+
+  row(t('h.keys'),'<span id="hKeys" class="chips"></span>')+
+  (has('capture')?row(t('h.rec'),'<button class="btn rec" id="hRec" type="button">…</button>','<span id="hRecW"></span>'):'')+
+  row(t('h.wifi'),'<span id="hWifi" class="chip off">…</span>','<span id="hWifiW"></span>'),'','full');
  if(D)$('#hResync').onclick=e=>run(e.target,()=>API.post('/api/display/resync'));
  if(has('capture'))$('#hRec').onclick=e=>run(e.target,()=>API.post(e.target.classList.contains('on')?'/api/cap/stop':'/api/cap/start'),'').then(()=>this.tick());
  await this.tick();
@@ -38,28 +30,28 @@ SCR.home={title:'Огляд',async render(m){
  const[h,st,me,c2,cp,di]=await Promise.all([API.get('/api/health'),API.get('/api/status'),getIf(D,'/api/media'),getIf(has('can2'),'/api/can2'),getIf(has('capture'),'/api/cap'),getIf(D,'/api/display')]);
  if(!$('#hHu'))return;
  /* ланцюга може не бути (функцію не зібрано): тоді рядок каже «нема даних» */
- const ch=id=>(h.chains||[]).find(c=>c.id===id)||{state:'off',why:'нема даних'};
- const chip=(el,c,t)=>setChip(el,CH[c.state]||'off',t||STATE_T[c.state]||c.state);
- if(D){const p=ch('panel');chip('#hPanel',p,di.registered?'зареєстрована':'');$('#hResyncRow').hidden=p.state==='ok';
+ const ch=id=>(h.chains||[]).find(c=>c.id===id)||{state:'off',code:'no_data'};
+ const chip=(el,c,txt)=>setChip(el,CH[c.state]||'off',txt||stateT(c.state));
+ if(D){const p=ch('panel');chip('#hPanel',p,di.registered?t('h.registered'):'');$('#hResyncRow').hidden=p.state==='ok';
   $('#hPanelW').textContent=p.state==='ok'?nameOf(CAT.panels,di.type):whyT(p);
-  const dt=`Тип: ${di.type} · реєстрація функцій: ${di.funcReg?'плата':'штатне радіо'} · фаза: ${di.phase||DASH} · втрат сесії: ${di.sessionsLost||0} · остання: ${di.lastLoss||DASH}`;
+  const dt=t('h.panelDt',di.type,di.funcReg?t('h.byBoard'):t('h.byRadio'),di.phase||DASH,di.sessionsLost||0,di.lastLoss||DASH);
   $('#hPanelD').textContent=dt;$('#hPanel').title=dt;
   const md=ch('media'),src=enumOf('mediaSrc',me.sourceActive);chip('#hSrc',md,src&&me.sourceActive!=='none'?src.name:'');
-  const tt=me.srcTitle||me.title;$('#hTrack').textContent=tt?[tt,me.srcArtist||me.artist,me.srcAlbum].filter(Boolean).join(' — ')+(me.hasTransport?' · '+fmtT(me.elapsed)+' / '+fmtT(me.duration):''):whyT(md)||'нічого не грає';
+  const tt=me.srcTitle||me.title;$('#hTrack').textContent=tt?[tt,me.srcArtist||me.artist,me.srcAlbum].filter(Boolean).join(' — ')+(me.hasTransport?' · '+fmtT(me.elapsed)+' / '+fmtT(me.duration):''):whyT(md)||t('h.nothing');
   $('#hProg').parentElement.hidden=!me.hasTransport;$('#hProg').style.width=me.duration?(me.elapsed/me.duration*100)+'%':'0';
   const ck=ch('clock');chip('#hClk',ck,ck.state==='ok'?ck.hhmm:'');$('#hClkW').textContent=whyT(ck)}
  /* UART: що саме приходить каже, де шукати — дріт, швидкість чи нічого */
  const hu=ch('hu'),hn=hu.rxFrames||0,hj=hu.junk||0;
- if(hu.state!=='off'&&!hn&&hj){setChip('#hHu','bad','сміття');$('#hHuW').textContent=`байти є (${fmtN(hj)}), кадрів нема: дроти живі, не та швидкість чи протокол ГУ`}
- else if(hu.state!=='off'&&!hn){chip('#hHu',hu,'тиша');$('#hHuW').textContent='від ГУ нічого: дріт C8 (жовтий, RX), маса; або поміняй C7/C8 · відправлено '+fmtN(st.framesSent||0)}
- else{chip('#hHu',hu,hu.code==='hu_dialect_vw'?'профіль VW':'');$('#hHuW').textContent=[whyT(hu),'кадрів від ГУ '+fmtN(hn),hu.notSupported?'«не підтримується» '+fmtN(hu.notSupported):'',hu.badCs?'збій суми '+fmtN(hu.badCs):'','відправлено '+fmtN(st.framesSent||0)].filter(Boolean).join(' · ')}
+ if(hu.state!=='off'&&!hn&&hj){setChip('#hHu','bad',t('h.junk'));$('#hHuW').textContent=t('h.junkW',fmtN(hj))}
+ else if(hu.state!=='off'&&!hn){chip('#hHu',hu,t('h.silent'));$('#hHuW').textContent=t('h.silentW',fmtN(st.framesSent||0))}
+ else{chip('#hHu',hu,hu.code==='hu_dialect_vw'?t('h.vw'):'');$('#hHuW').textContent=[whyT(hu),t('h.huRx',fmtN(hn)),hu.notSupported?t('h.notSup',fmtN(hu.notSupported)):'',hu.badCs?t('h.badCs',fmtN(hu.badCs)):'',t('h.sent',fmtN(st.framesSent||0))].filter(Boolean).join(' · ')}
  if(has('knobs')){const k=ch('knobs'),l=ch('lights');
   chip('#hKnob',k,k.state==='ok'?'0x'+(k.addr||0).toString(16).toUpperCase():'');
-  $('#hKnobW').textContent=k.state==='ok'?`ліва ${k.left} · права ${k.right} · клацань ${k.clicks}`+(k.i2cErrors?` · збоїв I2C ${fmtN(k.i2cErrors)}`:'')+' — крути, числа мають мінятись':whyT(k);
-  chip('#hLed',l,l.state==='ok'?l.leds+' LED':'');$('#hLedW').textContent=l.state==='ok'?'кільця мають світитись і реагувати на ручки':whyT(l)}
+  $('#hKnobW').textContent=k.state==='ok'?[t('h.knobsW',k.left,k.right,k.clicks),k.i2cErrors?t('h.i2c',fmtN(k.i2cErrors)):''].filter(Boolean).join(' · '):whyT(k);
+  chip('#hLed',l,l.state==='ok'?t('h.leds',l.leds):'');$('#hLedW').textContent=whyT(l)}
  if(has('ble')){const ph=ch('phone');$('#hPhoneRow').hidden=h.bleMode==='off';chip('#hPhone',ph);$('#hPhoneW').textContent=[whyT(ph),nameOf(CAT.bleModes,h.bleMode)].filter(Boolean).join(' · ')}
  const kd=ch('keys').dest||{};$('#hKeys').innerHTML=CAT.dests.filter(d=>d.built&&kd[d.id]).map(d=>chipH(kd[d.id].live?'ok':'off',d.name)).join('');
- if(c2){canChip($('#hCan'),c2);$('#hCanW').textContent=c2.fps?'':c2.autobaud!=='manual'?'кадрів нема: шина спить або не підключена':'перевір швидкість'}
- if(cp){recBtn($('#hRec'),cp);$('#hRecW').textContent=cp.recording?`${fmtN(cp.frames)} кадрів · міток ${cp.markers}`:cp.error||''}
- wifiChip($('#hWifi'),$('#hWifiW'),st,'жодної мережі не знайдено');
+ if(c2){canChip($('#hCan'),c2);$('#hCanW').textContent=c2.fps?'':c2.autobaud!=='manual'?t('h.canNone'):t('h.canRate')}
+ if(cp){recBtn($('#hRec'),cp);$('#hRecW').textContent=cp.recording?t('h.recW',fmtN(cp.frames),cp.markers):cp.error||''}
+ wifiChip($('#hWifi'),$('#hWifiW'),st,t('h.noWifi'));
 }};

@@ -16,11 +16,12 @@ static inline int replyJson(PsychicRequest* r, const String& out)
 // A page gzipped at build time (tools/gen_pages.py -> src/net/gen/PageGz.cpp).
 // A page in flight holds ~8 kB of lwIP send buffers per socket; gzip cuts the
 // bytes and the time to a quarter.
-static inline int replyPage(PsychicRequest* r, const uint8_t* gz, size_t len)
+static inline int replyPage(PsychicRequest* r, const uint8_t* gz, size_t len,
+                            const char* type = "text/html")
 {
     PsychicResponse res(r);
     res.setCode(200);
-    res.setContentType("text/html");
+    res.setContentType(type);
     res.addHeader("Content-Encoding", "gzip");
     res.setContent(gz, len);
     return res.send();
