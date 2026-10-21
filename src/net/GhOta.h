@@ -40,6 +40,10 @@ namespace GhOta
         // Internal heap, bytes: free when the job started, and the lowest seen
         // during it (the TLS cost the BACKLOG asks to measure).
         uint32_t heapStart = 0, heapMin = 0;
+        // ...and at the steps between: the task running (its stack is
+        // internal), the HTTP client made, the last TLS connection open.
+        uint32_t heapTask = 0, heapClient = 0, heapTls = 0;
+        uint32_t stackFree = 0;        // the last job's unused stack, bytes
         bool     tlsInPsram = false;
     };
     void view(View& out);

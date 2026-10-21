@@ -40,6 +40,10 @@ void WebUi::routesGhOta()
         if (v.err[0]) d["err"] = v.err;
         d["heapStart"]  = v.heapStart;
         d["heapMin"]    = v.heapMin;
+        d["heapTask"]   = v.heapTask;
+        d["heapClient"] = v.heapClient;
+        d["heapTls"]    = v.heapTls;
+        d["stackFree"]  = v.stackFree;
         d["tlsInPsram"] = v.tlsInPsram;
         String out;
         serializeJson(d, out);

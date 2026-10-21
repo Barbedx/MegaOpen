@@ -84,6 +84,31 @@ namespace GhOta
             return heap_caps_calloc(n, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         }
 
+        // Everything else the job allocates and could keep in PSRAM: the
+        // download chunk, SHA256SUMS, the JSON pools. Internal RAM when there
+        // is no PSRAM (heap_caps_free frees either).
+        constexpr uint32_t CAP_PS = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
+        constexpr uint32_t CAP_IN = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+        void* psMalloc(size_t n) { return heap_caps_malloc_prefer(n, 2, CAP_PS, CAP_IN); }
+
+        struct PsramJson final : ArduinoJson::Allocator {
+            void* allocate(size_t n) override { return psMalloc(n); }
+            void  deallocate(void* p) override { heap_caps_free(p); }
+            void* reallocate(void* p, size_t n) override { return heap_caps_realloc_prefer(p, n, 2, CAP_PS, CAP_IN); }
+        };
+        PsramJson s_json;
+
+        // Internal heap at the points of a job, for the log: what the task, the
+        // client and the handshake each cost.
+        void stage(uint32_t View::*at)
+        {
+            const uint32_t h = heapNow();
+            portENTER_CRITICAL(&s_mux);
+            s_v.*at = h;
+            if (h < s_v.heapMin) s_v.heapMin = h;
+            portEXIT_CRITICAL(&s_mux);
+        }
+
         struct TlsInPsram {
             bool on = false;
             TlsInPsram()
@@ -108,11 +133,14 @@ namespace GhOta
             cfg.url            = url;
             cfg.cert_pem       = GH_ROOTS_PEM;
             cfg.timeout_ms     = TIMEOUT_MS;
-            cfg.buffer_size    = 2048;
-            cfg.buffer_size_tx = 2048;
+            // Above CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL (4096), so the client's
+            // malloc puts both in PSRAM; at 2048 they took 4 kB of internal heap.
+            cfg.buffer_size    = 4608;
+            cfg.buffer_size_tx = 4608;
             cfg.user_agent     = "MegaOpen/" MEGAOPEN_VERSION;   // the API refuses none
             esp_http_client_handle_t c = esp_http_client_init(&cfg);
             if (!c) { fail("no memory for the HTTP client"); return nullptr; }
+            stage(&View::heapClient);
             if (api) esp_http_client_set_header(c, "Accept", "application/vnd.github+json");
 
             int hop = 0;
@@ -122,7 +150,7 @@ namespace GhOta
                     fail("cannot connect (%s): no internet, or TLS", esp_err_to_name(e));
                     break;
                 }
-                sampleHeap();
+                stage(&View::heapTls);
                 len = esp_http_client_fetch_headers(c);
                 const int st = esp_http_client_get_status_code(c);
                 if (st == 200) return c;
@@ -179,7 +207,7 @@ namespace GhOta
             int64_t len = 0;
             esp_http_client_handle_t c = get(LATEST_URL, true, len);
             if (!c) return;
-            JsonDocument f, doc;
+            JsonDocument f(&s_json), doc(&s_json);
             GhRelease::filter(f);
             BodyReader rd{c};
             const DeserializationError je = deserializeJson(doc, rd, DeserializationOption::Filter(f));
@@ -209,13 +237,13 @@ namespace GhOta
             int64_t len = 0;
             esp_http_client_handle_t c = get(s_rel.sumsUrl, false, len);
             if (!c) return false;
-            char* b = (char*)malloc(SUMS_MAX);
+            char* b = (char*)psMalloc(SUMS_MAX);
             if (!b) { done(c); fail("no memory for SHA256SUMS"); return false; }
             size_t n = 0;
             for (int k; n < SUMS_MAX && (k = esp_http_client_read(c, b + n, SUMS_MAX - n)) > 0;) n += k;
             done(c);
             const bool ok = GhRelease::sumFor(b, n, s_rel.asset, want);
-            free(b);
+            heap_caps_free(b);
             if (!ok) fail("SHA256SUMS has no line for %s", s_rel.asset);
             return ok;
         }
@@ -233,10 +261,12 @@ namespace GhOta
                 fail("the image is %lld bytes, the release says %u", (long long)len, (unsigned)s_rel.size);
                 return;
             }
-            uint8_t* buf = (uint8_t*)malloc(CHUNK);
+            // PSRAM is fine: Update copies it into its own sector buffer before
+            // the flash write.
+            uint8_t* buf = (uint8_t*)psMalloc(CHUNK);
             if (!buf) { done(c); fail("no memory for the download"); return; }
             if (!Update.begin((size_t)len)) {
-                free(buf);
+                heap_caps_free(buf);
                 done(c);
                 fail("no OTA slot: %s", Update.errorString());
                 return;
@@ -275,7 +305,7 @@ namespace GhOta
             uint8_t have[32];
             mbedtls_md_finish(&md, have);
             mbedtls_md_free(&md);
-            free(buf);
+            heap_caps_free(buf);
             done(c);
 
             if (why) { Update.abort(); fail("%s at %u of %u bytes", why, (unsigned)got, (unsigned)len); return; }
@@ -297,6 +327,7 @@ namespace GhOta
         void task(void* arg)
         {
             const Job job = (Job)(uintptr_t)arg;
+            stage(&View::heapTask);
             {
                 TlsInPsram tls;
                 portENTER_CRITICAL(&s_mux);
@@ -305,10 +336,16 @@ namespace GhOta
                 if (job == Job::Check) runCheck();
                 else                   runInstall();
             }
-            LogBus::printf("[ota] github: %s done, internal heap min %u of %u (TLS in %s)",
-                           job == Job::Check ? "check" : "install", (unsigned)s_v.heapMin,
-                           (unsigned)s_v.heapStart, s_v.tlsInPsram ? "PSRAM" : "internal RAM");
+            // ESP-IDF counts the high-water mark in bytes.
+            const uint32_t stackFree = uxTaskGetStackHighWaterMark(nullptr);
+            LogBus::printf("[ota] github: %s done; internal heap %u, task %u, client %u, after TLS %u, "
+                           "min %u (TLS in %s); stack %u of %u unused",
+                           job == Job::Check ? "check" : "install", (unsigned)s_v.heapStart,
+                           (unsigned)s_v.heapTask, (unsigned)s_v.heapClient, (unsigned)s_v.heapTls,
+                           (unsigned)s_v.heapMin, s_v.tlsInPsram ? "PSRAM" : "internal RAM",
+                           (unsigned)stackFree, (unsigned)App::Plan::GHOTA_STACK);
             portENTER_CRITICAL(&s_mux);
+            s_v.stackFree = stackFree;
             s_busy = false;
             portEXIT_CRITICAL(&s_mux);
             vTaskDelete(nullptr);
@@ -327,6 +364,7 @@ namespace GhOta
             s_v.err[0]   = 0;
             s_v.got      = 0;
             s_v.heapStart = s_v.heapMin = heapNow();
+            s_v.heapTask = s_v.heapClient = s_v.heapTls = 0;
             portEXIT_CRITICAL(&s_mux);
 
             if (xTaskCreatePinnedToCore(task, "ghota", App::Plan::GHOTA_STACK, (void*)(uintptr_t)job,
