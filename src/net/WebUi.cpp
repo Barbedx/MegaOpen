@@ -27,8 +27,9 @@
 #include "../utils/LogFile.h"
 #include <LittleFS.h>
 #endif
-#include <esp_heap_caps.h>    // HEAP_HUNT
+#include <esp_heap_caps.h>    // HEAP_HUNT, Scratch
 #include <esp_system.h>
+#include <new>
 #if FEATURE_BLE && FEATURE_ANCS
 #include "../apple_notification_service.h"
 #endif
@@ -108,6 +109,30 @@ static esp_err_t replyAndRestart(PsychicRequest* r, const char* json)
     ESP.restart();
     return ESP_OK;
 }
+
+// Per-request working space for the settings routes: in PSRAM where the
+// board has it, else the heap; constructed fresh (value-initialised) and
+// freed when the handler returns. Static buffers here cost internal RAM for
+// the life of the board; these exist only while a settings request runs.
+template <class T>
+class Scratch {
+public:
+    Scratch()
+    {
+        void* m = heap_caps_malloc(sizeof(T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!m) m = heap_caps_malloc(sizeof(T), MALLOC_CAP_8BIT);
+        _p = m ? new (m) T() : nullptr;
+    }
+    ~Scratch() { if (_p) { _p->~T(); heap_caps_free(_p); } }
+    Scratch(const Scratch&) = delete;
+    Scratch& operator=(const Scratch&) = delete;
+    explicit operator bool() const { return _p != nullptr; }
+    T* operator->() { return _p; }
+    T* get() { return _p; }
+
+private:
+    T* _p = nullptr;
+};
 
 uint8_t ChunkOut::s_buf[512];
 
@@ -462,12 +487,18 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         // Everything that can be refused is checked before anything is applied
         // (the /api/map rule): a 400 lists every refusal and leaves the
         // settings as they were. Keys the registry does not know (apPass,
-        // huForget, a newer file's) are not refused. Static: httpd serves one
-        // request at a time, and these are not for its stack.
-        static Cfg::SettingsJson::Read rd;
-        static Cfg::SettingsJson::Errors er;
-        rd = Cfg::SettingsJson::Read{};
-        er = Cfg::SettingsJson::Errors{};
+        // huForget, a newer file's) are not refused. The ~5 kB of working
+        // space lives only for this request, in PSRAM where there is some
+        // (Scratch): not for httpd's stack, and not static (internal RAM).
+        struct Work {
+            Cfg::SettingsJson::Read   rd;
+            Cfg::SettingsJson::Errors er;
+            char err[Cfg::SettingsJson::Errors::MAX * Cfg::SettingsJson::Errors::LEN];
+        };
+        Scratch<Work> w;
+        if (!w) { out = "no memory"; return 503; }
+        Cfg::SettingsJson::Read& rd = w->rd;
+        Cfg::SettingsJson::Errors& er = w->er;
         Cfg::SettingsJson::read(m, d, rd, er, file);
         // The caller's own refusals (a file's knobs), in the same list.
         if (extra) {
@@ -475,9 +506,8 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
             er.more = (uint16_t)(er.more + extra->more);
         }
         if (er.any()) {
-            static char err[Cfg::SettingsJson::Errors::MAX * Cfg::SettingsJson::Errors::LEN];
-            er.join(err, sizeof(err));
-            out = err;
+            er.join(w->err, sizeof(w->err));
+            out = w->err;
             return 400;
         }
 
@@ -852,8 +882,9 @@ void WebUi::routes()
         // sanitize() had to bring into range is shown in the preview. The
         // copy is applied only after the settings were.
         JsonVariantConst kj = d["knobs"];
-        static Cfg::SettingsJson::Errors kerr;
-        kerr = Cfg::SettingsJson::Errors{};
+        Scratch<Cfg::SettingsJson::Errors> kerrBox;
+        if (!kerrBox) return r->reply(503, "text/plain", "no memory");
+        Cfg::SettingsJson::Errors& kerr = *kerrBox.get();
         bool knobs = false;
         uint16_t clamped = 0;
 #if FEATURE_KNOBS
