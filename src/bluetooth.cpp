@@ -11,6 +11,7 @@
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
+#include <atomic>
 
 #include <time.h>
 #include <sys/time.h>
@@ -78,7 +79,20 @@ namespace Bluetooth
         }
     } // namespace
 
-    void OnAmsPeerLost()
+    namespace
+    {
+        // Requests from other tasks, performed by ServicePending() on ble_svc.
+        std::atomic<bool> PeerLostReq{false};
+        std::atomic<bool> ClearBondsReq{false};
+    }
+
+    static void clearBonds();   // below, beside the public status calls
+
+    void OnAmsPeerLost() { PeerLostReq.store(true); }
+    void ClearBonds()    { ClearBondsReq.store(true); }
+
+    // ble_svc only: see OnAmsPeerLost() in bluetooth.h.
+    static void peerLost()
     {
         resetAmsState();
         // These cache characteristic pointers owned by the lost client; they are
@@ -88,6 +102,14 @@ namespace Bluetooth
         CurrentTimeService::StopTimeService();
         StatusText = HasBond() ? "Waiting for phone" : "Pair from iPhone";
         LOGI("BT", "AMS peer lost — caches detached");
+    }
+
+    void ServicePending()
+    {
+        if (PeerLostReq.exchange(false))
+            peerLost();
+        if (ClearBondsReq.exchange(false))
+            clearBonds();
     }
 
     void ServiceAms()
@@ -114,7 +136,7 @@ namespace Bluetooth
         if (!target)
         {
             if (Connected || Client)
-                OnAmsPeerLost();
+                peerLost();
             return;
         }
 
@@ -156,7 +178,7 @@ namespace Bluetooth
                      (unsigned)h, (unsigned)(SECURE_WAIT_MS / 1000));
                 target->role = Ble::PeerRole::NotAms;
                 target->clientBound = false;
-                OnAmsPeerLost();
+                peerLost();
                 return;
             }
             if (target->secureTries < SECURE_MAX_TRIES &&
@@ -181,7 +203,7 @@ namespace Bluetooth
                  (unsigned)h, (unsigned)(SETUP_DEADLINE_MS / 1000));
             target->role        = Ble::PeerRole::NotAms;
             target->clientBound = false;
-            OnAmsPeerLost();
+            peerLost();
             // Encrypted, full probe budget, no AMS: now it may be classified as
             // the HID host (classifyAsHid defers while the probe is live, since
             // an iPhone subscribes to HID too).
@@ -200,7 +222,7 @@ namespace Bluetooth
             // The peer may have gone during discovery — validate before writing to it.
             if (!BleHub::peers().byHandle(h))
             {
-                OnAmsPeerLost();
+                peerLost();
                 return;
             }
             AmsUp     = true;
@@ -211,7 +233,7 @@ namespace Bluetooth
         }
         if (!BleHub::peers().byHandle(h))
         {
-            OnAmsPeerLost();
+            peerLost();
             return;
         }
 #if FEATURE_ANCS
@@ -232,7 +254,8 @@ namespace Bluetooth
     bool IsTimeSet()   { return TimeSet; }
     bool HasBond()     { return NimBLEDevice::getNumBonds() > 0; }
 
-    void ClearBonds()
+    // ble_svc only (ClearBonds() asks for it).
+    static void clearBonds()
     {
         // Checked, with a fallback: deleteAllBonds() stops at the first failed
         // ble_gap_unpair() and can leave bonds behind. A leftover bond the phone
@@ -266,7 +289,7 @@ namespace Bluetooth
         for (uint8_t i = 0; i < Ble::PeerTable::kMax; i++)
             if (Ble::Peer *p = BleHub::peers().at(i))
                 p->clientBound = false;
-        OnAmsPeerLost();
+        peerLost();
         StatusText = "Pair from iPhone";
         LOGI("BT", "Bonds cleared. Also 'Forget this device' on the iPhone, then re-pair.");
     }

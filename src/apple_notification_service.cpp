@@ -76,7 +76,9 @@ namespace AppleNotificationService
         // blocking write inside a notify callback deadlocks the NimBLE host).
         void requestAttributes(uint32_t uid)
         {
-            // Read once: Detach() may null it from the host task in between.
+            // Safe without a lock: Detach() and the getClient() that frees
+            // the GATT tree both run on ble_svc, this task
+            // (Bluetooth::OnAmsPeerLost()), so neither lands under the write.
             NimBLERemoteCharacteristic *const cp = gControlPoint;
             if (!cp)
                 return;

@@ -487,6 +487,7 @@ namespace BleHub
         if (hidActive())
             Hid::service();
 
+        Bluetooth::ServicePending();
         if (amsActive())
             Bluetooth::ServiceAms();
 

@@ -113,14 +113,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   of it is not logged. Fine for the console's one-at-a-time keys; raise SLOTS
   if a web macro ever posts bursts. Where: `display/KeyVerdicts.h`.
 
-### BLE
-
-- **ANCS control point can be freed under a write.** `requestAttributes()`
-  now reads `gControlPoint` once, but a reconnect's `getClient()` ->
-  `deleteServices()` can still free it between that read and `writeValue()`.
-  The ANCS lock cannot be held across the write (the host task takes it in the
-  notify callback while the write waits on the host). Needs a use-count or a
-  loop-task-owned detach. Where: `apple_notification_service.cpp`.
 ### Web UI
 
 - **`/api/knobs` stays out of the settings registry (decided 2026-10-21).**

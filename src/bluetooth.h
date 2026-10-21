@@ -8,14 +8,23 @@
 // here; use BleHub::bindAmsClient() (one-client invariant).
 namespace Bluetooth {
 
-// --- driven by BleHub ---
+// --- driven by BleHub, on ble_svc ---
+// Requests from other tasks (OnAmsPeerLost, ClearBonds), performed here.
+// Every pass, whatever the roles.
+void ServicePending();
 void ServiceAms();     // per-loop AMS setup/keepalive; called by BleHub::Service()
-void OnAmsPeerLost();  // the peer holding our client went away — drop all caches
+
+// Any task. The peer holding our client went away: ble_svc drops every cache
+// (AMS, ANCS, CTS, the client) at its next pass. Only ble_svc drops them, and
+// only ble_svc rebinds the client (whose getClient() frees the old GATT
+// tree), so a cached characteristic is never freed or nulled under a write.
+void OnAmsPeerLost();
 
 // --- public status ---
 bool IsConnected();
 bool IsTimeSet();
 bool HasBond();
+// Any task: forget every bond; ble_svc does it at its next pass.
 void ClearBonds();
 
 const char* GetStatusText(); // short status for the car display
