@@ -17,6 +17,12 @@
 //   web task   config()/setConfig()/live(): swaps Config under a mutex and sets
 //              a flag; never touches Source or Lights. The knob task only
 //              try-takes that mutex and keeps its last Config while it is held.
+//
+// That mutex makes one swap safe, not a read-modify-write (config(), change a
+// field, setConfig()). Every such edit runs under the settings lock
+// (Cfg::Config::lock): the web routes hold it for their whole handler and the
+// panel menu's applyPending() for each commit, so a menu commit can never land
+// between a web request's config() and its setConfig() and be overwritten.
 namespace Knobs
 {
     class Service {

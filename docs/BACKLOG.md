@@ -142,13 +142,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   loop-task-owned detach. Where: `apple_notification_service.cpp`.
 ### Web UI
 
-- **A knob change from the menu can be lost under a web save (review,
-  2026-10-21).** POST /api/settings copies the knob config when the request
-  starts and `setConfig()`s it whole at the end; a menu commit on net_svc in
-  between (`knobsSet`) is overwritten. KnobService's mutex guards each swap,
-  not the read-modify-write. Where: `WebUi.cpp` /api/settings (`kc`),
-  `PanelMenu::applyPending`.
-
 - **`/api/knobs` stays out of the settings registry (decided 2026-10-21).**
   Slice 7 folded `/api/cap/settings`, `/api/loglevel`, `/api/routing`,
   `/api/messages/enable` and `/api/canbox/tuning` into `/api/settings` (9
@@ -213,6 +206,13 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   debug callback guard.
 
 ## Done
+
+- **A menu knob commit is no longer lost under a web save** (review,
+  2026-10-21): closed by the settings lock (3ad4450). The /api/settings
+  handler and every other web route hold it for the whole request, and the
+  menu's applyPending() for each commit, so the POST's config() ...
+  setConfig() and a menu commit cannot interleave. Written down in
+  `knobs/KnobService.h`.
 
 - **A menu Bool pressed twice toggles twice** (review, 2026-10-21): the
   engine writes each commit into the menu's own copy at once, and the copy

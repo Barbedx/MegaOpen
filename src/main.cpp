@@ -1638,6 +1638,8 @@ void setup()
         m.cfg = &g_cfg;
         m.car = &g_state;
 #if FEATURE_KNOBS
+        // Get and set together under the settings lock (applyPending holds it),
+        // like every knob read-modify-write (Knobs::Service's comment).
         m.knobsGet = [](Knobs::Config& out) { out = g_knobs.config(); return true; };
         m.knobsSet = [](const Knobs::Config& c) { g_knobs.setConfig(c); g_cfg.saveKnobs(c); };
 #endif

@@ -553,6 +553,8 @@ void WebUi::routes()
         Capture::Settings* csp = nullptr;
 #endif
 #if FEATURE_KNOBS
+        // Read here, set whole at the end: safe because this handler holds the
+        // settings lock throughout, as the menu's knob commits do (dispatch()).
         Knobs::Config kc;
         if (_knobs) kc = _knobs->config();
         Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
