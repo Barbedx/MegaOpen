@@ -988,16 +988,18 @@ void WebUi::routes()
                 {"panel_off", "FEATURE_DISPLAY_CAN is off"},
                 {"panel_unregistered", "registration lost — panel is not completing the handshake"},
                 {"panel_ok", ""},
-                {"panel_foreign_master", "another radio drives this panel; MegaOpen stays silent (passive, listen-only)"},
+                {"panel_foreign_master", "another radio's sync on this bus: MegaOpen is silent (passive, listen-only); it re-detects 30 s after the syncs stop, or at a restart"},
                 {"panel_cluster_only", "only an instrument cluster answers on this bus, no AFFA panel"}};
             const bool reg = ps.attached && ps.registered;
             // What else is on the bus (PanelBusWatch) explains a panel that
             // never registers: an OEM radio has it (and we stay silent), or
             // there is no panel at all.
-            const bool foreign = _panelWatch && _panelWatch->foreignMaster();
+            const bool foreign = _panelWatch && _panelWatch->foreignMaster(millis());
             const bool cluster = !reg && _panelWatch && _panelWatch->clusterOnly();
             const uint8_t i = !ps.attached ? 0 : foreign ? 3 : reg ? 2 : cluster ? 4 : 1;
-            JsonObject o = chain("panel", i == 0 ? "off" : i == 2 ? "ok" : i == 3 ? "idle" : "broken", W[i]);
+            // A foreign master is "broken", not "idle": nothing is drawn, and it
+            // may be a false positive worth a look.
+            JsonObject o = chain("panel", i == 0 ? "off" : i == 2 ? "ok" : "broken", W[i]);
             if (_panelWatch) {
                 o["foreignMasters"] = _panelWatch->masters();
                 o["clusterPings"]   = _panelWatch->clusterPings();

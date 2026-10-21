@@ -163,7 +163,7 @@ JSON from `http://<board>/api/health`: one entry per part with a `code`.
 | code | means | try |
 | --- | --- | --- |
 | `panel_unregistered` | the display is not finishing its handshake | check CAN B wiring and power; reboot the board |
-| `panel_foreign_master` | another radio already drives the display; MegaOpen stays silent on that bus (listens only) until reboot | remove the OEM radio from the display bus, or leave MegaOpen passive there |
+| `panel_foreign_master` | another radio's sync is on the display bus; MegaOpen is silent there (listens only) and checks again 30 s after it stops, or at a restart | remove the OEM radio from the display bus; if there is none, report it (a false detection) |
 | `panel_cluster_only` | only an instrument cluster answers on this bus, no AFFA display | CAN B is wired to the wrong bus |
 | `media_off` | now playing switched off | **Екран → Показувати музику** |
 | `media_no_panel` | nothing can be drawn | see `panel_unregistered` |

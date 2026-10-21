@@ -212,9 +212,11 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 
 - **The panel bus watch** (715d886, v1.2.0): `MegaOpen::PanelBusWatch`
   listens (never transmits) for another bus master (0x3AF/0x3DF syncs) and a
-  lone cluster (0x3CF `69`, no `61 11`). The panel TX gate opens 1 s after
-  the link comes up, only with no other master heard; a foreign master makes
-  the stack passive, TX-gated and listen-only until reboot. Health
+  lone cluster (0x3CF `69`, no `61 11`). The panel TX gate opens 3 s after
+  the first poll, and only with no foreign sync in the last 3 s (one is
+  enough to keep it shut); two syncs within 3 s make a foreign master, and
+  the stack goes passive, TX-gated and listen-only until 30 s pass without
+  one (fixed after review in the commit after 715d886). Health
   `panel_foreign_master` / `panel_cluster_only`. Replays in test_panelwatch;
   the foreign-master path is still to be seen on a bus with an OEM radio.
 

@@ -1116,7 +1116,7 @@ static uint32_t          g_affaTracePrinted = 0;
 static void affaTap(const affa::Frame& f, affa::Direction d, void*)
 {
     // Received frames only: what the rest of the bus says, never our own.
-    if (d != affa::Direction::Tx) g_panelWatch.onRx(f.id, f.len, f.data);
+    if (d != affa::Direction::Tx) g_panelWatch.onRx(f.id, f.len, f.data, millis());
     // Feed the raw frame ring: the panel bus is not a car source.
     ringPut((d == affa::Direction::Tx) ? 'T' : 'R', f.id, f.data, f.len);
 
@@ -1950,10 +1950,9 @@ void setup()
     }
     memMark("can+display");
     // Listen before talking: the TX gate stays shut until PanelBusWatch has
-    // heard the bus for LISTEN_MS without another master on it
-    // (panelWatchStep()), so an OEM radio is found before we send a sync.
+    // listened for LISTEN_MS from the first poll() with no other master's
+    // sync (panelWatchStep()), so an OEM radio is found before we send one.
     g_twai.setTxEnabled(false);
-    g_panelWatch.begin(millis());
     g_web.attachPanelWatch(&g_panelWatch);
     // Passive = a real radio owns the handshake; we send no sync or hello and
     // never register. Must be set if an OEM radio is on the bus.
@@ -2447,21 +2446,35 @@ static void loopWait()
 // gate opens once the listen window has passed.
 static void panelWatchStep(uint32_t now)
 {
-    static bool s_silent = false;
-    if (s_silent) return;
-    if (g_panelWatch.foreignMaster()) {
+    static bool s_silent = false, s_open = false;
+    // The window starts at the first poll(): only poll() drains the receive
+    // queue, so before it nothing has been heard.
+    g_panelWatch.begin(now);
+    if (g_panelWatch.foreignMaster(now)) {
+        if (s_silent) return;
         s_silent = true;
+        s_open = false;
         App::Panel::lib().setPassive(true);
         g_twai.setTxEnabled(false);
         const bool lo = g_twai.setListenOnly(true);
-        LogBus::printf("[panel] another bus master on the panel bus (sync 0x%03X): MegaOpen stays silent "
-                       "(passive, TX off, listen-only%s) until reboot",
-                       (unsigned)g_panelWatch.masterId(), lo ? "" : " FAILED");
+        LogBus::printf("[panel] another bus master on the panel bus (sync 0x%03X): MegaOpen is silent "
+                       "(passive, TX off, listen-only%s) until it has been quiet %u s",
+                       (unsigned)g_panelWatch.masterId(), lo ? "" : " FAILED",
+                       (unsigned)(MegaOpen::PanelBusWatch::REARM_MS / 1000));
         return;
     }
-    // Once: after that the gate is whoever else's to shut.
-    static bool s_open = false;
-    if (!s_open && g_panelWatch.mayTransmit(now)) { s_open = true; g_twai.setTxEnabled(true); }
+    if (s_silent) {
+        // No foreign sync for REARM_MS: back to what the settings say; the
+        // gate opens below once the listen rule allows it.
+        s_silent = false;
+        g_twai.setListenOnly(false);
+        App::Panel::lib().setPassive(!g_cfg.s().funcReg);
+        LogBus::line("[panel] no other bus master for a while: the panel stack listens, then talks again");
+    }
+    // Ours to open and to close: a single foreign sync shuts the gate again
+    // for LISTEN_MS, before a second one would make it a master.
+    const bool may = g_panelWatch.mayTransmit(now);
+    if (may != s_open) { s_open = may; g_twai.setTxEnabled(may); }
 }
 #endif
 

@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- Health says when the head unit speaks the VW canbox profile (`hu_dialect_vw`), with the 0xF3 "not supported" count.
+- The panel bus watch: MegaOpen listens before it talks on the display bus and stays silent beside another radio (`panel_foreign_master`); a bus with only a cluster says so (`panel_cluster_only`).
+
+### Changed
+- The display's first registration starts about 3 s later on every boot: the panel stack listens for another radio's sync first.
+
 ## [1.1.0] - 2026-10-21
 
 ### Added
