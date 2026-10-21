@@ -190,6 +190,20 @@ canvas.glassC{display:block;width:100%;height:auto;border-radius:8px;border:2px 
 tr.nofw td{color:var(--mute)}
 tr.testing td:nth-child(2){color:var(--warn);font-weight:700}
 .tag.new{color:var(--acc);border-color:var(--acc)}
+/* прапорець у таблиці: зона натискання 40 px — label навколо нього */
+.cbh{display:inline-flex;align-items:center;justify-content:center;min-width:40px;min-height:40px;cursor:pointer}
+/* числові поля в рядку кнопок не стискаються до нуля */
+.fr>input.in[type=number]{flex:0 0 auto;min-width:80px}
+/* телефон: рядок зі списком — підпис зверху, список на всю ширину (довгі назви не обрізаються) */
+@media (max-width:559px){
+ .row:has(>.c>select){flex-wrap:wrap}
+ .row:has(>.c>select)>.c{max-width:none;width:100%}
+ .row:has(>.c>select)>.c>select{flex:1}
+ #mExpRow,#mSwRow{flex-wrap:wrap}
+ #mExpRow>.c,#mSwRow>.c{max-width:none;width:100%;justify-content:flex-start}
+}
+#mExp{display:grid;grid-template-columns:1fr 1fr;gap:0 12px;border:0;padding:0;width:100%}
+#mSwRow .fr{border:0;padding:0}
 /* телефон: клік і утримання одне під одним, кожне на всю ширину; підпис замість шапки колонок */
 @media (max-width:559px){
  .kgrid{grid-template-columns:minmax(0,1fr)}

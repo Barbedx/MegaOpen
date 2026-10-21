@@ -45,9 +45,9 @@ SCR.car={title:'Авто',async render(m){
  card('Файли',row('','','Коли місце закінчується, найстаріші файли видаляються самі. 🔒 — не видаляти. Мітка ставить 🔒 на свою сесію сама.')+`<div id="files"></div><div class="fr"><button class="btn dng" type="button" id="fUnp">Видалити всі без 🔒</button></div>`,'cFiles','custom'):C2?notBuilt('Запис','запису'):'')+
  card('RAV4 → ГУ',
   row('Слати дані авто в ГУ',sw('/api/map|send',mp.send),'запам’ятовується','Ліворуч — що вміє протокол RAV4 (0x2E …). ▶ шле тестове значення в ГУ одразу і тримає 30 с: так видно, що й де покаже Android. Потім «прив’язати» поле до ID машини. Нема в прошивці — апка це читає, але плата ще не шле.')+
-  row('Одиниці',sel('#fuel',enumOpts('fuelUnits'),mp.units.fuel)+sel('#trip',enumOpts('tripUnits'),mp.units.trip),'','','mUnits')+
-  row('Експерименти ГУ','<span class="fr" id="mExp">'+[[1,'t° ОР'],[2,'пальне в 7D04'],[4,'розрах. витрата'],[8,'селектор 7D06']].map(([b,t])=>'<label class="ck"><input type="checkbox" class="cb" data-b="'+b+'"'+((mp.exp|0)&b?' checked':'')+'> '+t+'</label>').join(' ')+'</span>','за замовчуванням вимкнені','Поля, які магнітола розбирає, але жоден запис їх не показав. t° ОР — 0x7D 09 з температурою охолодної рідини; пальне — літри ×10 у 0x7D 04 D4-D5 замість F2 08 (і одометр щитка, якщо 0x5FD мовчить); розрах. витрата — запас ходу й витрата з лічильника 0x551 у 0x21/0x22/0x23; селектор — 0x7D 06, лише зі значенням з прогону нижче. Вмикай по одному і дивись, що зміниться на планшеті.')+
-  row('Прогін селектора','<span class="fr"><select class="in" id="mSwT" aria-label="Крок"><option value="3">3 с</option><option value="5" selected>5 с</option><option value="8">8 с</option></select><button class="btn" type="button" id="mSwGo">Почати</button><b class="mono" id="mSwV">—</b></span>','0x7D 06, D2 = 0…15','Шле в ГУ 0x7D 06 з D2 = 0, 1 … 15, одне значення на крок. Дивись на планшет: коли з’явиться P, R, N чи D, запиши число D2. Потрібен увімкнений «селектор 7D06» вище. Кожне значення тримається 30 с; після зупинки кадр зникає сам.')+
+  row('Одиниці: пальне · пробіг',sel('#fuel',enumOpts('fuelUnits'),mp.units.fuel,'aria-label="Пальне"')+sel('#trip',enumOpts('tripUnits'),mp.units.trip,'aria-label="Пробіг"'),'','','mUnits')+
+  row('Експерименти ГУ','<span class="fr" id="mExp">'+[[1,'t° ОР'],[2,'пальне в 7D04'],[4,'розрах. витрата'],[8,'селектор 7D06']].map(([b,t])=>'<label class="ck"><input type="checkbox" class="cb" data-b="'+b+'"'+((mp.exp|0)&b?' checked':'')+'> '+t+'</label>').join(' ')+'</span>','за замовчуванням вимкнені','Поля, які магнітола розбирає, але жоден запис їх не показав. t° ОР — 0x7D 09 з температурою охолодної рідини; пальне — літри ×10 у 0x7D 04 D4-D5 замість F2 08 (і одометр щитка, якщо 0x5FD мовчить); розрах. витрата — запас ходу й витрата з лічильника 0x551 у 0x21/0x22/0x23; селектор — 0x7D 06, лише зі значенням з прогону нижче. Вмикай по одному і дивись, що зміниться на планшеті.','mExpRow')+
+  row('Прогін селектора','<span class="fr"><select class="in" id="mSwT" aria-label="Крок"><option value="3">3 с</option><option value="5" selected>5 с</option><option value="8">8 с</option></select><button class="btn" type="button" id="mSwGo">Почати прогін</button><b class="mono" id="mSwV">—</b></span>','0x7D 06, D2 = 0…15','Шле в ГУ 0x7D 06 з D2 = 0, 1 … 15, одне значення на крок. Дивись на планшет: коли з’явиться P, R, N чи D, запиши число D2. Потрібен увімкнений «селектор 7D06» вище. Кожне значення тримається 30 с; після зупинки кадр зникає сам.','mSwRow')+
   `<div class="pad"><div class="seg wrap" id="mGrp" data-v="усі">${groups.map(g=>`<button type="button" data-val="${esc(g)}" class="${g==='усі'?'on':''}">${esc(g)}</button>`).join('')}</div></div>`+
   `<div class="fr"><button class="btn" type="button" id="mReset">Заводські прив’язки</button></div>`+
   `<div class="tw"><table class="mapt"><thead><tr><th>Поле</th><th>Зараз</th><th>Звідки</th><th>Тест</th></tr></thead><tbody id="map">${raiseRows(mp).map(mapRow).join('')}</tbody></table></div><datalist id="idl"></datalist>`,'cMap','custom full')+
@@ -69,13 +69,13 @@ SCR.car={title:'Авто',async render(m){
  // RAV4
  saver($('#cMap .row'),()=>API.post('/api/map',{send:$('[data-k="/api/map|send"]').checked}),'[data-k]');
  saver($('#mUnits'),()=>API.post('/api/map',{units:{fuel:val($('[data-f="fuel"]')),trip:val($('[data-f="trip"]'))}}),'[data-f]');
-$('#mSwGo').onclick=async e=>{const b=e.target,v=$('#mSwV'),live=t=>this.sw===t&&document.contains(b);if(this.sw){this.sw=null;b.textContent='Почати';return}
+$('#mSwGo').onclick=async e=>{const b=e.target,v=$('#mSwV'),live=t=>this.sw===t&&document.contains(b);if(this.sw){this.sw=null;b.textContent='Почати прогін';return}
   if(!$('#mExp [data-b="8"]').checked){sv(svOf(b),'bad','спершу увімкни «селектор 7D06»');return}
-  const tok=this.sw={};b.textContent='Стоп';
+  const tok=this.sw={};b.textContent='Зупинити прогін';
   for(let n=0;n<16&&live(tok);n++){v.textContent='D2 = '+n;
    try{await API.post('/api/map/test',{id:'prnd',value:n})}catch(err){sv(svOf(b),'bad',errT(err));break}
    for(let w=+$('#mSwT').value*10;w>0&&live(tok);w--)await sleep(100)}
-  if(this.sw===tok){this.sw=null;b.textContent='Почати';sv(svOf(b),'ok','прогін закінчено')}};
+  if(this.sw===tok){this.sw=null;b.textContent='Почати прогін';sv(svOf(b),'ok','прогін закінчено')}};
 $('#mExp').onchange=e=>{const m=$$('#mExp [data-b]').reduce((a,c)=>a|(c.checked?+c.dataset.b:0),0);run(e.target,()=>API.post('/api/map',{exp:m}),'експерименти: '+m)};
  $('#mReset').onclick=e=>ask(e.target,'Повернути заводські прив’язки? Твої зміни зникнуть.',()=>run(e.target,()=>API.post('/api/map',{reset:true}),'заводські').then(()=>this.map()));
  $('#mGrp').addEventListener('change',e=>{this.grp=e.currentTarget.dataset.v;$$('#map tr[data-id]').forEach(tr=>{const hide=this.grp!=='усі'&&tr.dataset.g!==this.grp;tr.hidden=hide;const ed=$(`#map tr[data-for="${tr.dataset.id}"]`);if(ed)ed.hidden=hide})});
