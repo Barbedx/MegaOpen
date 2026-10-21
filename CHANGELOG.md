@@ -5,12 +5,31 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-21
+
 ### Added
-- Health says when the head unit speaks the VW canbox profile (`hu_dialect_vw`), with the 0xF3 "not supported" count.
-- The panel bus watch: MegaOpen listens before it talks on the display bus and stays silent beside another radio (`panel_foreign_master`); a bus with only a cluster says so (`panel_cluster_only`).
+- Settings to a file and back: GET/POST `/api/config` and a card on Плата; a dry run shows what changes before anything applies. Passwords never go in the file.
+- SK6812 RGBW LED strips: a third strip type, white from min(r, g, b).
+- Panel bus watch: the panel link listens 3 s from the first poll before it sends; any other radio's sync keeps MegaOpen silent (health `panel_foreign_master`), and it re-detects 30 s after the syncs stop. A lone cluster reads `panel_cluster_only`. First registration comes ~3 s later than before.
+- Health: `hu_dialect_vw` when the head unit speaks the VW canbox profile instead of Toyota, with the 0xF3 "not supported" count.
+- Glass sweeps: a 10-minute camera procedure (`docs/glass-sweeps.md`) with a step-through on Сервіс; a developer-only `/api/display/inforaw` row with a declared length.
+- `SECURITY.md`: what is exposed and how to report; README and the user guide say to change the AP password at first boot.
+- `docs/RELEASING.md`: how a release goes.
+- `tools/rc_smoke.sh`: a release-candidate smoke test against a running board (reads and dry runs only).
 
 ### Changed
-- The display's first registration starts about 3 s later on every boot: the panel stack listens for another radio's sync first.
+- Requests from other sites are refused: every change needs the header `X-MegaOpen: 1` and the board answers only to its IP or its own `.local` name. `/update` leads to the Плата page; a WiFi scan is a POST.
+- POST `/api/settings` lists every refusal in its 400 and applies nothing; `?dry=1` checks without applying.
+- Phone layout: 40 px touch targets, whole select labels below 560 px, 4.5:1 contrast in both themes.
+- Errors and reasons on the page in Ukrainian.
+- The page polls only what is on screen; Огляд every 2 s.
+- The 32 kB log ring and request-only buffers live in PSRAM; idle internal heap ~99 kB (was ~58).
+- AffaDisplay v1.1.1 (docs and examples only; same firmware).
+- README: flashing and building from a clean machine (esptool 5 spelling, download mode, checksums, Windows path limit).
+
+### Fixed
+- `t2can_usbhid` builds on Windows again (the compile line passed the 32 kB limit).
+- A web key sent while four others wait for the panel's verdict is logged as unwatched; before, its refusal went unlogged.
 
 ## [1.1.0] - 2026-10-21
 
@@ -68,6 +87,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - CloudLink and `cloud/`.
 - OTA password; the WiFi password protects the board.
 
-[Unreleased]: https://github.com/Barbedx/MegaOpen/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Barbedx/MegaOpen/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Barbedx/MegaOpen/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/Barbedx/MegaOpen/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Barbedx/MegaOpen/releases/tag/v1.0.0
