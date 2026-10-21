@@ -1,0 +1,108 @@
+# Host tests, the three board builds and the repo checks, on every push to
+# master and every pull request. The same gate a slice passes locally.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PLATFORMIO_VERSION: "6.1.19"
+
+jobs:
+  native:
+    name: host tests + rules
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio/libdeps
+          key: pio-native-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-native-
+      - run: pip install "platformio==${PLATFORMIO_VERSION}"
+      - name: pio test -e native
+        run: pio test -e native
+      - name: check_rules
+        run: python tools/check_rules.py
+      # catalog.json, features.json and decode.json for check_nav and build_sim.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-build
+          path: build/
+          if-no-files-found: error
+
+  firmware:
+    name: build ${{ matrix.env }}
+    needs: native
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [t2can, t2can_usbhid, direct]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio/libdeps
+          key: pio-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ matrix.env }}-
+      - run: pip install "platformio==${PLATFORMIO_VERSION}"
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-build
+          path: build/
+      - name: pio run -e ${{ matrix.env }}
+        run: pio run -e ${{ matrix.env }}
+      - name: check_nav
+        run: python tools/check_nav.py ${{ matrix.env }}
+      - name: check_pages
+        run: python tools/check_pages.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: features-${{ matrix.env }}
+          path: build/features/${{ matrix.env }}.json
+          if-no-files-found: error
+
+  sim:
+    name: UI simulator
+    needs: firmware
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-build
+          path: build/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: features-*
+          path: build/features/
+          merge-multiple: true
+      - name: build_sim
+        run: python tools/build_sim.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-sim
+          path: build/ui-sim.html

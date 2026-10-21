@@ -1,0 +1,84 @@
+# A tag vX.Y.Z builds every board env and publishes a GitHub release:
+#   megaopen-<env>-<ver>.bin           the app, for OTA (/update)
+#   megaopen-<env>-<ver>-factory.bin   bootloader + partitions + boot_app0 + app,
+#                                      for a first USB flash at 0x0
+#   SHA256SUMS
+# Notes: the CHANGELOG.md section for <ver> and the AffaDisplay commit the build
+# actually used.
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: write
+
+env:
+  PLATFORMIO_VERSION: "6.1.19"
+  ENVS: "t2can t2can_usbhid direct"
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Tag matches src/Version.h
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          code=$(sed -n 's/^#define MEGAOPEN_VERSION "\(.*\)"$/\1/p' src/Version.h)
+          wire=$(sed -n 's/^#define MEGAOPEN_VERSION_WIRE "\(.*\)"$/\1/p' src/Version.h)
+          echo "tag $ver, MEGAOPEN_VERSION '$code', WIRE '$wire'"
+          [ "$code" = "$ver" ] || { echo "::error::MEGAOPEN_VERSION is '$code', tag is $ver"; exit 1; }
+          [ "$(echo "$wire" | sed 's/ *$//')" = "MegaOpen $ver" ] \
+            || { echo "::error::MEGAOPEN_VERSION_WIRE is '$wire', expected 'MegaOpen $ver'"; exit 1; }
+          echo "VER=$ver" >> "$GITHUB_ENV"
+
+      - name: CHANGELOG section
+        run: |
+          awk -v v="$VER" '
+            /^\[[^]]+\]: / { if (on) exit }
+            /^## \[/ { if (on) exit; if (index($0, "## [" v "]") == 1) { on = 1; next } }
+            on' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "::error::CHANGELOG.md has no '## [$VER]' section"; exit 1; }
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio/libdeps
+          key: pio-release-${{ hashFiles('platformio.ini') }}
+      - run: pip install "platformio==${PLATFORMIO_VERSION}"
+
+      - name: Build
+        run: |
+          mkdir -p dist
+          for e in $ENVS; do
+            pio run -e "$e" -t factory
+            cp ".pio/build/$e/firmware.bin"         "dist/megaopen-$e-$VER.bin"
+            cp ".pio/build/$e/firmware-factory.bin" "dist/megaopen-$e-$VER-factory.bin"
+          done
+          (cd dist && sha256sum *.bin > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - name: Release notes
+        run: |
+          lib=$(git -C .pio/libdeps/t2can/AffaDisplay rev-parse HEAD)
+          {
+            cat notes.md
+            echo
+            echo "Built with [AffaDisplay@${lib:0:7}](https://github.com/Barbedx/AffaDisplay/commit/$lib)."
+            echo
+            echo "First flash over USB: \`esptool.py write_flash 0x0 megaopen-<env>-$VER-factory.bin\`."
+            echo "Later updates: \`megaopen-<env>-$VER.bin\` from the board's /update page."
+          } > release.md
+          cat release.md
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "MegaOpen $VER" --notes-file release.md dist/*
