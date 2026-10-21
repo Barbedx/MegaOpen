@@ -203,6 +203,9 @@ void WebUi::begin(Cfg::Config& cfg, KeyEngine& engine, KeyMap& map,
     // No OTA password: the web API that sets every password has none either,
     // so the WiFi password is the only real gate.
     ElegantOTA.begin(&_server);
+#if FEATURE_GH_OTA
+    gateLocalOta();
+#endif
     mem("ota");
     if (_routesLost)
         LogBus::printf("[web] %u route(s) did not fit the table — raise ROUTE_MAX\n", _routesLost);

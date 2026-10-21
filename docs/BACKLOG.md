@@ -145,8 +145,13 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   (an rc orders below its final); Оновити downloads
   `megaopen-<env>-<ver>.bin` into the free slot while hashing it, and sets the
   boot partition only when the SHA-256 matches the release's `SHA256SUMS`;
-  then the usual OTA trial. Never automatic; refused in AP mode and while the
-  car's speed is fresh and above 3 km/h. `src/net/GhOta.*` (task, TLS),
+  then it WAITS: the reboot into the usual OTA trial comes from the page's
+  «Перезавантажити», or by itself once the speed is fresh and 0 (a power-off
+  boots it too). Never automatic; install and reboot refused in AP mode and
+  while the car's speed is fresh and above 3 km/h. One OTA owner: the local
+  upload (`/ota/*`) answers 409 while a GitHub job runs or waits, and an
+  install clears a local session idle for 60 s. Every URL, first and after
+  each redirect, must be https on a GitHub host (`GhRelease::trustedUrl`). `src/net/GhOta.*` (task, TLS),
   `GhRelease.*` (decisions, `test_ghota`), `GhRoots.h` (the trusted roots,
   chains checked 2026-10-21), routes `/api/fw*`. `FEATURE_GH_OTA` is on for
   the T-2CAN envs, off for `direct` (no PSRAM for the handshake). Still to

@@ -46,6 +46,11 @@ namespace GhRelease
     Pick pick(JsonVariantConst rel, const char* env, Release& out);
     const char* pickText(Pick p);
 
+    // A URL the update may fetch: https:// and one of GitHub's hosts (the API,
+    // github.com's release links, and the CDNs they redirect to). Checked
+    // before every request and after every redirect.
+    bool trustedUrl(const char* url);
+
     // The image's hash from SHA256SUMS text (not NUL-terminated). Accepts
     // sha256sum's text ("  name") and binary (" *name") forms, any case.
     bool sumFor(const char* sums, size_t len, const char* asset, uint8_t out[32]);

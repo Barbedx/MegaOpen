@@ -10,6 +10,9 @@
 //   release-assets.githubusercontent.com (where an asset URL redirects)
 //                                  *.github.io <- Let's Encrypt YR1 <- ISRG Root YR
 //                                  <- ISRG Root X1
+// What is checked: the chain to one of these roots, and the host name. NOT the
+// validity dates: the prebuilt sdkconfig has no MBEDTLS_HAVE_TIME_DATE and
+// the board no RTC or SNTP, so notBefore/notAfter are never read.
 // Each issuer has one spare. When GitHub moves to another CA the check fails
 // with a TLS error on the page, and the local upload (/update) still works.
 // PEMs from the Mozilla bundle (Git for Windows' ca-bundle.crt).

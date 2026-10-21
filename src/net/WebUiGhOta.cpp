@@ -2,18 +2,15 @@
 #include "GhOta.h"
 #if FEATURE_GH_OTA
 #include <WiFi.h>
+#include <ElegantOTA.h>
 #include "../Version.h"
 
 // ---------------------------------------------------------------------------
 // /api/fw — firmware updates from GitHub Releases (src/net/GhOta.h)
 // ---------------------------------------------------------------------------
-// GET is the state the Плата page polls; check and install are POST and only
-// ever start a job, so httpd never waits on the network. Never automatic, and
-// never with the car moving: install refuses while the speed is fresh and
-// above a walk.
-
-static constexpr int32_t  MOVING_KMH_X100 = 300;    // 3 km/h
-static constexpr uint32_t SPEED_FRESH_MS  = 5000;
+// GET is the state the Плата page polls; check, install and reboot are POST
+// and only ever start or release a job, so httpd never waits on the network.
+// Never automatic, and never with the car moving (GhOta::moving()).
 
 static int fwBusy(PsychicRequest* r, const char* why)
 {
@@ -61,11 +58,46 @@ void WebUi::routesGhOta()
     route("/api/fw/install", HTTP_POST, [this](PsychicRequest* r) {
         if (!WiFi.isConnected())
             return fwBusy(r, "the board is on its own access point: join it to a WiFi network with internet");
-        if (_state && _state->fresh(Vehicle::SIG_SPEED, millis(), SPEED_FRESH_MS) &&
-            _state->get(Vehicle::SIG_SPEED) > MOVING_KMH_X100)
-            return fwBusy(r, "the car is moving: update when parked");
+        GhOta::attachCar(_state);
         const char* why = GhOta::install();
         return why ? fwBusy(r, why) : r->reply(200, "application/json", "{\"ok\":true}");
     });
+
+    // After a good install the board waits for a standing car or this.
+    route("/api/fw/reboot", HTTP_POST, [this](PsychicRequest* r) {
+        GhOta::attachCar(_state);
+        const char* why = GhOta::reboot();
+        return why ? fwBusy(r, why) : r->reply(200, "application/json", "{\"ok\":true}");
+    });
+
+    // Only reached when gateLocalOta()'s filter turned ElegantOTA's own
+    // handlers away (PsychicHttp hands a filtered request to onNotFound).
+    auto refused = [](PsychicRequest* r) { return fwBusy(r, "a GitHub update owns the OTA slot"); };
+    route("/ota/start", HTTP_GET, refused);
+    route("/ota/upload", HTTP_POST, refused);
+}
+
+// PsychicHttpServer keeps its endpoints protected; a pointer to that member,
+// formed through a class derived from it, reads them without a cast.
+namespace
+{
+    struct EndpointList : PsychicHttpServer {
+        static constexpr std::list<PsychicEndpoint*> PsychicHttpServer::*list() { return &EndpointList::_endpoints; }
+    };
+}
+
+void WebUi::gateLocalOta()
+{
+    // One OTA owner: ElegantOTA's routes stand down while a GitHub job runs or
+    // waits to reboot into its image.
+    for (PsychicEndpoint* e : _server.*EndpointList::list()) {
+        const String u = e->uri();
+        if (u == "/ota/start" || u == "/ota/upload")
+            e->setFilter([](PsychicRequest*) { return !GhOta::busy(); });
+    }
+    // ...and a GitHub install asks whether a local session is alive.
+    ElegantOTA.onStart([]() { GhOta::localStart(); });
+    ElegantOTA.onProgress([](size_t, size_t) { GhOta::localChunk(); });
+    ElegantOTA.onEnd([](bool) { GhOta::localEnd(); });
 }
 #endif

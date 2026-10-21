@@ -337,6 +337,7 @@ private:
 #endif
 #if FEATURE_GH_OTA
     void routesGhOta();          // WebUiGhOta.cpp
+    void gateLocalOta();         // after ElegantOTA.begin(): one OTA owner
 #endif
 
     PsychicHttpServer      _server;

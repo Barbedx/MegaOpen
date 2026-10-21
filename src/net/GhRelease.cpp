@@ -1,6 +1,7 @@
 #include "GhRelease.h"
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 
 namespace GhRelease
 {
@@ -119,6 +120,24 @@ namespace GhRelease
             case Pick::NO_SUMS:  return "the latest release has no SHA256SUMS";
         }
         return "?";
+    }
+
+    bool trustedUrl(const char* url)
+    {
+        static const char* const HOSTS[] = {
+            "api.github.com", "github.com", "objects.githubusercontent.com",
+            "release-assets.githubusercontent.com",
+        };
+        static const char SCHEME[] = "https://";
+        if (!url || strncmp(url, SCHEME, sizeof(SCHEME) - 1) != 0) return false;
+        const char* h = url + sizeof(SCHEME) - 1;
+        const size_t n = strcspn(h, "/?#");          // the authority
+        if (memchr(h, '@', n) || memchr(h, ':', n)) return false;   // no userinfo, no port
+        for (const char* host : HOSTS) {
+            const size_t k = strlen(host);
+            if (n == k && strncasecmp(h, host, k) == 0) return true;
+        }
+        return false;
     }
 
     bool sumFor(const char* sums, size_t len, const char* asset, uint8_t out[32])

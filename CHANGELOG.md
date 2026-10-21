@@ -6,7 +6,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [Unreleased]
 
 ### Added
-- Firmware updates from GitHub Releases on the Плата page (T-2CAN): check, then download the env's image, check its SHA-256 against `SHA256SUMS`, and reboot into the OTA trial. Never automatic, never while driving.
+- Firmware updates from GitHub Releases on the Плата page (T-2CAN): check, then download the env's image, check its SHA-256 against `SHA256SUMS`, and reboot into the OTA trial from the page or once the car stands. Never automatic, never while driving.
 
 ## [1.0.0]
 

@@ -33,7 +33,7 @@ SCR.board={title:'Плата',async render(m){
   `<div id="bLive"${se.bleMode==='off'?' hidden':''}>${row('Стан','<span id="bSt" class="chip off">…</span>','<span id="bName"></span>')}<div class="fr"><button class="btn dng" type="button" id="bForget">Забути телефон</button></div></div>`):'')+
  card('Оновлення прошивки','<div class="kv"><div><small>Прошивка</small><b>'+esc(se.fw)+'</b></div><div><small>Збірка</small><b>'+esc(se.build)+'</b></div></div>'+
   (has('ghota')?row('З GitHub','<span id="ghSt" class="chip off">…</span>','<span id="ghW"></span>','Остання стабільна версія з github.com/Barbedx/MegaOpen. Лише коли плата в мережі з інтернетом, лише з цієї кнопки й не під час руху. Образ перевіряється за SHA-256; якщо нова прошивка не стане здоровою за 3 хв, плата повернеться до попередньої.')+
-   '<div class="fr"><button class="btn" type="button" id="ghChk">Перевірити</button><button class="btn pri" type="button" id="ghGo" hidden>Оновити</button></div><div class="pad" id="ghP" hidden><div class="bar big"><i id="ghBar"></i></div></div>'+row('','','або файлом .bin:'):'')+
+   '<div class="fr"><button class="btn" type="button" id="ghChk">Перевірити</button><button class="btn pri" type="button" id="ghGo" hidden>Оновити</button><button class="btn pri" type="button" id="ghBoot" hidden>Перезавантажити</button></div><div class="pad" id="ghP" hidden><div class="bar big"><i id="ghBar"></i></div></div>'+row('','','або файлом .bin:'):'')+
   '<div class="fr"><input type="file" id="otaF" accept=".bin" class="in" style="flex:1"><button class="btn pri" type="button" id="otaGo">Оновити</button></div><div class="pad" id="otaP" hidden><div class="bar big"><i id="otaBar"></i></div></div>','cOta','custom')+
  (has('logfs')?card('Журнал запусків',row('','','Ті самі рядки, що йдуть у серійний порт, але на флеші: файл на кожен запуск, 8 останніх. Живий потік — Сервіс › Лог. Після зависання чи зникнення живлення останні ~16 кБ можуть не потрапити.')+`<div id="logs">${(lg.files||[]).map(f=>row(f.n?'Запуск −'+f.n:'Цей запуск',`<button class="btn sm" type="button" data-n="${f.n}">Скачати</button>`,fmtB(f.size))).join('')}</div>`,'','custom'):'')+
  '<div id="allSlot"></div>'+
@@ -53,7 +53,8 @@ SCR.board={title:'Плата',async render(m){
   const onP=p=>{$('#otaBar').style.width=p+'%';sv(s,'busy');s.textContent=p+'%'};
   try{await reboot(()=>upload(f,onP),undefined,'нова прошивка '+f.name)}catch(err){sv(s,'bad',errT(err))}b.disabled=false};
  if(has('ghota')){$('#ghChk').onclick=e=>run(e.target,async()=>{await API.post('/api/fw/check');await this.gh()},'перевіряю');
-  $('#ghGo').onclick=e=>ask(e.target,'Завантажити '+this.ghTag+' з GitHub і перезавантажити плату?',()=>run(e.target,async()=>{await API.post('/api/fw/install');await this.gh()},'завантажую'))}
+  $('#ghGo').onclick=e=>ask(e.target,'Завантажити '+this.ghTag+' з GitHub? Перезавантаження — потім, окремо.',()=>run(e.target,async()=>{await API.post('/api/fw/install');await this.gh()},'завантажую'));
+  $('#ghBoot').onclick=e=>ask(e.target,'Перезавантажити в '+this.ghTag+' зараз?',()=>run(e.target,async()=>{await API.post('/api/fw/reboot');await this.gh()},'перезавантажую'))}
  if(has('logfs'))$('#logs').onclick=e=>{const b=e.target.closest('[data-n]');if(b)run(b,()=>download('/api/logs/file?n='+b.dataset.n,'boot-'+b.dataset.n+'.log'))};
  $('#rbt').onclick=e=>ask(e.target,'Перезавантажити плату?',()=>reboot().catch(err=>sv(svOf(e.target),'bad',errT(err))));
  $('#fac').onclick=e=>ask(e.target,'Стерти все, включно з WiFi. Плата підніме точку 192.168.4.1.',()=>reboot('/api/factory?confirm=factory',undefined,'заводські налаштування').catch(err=>sv(svOf(e.target),'bad',errT(err))),'factory');
@@ -64,8 +65,10 @@ async gh(){const v=await API.get('/api/fw');if(!$('#ghSt'))return;this.ghTag=v.l
  const busy=v.phase==='checking'||v.phase==='downloading',pct=v.size?Math.floor(v.got/v.size*100):0;
  const[st,t,w]={idle:['off','не перевірено','ця '+v.fw],checking:['warn','перевіряю…',''],current:['ok','актуальна','остання '+v.latest+' · ця '+v.fw],
   available:['warn','є '+v.latest,'ця '+v.fw+' · '+fmtB(v.size)],downloading:['warn','завантажую '+pct+'%',fmtB(v.got)+' з '+fmtB(v.size)],
+  written:['warn','записано '+v.latest,'SHA-256 збігся · перезавантажиться сама, коли авто стоїть, або кнопкою'],
   rebooting:['ok','перезавантаження',v.latest+' записано, SHA-256 збігся'],failed:['bad','помилка',v.err||'']}[v.phase]||['off',v.phase,''];
- setChip('#ghSt',st,t);$('#ghW').textContent=w;$('#ghChk').disabled=busy||v.phase==='rebooting';
+ setChip('#ghSt',st,t);$('#ghW').textContent=w;$('#ghChk').disabled=busy||v.phase==='written'||v.phase==='rebooting';
+ $('#ghBoot').hidden=v.phase!=='written';
  const go=$('#ghGo');go.hidden=v.phase!=='available';go.textContent='Оновити до '+v.latest;
  $('#ghP').hidden=v.phase!=='downloading';$('#ghBar').style.width=pct+'%';
  if(v.phase==='rebooting'&&!REBOOTING)reboot(async()=>{},undefined,'оновлення '+v.latest+' з GitHub')},

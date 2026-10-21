@@ -156,6 +156,31 @@ void test_sum_for_does_not_match_a_prefix_or_a_missing_name()
     TEST_ASSERT_FALSE(sumFor("", 0, "a.bin", h));
 }
 
+void test_trusted_url_takes_githubs_https_hosts_only()
+{
+    TEST_ASSERT_TRUE(trustedUrl("https://api.github.com/repos/Barbedx/MegaOpen/releases/latest"));
+    TEST_ASSERT_TRUE(trustedUrl("https://github.com/Barbedx/MegaOpen/releases/download/v1.0.1/SHA256SUMS"));
+    TEST_ASSERT_TRUE(trustedUrl("https://release-assets.githubusercontent.com/github-production-release-asset/1?sp=r&sig=x"));
+    TEST_ASSERT_TRUE(trustedUrl("https://objects.githubusercontent.com/a/b"));
+    TEST_ASSERT_TRUE(trustedUrl("https://GitHub.com/x"));
+    TEST_ASSERT_TRUE(trustedUrl("https://github.com"));
+}
+
+void test_trusted_url_refuses_plain_http_lookalikes_and_tricks()
+{
+    const char* bad[] = {
+        "http://github.com/x",                          // in clear
+        "https://github.com.evil.example/x",            // a suffix
+        "https://evilgithub.com/x",
+        "https://raw.githubusercontent.com/x",          // not on the list
+        "https://github.com@evil.example/x",            // userinfo
+        "https://github.com:8443/x",                    // a port
+        "ftp://github.com/x", "github.com/x", "", "https://",
+    };
+    for (const char* u : bad) TEST_ASSERT_FALSE_MESSAGE(trustedUrl(u), u);
+    TEST_ASSERT_FALSE(trustedUrl(nullptr));
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -169,5 +194,7 @@ int main(int, char**)
     RUN_TEST(test_pick_wants_the_sums_file);
     RUN_TEST(test_sum_for_finds_the_exact_name_in_both_forms);
     RUN_TEST(test_sum_for_does_not_match_a_prefix_or_a_missing_name);
+    RUN_TEST(test_trusted_url_takes_githubs_https_hosts_only);
+    RUN_TEST(test_trusted_url_refuses_plain_http_lookalikes_and_tricks);
     return UNITY_END();
 }

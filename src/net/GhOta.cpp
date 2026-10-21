@@ -12,6 +12,7 @@
 #include "../Version.h"
 #include "../app/TaskPlan.h"
 #include "../utils/LogBus.h"
+#include "../vehicle/VehicleState.h"
 
 #ifndef GH_OTA_REPO
 #define GH_OTA_REPO "Barbedx/MegaOpen"
@@ -27,11 +28,25 @@ namespace GhOta
         constexpr size_t   CHUNK      = 4096;
         constexpr size_t   SUMS_MAX   = 4096;    // three envs x two images: ~600 bytes
         constexpr uint32_t PAGE_SEES_REBOOT_MS = 1500;
+        constexpr uint32_t WAIT_POLL_MS = 500;     // Written: how often the gates are read
 
         portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
         View s_v;                              // under s_mux
         bool s_busy = false;                   // under s_mux: a job task exists
         GhRelease::Release s_rel;              // the last check's pick; the job owns it
+        volatile bool s_rebootAsked = false;   // the page confirmed, Written only
+        const Vehicle::State* s_car = nullptr;
+        // ElegantOTA's session: open, and when it last showed signs of life.
+        volatile bool     s_local   = false;
+        volatile uint32_t s_localAt = 0;
+
+        // Speed fresh and exactly 0: the one state the reboot may take by itself.
+        bool parked()
+        {
+            const uint32_t now = millis();
+            return s_car && s_car->fresh(Vehicle::SIG_SPEED, now, SPEED_FRESH_MS) &&
+                   s_car->get(Vehicle::SIG_SPEED) == 0;
+        }
 
         enum class Job : uint8_t { Check, Install };
 
@@ -124,11 +139,26 @@ namespace GhOta
             }
         };
 
+        // The host of a URL, for a log line: at most `n` bytes.
+        void hostOf(const char* url, char* out, size_t n)
+        {
+            const char* h = strstr(url, "://");
+            h = h ? h + 3 : url;
+            snprintf(out, n, "%.*s", (int)strcspn(h, "/?#"), h);
+        }
+
         // A GET that follows redirects (a release asset is a 302 to the CDN,
-        // with a ~1 kB Location: hence the buffers). The open client, headers
-        // read, status 200; nullptr after fail().
+        // with a ~1 kB Location: hence the buffers). Every URL, the first and
+        // each redirect's, must be GitHub over https (GhRelease::trustedUrl).
+        // The open client, headers read, status 200; nullptr after fail().
         esp_http_client_handle_t get(const char* url, bool api, int64_t& len)
         {
+            if (!GhRelease::trustedUrl(url)) {
+                char h[48];
+                hostOf(url, h, sizeof(h));
+                fail("refused %s: not GitHub over https", h);
+                return nullptr;
+            }
             esp_http_client_config_t cfg = {};
             cfg.url            = url;
             cfg.cert_pem       = GH_ROOTS_PEM;
@@ -158,6 +188,18 @@ namespace GhOta
                     // A new host closes the connection inside set_url.
                     esp_http_client_set_redirection(c);
                     esp_http_client_close(c);
+                    // Where it now points, read back: a Location cut short
+                    // (split across reads) or off GitHub stops here.
+                    constexpr size_t URL_MAX = 2048;
+                    char* u = (char*)psMalloc(URL_MAX);
+                    if (!u) { fail("no memory for the redirect"); break; }
+                    const bool got = esp_http_client_get_url(c, u, URL_MAX) == ESP_OK;
+                    char h[48];
+                    hostOf(got ? u : "", h, sizeof(h));
+                    LogBus::printf("[ota] github: %d -> %s (%u bytes)", st, h, got ? (unsigned)strlen(u) : 0u);
+                    const bool ok = got && GhRelease::trustedUrl(u);
+                    heap_caps_free(u);
+                    if (!ok) { fail("redirect to %s refused: not GitHub over https", got ? h : "?"); break; }
                     continue;
                 }
                 if (st == 403 || st == 429)
@@ -284,12 +326,12 @@ namespace GhOta
             mbedtls_md_starts(&md);
 
             uint32_t got = 0, lastPct = 0;
-            const char* why = nullptr;
+            const char* broke = nullptr;
             while (got < (uint32_t)len) {
                 const int k = esp_http_client_read(c, (char*)buf, CHUNK);
-                if (k <= 0) { why = "the download broke off"; break; }
+                if (k <= 0) { broke = "the download broke off"; break; }
                 mbedtls_md_update(&md, buf, (size_t)k);
-                if (Update.write(buf, (size_t)k) != (size_t)k) { why = Update.errorString(); break; }
+                if (Update.write(buf, (size_t)k) != (size_t)k) { broke = Update.errorString(); break; }
                 got += (uint32_t)k;
                 sampleHeap();
                 portENTER_CRITICAL(&s_mux);
@@ -308,7 +350,7 @@ namespace GhOta
             heap_caps_free(buf);
             done(c);
 
-            if (why) { Update.abort(); fail("%s at %u of %u bytes", why, (unsigned)got, (unsigned)len); return; }
+            if (broke) { Update.abort(); fail("%s at %u of %u bytes", broke, (unsigned)got, (unsigned)len); return; }
             if (memcmp(have, want, 32) != 0) {
                 Update.abort();
                 fail("SHA-256 does not match SHA256SUMS: nothing was changed");
@@ -319,17 +361,34 @@ namespace GhOta
             // The done line never comes after a good install: the stack's
             // headroom is reported here, at the deepest point it will reach.
             const uint32_t stackFree = uxTaskGetStackHighWaterMark(nullptr);
+            s_rebootAsked = false;
             portENTER_CRITICAL(&s_mux);
-            s_v.phase     = Phase::Rebooting;
+            s_v.phase     = Phase::Written;
             s_v.stackFree = stackFree;
             portEXIT_CRITICAL(&s_mux);
             LogBus::printf("[ota] github: %s written, SHA-256 matches; internal heap min %u of %u; "
-                           "stack %u of %u unused; rebooting into the trial",
+                           "stack %u of %u unused; reboot when parked or from the page",
                            s_rel.tag, (unsigned)s_v.heapMin, (unsigned)s_v.heapStart,
                            (unsigned)stackFree, (unsigned)App::Plan::GHOTA_STACK);
+        }
+
+        // After a good install, with mbedTLS back on its own allocator: never a
+        // reboot mid-drive. The page's confirm (refused while moving), or the
+        // car standing with a fresh speed of 0.
+        [[noreturn]] void waitAndReboot()
+        {
+            const char* why = nullptr;
+            while (!why) {
+                if (s_rebootAsked)  why = "from the page";
+                else if (parked())  why = "the car is standing";
+                else vTaskDelay(pdMS_TO_TICKS(WAIT_POLL_MS));
+            }
+            setPhase(Phase::Rebooting);
+            LogBus::printf("[ota] github: rebooting into the trial (%s)", why);
             vTaskDelay(pdMS_TO_TICKS(PAGE_SEES_REBOOT_MS));   // the page's next poll shows it
             LogBus::flushAndWait(300);
             ESP.restart();
+            for (;;) vTaskDelay(pdMS_TO_TICKS(1000));   // restart() does not return
         }
 
         void task(void* arg)
@@ -344,6 +403,9 @@ namespace GhOta
                 if (job == Job::Check) runCheck();
                 else                   runInstall();
             }
+            View v;
+            view(v);
+            if (v.phase == Phase::Written) waitAndReboot();
             // ESP-IDF counts the high-water mark in bytes.
             const uint32_t stackFree = uxTaskGetStackHighWaterMark(nullptr);
             LogBus::printf("[ota] github: %s done; internal heap %u, task created %u, running %u, "
@@ -363,7 +425,12 @@ namespace GhOta
         const char* start(Job job)
         {
             portENTER_CRITICAL(&s_mux);
-            if (s_busy) { portEXIT_CRITICAL(&s_mux); return "a check or an update is already running"; }
+            if (s_busy) {
+                const bool written = s_v.phase == Phase::Written;
+                portEXIT_CRITICAL(&s_mux);
+                return written ? "an update is written and waits for the reboot"
+                               : "a check or an update is already running";
+            }
             if (job == Job::Install && s_v.phase != Phase::Available) {
                 portEXIT_CRITICAL(&s_mux);
                 return "no newer release: check first";
@@ -402,6 +469,7 @@ namespace GhOta
             case Phase::Current:     return "current";
             case Phase::Available:   return "available";
             case Phase::Downloading: return "downloading";
+            case Phase::Written:     return "written";
             case Phase::Rebooting:   return "rebooting";
             case Phase::Failed:      return "failed";
         }
@@ -419,8 +487,47 @@ namespace GhOta
 
     const char* install()
     {
-        if (Update.isRunning()) return "an upload from the page is running";
+        if (moving()) return "the car is moving: update when parked";
+        if (Update.isRunning()) {
+            // A /ota/start with no upload after it holds Update open for ever.
+            if (s_local && (uint32_t)(millis() - s_localAt) < LOCAL_STALE_MS)
+                return "an upload from the page is running";
+            Update.abort();
+            s_local = false;
+            LogBus::line("[ota] github: cleared a local upload session left open");
+        }
         return start(Job::Install);
     }
+
+    const char* reboot()
+    {
+        View v;
+        view(v);
+        if (v.phase != Phase::Written) return "nothing written to reboot into";
+        if (moving()) return "the car is moving: reboot when parked";
+        s_rebootAsked = true;
+        return nullptr;
+    }
+
+    void attachCar(const Vehicle::State* car) { s_car = car; }
+
+    bool moving()
+    {
+        const uint32_t now = millis();
+        return s_car && s_car->fresh(Vehicle::SIG_SPEED, now, SPEED_FRESH_MS) &&
+               s_car->get(Vehicle::SIG_SPEED) > MOVING_KMH_X100;
+    }
+
+    bool busy()
+    {
+        portENTER_CRITICAL(&s_mux);
+        const bool b = s_busy;
+        portEXIT_CRITICAL(&s_mux);
+        return b;
+    }
+
+    void localStart() { s_localAt = millis(); s_local = true; }
+    void localChunk() { s_localAt = millis(); }
+    void localEnd()   { s_local = false; }
 }
 #endif
