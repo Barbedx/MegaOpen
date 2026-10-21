@@ -1,0 +1,2 @@
+# Shell scripts run under bash on every OS: LF, never CRLF.
+*.sh text eol=lf
