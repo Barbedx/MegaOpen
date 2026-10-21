@@ -71,14 +71,17 @@ namespace Cfg
         uint8_t     (*count)();
         const char* (*id)(uint8_t i);
         const char* (*name)(uint8_t i);
+        // The page's words for a row: "k.<dom>.<id>" in web/i18n, shared by
+        // every setting that lists the same things (four lists of signals,
+        // one word each). nullptr: "k.set.<setting id>.<id>".
+        const char* dom = nullptr;
     };
 
     // A Table's column: Bool, Int or Enum. An Enum cell is its row index in
     // `en`; an Int's min/max are what the page offers, the table's put() has
     // the last word.
     struct SColumn {
-        const char*  id;       // ASCII, the page's key
-        const char*  label;    // Ukrainian, the web
+        const char*  id;       // ASCII, the page's key; its words: k.set.<setting>.<id> (web/i18n)
         SType        type;
         int32_t      min, max;
         const SEnum* en;
@@ -106,8 +109,7 @@ namespace Cfg
     };
 
     struct SEntry {
-        const char*  id;       // stable API key (the /api/settings JSON key)
-        const char*  label;    // Ukrainian, the web
+        const char*  id;       // stable API key (the /api/settings JSON key); its words: k.set.<id> (web/i18n)
         const char*  tag;      // ASCII, <= TAG_MAX, the panel
         const char*  parent;   // a Group's id; nullptr = top level
         SType        type;

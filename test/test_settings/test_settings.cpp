@@ -92,7 +92,6 @@ void test_tags_fit_the_panel()
         const SEntry& e = Registry::at(i);
         TEST_ASSERT_TRUE_MESSAGE(ascii(e.tag), e.id);
         TEST_ASSERT_TRUE_MESSAGE(strlen(e.tag) <= Registry::TAG_MAX, e.id);
-        TEST_ASSERT_TRUE_MESSAGE(e.label && *e.label, e.id);
         if (e.unit) TEST_ASSERT_TRUE_MESSAGE(ascii(e.unit), e.id);
     }
 }

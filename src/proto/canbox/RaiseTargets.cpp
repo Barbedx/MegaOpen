@@ -11,7 +11,8 @@ namespace Canbox
     namespace
     {
         // The page's sections, in the order they first appear.
-        const char* const kGroups[] = {"Двері", "Рух", "Пробіг", "Паливо", "Двигун", "Клімат", "Світло", "Радар", "Шини", "Звук", "Налаштування", "Гібрид"};
+        // Ids: the page has the words (web/i18n "k.rgroup.<id>").
+        const char* const kGroups[] = {"doors", "drive", "trip", "fuel", "engine", "climate", "lights", "radar", "tyres", "audio", "settings", "hybrid"};
 
         enum : uint8_t { G_DOORS, G_DRIVE, G_TRIP, G_FUEL, G_ENGINE, G_CLIMATE, G_LIGHTS, G_RADAR, G_TYRES, G_AUDIO, G_SETTINGS, G_HYBRID };
 
@@ -168,22 +169,6 @@ namespace Canbox
         #undef X
 
         constexpr uint8_t kCount = (uint8_t)(sizeof(kRows) / sizeof(kRows[0]));
-
-        // Signals.cpp units are terse and English; the page shows these. A
-        // range ("0–7") is a hint, and the page leaves it out of a value.
-        struct Unit { const char* en; const char* uk; };
-        const Unit kUnits[] = {
-            {"km/h", "км/год"}, {"rpm", "об/хв"}, {"deg", "°"}, {"km", "км"}, {"C", "°C"},
-            {"min", "хв"}, {"L/100km", "л/100 км"}, {"raw", "байт"}, {"0-2", "0–2"},
-            {"0-3", "0–3"}, {"0-4", "0–4"}, {"0-7", "0–7"}, {"0-8", "0–8"}, {"0-14", "0–14"},
-            {"0-15", "0–15"}, {"0-63", "0–63"}, {"1-5", "1–5"}, {"-5..5", "−5–5"}, {"V", "В"},
-        };
-
-        const char* unitUk(const char* en)
-        {
-            for (const Unit& u : kUnits) if (!strcmp(u.en, en)) return u.uk;
-            return en;
-        }
     }
 
     namespace RaiseTargets
@@ -203,7 +188,7 @@ namespace Canbox
             v.sig     = r.sig;
             v.msg     = r.msg;
             v.id      = m.name;
-            v.unit    = unitUk(m.unit);
+            v.unit    = m.unit;   // English and terse; the page has the words (k.unit.<unit>)
             v.boolean = m.boolean;
             v.min     = m.min;
             v.max     = m.max;

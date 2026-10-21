@@ -26,7 +26,7 @@ $('#langBtn').onclick=()=>{try{localStorage.setItem('mo-lang',LANG==='uk'?'en':'
 applyTh();$('#themeBtn').onclick=()=>{th=THEMES[(THEMES.indexOf(th)+1)%3];try{localStorage.setItem('mo-theme',th)}catch(e){}applyTh()};
 /* старт: після розбору всієї сторінки (у симуляторі після sim-скриптів), спершу каталог */
 async function start(){await i18nLoad();devUi();
- try{CAT=await API.get('/api/catalog')}catch(e){$('#main').innerHTML=card(t('c.errTitle'),row(esc(t('m.catalog',errT(e))),`<button class="btn" type="button" onclick="start()">${t('c.retry')}</button>`));return}
+ try{CAT=i18nCat(deep(await API.get('/api/catalog')))}catch(e){$('#main').innerHTML=card(t('c.errTitle'),row(esc(t('m.catalog',errT(e))),`<button class="btn" type="button" onclick="start()">${t('c.retry')}</button>`));return}
  $('[data-t="screen"]').hidden=!has('display');
  route();foot().catch(()=>{});
 }

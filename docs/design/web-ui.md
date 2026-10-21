@@ -95,6 +95,19 @@ address) and reloads the page.
 - The board's page inlines only `uk.json`; `en.json` is a separate gzipped
   file at `GET /i18n/en.json`, fetched by an English viewer only. The
   simulator inlines both.
+- The catalog's names are words too, `k.*`, put in by `i18nCat()` (`20-kit.js`)
+  once, right after `/api/catalog`, so the screens read `name`, `label`,
+  `group` and `unit` as before. The key comes from the id: `k.set.<setting>`
+  and `k.set.<setting>.<column>`; an enum row `k.<dom>.<v>`, where the
+  firmware's `SEnum::dom` names the things it lists (`sig`, `style`, `scene`,
+  `ble`…, one word each however many settings list them), or
+  `k.set.<setting>.<v>` without one; a signal `k.sig.<v>`, else its name in
+  the Raise list `k.raise.<v>`; `k.rgroup.<id>` and `k.unit.<unit>` for the
+  Raise rows' section and unit (ids and terse English units from the
+  firmware); `k.layout.*`, `k.style.*`, `k.scene.*`, `k.con.*`, `k.dest.*`,
+  `k.action.*`, `k.pkey.*`, `k.class.*` for the other lists. The settings
+  carry no `label` any more; `tools/check_i18n.py` fails on a catalog name with
+  no words (it derives the keys the same way from `build/catalog.json`).
 - The firmware sends codes, not prose (English stays in the log only):
   `/api/health` chains carry `code` (`w.<code>`), error replies are codes
   (`e.<code>`, see the API contract), and the page has the words.

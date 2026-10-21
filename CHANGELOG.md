@@ -10,6 +10,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Changed
 - `/api/health` chains carry only `code` (no English `why`): the page has the words in both languages. Огляд no longer tells you to turn the knobs or watch the rings.
+- The catalog's names (settings, their choices, signals, Raise rows, layouts, styles, scenes, console) are in the page's dictionaries, so they follow the language switch. `/api/catalog` settings carry no `label`; enum lists name their kind (`dom`); Raise rows send a section id and an English unit. Signal lists show a name for every signal the Raise list names (they showed its id, `speed`), and doors and radar sensors say which ones.
 - Error replies are codes, one refusal a line (`pulseMs: number`, `param exp`, `busy`), not English sentences; the page shows them in its language. A refused macro now marks its row again (the reply said `row 3: …`, the page looked for `3: …`).
 
 ## [1.4.0] - 2026-10-21

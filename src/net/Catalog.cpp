@@ -243,6 +243,7 @@ namespace Catalog
         // min/max or enum).
         void enumRows(J& j, const Cfg::SEnum& en)
         {
+            if (en.dom) j.ks("dom", en.dom);
             j.k("enum").arr();
             for (uint8_t r = 0; r < en.count(); ++r)
                 j.obj().ks("v", en.id(r)).ks("name", en.name(r)).endObj();
@@ -257,7 +258,7 @@ namespace Catalog
             for (size_t i = 0; i < Registry::count(); ++i) {
                 const SEntry& e = Registry::at(i);
                 if (!(e.flags & F_WEB)) continue;
-                j.obj().ks("id", e.id).ks("label", e.label).ks("tag", e.tag)
+                j.obj().ks("id", e.id).ks("tag", e.tag)
                  .ks("type", kType[(uint8_t)e.type]);
                 if (e.parent) j.ks("parent", e.parent);
                 if (e.flags & F_MENU) j.kb("menu", true);
@@ -275,7 +276,7 @@ namespace Catalog
                     j.kn("rows", e.tab->rows()).k("cols").arr();
                     for (uint8_t c = 0; c < e.tab->cols; ++c) {
                         const SColumn& col = e.tab->col[c];
-                        j.obj().ks("id", col.id).ks("label", col.label).ks("type", kType[(uint8_t)col.type]);
+                        j.obj().ks("id", col.id).ks("type", kType[(uint8_t)col.type]);
                         if (col.type == SType::Int) j.kn("min", col.min).kn("max", col.max);
                         if (col.type == SType::Enum && col.en) enumRows(j, *col.en);
                         j.endObj();

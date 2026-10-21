@@ -11,7 +11,11 @@ Errors (always):
     data-i18n-aria="x.y" with a literal key;
   * the firmware sends a code the page has no words for: an error reply's
     text/plain code (e.<code>) or a /api/health chain code (w.<code>; the
-    *_ok codes may have none).
+    *_ok codes may have none);
+  * the catalog (build/catalog.json, from `pio test -e native -f test_catalog`)
+    has a name the page cannot put in words: a Ukrainian name, a raise group
+    or a unit whose key (as i18nCat() in web/js/20-kit.js derives it) is not in
+    uk.json. Skipped, with a note, when the file is not there.
 Warnings:
   * a key nothing names literally and no dynamic prefix covers (KEY_PREFIXES);
   * Ukrainian (Cyrillic) still in web/js/*.js or web/index.html outside comments,
@@ -24,7 +28,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(ROOT, "web")
 LANGS = ("uk", "en")
 # Keys built at run time ('w.'+code, 's.'+state, 'e.'+code, a screen's title key).
-KEY_PREFIXES = ("w.", "s.", "e.", "nav.")
+KEY_PREFIXES = ("w.", "s.", "e.", "k.", "nav.")
+CATALOG = os.path.join(ROOT, "build", "catalog.json")
 SRC = os.path.join(ROOT, "src")
 
 def load(lang):
@@ -36,6 +41,50 @@ def strip_comments(js):
     what the page shows. Good enough for this code base: no '/*' in strings."""
     js = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
     return "\n".join(l for l in js.split("\n") if not l.lstrip().startswith("//"))
+
+NEED = object()
+
+def catalog_keys(c):
+    """(key, what) for every name the page translates, the way i18nCat() does:
+    what is the firmware's text, or NEED where a key is needed whatever it says."""
+    out = []
+    def rows(lst, dom, base):
+        for r in lst or []:
+            v = str(r.get("v"))
+            if dom == "sig":
+                out.append((("k.sig." + v, "k.raise." + v), r.get("name")))
+            else:
+                out.append((("k.%s.%s" % (dom, v)) if dom else ("%s.%s" % (base, v)), r.get("name")))
+    for st in c.get("settings", []):
+        out.append(("k.set." + st["id"], NEED))   # no label in the catalog: the page has the words
+        rows(st.get("enum"), st.get("dom"), "k.set." + st["id"])
+        for col in st.get("cols") or []:
+            out.append(("k.set.%s.%s" % (st["id"], col["id"]), NEED))
+            rows(col.get("enum"), col.get("dom"), "k.set.%s.%s" % (st["id"], col["id"]))
+    for n, lst in (c.get("enums") or {}).items():
+        rows(lst, n, None)
+    for l in c.get("layouts", []):
+        out.append(("k.layout." + l["id"], l.get("name")))
+        for prm in l.get("params", []):
+            out.append(("k.layout.%s.%s" % (l["id"], prm["n"]), prm.get("label")))
+            out.append(("k.layout.%s.%s.h" % (l["id"], prm["n"]), prm.get("hint")))
+    for lst, d in (("styles", "style"), ("scenes", "scene"), ("bleModes", "ble"), ("panels", "panel"),
+                   ("dests", "dest"), ("actions", "action"), ("panelKeys", "pkey")):
+        for x in c.get(lst, []):
+            out.append(("k.%s.%s" % (d, x["id"]), x.get("name")))
+    for x in c.get("classes", []):
+        out.append(("k.class.%s" % x["bit"], x.get("name")))
+    for x in c.get("console", []):
+        out.append(("k.con." + x["cmd"], x.get("name")))
+        for f in x.get("fields", []):
+            out.append(("k.con.%s.%s" % (x["cmd"], f["n"]), f.get("label")))
+    for x in c.get("raise", []):
+        out.append(("k.raise." + x["id"], x.get("name")))
+        out.append(("k.raise.%s.why" % x["id"], x.get("why")))
+        out.append(("k.rgroup." + x["group"], NEED))
+        if x.get("unit"):
+            out.append(("k.unit." + x["unit"], NEED))
+    return out
 
 def main():
     strict = "--strict" in sys.argv
@@ -94,6 +143,19 @@ def main():
                     c = m.group(1)
                     if not c.endswith("_ok") and "w." + c not in base and "e." + c not in base:
                         errors.append("%s: health code %s has no w.%s in uk.json" % (rel, c, c))
+    cyr_s = lambda v: isinstance(v, str) and cyr.search(v)
+    if os.path.exists(CATALOG):
+        with open(CATALOG, encoding="utf-8") as f:
+            cat = json.load(f)
+        missing = set()
+        for key, what in catalog_keys(cat):
+            keys = key if isinstance(key, tuple) else (key,)
+            if (what is NEED or cyr_s(what)) and not any(k in base for k in keys):
+                missing.add(keys[0])
+        for k in sorted(missing):
+            errors.append("catalog: no words for %s (uk.json)" % k)
+    else:
+        print("check_i18n: note: no build/catalog.json, catalog not checked (pio test -e native -f test_catalog)")
     for k in base:
         if k not in used and not k.startswith(KEY_PREFIXES):
             warnings.append("unused key %s" % k)

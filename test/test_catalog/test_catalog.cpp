@@ -261,7 +261,9 @@ static void test_settings_list()
     for (const auto& e : s.a) {
         const std::string id = e->get("id")->s;
         TEST_ASSERT_TRUE_MESSAGE(ids.insert(id).second, id.c_str());
-        TEST_ASSERT_FALSE_MESSAGE(e->get("label")->s.empty(), id.c_str());
+        // No label: the page has the words (web/i18n k.set.<id>, tools/check_i18n.py).
+        TEST_ASSERT_NULL_MESSAGE(e->get("label"), id.c_str());
+        TEST_ASSERT_FALSE_MESSAGE(e->get("tag")->s.empty(), id.c_str());
         const std::string type = e->get("type")->s;
         if (const V* p = e->get("parent")) TEST_ASSERT_TRUE_MESSAGE(groups.count(p->s), id.c_str());
         if (type == "group") { groups.insert(id); continue; }

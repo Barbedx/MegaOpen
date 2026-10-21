@@ -28,12 +28,14 @@ namespace Cfg
             [] { return MediaScreen::LAYOUT_COUNT; },
             [](uint8_t i) { return MediaScreen::layoutAt(i).id; },
             [](uint8_t i) { return MediaScreen::layoutAt(i).name; },
+            "layout",
         };
 
         const SEnum kStyles = {
             [] { return MediaScreen::STYLE_COUNT; },
             [](uint8_t i) { return MediaScreen::styleName((MediaScreen::Style)i); },
             [](uint8_t i) { return MediaScreen::styleTitle((MediaScreen::Style)i); },
+            "style",
         };
 
         // mediaPane: the scenes, then "auto" (the carousel) as the last row,
@@ -46,6 +48,7 @@ namespace Cfg
             [](uint8_t i) {
                 return i < MediaPane::SCENE_COUNT ? MediaPane::sceneTitle((MediaPane::Scene)i) : "карусель";
             },
+            "scene",
         };
 
         // The pickable sources only; "none" is a display row, not a choice.
@@ -64,6 +67,7 @@ namespace Cfg
             pickRows,
             [](uint8_t i) { return pickRow(i).id; },
             [](uint8_t i) { return pickRow(i).name; },
+            "mediaSrc",
         };
 
         // A car screen row: row 0 is "none" (SIG_COUNT), row i the signal i-1.
@@ -76,6 +80,7 @@ namespace Cfg
                 const char* l = Vehicle::label((uint8_t)(i - 1));
                 return *l ? l : Vehicle::meta((uint8_t)(i - 1)).name;
             },
+            "sig",
         };
         int32_t sigRowOf(uint8_t sig) { return sig < Vehicle::SIG_COUNT ? sig + 1 : 0; }
         uint8_t sigOfRow(int32_t v)   { return v > 0 ? (uint8_t)(v - 1) : (uint8_t)Vehicle::SIG_COUNT; }
@@ -85,11 +90,12 @@ namespace Cfg
             [] { return (uint8_t)CarPreset::_Count; },
             [](uint8_t i) { return i == (uint8_t)CarPreset::Trip ? "trip" : "custom"; },
             [](uint8_t i) { return i == (uint8_t)CarPreset::Trip ? "Поїздка" : "Свої рядки"; },
+            "carPreset",
         };
 #endif
 
-        const SEnum kBleModes = { Catalog::bleModeCount, Catalog::bleModeId, Catalog::bleModeName };
-        const SEnum kPanels   = { Catalog::panelCount,   Catalog::panelId,   Catalog::panelName };
+        const SEnum kBleModes = { Catalog::bleModeCount, Catalog::bleModeId, Catalog::bleModeName, "ble" };
+        const SEnum kPanels   = { Catalog::panelCount,   Catalog::panelId,   Catalog::panelName, "panel" };
 
         // can2Bitrate: 0 = find it, then the rates Autobaud probes, ascending.
         uint32_t rateRow(uint8_t i)
@@ -124,6 +130,7 @@ namespace Cfg
             [] { return (uint8_t)(Bus::Autobaud::N_RATES + 1); },
             rateId,
             [](uint8_t i) { return i ? rateId(i) : "авто"; },
+            "rate",
         };
 
         // uartBaud: the rates canbox dialects use; Raise/RAV4 is 38400. A
@@ -168,6 +175,7 @@ namespace Cfg
             [] { return PRESETS; },
             [](uint8_t i) { return kPresets[i < PRESETS ? i : 0].id; },
             [](uint8_t i) { return kPresets[i < PRESETS ? i : 0].name; },
+            "color",
         };
 
         bool same(const Knobs::Rgb& a, const Knobs::Rgb& b) { return a.r == b.r && a.g == b.g && a.b == b.b; }
@@ -186,14 +194,14 @@ namespace Cfg
             for (auto& l : z.led) l = kPresets[v].c;
         }
 
-#define UI_NAMES_ENUM(T)                                          \
+#define UI_NAMES_ENUM(T, DOM)                                     \
         SEnum{ [] { return (uint8_t)(sizeof(T) / sizeof(T[0])); }, \
                [](uint8_t i) { return T[i].id; },                  \
-               [](uint8_t i) { return T[i].name; } }
-        const SEnum kReact = UI_NAMES_ENUM(Knobs::REACT_NAMES);
-        const SEnum kAnim  = UI_NAMES_ENUM(Knobs::ANIM_NAMES);
-        const SEnum kConds = UI_NAMES_ENUM(Vehicle::ALERT_COND);
-        const SEnum kCapModes = UI_NAMES_ENUM(CapFormat::MODE_NAMES);
+               [](uint8_t i) { return T[i].name; }, DOM }
+        const SEnum kReact = UI_NAMES_ENUM(Knobs::REACT_NAMES, "ledReact");
+        const SEnum kAnim  = UI_NAMES_ENUM(Knobs::ANIM_NAMES, "ledIdle");
+        const SEnum kConds = UI_NAMES_ENUM(Vehicle::ALERT_COND, "cond");
+        const SEnum kCapModes = UI_NAMES_ENUM(CapFormat::MODE_NAMES, "capModes");
 
         // Log levels: row i = LogLevel i, the id is also the name.
         const SEnum kLogLevels = {
@@ -214,16 +222,17 @@ namespace Cfg
                 const char* l = Vehicle::label(i);
                 return *l ? l : Vehicle::meta(i).name;
             },
+            "sig",
         };
 
         // AlertRules::Col order. thr's range is its row's signal's (the
         // table refuses the rest); the page offers any number.
         const SColumn kAlertCols[] = {
-            {"sig",       "Сигнал",   SType::Enum, 0, 0, &kAlertSigs},
-            {"cond",      "Умова",    SType::Enum, 0, 0, &kConds},
-            {"thr",       "Поріг",    SType::Int,  INT32_MIN, INT32_MAX, nullptr},
-            {"cooldownS", "Пауза, с", SType::Int,  Vehicle::ALERT_COOLDOWN_MIN_S, 65535, nullptr},
-            {"on",        "Увімк",    SType::Bool, 0, 1, nullptr},
+            {"sig",       SType::Enum, 0, 0, &kAlertSigs},
+            {"cond",      SType::Enum, 0, 0, &kConds},
+            {"thr",       SType::Int,  INT32_MIN, INT32_MAX, nullptr},
+            {"cooldownS", SType::Int,  Vehicle::ALERT_COOLDOWN_MIN_S, 65535, nullptr},
+            {"on",        SType::Bool, 0, 1, nullptr},
         };
         static_assert(sizeof(kAlertCols) / sizeof(kAlertCols[0]) == Vehicle::AlertRules::COLS,
                       "kAlertCols is out of step with AlertRules::Col");
@@ -244,7 +253,7 @@ namespace Cfg
 
         // ---- the head-unit emitter's messages: row i = message i, on/off ----
         const SColumn kMsgCols[] = {
-            {"on", "Увімк", SType::Bool, 0, 1, nullptr},
+            {"on", SType::Bool, 0, 1, nullptr},
         };
         const STable kMessages = {
             Canbox::Rav4Emitter::messageCount, 1, kMsgCols,
@@ -272,16 +281,19 @@ namespace Cfg
             [] { return (uint8_t)(sizeof(kCmd28) / sizeof(kCmd28[0])); },
             [](uint8_t i) { return kCmd28[i < 2 ? i : 0].id; },
             [](uint8_t i) { return kCmd28[i < 2 ? i : 0].name; },
+            "cmd28",
         };
         const SEnum kFuelE = {
             [] { return FUEL_ROWS; },
             [](uint8_t i) { return kFuelIds[i < FUEL_ROWS ? i : 0]; },
             [](uint8_t i) { return Canbox::FUEL_UNITS[i < FUEL_ROWS ? i : 0].name; },
+            "fuelUnit",
         };
         const SEnum kTripE = {
             [] { return TRIP_ROWS; },
             [](uint8_t i) { return kTripIds[i < TRIP_ROWS ? i : 0]; },
             [](uint8_t i) { return Canbox::TRIP_UNITS[i < TRIP_ROWS ? i : 0].name; },
+            "tripUnit",
         };
         template <size_t N>
         int32_t unitRow(const Canbox::UnitRow (&t)[N], uint8_t v)
@@ -321,10 +333,9 @@ namespace Cfg
         constexpr uint8_t WM = F_WEB | F_MENU;
 
         // Shorthands for the table. G = a group, B/I/E = Bool/Int/Enum.
-        constexpr SEntry G(const char* id, const char* label, const char* tag,
-                           const char* parent, uint8_t flags)
+        constexpr SEntry G(const char* id, const char* tag, const char* parent, uint8_t flags)
         {
-            return SEntry{id, label, tag, parent, SType::Group, flags, AP_NONE,
+            return SEntry{id, tag, parent, SType::Group, flags, AP_NONE,
                           0, 0, 0, nullptr, nullptr, nullptr, nullptr};
         }
 
@@ -341,217 +352,217 @@ namespace Cfg
         const SEntry kTable[] = {
 #if FEATURE_DISPLAY_CAN    // the screen: nothing to set on a build without the panel
             // ---- the screen ------------------------------------------------
-            G("display", "Екран", "Display", nullptr, WM),
-            {"mediaScreen", "Екран «зараз грає»", "Audio screen", "display", SType::Bool, WM, AP_UI,
+            G("display", "Display", nullptr, WM),
+            {"mediaScreen", "Audio screen", "display", SType::Bool, WM, AP_UI,
              0, 1, 0, nullptr, nullptr, S_GET(s.mediaScreen), S_PUT(s.mediaScreen = v != 0)},
             // Display › Car screen: on/off, the preset, the custom rows.
-            G("display.car", "Екран авто", "Car screen", "display", WM),
-            {"carScreen", "Екран авто замість аудіо", "Show", "display.car", SType::Bool, WM, AP_UI,
+            G("display.car", "Car screen", "display", WM),
+            {"carScreen", "Show", "display.car", SType::Bool, WM, AP_UI,
              0, 1, 0, nullptr, nullptr, S_GET(s.carScreen), S_PUT(s.carScreen = v != 0)},
-            {"carPreset", "Екран авто: що показувати", "Preset", "display.car", SType::Enum, WM, AP_UI,
+            {"carPreset", "Preset", "display.car", SType::Enum, WM, AP_UI,
              0, 0, 0, nullptr, &kCarPresets, S_GET(s.carPreset), S_PUT(s.carPreset = (uint8_t)v)},
-            {"carSig1", "Екран авто: рядок 1", "Car row 1", "display.car", SType::Enum, WM, AP_UI,
+            {"carSig1", "Car row 1", "display.car", SType::Enum, WM, AP_UI,
              0, 0, 0, nullptr, &kSignals, S_GET(sigRowOf(s.carSig[0])), S_PUT(s.carSig[0] = sigOfRow(v))},
-            {"carSig2", "Екран авто: рядок 2", "Car row 2", "display.car", SType::Enum, WM, AP_UI,
+            {"carSig2", "Car row 2", "display.car", SType::Enum, WM, AP_UI,
              0, 0, 0, nullptr, &kSignals, S_GET(sigRowOf(s.carSig[1])), S_PUT(s.carSig[1] = sigOfRow(v))},
-            {"carSig3", "Екран авто: рядок 3", "Car row 3", "display.car", SType::Enum, WM, AP_UI,
+            {"carSig3", "Car row 3", "display.car", SType::Enum, WM, AP_UI,
              0, 0, 0, nullptr, &kSignals, S_GET(sigRowOf(s.carSig[2])), S_PUT(s.carSig[2] = sigOfRow(v))},
-            {"mediaLayout", "Розкладка", "Layout", "display", SType::Enum, WM, AP_UI,
+            {"mediaLayout", "Layout", "display", SType::Enum, WM, AP_UI,
              0, 0, 0, nullptr, &kLayouts, S_GET(rowOf(kLayouts, s.mediaLayout)),
              S_PUT(s.mediaLayout = kLayouts.id((uint8_t)v))},
-            {"mediaStyle", "Стиль тексту", "Text style", "display", SType::Enum, WM, AP_UI,
+            {"mediaStyle", "Text style", "display", SType::Enum, WM, AP_UI,
              0, 0, 0, nullptr, &kStyles, S_GET(rowOf(kStyles, s.mediaStyle)),
              S_PUT(s.mediaStyle = kStyles.id((uint8_t)v))},
-            {"mediaPane", "Картинка", "Scene", "display", SType::Enum, WM, AP_UI,
+            {"mediaPane", "Scene", "display", SType::Enum, WM, AP_UI,
              0, 0, 0, nullptr, &kPanes, S_GET(rowOf(kPanes, s.mediaPane)),
              S_PUT(s.mediaPane = kPanes.id((uint8_t)v))},
             // 5..600 s per stop (the /api/media rule).
-            {"paneCycleS", "Карусель, с", "Carousel", "display", SType::Int, WM, AP_UI,
+            {"paneCycleS", "Carousel", "display", SType::Int, WM, AP_UI,
              5, 600, 5, "s", nullptr, S_GET(s.paneCycleS), S_PUT(s.paneCycleS = (uint16_t)v)},
             // 1..6: past that it stops reading as motion at two images a second.
-            {"paneSpeed", "Швидкість картинки", "Scene speed", "display", SType::Int, WM, AP_UI,
+            {"paneSpeed", "Scene speed", "display", SType::Int, WM, AP_UI,
              1, 6, 1, nullptr, nullptr, S_GET(s.paneSpeed), S_PUT(s.paneSpeed = (uint8_t)v)},
             // 0 = off, else 1..20 s; a value under a second becomes one.
-            {"trackSplashMs", "Заставка треку, мс", "Track splash", "display", SType::Int, WM, AP_UI,
+            {"trackSplashMs", "Track splash", "display", SType::Int, WM, AP_UI,
              0, 20000, 1000, "ms", nullptr, S_GET(s.trackSplashMs),
              S_PUT(s.trackSplashMs = (uint16_t)(v <= 0 ? 0 : (v < 1000 ? 1000 : v)))},
-            {"autoTime", "Час з телефону", "Phone clock", "display", SType::Bool, WM, AP_UI,
+            {"autoTime", "Phone clock", "display", SType::Bool, WM, AP_UI,
              0, 1, 0, nullptr, nullptr, S_GET(s.autoTime), S_PUT(s.autoTime = v != 0)},
-            {"keyPopup", "Показувати натискання", "Key popup", "display", SType::Bool, WM, AP_UI,
+            {"keyPopup", "Key popup", "display", SType::Bool, WM, AP_UI,
              0, 1, 0, nullptr, nullptr, S_GET(s.keyPopup), S_PUT(s.keyPopup = v != 0)},
             // Shorter than a glance, or longer than a screen, is refused.
-            {"keyPopupMs", "Натискання, мс", "Popup time", "display", SType::Int, WM, AP_UI,
+            {"keyPopupMs", "Popup time", "display", SType::Int, WM, AP_UI,
              300, 10000, 100, "ms", nullptr, S_GET(s.keyPopupMs), S_PUT(s.keyPopupMs = (uint16_t)v)},
-            {"ancsPopup", "Сповіщення iPhone", "Notifications", "display", SType::Bool, WM, AP_UI,
+            {"ancsPopup", "Notifications", "display", SType::Bool, WM, AP_UI,
              0, 1, 0, nullptr, nullptr, S_GET(s.ancsPopup), S_PUT(s.ancsPopup = v != 0)},
-            {"mediaSource", "Джерело назви треку", "Track source", "display", SType::Enum, WM, AP_MEDIA,
+            {"mediaSource", "Track source", "display", SType::Enum, WM, AP_MEDIA,
              0, 0, 0, nullptr, &kSources, S_GET(rowOf(kSources, s.mediaSource)),
              S_PUT(s.mediaSource = kSources.id((uint8_t)v))},
 #endif
 
             // ---- the knob lights -------------------------------------------
-            G("lights", "Підсвітка", "Lights", nullptr, WM),
-            {"ledEnabled", "Підсвітка", "Lights on", "lights", SType::Bool, WM, AP_KNOBS,
+            G("lights", "Lights", nullptr, WM),
+            {"ledEnabled", "Lights on", "lights", SType::Bool, WM, AP_KNOBS,
              0, 1, 0, nullptr, nullptr, K_GET(k.ledEnabled), K_PUT(k.ledEnabled = v != 0)},
-            {"ledBrightness", "Яскравість", "Brightness", "lights", SType::Int, WM, AP_KNOBS,
+            {"ledBrightness", "Brightness", "lights", SType::Int, WM, AP_KNOBS,
              0, 255, 15, nullptr, nullptr, K_GET(k.brightness), K_PUT(k.brightness = (uint8_t)v)},
-            G("lights.r", "Правий енкодер", "Right knob", "lights", WM),
-            {"ledR.react", "Реакція", "Reaction", "lights.r", SType::Enum, WM, AP_KNOBS,
+            G("lights.r", "Right knob", "lights", WM),
+            {"ledR.react", "Reaction", "lights.r", SType::Enum, WM, AP_KNOBS,
              0, 0, 0, nullptr, &kReact, K_GET(k.zone[Knobs::ZONE_RIGHT].react),
              K_PUT(k.zone[Knobs::ZONE_RIGHT].react = (Knobs::React)v)},
-            {"ledR.anim", "У спокої", "Idle", "lights.r", SType::Enum, WM, AP_KNOBS,
+            {"ledR.anim", "Idle", "lights.r", SType::Enum, WM, AP_KNOBS,
              0, 0, 0, nullptr, &kAnim, K_GET(k.zone[Knobs::ZONE_RIGHT].anim),
              K_PUT(k.zone[Knobs::ZONE_RIGHT].anim = (Knobs::Anim)v)},
-            {"ledR.color", "Колір", "Colour", "lights.r", SType::Enum, WM, AP_KNOBS,
+            {"ledR.color", "Colour", "lights.r", SType::Enum, WM, AP_KNOBS,
              0, 0, 0, nullptr, &kColors, K_GET(zoneColor(k.zone[Knobs::ZONE_RIGHT])),
              K_PUT(setZoneColor(k.zone[Knobs::ZONE_RIGHT], v))},
-            G("lights.l", "Лівий енкодер", "Left knob", "lights", WM),
-            {"ledL.react", "Реакція", "Reaction", "lights.l", SType::Enum, WM, AP_KNOBS,
+            G("lights.l", "Left knob", "lights", WM),
+            {"ledL.react", "Reaction", "lights.l", SType::Enum, WM, AP_KNOBS,
              0, 0, 0, nullptr, &kReact, K_GET(k.zone[Knobs::ZONE_LEFT].react),
              K_PUT(k.zone[Knobs::ZONE_LEFT].react = (Knobs::React)v)},
-            {"ledL.anim", "У спокої", "Idle", "lights.l", SType::Enum, WM, AP_KNOBS,
+            {"ledL.anim", "Idle", "lights.l", SType::Enum, WM, AP_KNOBS,
              0, 0, 0, nullptr, &kAnim, K_GET(k.zone[Knobs::ZONE_LEFT].anim),
              K_PUT(k.zone[Knobs::ZONE_LEFT].anim = (Knobs::Anim)v)},
-            {"ledL.color", "Колір", "Colour", "lights.l", SType::Enum, WM, AP_KNOBS,
+            {"ledL.color", "Colour", "lights.l", SType::Enum, WM, AP_KNOBS,
              0, 0, 0, nullptr, &kColors, K_GET(zoneColor(k.zone[Knobs::ZONE_LEFT])),
              K_PUT(setZoneColor(k.zone[Knobs::ZONE_LEFT], v))},
 
             // ---- keys and the head-unit link (web only) ----------------------
             // The timing ranges are wide on purpose: the debouncer had no bounds
             // before, so they only stop nonsense.
-            G("keys", "Клавіші", "Keys", nullptr, W),
-            {"debounceMs", "Брязкіт, мс", "Debounce", "keys", SType::Int, W, AP_KEYS,
+            G("keys", "Keys", nullptr, W),
+            {"debounceMs", "Debounce", "keys", SType::Int, W, AP_KEYS,
              1, 200, 1, "ms", nullptr, S_GET(s.timing.debounceMs), S_PUT(s.timing.debounceMs = (uint16_t)v)},
-            {"fastDebounceMs", "Швидкий брязкіт, мс", "Fast debounce", "keys", SType::Int, W, AP_KEYS,
+            {"fastDebounceMs", "Fast debounce", "keys", SType::Int, W, AP_KEYS,
              0, 50, 1, "ms", nullptr, S_GET(s.timing.fastDebounceMs), S_PUT(s.timing.fastDebounceMs = (uint16_t)v)},
-            {"longMs", "Довге натискання, мс", "Long press", "keys", SType::Int, W, AP_KEYS,
+            {"longMs", "Long press", "keys", SType::Int, W, AP_KEYS,
              200, 5000, 50, "ms", nullptr, S_GET(s.timing.longMs), S_PUT(s.timing.longMs = (uint16_t)v)},
-            {"repeatMs", "Повтор, мс", "Repeat", "keys", SType::Int, W, AP_KEYS,
+            {"repeatMs", "Repeat", "keys", SType::Int, W, AP_KEYS,
              50, 2000, 10, "ms", nullptr, S_GET(s.timing.repeatMs), S_PUT(s.timing.repeatMs = (uint16_t)v)},
-            {"repeatEnabled", "Повтор утриманням", "Repeat on", "keys", SType::Bool, W, AP_KEYS,
+            {"repeatEnabled", "Repeat on", "keys", SType::Bool, W, AP_KEYS,
              0, 1, 0, nullptr, nullptr, S_GET(s.timing.repeatEnabled), S_PUT(s.timing.repeatEnabled = v != 0)},
-            {"encInverted", "Енкодер навпаки", "Enc reversed", "keys", SType::Bool, W, AP_KEYS,
+            {"encInverted", "Enc reversed", "keys", SType::Bool, W, AP_KEYS,
              0, 1, 0, nullptr, nullptr, S_GET(s.encInverted), S_PUT(s.encInverted = v != 0)},
             // Destination class masks (Keys::CLASS_*).
-            {"routeUart", "Клавіші в ГУ (UART)", "Route UART", "keys", SType::Int, W, AP_KEYS,
+            {"routeUart", "Route UART", "keys", SType::Int, W, AP_KEYS,
              0, Keys::CLASS_ALL, 1, nullptr, nullptr, S_GET(s.routeUart), S_PUT(s.routeUart = (uint8_t)v)},
-            {"routeAms", "Клавіші в iPhone", "Route AMS", "keys", SType::Int, W, AP_KEYS,
+            {"routeAms", "Route AMS", "keys", SType::Int, W, AP_KEYS,
              0, Keys::CLASS_ALL, 1, nullptr, nullptr, S_GET(s.routeAms), S_PUT(s.routeAms = (uint8_t)v)},
-            {"routeHid", "Клавіші в HID", "Route HID", "keys", SType::Int, W, AP_KEYS,
+            {"routeHid", "Route HID", "keys", SType::Int, W, AP_KEYS,
              0, Keys::CLASS_ALL, 1, nullptr, nullptr, S_GET(s.routeHid), S_PUT(s.routeHid = (uint8_t)v)},
-            {"routeRes", "Клавіші в KEY1/KEY2", "Route RES", "keys", SType::Int, W, AP_KEYS,
+            {"routeRes", "Route RES", "keys", SType::Int, W, AP_KEYS,
              0, Keys::CLASS_ALL, 1, nullptr, nullptr, S_GET(s.routeRes), S_PUT(s.routeRes = (uint8_t)v)},
-            {"routeUsb", "Клавіші в USB", "Route USB", "keys", SType::Int, W, AP_KEYS,
+            {"routeUsb", "Route USB", "keys", SType::Int, W, AP_KEYS,
              0, Keys::CLASS_ALL, 1, nullptr, nullptr, S_GET(s.routeUsb), S_PUT(s.routeUsb = (uint8_t)v)},
 
-            G("link", "Звʼязок з ГУ", "Head unit", nullptr, W),
-            {"uartEnabled", "ГУ по UART", "UART on", "link", SType::Bool, W, AP_KEYS,
+            G("link", "Head unit", nullptr, W),
+            {"uartEnabled", "UART on", "link", SType::Bool, W, AP_KEYS,
              0, 1, 0, nullptr, nullptr, S_GET(s.uartEnabled), S_PUT(s.uartEnabled = v != 0)},
-            {"pulseMs", "Довжина натиску в ГУ, мс", "Key pulse", "link", SType::Int, W, AP_KEYS,
+            {"pulseMs", "Key pulse", "link", SType::Int, W, AP_KEYS,
              40, 500, 10, "ms", nullptr, S_GET(s.pulseMs), S_PUT(s.pulseMs = (uint16_t)v)},
             // Serial1 is opened once at boot.
-            {"uartBaud", "Швидкість UART", "UART baud", "link", SType::Enum, W, AP_REBOOT,
+            {"uartBaud", "UART baud", "link", SType::Enum, W, AP_REBOOT,
              0, 0, 0, nullptr, &kBaudRates, S_GET(baudIndex(s.uartBaud)),
              S_PUT(s.uartBaud = kBauds[v < BAUDS ? v : BAUD_DEFAULT_ROW])},
-            {"resEnabled", "KEY1/KEY2", "KEY1/KEY2", "link", SType::Bool, W, AP_KEYS,
+            {"resEnabled", "KEY1/KEY2", "link", SType::Bool, W, AP_KEYS,
              0, 1, 0, nullptr, nullptr, S_GET(s.resEnabled), S_PUT(s.resEnabled = v != 0)},
             // 0 = learn it (HuMediaSource).
-            {"huTitleCmd", "Команда назви", "HU title cmd", "link", SType::Int, W, AP_MEDIA,
+            {"huTitleCmd", "HU title cmd", "link", SType::Int, W, AP_MEDIA,
              0, 255, 1, nullptr, nullptr, S_GET(s.huTitleCmd), S_PUT(s.huTitleCmd = (uint8_t)v)},
-            {"huArtistCmd", "Команда виконавця", "HU artist cmd", "link", SType::Int, W, AP_MEDIA,
+            {"huArtistCmd", "HU artist cmd", "link", SType::Int, W, AP_MEDIA,
              0, 255, 1, nullptr, nullptr, S_GET(s.huArtistCmd), S_PUT(s.huArtistCmd = (uint8_t)v)},
-            {"huTitleFirst", "Назва першою", "Title first", "link", SType::Bool, W, AP_MEDIA,
+            {"huTitleFirst", "Title first", "link", SType::Bool, W, AP_MEDIA,
              0, 1, 0, nullptr, nullptr, S_GET(s.huTitleFirst), S_PUT(s.huTitleFirst = v != 0)},
 
             // ---- read at boot ----------------------------------------------
-            G("system", "Система", "System", nullptr, W),
-            {"bleMode", "Bluetooth", "Bluetooth", "system", SType::Enum, W, AP_REBOOT,
+            G("system", "System", nullptr, W),
+            {"bleMode", "Bluetooth", "system", SType::Enum, W, AP_REBOOT,
              0, 0, 0, nullptr, &kBleModes, S_GET(rowOf(kBleModes, s.bleMode)),
              S_PUT(s.bleMode = kBleModes.id((uint8_t)v))},
-            {"displayType", "Тип щитка", "Panel", "system", SType::Enum, W, AP_REBOOT,
+            {"displayType", "Panel", "system", SType::Enum, W, AP_REBOOT,
              0, 0, 0, nullptr, &kPanels, S_GET(rowOf(kPanels, s.displayType)),
              S_PUT(s.displayType = kPanels.id((uint8_t)v))},
-            {"funcReg", "Реєструвати щиток", "FuncsReg", "system", SType::Bool, W, AP_REBOOT,
+            {"funcReg", "FuncsReg", "system", SType::Bool, W, AP_REBOOT,
              0, 1, 0, nullptr, nullptr, S_GET(s.funcReg), S_PUT(s.funcReg = v != 0)},
-            {"mdnsOn", "Імʼя megaopen.local", "mDNS", "system", SType::Bool, W, AP_REBOOT,
+            {"mdnsOn", "mDNS", "system", SType::Bool, W, AP_REBOOT,
              0, 1, 0, nullptr, nullptr, S_GET(s.mdnsOn), S_PUT(s.mdnsOn = v != 0)},
-            {"can2Bitrate", "Швидкість CAN A", "CAN A rate", "system", SType::Enum, W, AP_REBOOT,
+            {"can2Bitrate", "CAN A rate", "system", SType::Enum, W, AP_REBOOT,
              0, 0, 0, nullptr, &kRates, S_GET(rateIndex(s.can2Bitrate)),
              S_PUT(s.can2Bitrate = rateRow((uint8_t)v))},
             // Written by net_svc when the search locks on; shown only.
-            {"can2Detected", "Знайдена швидкість CAN A", "CAN A found", "system", SType::Enum, W | F_RO, AP_NONE,
+            {"can2Detected", "CAN A found", "system", SType::Enum, W | F_RO, AP_NONE,
              0, 0, 0, nullptr, &kRates, S_GET(rateIndex(s.can2Detected)),
              S_PUT(s.can2Detected = rateRow((uint8_t)v))},
 
             // ---- service: RAM only ------------------------------------------
             // TRC costs the CAN path real time, so the level is never saved:
             // every boot starts at INF.
-            G("service", "Сервіс", "Service", nullptr, WM),
-            {"logLevel", "Рівень логу", "Log level", "service", SType::Enum, WM | F_VOLATILE, AP_NONE,
+            G("service", "Service", nullptr, WM),
+            {"logLevel", "Log level", "service", SType::Enum, WM | F_VOLATILE, AP_NONE,
              0, 0, 0, nullptr, &kLogLevels, [](const Model&) -> int32_t { return (int32_t)Log::level(); },
              [](Model&, int32_t v) { Log::setLevel((LogLevel)v); }},
             // Set by the page's «Режим розробника»; off at boot. Dev-only test
             // routes answer 403 without it (/api/display/inforaw).
-            {"devMode", "Режим розробника", "Dev mode", "service", SType::Bool, W | F_VOLATILE, AP_NONE,
+            {"devMode", "Dev mode", "service", SType::Bool, W | F_VOLATILE, AP_NONE,
              0, 1, 0, nullptr, nullptr, S_GET(s.devMode), S_PUT(s.devMode = v != 0)},
 
             // ---- the CAN capture recorder (its own NVS namespace) -------------
             // Ranges are Capture::setSettings()'s clamps.
-            G("cap", "Запис CAN", "Capture", nullptr, W),
-            {"cap.autostart", "Автостарт", "Autostart", "cap", SType::Bool, W, AP_CAP,
+            G("cap", "Capture", nullptr, W),
+            {"cap.autostart", "Autostart", "cap", SType::Bool, W, AP_CAP,
              0, 1, 0, nullptr, nullptr, C_GET(c.autostart), C_PUT(c.autostart = v != 0)},
-            {"cap.mode", "Що писати", "Mode", "cap", SType::Enum, W, AP_CAP,
+            {"cap.mode", "Mode", "cap", SType::Enum, W, AP_CAP,
              0, 0, 0, nullptr, &kCapModes, C_GET(c.mode), C_PUT(c.mode = (uint8_t)v)},
-            {"cap.ring", "Стирати найстаріші", "Ring", "cap", SType::Bool, W, AP_CAP,
+            {"cap.ring", "Ring", "cap", SType::Bool, W, AP_CAP,
              0, 1, 0, nullptr, nullptr, C_GET(c.ring), C_PUT(c.ring = v != 0)},
-            {"cap.fill", "Заповнювати сховище до, %", "Fill", "cap", SType::Int, W, AP_CAP,
+            {"cap.fill", "Fill", "cap", SType::Int, W, AP_CAP,
              10, 95, 5, "%", nullptr, C_GET(c.fillPct), C_PUT(c.fillPct = (uint8_t)v)},
-            {"cap.fileMB", "Розмір файлу, МБ", "File size", "cap", SType::Int, W, AP_CAP,
+            {"cap.fileMB", "File size", "cap", SType::Int, W, AP_CAP,
              1, 8, 1, "MB", nullptr, C_GET(c.fileMB), C_PUT(c.fileMB = (uint8_t)v)},
-            {"cap.autoProtect", "Мітка ставить 🔒", "Mark protects", "cap", SType::Bool, W, AP_CAP,
+            {"cap.autoProtect", "Mark protects", "cap", SType::Bool, W, AP_CAP,
              0, 1, 0, nullptr, nullptr, C_GET(c.autoProtect), C_PUT(c.autoProtect = v != 0)},
 
             // ---- the head-unit emitter's Raise tuning (NVS "tuning") ---------
             // The ranges only stop nonsense: the emitter takes any of these
             // (docs/raise-protocol.md says what each one changes on the unit).
-            G("raise", "ГУ: протокол Raise", "Raise", nullptr, W),
-            {"raise.doorsLen", "Двері: довжина кадру", "Doors len", "raise", SType::Int, W, AP_HU,
+            G("raise", "Raise", nullptr, W),
+            {"raise.doorsLen", "Doors len", "raise", SType::Int, W, AP_HU,
              1, 2, 1, nullptr, nullptr, T_GET(t.doorsLen), T_PUT(t.doorsLen = (uint8_t)v)},
-            {"raise.cmd28", "cmd 0x28 несе", "0x28 carries", "raise", SType::Enum, W, AP_HU,
+            {"raise.cmd28", "0x28 carries", "raise", SType::Enum, W, AP_HU,
              0, 0, 0, nullptr, &kCmd28E, T_GET(t.cmd28 ? 1 : 0), T_PUT(t.cmd28 = (uint8_t)v)},
-            {"raise.steerInvert", "Кермо навпаки", "Steer invert", "raise", SType::Bool, W, AP_HU,
+            {"raise.steerInvert", "Steer invert", "raise", SType::Bool, W, AP_HU,
              0, 1, 0, nullptr, nullptr, T_GET(t.steerInvert != 0), T_PUT(t.steerInvert = v ? 1 : 0)},
             // 10 = whole degrees, 1 = the x10 value.
-            {"raise.steerDiv", "Кермо: дільник", "Steer div", "raise", SType::Int, W, AP_HU,
+            {"raise.steerDiv", "Steer div", "raise", SType::Int, W, AP_HU,
              1, 10, 1, nullptr, nullptr, T_GET(t.steerDiv), T_PUT(t.steerDiv = (uint8_t)v)},
             // Spec 380, a Clio III 500, mikescotland 540; never near 5400.
-            {"raise.steerClamp", "Кермо: межа", "Steer clamp", "raise", SType::Int, W, AP_HU,
+            {"raise.steerClamp", "Steer clamp", "raise", SType::Int, W, AP_HU,
              100, 1000, 10, nullptr, nullptr, T_GET(t.steerClamp), T_PUT(t.steerClamp = (int16_t)v)},
-            {"raise.fuelUnit", "Витрата пального в", "Fuel unit", "raise", SType::Enum, W, AP_HU,
+            {"raise.fuelUnit", "Fuel unit", "raise", SType::Enum, W, AP_HU,
              0, 0, 0, nullptr, &kFuelE, T_GET(unitRow(Canbox::FUEL_UNITS, t.fuelUnit)),
              T_PUT(t.fuelUnit = Canbox::FUEL_UNITS[v].v)},
-            {"raise.tripUnit", "Пробіг у", "Trip unit", "raise", SType::Enum, W, AP_HU,
+            {"raise.tripUnit", "Trip unit", "raise", SType::Enum, W, AP_HU,
              0, 0, 0, nullptr, &kTripE, T_GET(unitRow(Canbox::TRIP_UNITS, t.tripUnit)),
              T_PUT(t.tripUnit = Canbox::TRIP_UNITS[v].v)},
-            {"raise.tripFields", "Поїздка: середня швидкість і час", "Trip fields", "raise", SType::Bool, W, AP_HU,
+            {"raise.tripFields", "Trip fields", "raise", SType::Bool, W, AP_HU,
              0, 1, 0, nullptr, nullptr, T_GET(t.tripFields != 0), T_PUT(t.tripFields = v ? 1 : 0)},
             // 13 fills the HISTORY screen; 3 is the copied form the unit drops.
-            {"raise.histLen", "Історія: довжина кадру", "History len", "raise", SType::Int, W, AP_HU,
+            {"raise.histLen", "History len", "raise", SType::Int, W, AP_HU,
              3, 13, 1, nullptr, nullptr, T_GET(t.histLen), T_PUT(t.histLen = (uint8_t)v)},
-            {"raise.radarInvert", "Радар навпаки", "Radar invert", "raise", SType::Bool, W, AP_HU,
+            {"raise.radarInvert", "Radar invert", "raise", SType::Bool, W, AP_HU,
              0, 1, 0, nullptr, nullptr, T_GET(t.radarInvert != 0), T_PUT(t.radarInvert = v ? 1 : 0)},
-            {"raise.version", "Версія коробки", "Version", "raise", SType::Str, W, AP_HU,
+            {"raise.version", "Version", "raise", SType::Str, W, AP_HU,
              0, 0, 0, nullptr, nullptr, nullptr, nullptr, nullptr, &kVersion},
 
             // ---- the panel alerts: the whole table, row i = rule i ----------
             // Drawn by the live-car page, not the settings card.
-            {"alerts", "Сповіщення на дисплей", "Alerts", nullptr, SType::Table, W, AP_CAR,
+            {"alerts", "Alerts", nullptr, SType::Table, W, AP_CAR,
              0, 0, 0, nullptr, nullptr, nullptr, nullptr, &kAlerts},
 
             // ---- which Raise messages go to the head unit: RAM only ---------
             // A bench switch (every boot sends them all); drawn by the service
             // page next to each message's live bytes (/api/messages).
-            {"huMessages", "Повідомлення в ГУ", "HU messages", nullptr, SType::Table, W | F_VOLATILE, AP_HU,
+            {"huMessages", "HU messages", nullptr, SType::Table, W | F_VOLATILE, AP_HU,
              0, 0, 0, nullptr, nullptr, nullptr, nullptr, &kMessages},
         };
 #undef S_GET
