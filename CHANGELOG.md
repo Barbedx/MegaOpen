@@ -5,13 +5,34 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-21
+
 ### Added
-- Firmware updates from GitHub Releases on the Плата page (T-2CAN): check, then download the env's image, check its SHA-256 against `SHA256SUMS`, and reboot into the OTA trial from the page or once the car stands. Never automatic, never while driving.
+- Firmware updates from GitHub Releases on the Плата page (T-2CAN): check, download the env's image, verify its SHA-256 against `SHA256SUMS`, reboot into the OTA trial from the page or once the car stands. Never automatic, never while driving.
+- Media styles tape (a cassette with turning reels) and typewriter; pane scenes tape and tunnel.
+- Volume keys fall back to the phone while the head unit is silent (not in the first minute after boot).
+- Direct tier: web screens for the 3x3 key matrix and the KEY1/KEY2 ladder.
+- Head unit: a PRND probe on 0x7D 06 behind a switch, with a web sweep.
+- `uartBaud` in the settings registry: a list of canbox rates, applied at reboot; a stored rate outside the list can be repaired.
+- User guide (`docs/USER-GUIDE.md`): first boot, the panel menu, live car page and alerts, media, keys, updates, health codes.
 
 ### Changed
 - AffaDisplay v1.1.0: its fullscreen sends the OEM geometry; MegaOpen's own fullscreen sender is gone.
-- Car screen and the media Fullscreen layout now use the OEM fullscreen geometry (row 1 no longer indented, row 3 gets room).
+- Car screen and the media Fullscreen layout use the OEM fullscreen geometry (row 1 no longer indented, row 3 gets room).
+- Media rows and the header fit the glass's 22 columns.
+- Key routing knows what each sink can do; the AMS default no longer takes the phone class.
+- AMS volume: commands per press measured from the phone's volume instead of a fixed 15.
+- No automatic screen covers a live popup, in any layout.
+- The generated web page is no longer tracked, so a build cannot mark the tree dirty.
+
+### Fixed
+- Steering angle centred on 0x7FFF, as the X84 matrix says.
+- A Renault 2-bit state's invalid value no longer reads as "yes"; belts and the passenger seat read 1 = yes.
+- AMS reads the whole of a long title, artist or album; a failed or short read never replaces the shown title.
+- BLE: AMS long reads and ANCS attribute requests wait for idle keys; the AMS caches and bonds are cleared only on the BLE task.
+- Panel menu: a Bool pressed twice toggles twice; a knob edit from the menu is no longer lost to a web save.
 - Car screen: a "none" row stays blank in its place instead of moving the rows below it up.
+- Simulator: GET /api/settings no longer fails on a text setting.
 
 ## [1.0.0]
 
@@ -40,5 +61,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - CloudLink and `cloud/`.
 - OTA password; the WiFi password protects the board.
 
-[Unreleased]: https://github.com/Barbedx/MegaOpen/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Barbedx/MegaOpen/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Barbedx/MegaOpen/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Barbedx/MegaOpen/releases/tag/v1.0.0
