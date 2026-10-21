@@ -17,6 +17,7 @@ SCR.service={title:'Сервіс',async render(m){
  (D?card('Панель: консоль',row('Живлення','<button class="btn sm" type="button" data-pw="1">Увімк</button><button class="btn sm" type="button" data-pw="0">Вимк</button>')+
   '<div class="fr">'+`<select class="in" id="cK" style="flex:1">${CAT.console.map(c=>`<option value="${esc(c.cmd)}">${esc(c.name)}</option>`).join('')}</select>`+'</div><div class="pad"><div class="mg" id="cF"></div></div><div class="fr"><button class="btn pri" type="button" id="cGo">Надіслати</button></div>'+
   '<div class="kv" id="caps"></div>','cCon','custom')+
+ card('Заміри скла',row('','','Крок за кроком шле лінійки на щиток (docs/glass-sweeps.md). На кожному кроці сфотографуй скло і запиши, який символ останній видно. Цифра/літера кожні 10 знаків — це номер десятка.')+'<div class="fr"><button class="btn pri" type="button" id="swGo">Почати</button><button class="btn" type="button" id="swEnd">Скинути</button></div><div class="pad"><b class="mono" id="swN">—</b> <span id="swW" class="muted"></span></div>','','custom')+
  card('Клавіша в CAN B',row('','','Кадр клавіші йде в шину панелі, ніби від джойстика: щоб перевірити штатне радіо. Плата сама його не обробляє.')+
   `<div class="fr">${sel('wK',PK.map(a=>[a.wire,a.name]),PK.length?PK[0].wire:'','data-nosave data-str id="wK"')}<button class="btn" type="button" data-wire="0">клік</button><button class="btn" type="button" data-wire="1">утрим.</button></div>`,'','custom')+
  card('Медіа: тестовий трек',row('','','Підставляє вигаданий трек, щоб глянути розкладку без телефона. Тримається, доки джерело не оновить екран.')+`<div class="fr"><input class="in" id="iT" placeholder="Назва" value="Тест"><input class="in" id="iA" placeholder="Виконавець" value="MegaOpen"></div><div class="fr"><input class="in" type="number" id="iE" value="30" style="width:80px" aria-label="Минуло, с"><input class="in" type="number" id="iD" value="200" style="width:80px" aria-label="Тривалість, с"><button class="btn pri" type="button" id="iGo">Показати</button><button class="btn" type="button" id="spGo">Заставка зараз</button></div>`,'','custom')+
@@ -52,6 +53,19 @@ SCR.service={title:'Сервіс',async render(m){
  // консоль
  if(D){const cF=()=>{$('#cF').innerHTML=con().fields.map(cField).join('')||'<span class="muted">без параметрів</span>'};cF();$('#cK').onchange=cF;
  $('#cGo').onclick=e=>{const c=con(),q=new URLSearchParams();c.fields.forEach(({n})=>{const v=val($(`#cF [data-f="${n}"]`));if(v!==undefined&&v!=='')q.set(n,v)});run(e.target,()=>API.post('/api/display/'+c.cmd+'?'+q),c.name+': у черзі')};
+ /* заміри скла: лінійки по одній на крок, docs/glass-sweeps.md */
+ const RD='123456789A123456789B123456789C',RW='WWWWWWWWW1WWWWWWWWW2WWWWWWWWW3',RL='abcdefghi1abcdefghi2abcdefghi3',SW=[
+  ['fullscreen',{l1:RD},'Повний екран, цифри: останній видимий символ'],
+  ['fullscreen',{l1:RW},'Повний екран, W (найширша): останній видимий'],
+  ['fullscreen',{l1:RL},'Повний екран, малі літери: останній видимий'],
+  ['fullscreen',{l1:RD.slice(0,22),l2:RD.slice(0,22),l3:RD.slice(0,22)},'Три рядки по 22: чи всі три цілі (кожен кінчається на B12)'],
+  ['menu',{header:RD,row0:RD,row1:RW},'Меню: заголовок, рядок цифр, рядок W: останні видимі'],
+  ['info',{l1:'12345678',l2:'WWWWWWWW',l3:'abcdefgh'},'Інфо: 8 знаків у кожному рядку; скільки ще місця праворуч у рамці'],
+ ];
+ let swI=-1;const swStep=async b=>{swI++;if(swI>=SW.length){swI=-1;$('#swN').textContent='готово';$('#swW').textContent='';b.textContent='Почати';await API.post('/api/display/clear');return {note:'кінець, щиток повернуто'}}
+  const[c,q,w]=SW[swI];$('#swN').textContent=(swI+1)+'/'+SW.length;$('#swW').textContent=w;b.textContent='Далі';await API.post('/api/display/'+c+'?'+new URLSearchParams(q));return {note:'крок '+(swI+1)+': фото'}};
+ $('#swGo').onclick=e=>run(e.target,()=>swStep(e.target));
+ $('#swEnd').onclick=e=>{swI=-1;$('#swN').textContent='—';$('#swW').textContent='';$('#swGo').textContent='Почати';run(e.target,()=>API.post('/api/display/clear'),'щиток повернуто')};
  $$('[data-pw]',m).forEach(b=>b.onclick=()=>run(b,()=>API.post('/api/display/power?on='+b.dataset.pw)));
  $$('[data-wire]',m).forEach(b=>b.onclick=()=>run(b,()=>API.post('/api/display/key?wire=1&code='+$('#wK').value+'&hold='+b.dataset.wire)));
  /* утримання коліщатка не має форми на шині: каталог каже wireHold:false */

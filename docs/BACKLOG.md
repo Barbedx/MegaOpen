@@ -55,11 +55,13 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   MediaSession, sending to the board over WiFi.
 
 - **Info list truncates to 8 characters** (`kInfoCells`), seen on camera with a
-  row box that is visibly wider. Same sweep: declared length 0x0B + offsets.
+  row box that is visibly wider. Same sweep: declared length 0x0B + offsets;
+  needs a raw-frame test route first (docs/glass-sweeps.md, step 6).
 - **Column widths are guesses elsewhere.** `MediaScreen::COLS_DEFAULT = 26`
   still drives the menu/fullscreen media layouts; the glass measured ~22 wide
   characters (capitals/digits) and ~21 lowercase. Proportional font, so the
   real limit is pixels: measure the widest glyphs (W, M) and set the budget.
+  Procedure: docs/glass-sweeps.md (Сервіс → Заміри скла, 10 minutes).
 - **Right pane seen blank for a while after a notification** in one capture
   (2026-09-27, ~20 s), fine in the next. Observe before acting; could be the
   carousel on an empty scene.
