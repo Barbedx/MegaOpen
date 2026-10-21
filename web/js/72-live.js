@@ -20,12 +20,15 @@ const lvAge=a=>a==null?DASH:a<1000?'<1 с':a<60000?Math.round(a/1000)+' с':Math
    зайвого запиту), у памʼять цієї вкладки рядком JSON на зріз (так і рахує
    розмір), до REC_MAX зрізів (2 год). Стоп — пауза: «Записати» дописує далі,
    час у CSV показує прогалини. Позначки — рядки з текстом між зрізами. Ніде не зберігається: перезавантаження
-   сторінки його губить, тому до того — «Завантажити CSV». */
+   сторінки його губить, тому до того — «Завантажити CSV»; поки є незбережене,
+   beforeunload питає (лише тоді: зайвий слухач вішав навігацію headless-Chrome у ui_audit). */
 const REC_MAX=3600,REC_MARKS=['лівий поворот','правий поворот','гальмо','ручник','розгін'];
 const REC={on:false,rows:[],n:0,bytes:0,M:null,saved:true};
+const recUnload=e=>{e.preventDefault();e.returnValue=''};
+const recSaved=v=>{REC.saved=v;window[(v?'remove':'add')+'EventListener']('beforeunload',recUnload)};
 const recAdd=(M,r)=>{if(!REC.on||!r||!r.sigs)return;REC.M=REC.M||M;
- const s=JSON.stringify(r.sigs);REC.rows.push({t:Date.now(),s});REC.n++;REC.bytes+=s.length+16;REC.saved=false;if(REC.n>=REC_MAX)REC.on=false};
-const recMark=t=>{t=(t||'').trim();if(!t||!REC.M)return false;REC.rows.push({t:Date.now(),mark:t});REC.bytes+=t.length+16;REC.saved=false;return true};
+ const s=JSON.stringify(r.sigs);REC.rows.push({t:Date.now(),s});REC.n++;REC.bytes+=s.length+16;recSaved(false);if(REC.n>=REC_MAX)REC.on=false};
+const recMark=t=>{t=(t||'').trim();if(!t||!REC.M)return false;REC.rows.push({t:Date.now(),mark:t});REC.bytes+=t.length+16;recSaved(false);return true};
 const recSize=b=>b<1048576?Math.max(1,Math.round(b/1024))+' кБ':(b/1048576).toFixed(1)+' МБ';
 const recStat=()=>{if(!REC.rows.length)return REC.on?'● чекаю на перше оновлення':'порожньо';const a=REC.rows[0].t,b=REC.rows[REC.rows.length-1].t;
  return (REC.on?'● ':REC.n>=REC_MAX?'повно (2 год) · ':'')+fmtUp(b-a)+' · '+REC.n+' зрізів · '+(REC.rows.length-REC.n)+' позн. · '+recSize(REC.bytes)};
@@ -41,8 +44,7 @@ function recCsv(){const M=REC.M||[],t0=REC.rows.length?REC.rows[0].t:0,L=[];
  return '﻿'+L.join('\r\n')+'\r\n'}
 function recSave(){const a=document.createElement('a'),t=recTime(REC.rows[0].t).slice(0,16).replace(/[-: ]/g,'');
  a.href=URL.createObjectURL(new Blob([recCsv()],{type:'text/csv;charset=utf-8'}));a.download='megaopen-live-'+t+'.csv';
- document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);REC.saved=true}
-window.addEventListener('beforeunload',e=>{if(!REC.saved){e.preventDefault();e.returnValue=''}});
+ document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),60000);recSaved(true)}
 SCR.live={title:'Авто — наживо',hidden:true,async render(m){
  const[r,se]=await Promise.all([API.get('/api/map?meta=1&live=1'),API.get('/api/settings')]);
  const al=(CAT.settings||[]).find(f=>f.id==='alerts')||{cols:[]},cond=al.cols.find(c=>c.id==='cond')||{enum:[]};
@@ -66,7 +68,7 @@ SCR.live={title:'Авто — наживо',hidden:true,async render(m){
  $('#rcAdd').onclick=e=>{const i=$('[data-f="rcTxt"]');if(mark(i.value,e.target))i.value=''};
  $('#rcCsv').onclick=e=>{if(!REC.rows.length){sv(svOf(e.target),'bad','порожньо');return}recSave();sv(svOf(e.target),'ok','CSV');this.drawRec()};
  $('#rcClr').onclick=e=>{const b=e.target;if(!REC.saved&&!b.dataset.sure){b.dataset.sure=1;b.textContent='Не збережено. Ще раз — очистити';return}
-  Object.assign(REC,{on:false,rows:[],n:0,bytes:0,M:null,saved:true});delete b.dataset.sure;b.textContent='Очистити';this.drawRec()};
+  Object.assign(REC,{on:false,rows:[],n:0,bytes:0,M:null});recSaved(true);delete b.dataset.sure;b.textContent='Очистити';this.drawRec()};
  $('#alSave').onclick=e=>{this.A=this.readAlerts();run(e.target,()=>API.post('/api/settings',{alerts:this.A.map(a=>[a[0],a[1],+a[2]||0,parseInt(a[3])||0,!!a[4]])}),'збережено')};
  $('#lvT').onclick=e=>{const c=e.target.closest('[data-conf]');
   if(c){const mm=this.M[+c.dataset.conf],[t,on]=LV_CONF[c.dataset.on==='1'?0:1];

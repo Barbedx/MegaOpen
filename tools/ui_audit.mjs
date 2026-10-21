@@ -89,7 +89,16 @@ async function connect() {
     else if (d.method) listeners.forEach(f => f(d));
   };
 }
-const cmd = (method, params = {}) => new Promise(r => { const i = ++nextId; pending.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
+// A command that does not answer in CMD_MS fails the page with its name
+// instead of hanging the job until CI cancels it (a beforeunload listener once
+// left Page.navigate waiting for ever).
+const CMD_MS = 20000;
+const cmd = (method, params = {}) => new Promise((r, j) => {
+  const i = ++nextId;
+  const t = setTimeout(() => { pending.delete(i); j(new Error(`${method} did not answer in ${CMD_MS / 1000} s`)); }, CMD_MS);
+  pending.set(i, d => { clearTimeout(t); r(d); });
+  ws.send(JSON.stringify({ id: i, method, params }));
+});
 
 // Runs in the page. ALLOW is passed in.
 const AUDIT = allow => `(() => {
@@ -142,7 +151,7 @@ const AUDIT = allow => `(() => {
 })()`;
 
 const t0 = Date.now();
-let failed = 0;
+let failed = 0, hung = 0;
 const report = {};
 try {
   await connect();
@@ -158,37 +167,48 @@ try {
     await cmd('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
     for (const [w, h] of SIZES) {
       for (const [env, tab] of PAGES) {
-        await cmd('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: true });
-        await cmd('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
-        errors = [];
-        await cmd('Page.navigate', { url: 'about:blank' });
-        await cmd('Page.navigate', { url: pathToFileURL(html).href + '?env=' + env + '#' + tab });
-        // Rendered: a card in #main (or an error card), then a moment to settle.
-        for (let i = 0; i < 60; i++) {
-          const r = await cmd('Runtime.evaluate', { expression: '!!document.querySelector("#main .card")', returnByValue: true });
-          if (r.result?.result?.value) break;
-          await sleep(100);
-        }
-        await sleep(700);
-        const a = await cmd('Runtime.evaluate', { expression: AUDIT(ALLOW), returnByValue: true });
-        const r = JSON.parse(a.result.result.value || '{}');
-        r.errors = errors.slice(0, 10);
         const key = `${theme}-${w}-${env}-${tab}`;
-        const bad = r.overflow.length + r.small.length + r.contrast.length + r.errors.length;
-        report[key] = r;
-        if (bad) {
-          failed++;
+        try {
+          await cmd('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: true });
+          await cmd('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+          errors = [];
+          await cmd('Page.navigate', { url: 'about:blank' });
+          await cmd('Page.navigate', { url: pathToFileURL(html).href + '?env=' + env + '#' + tab });
+          // Rendered: a card in #main (or an error card), then a moment to settle.
+          for (let i = 0; i < 60; i++) {
+            const r = await cmd('Runtime.evaluate', { expression: '!!document.querySelector("#main .card")', returnByValue: true });
+            if (r.result?.result?.value) break;
+            await sleep(100);
+          }
+          await sleep(700);
+          const a = await cmd('Runtime.evaluate', { expression: AUDIT(ALLOW), returnByValue: true });
+          const r = JSON.parse(a.result.result.value || '{}');
+          r.errors = errors.slice(0, 10);
+          const bad = r.overflow.length + r.small.length + r.contrast.length + r.errors.length;
+          report[key] = r;
+          if (bad) {
+            failed++;
+            console.log(`FAIL ${key}`);
+            const lines = [];
+            for (const k of ['overflow', 'small', 'contrast', 'errors']) for (const x of r[k].slice(0, 8)) lines.push(`${k}: ${x}`);
+            lines.forEach(l => console.log('  ' + l));
+            ghError('ui_audit ' + key, lines);
+            const lm = await cmd('Page.getLayoutMetrics');
+            await cmd('Emulation.setDeviceMetricsOverride', { width: w, height: Math.min(Math.ceil(lm.result.cssContentSize.height), 6000), deviceScaleFactor: 1, mobile: true });
+            const shot = await cmd('Page.captureScreenshot', { format: 'png' });
+            writeFileSync(join(out, key + '.png'), Buffer.from(shot.result.data, 'base64'));
+          } else {
+            console.log(`ok   ${key}`);
+          }
+        } catch (e) {
+          // A hung page: report it by name and go on; a Chrome that hangs on
+          // every page stops the run after three.
+          failed++; hung++;
+          report[key] = { hung: String(e.message || e) };
           console.log(`FAIL ${key}`);
-          const lines = [];
-          for (const k of ['overflow', 'small', 'contrast', 'errors']) for (const x of r[k].slice(0, 8)) lines.push(`${k}: ${x}`);
-          lines.forEach(l => console.log('  ' + l));
-          ghError('ui_audit ' + key, lines);
-          const lm = await cmd('Page.getLayoutMetrics');
-          await cmd('Emulation.setDeviceMetricsOverride', { width: w, height: Math.min(Math.ceil(lm.result.cssContentSize.height), 6000), deviceScaleFactor: 1, mobile: true });
-          const shot = await cmd('Page.captureScreenshot', { format: 'png' });
-          writeFileSync(join(out, key + '.png'), Buffer.from(shot.result.data, 'base64'));
-        } else {
-          console.log(`ok   ${key}`);
+          console.log(`  hung: ${e.message || e}`);
+          ghError('ui_audit ' + key, ['hung: ' + (e.message || e)]);
+          if (hung >= 3) throw new Error(`ui_audit: ${hung} pages hung, last ${key}`);
         }
       }
     }
