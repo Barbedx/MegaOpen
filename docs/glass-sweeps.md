@@ -57,4 +57,6 @@ curl -X POST -H "X-MegaOpen: 1" "$B/api/display/clear"
   count in the library's `showInfoMenu`, and the route goes.
 * Step 15: the same route with `rows=3` (`len=0x13&rows=3&text=…`): the text
   in all three rows at the OEM offsets `0x41`/`0x44`/`0x48`, so the photo
-  shows whether the width differs per row.
+  shows whether the width differs per row. If a row shows a different count, the
+  cell count is per row, not one number: `showInfoMenu` takes one count for
+  all three rows, so the info layout would send each row with `showInfoRow`.
