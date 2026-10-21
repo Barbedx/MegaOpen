@@ -42,7 +42,7 @@ locked, 3 both.
 | 13 | When the low-fuel lamp lights | a "Car alert / fuel_low: 1 ?" popup on the display (held while a menu is open) | `0x5C5` b1.2/1 + alert rule 1 |
 | 14 | Before/after refuelling | Пальне, л in both copies | `0x5C5` / `0x715` b5.0/7 |
 | 15 | A drive of 5 km+ | Витрата зараз/середня, Запас ходу (розрах.), vs the cluster's trip computer | `0x551` b2.0/8 counter |
-| 16 | A steady left turn, then hard braking in a straight line | `accel_lat` and `accel_long` on Наживо: write down the sign of each. The G-метр (pane carousel) shows felt force, so its dot should go **right** in the left turn and **up** under braking. This confirms 0x2A0's signs | `0x2A0` b2.0/16, b1.0/8 |
+| 16 | A steady left turn, then hard braking in a straight line | `accel_lat` and `accel_long` on Наживо: write down the sign of each. The G-метр (pick it on Екран → Картинка 48×48 → G-метр; it is not in the carousel) shows felt force, so its dot should go **right** in the left turn and **up** under braking. This confirms 0x2A0's signs | `0x2A0` b2.0/16, b1.0/8 |
 
 A row that reads right goes measured by dropping its `DF_HYPOTHESIS` (it then
 shows ✓). A row that does not: the capture, the marker and the step number go
