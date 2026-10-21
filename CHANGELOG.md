@@ -5,16 +5,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-21
+
 ### Added
 - Pane scene G-метр: the felt force from 0x2A0 (left turn → right, braking → up) as a dot with a trail, a 0.5 g ring and a 3 s peak; the ring dotted while the decode is unverified, a still dotted ring with no fresh data. Not in the carousel.
 - Car screen preset «Поїздка»: consumption now/average, range, trip distance (`--` with no data; the trip keeps its last value with `?` after the engine stops); Display › Car screen › Preset, `carPreset`, and a card on Екран.
+- Head unit experiment: battery volts on the tablet (off by default). The RAV4 profile has no battery field, so the volts ×10 go in a borrowed one: the range of `0x21`, `0x7D 04` D4-D5, or the current value of `0x23`. A field another experiment uses is refused (400, in Ukrainian on the page).
+- `/api/health` `hu.climateChanges`: changed `0x28` frames since boot, to compare with climate pop-ups seen in the car.
+- CI job `ui`: the web app audited at phone width (390 and 360 px, light and dark) on every push. It fails on a page wider than the screen, text under 4.5:1 contrast, a control under 40 px, or a console error; findings show as annotations on the run page.
 
 ### Changed
 - Panel menu: the car screen settings moved into Display › Car screen.
-- AffaDisplay v1.3.0. The dev-only `/api/display/inforaw` (glass sweep) sends through the library's `showInfoRow`: the same bytes as before, and the hand-built frame (`display/InfoRaw.h`) is gone. `rows=3` puts the ruler in all three info rows (sweep step 15).
+- AffaDisplay v1.3.0 (from v1.1.1). The dev-only `/api/display/inforaw` (glass sweep) sends through the library's `showInfoRow`: the same bytes as before, and the hand-built frame (`display/InfoRaw.h`) is gone. `rows=3` puts the ruler in all three info rows (sweep step 15).
+- CI actions on their current major versions (Node 24).
 
 ### Fixed
 - AffaDisplay v1.1.2: urgent panel jobs (power on/off) go out in the order they were queued; two of them used to go out reversed.
+- Head unit: the tablet's climate overlay no longer pops up by itself. The outside temperature in `0x28` changes only after a new reading has held for 60 s (a flickering degree changed the frame every 5 s), and the 5-byte A/C form goes out only from a measured or pinned signal, not a guessed one.
+- Кнопки: the macro card fits a 360 px phone (it overflowed by 13 px with Linux fonts).
 
 ## [1.2.0] - 2026-10-21
 
