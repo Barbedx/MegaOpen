@@ -1,2 +1,24 @@
+# Every text file is stored with LF, on every OS: release.yml parses
+# src/Version.h with sed, and a CR before the line end read as no version
+# (v1.2.0-rc1). CI fails on a tracked file stored with CR.
+* text=auto eol=lf
+
 # Shell scripts run under bash on every OS: LF, never CRLF.
 *.sh text eol=lf
+
+# Never converted.
+*.bin binary
+*.elf binary
+*.gz binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.stl binary
+*.3mf binary
+*.step binary
+*.woff binary
+*.woff2 binary

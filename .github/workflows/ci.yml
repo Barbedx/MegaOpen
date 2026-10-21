@@ -23,6 +23,12 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      # .gitattributes stores text as LF; a file committed with CR anyway
+      # (core.autocrlf=false) broke release.yml's version parse once.
+      - name: no CR in tracked files
+        run: |
+          bad=$(git ls-files --eol | awk '$1 == "i/crlf" || $1 == "i/mixed" { print $NF }')
+          [ -z "$bad" ] || { echo "::error::stored with CR (git add --renormalize):"; echo "$bad"; exit 1; }
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

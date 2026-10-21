@@ -41,9 +41,12 @@ jobs:
         run: |
           tag="$GITHUB_REF_NAME"
           ver="${tag#v}"; ver="${ver%%-rc*}"
-          code=$(sed -n 's/^#define MEGAOPEN_VERSION "\(.*\)"$/\1/p' src/Version.h)
-          wire=$(sed -n 's/^#define MEGAOPEN_VERSION_WIRE "\(.*\)"$/\1/p' src/Version.h)
+          # tr: a CRLF Version.h read as no version once (v1.2.0-rc1).
+          code=$(tr -d '\r' < src/Version.h | sed -n 's/^#define MEGAOPEN_VERSION "\(.*\)"$/\1/p')
+          wire=$(tr -d '\r' < src/Version.h | sed -n 's/^#define MEGAOPEN_VERSION_WIRE "\(.*\)"$/\1/p')
           echo "tag $tag, MEGAOPEN_VERSION '$code', WIRE '$wire'"
+          [ -n "$code" ] && [ -n "$wire" ] \
+            || { echo "::error::no MEGAOPEN_VERSION / MEGAOPEN_VERSION_WIRE parsed from src/Version.h"; exit 1; }
           [ "$code" = "$ver" ] || { echo "::error::MEGAOPEN_VERSION is '$code', tag is $tag"; exit 1; }
           [ "$(echo "$wire" | sed 's/ *$//')" = "MegaOpen $ver" ] \
             || { echo "::error::MEGAOPEN_VERSION_WIRE is '$wire', expected 'MegaOpen $ver'"; exit 1; }
