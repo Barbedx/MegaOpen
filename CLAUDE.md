@@ -31,7 +31,8 @@ map; this file is the "where do I look" index for a session in the car.
 
 0. After a drive, grab everything at once: `tools/car_report.sh http://<board>`
    (status, health, settings, map, both boots' logs, a summary.txt; GETs only).
-1. `GET /api/health` — one object per chain with `state`, `code`, `why`:
+1. `GET /api/health` — one object per chain with `state` and `code` (the words
+   live in `web/i18n/*.json` as `w.<code>`; error replies are codes too, `e.<code>`):
    `panel`, `media`, `clock`, `keys` (+ `dest` masks), `ancs`, `hu`, `knobs`,
    `lights`, `phone`. Start from the `code`.
 2. `GET /api/status` — build hash, uptime, heap, RSSI.
