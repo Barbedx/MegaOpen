@@ -189,10 +189,6 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   log: three of the failed tries overlapped board resets caused by opening COM4.
   Re-test with the log over WiFi (no COM4), read `disconnected reason=`.
 
-- **`uartBaud` has no write path.** Loaded/saved under NVS `baud` (38400),
-  reported by `/api/settings`, but no POST sets it.
-  Where: `cfg/Config.cpp`, `WebUi.cpp` settings POST.
-
 ### Build / code health
 - **`AFFA_ENABLE_TASK=0` on purpose.** The loop task owns `poll()` and sleeps
   in `TwaiLink::waitRx()` paced by `affa::WakePacer`, the same wake `AffaTask`

@@ -194,6 +194,24 @@ void test_unknown_stored_id_reads_as_row_zero()
     TEST_ASSERT_EQUAL_STRING(e->en->id(1), f.s.mediaStyle.c_str());
 }
 
+// uartBaud is a list of rates, not a free number; a rate saved by an older
+// build that the list lacks reads as the Raise rate and is kept until written.
+void test_uart_baud_is_one_of_the_canbox_rates()
+{
+    Fixture f;
+    const SEntry* e = Registry::find("uartBaud");
+    TEST_ASSERT_NOT_NULL(e);
+    TEST_ASSERT_FALSE(e->flags & F_RO);
+    TEST_ASSERT_TRUE(e->apply & AP_REBOOT);
+    const int r = Registry::enumIndex(*e, "115200");
+    TEST_ASSERT_TRUE(r >= 0);
+    TEST_ASSERT_TRUE(Registry::set(f.m, *e, r));
+    TEST_ASSERT_EQUAL_UINT32(115200, f.s.uartBaud);
+    f.s.uartBaud = 4800;
+    TEST_ASSERT_EQUAL_INT32(Registry::enumIndex(*e, "38400"), Registry::get(f.m, *e));
+    TEST_ASSERT_EQUAL_UINT32(4800, f.s.uartBaud);
+}
+
 void test_pane_auto_is_its_own_row()
 {
     Fixture f;
@@ -621,6 +639,7 @@ int main(int, char**)
     RUN_TEST(test_every_entry_round_trips);
     RUN_TEST(test_entries_are_independent);
     RUN_TEST(test_unknown_stored_id_reads_as_row_zero);
+    RUN_TEST(test_uart_baud_is_one_of_the_canbox_rates);
     RUN_TEST(test_pane_auto_is_its_own_row);
     RUN_TEST(test_splash_under_a_second_becomes_one);
     RUN_TEST(test_color_preset_paints_the_zone_and_custom_keeps_it);

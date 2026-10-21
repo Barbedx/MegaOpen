@@ -119,6 +119,23 @@ namespace Cfg
             [](uint8_t i) { return i ? rateId(i) : "авто"; },
         };
 
+        // uartBaud: the rates canbox dialects use. Raise/RAV4 is 38400; a
+        // stored rate not in the list reads as that row, the profile's own.
+        const uint32_t kBauds[] = {9600, 19200, 38400, 57600, 115200};
+        constexpr uint8_t BAUDS = sizeof(kBauds) / sizeof(kBauds[0]);
+        constexpr uint8_t BAUD_DEFAULT_ROW = 2;
+        uint8_t baudIndex(uint32_t bps)
+        {
+            for (uint8_t i = 0; i < BAUDS; ++i) if (kBauds[i] == bps) return i;
+            return BAUD_DEFAULT_ROW;
+        }
+        const char* baudId(uint8_t i)
+        {
+            static const char* const kIds[] = {"9600", "19200", "38400", "57600", "115200"};
+            return i < BAUDS ? kIds[i] : kIds[BAUD_DEFAULT_ROW];
+        }
+        const SEnum kBaudRates = { [] { return BAUDS; }, baudId, baudId };
+
         // Knob colours: a whole zone in one colour, the menu's way to pick one.
         // Row 0 is whatever the web set LED by LED; it is shown, and choosing
         // it changes nothing.
@@ -418,9 +435,10 @@ namespace Cfg
              0, 1, 0, nullptr, nullptr, S_GET(s.uartEnabled), S_PUT(s.uartEnabled = v != 0)},
             {"pulseMs", "Довжина натиску в ГУ, мс", "Key pulse", "link", SType::Int, W, AP_KEYS,
              40, 500, 10, "ms", nullptr, S_GET(s.pulseMs), S_PUT(s.pulseMs = (uint16_t)v)},
-            // Fixed by the canbox profile; shown, not set.
-            {"uartBaud", "Швидкість UART", "UART baud", "link", SType::Int, W | F_RO, AP_REBOOT,
-             1200, 921600, 0, nullptr, nullptr, S_GET(s.uartBaud), S_PUT(s.uartBaud = (uint32_t)v)},
+            // Serial1 is opened once at boot.
+            {"uartBaud", "Швидкість UART", "UART baud", "link", SType::Enum, W, AP_REBOOT,
+             0, 0, 0, nullptr, &kBaudRates, S_GET(baudIndex(s.uartBaud)),
+             S_PUT(s.uartBaud = kBauds[v < BAUDS ? v : BAUD_DEFAULT_ROW])},
             {"resEnabled", "KEY1/KEY2", "KEY1/KEY2", "link", SType::Bool, W, AP_KEYS,
              0, 1, 0, nullptr, nullptr, S_GET(s.resEnabled), S_PUT(s.resEnabled = v != 0)},
             // 0 = learn it (HuMediaSource).
