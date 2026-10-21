@@ -12,24 +12,15 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 
 ### Hardware (T-2CAN)
 
-- **CAN A listen-only in hardware (security review P5; researched 2026-10-21,
-  NOT done, owner's call).** Firmware keeps the MCP2518FD in listen-only, but
-  any foreign image flashed over OTA could transmit on the car bus. The T-2CAN
-  has no transceiver silent pin: CAN A is a Mornsun TD501MCAN isolated module
-  (RXD/TXD/GND/VCC/CANG/CANL/CANH only). Path (LilyGO T-2Can-Fd_V1.0.pdf):
-  MCP2518FD pin 1 TXCAN → UY2 MS4553S A1/B1 level translator → U2 TD501MCAN
-  pin 2 TXD. Options, easiest first:
-  1. Lift MCP2518FD pin 1 (SOIC-14 corner) and pull the freed UY2 A1 node to
-     3V3 through 10 kΩ. Reversible; relies on UY2 OE staying enabled.
-  2. Lift UY2 pin 2 (B1, MSOP-8, 0.65 mm) and pull U2 TXD to 5 V via 10 kΩ.
-     Strongest, risky pad.
-  3. Cut the CANA_TXD trace and pull U2's side to 5 V via 10 kΩ.
-  Never leave TXD floating. Verify: U2 TXD ≈ 5 V in every mode; a NORMAL-mode
-  test image sends nothing a USB-CAN adapter can see; `[can2]` fps unchanged.
-  Trade-off: it rules out transmitting on CAN A for good, including the
-  planned KWP diag polling (reads still need requests on the bus), unless
-  the mod is undone. Sources: github.com/Xinyuan-LilyGO/T-2Can (c918e0b,
-  project/T-2Can-Fd_V1.0.pdf); Mornsun TD501MCAN and MS4553S infosheets.
+- **CAN A listen-only in hardware (security review P5): REJECTED by the
+  owner 2026-10-21.** The CAN A TX path stays wired: transmitting there may be
+  wanted later (KWP diag polling, writes). Firmware keeps the MCP2518FD in
+  listen-only until a feature needs TX. The research (TD501MCAN has no silent
+  pin; lift MCP2518FD pin 1 + 10 kΩ pull-up) is in git history, 341ae94.
+
+- **iPhone diag proxy (KWP on CAN A): v2.0, owner 2026-10-21.** Design on
+  origin/held/diag-design (docs/design/diag-proxy.md, 10 owner questions);
+  DTCs first, reads only. Not before v2.0.
 
 - **Swap the LCD backpack for an Adafruit 5545 (STEMMA QT PCF8574), noted
   2026-10-19.** It is the same PCF8574, with STEMMA QT (= Qwiic) on both ends,
@@ -136,11 +127,10 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 
 ### Web UI
 
-- **Physical presence for the dangerous routes (security review 2026-10-21,
-  P3).** OTA (local and the GitHub install), factory reset and a settings
-  import allowed only within ~2 min of a panel-menu "Service › Allow update"
-  press (or a knob hold). Protects the home LAN, where the WiFi password is
-  not ours. ~80 lines + a menu row. SECURITY.md.
+- **Physical presence for the dangerous routes (security review P3):
+  REJECTED by the owner 2026-10-21** as over-engineering for a board in a car
+  with a weak AP. origin/held/presence is not merged; the AP password is
+  changed on «Плата» (default `megaopen`), so held/ap-pass is not merged either.
 - **Signed OTA images (security review 2026-10-21, P4).** Secure boot v2 or
   app-signature verification with the key a CI secret, so only our releases
   flash. Key management and the factory flash change: a project.

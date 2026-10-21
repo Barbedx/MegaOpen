@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-21
+
+### Changed
+- A failed GitHub update (`/api/fw` `err`) and a recording error (`/api/cap` `error`) are codes too (`gh_rate`, `gh_http 503`, `cap_full`…); the detail stays in the log in English. USER-GUIDE's health table shows the page's Ukrainian words for each code.
+
 ## [1.5.0] - 2026-10-21
 
 ### Added

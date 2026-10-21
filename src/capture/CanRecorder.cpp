@@ -104,6 +104,7 @@ namespace Capture
         uint16_t  g_nFiles = 0;
         uint32_t  g_next = 1;
         Settings  g_set;
+        // A code, "" = none: the page has the words (web/i18n e.<code>).
         const char* volatile g_err = "";
         bool      g_ready = false;
 
@@ -225,11 +226,11 @@ namespace Capture
             Lock l;
             for (;;) {
                 if (capBytesLocked() + need <= budget) return true;
-                if (!g_set.ring) { g_err = "capture area full and ring is off"; return false; }
+                if (!g_set.ring) { g_err = "cap_full_noring"; return false; }   // full, ring is off
                 const int v = victimLocked(true);
-                if (v < 0) { g_err = "capture area full: nothing left to delete"; return false; }
+                if (v < 0) { g_err = "cap_full"; return false; }   // full: nothing left to delete
                 const FileRec f = g_files[v];
-                if (!deleteLocked((uint16_t)v)) { g_err = "delete failed"; return false; }
+                if (!deleteLocked((uint16_t)v)) { g_err = "cap_delete"; return false; }
                 if (f.prot)
                     LogBus::printf("[cap] deleted PROTECTED %04lu (session %04lu): nothing unprotected left",
                                    (unsigned long)f.num, (unsigned long)f.session);
@@ -330,9 +331,9 @@ namespace Capture
                 Lock l;
                 while (g_nFiles >= MAX_FILES) {
                     const int v = victimLocked(true);
-                    if (v < 0) { g_err = "file table full"; return false; }
+                    if (v < 0) { g_err = "cap_files"; return false; }   // file table full
                     const FileRec f = g_files[v];
-                    if (!deleteLocked((uint16_t)v)) { g_err = "file table full"; return false; }
+                    if (!deleteLocked((uint16_t)v)) { g_err = "cap_files"; return false; }
                     LogBus::printf("[cap] %u files: deleted %s%04lu", (unsigned)MAX_FILES,
                                    f.prot ? "PROTECTED " : "", (unsigned long)f.num);
                 }
@@ -345,7 +346,7 @@ namespace Capture
             char p[24];
             binPath(num, p, sizeof(p));
             g_file = LittleFS.open(p, "w");
-            if (!g_file) { g_err = "cannot create a capture file"; return false; }
+            if (!g_file) { g_err = "cap_create"; return false; }
 
             Header h;
             h.session = g_session;
@@ -402,7 +403,7 @@ namespace Capture
                 const int i = indexOf(g_curNum);
                 if (i >= 0) g_files[i].size = g_curBytes;
             }
-            if (w != g_chunkLen) g_err = "short write (filesystem full?)";
+            if (w != g_chunkLen) g_err = "cap_write";   // short write: filesystem full?
             g_chunkLen = 0;
         }
 
@@ -628,7 +629,7 @@ namespace Capture
         g_mode = g_set.mode;
         g_modeReq = g_mode;
         if (!LogFile::fsMounted()) {
-            g_err = "littlefs not mounted";
+            g_err = "cap_no_fs";   // littlefs not mounted
             LogBus::line("[cap] off: littlefs not mounted");
             return;
         }
@@ -645,7 +646,7 @@ namespace Capture
             heap_caps_free(g_ring); heap_caps_free(g_chunk); heap_caps_free(g_table);
             heap_caps_free(g_files);
             g_ring = nullptr; g_chunk = nullptr; g_table = nullptr; g_files = nullptr;
-            g_err = "no memory for the ring";
+            g_err = "no_memory";   // for the ring
             LogBus::line("[cap] off: no memory for the ring");
             return;
         }
@@ -663,7 +664,7 @@ namespace Capture
         spec.core  = CAPWR_CORE;
         spec.idOut = &g_taskId;
         g_task = App::spawn(spec);
-        if (!g_task) { g_err = "capwr did not start"; return; }
+        if (!g_task) { g_err = "cap_task"; return; }   // capwr did not start
         g_ready = true;
 
         uint32_t capB, nF;

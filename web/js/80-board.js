@@ -91,7 +91,7 @@ async gh(){const v=await API.get('/api/fw');if(!$('#ghSt'))return;this.ghTag=v.l
  const[st,tx,w]={idle:['off',t('bd.gh.idle'),t('bd.gh.this',v.fw)],checking:['warn',t('bd.gh.checking'),''],current:['ok',t('bd.gh.current'),t('bd.gh.latestThis',v.latest,v.fw)],
   available:['warn',t('bd.gh.available',v.latest),t('bd.gh.this',v.fw)+' · '+fmtB(v.size)],downloading:['warn',t('bd.gh.dl',pct),t('bd.gh.of',fmtB(v.got),fmtB(v.size))],
   written:['warn',t('bd.gh.written',v.latest),t('bd.gh.writtenW')],
-  rebooting:['ok',t('bd.gh.rebooting'),t('bd.gh.rebootingW',v.latest)],failed:['bad',t('bd.gh.failed'),v.err||'']}[v.phase]||['off',v.phase,''];
+  rebooting:['ok',t('bd.gh.rebooting'),t('bd.gh.rebootingW',v.latest)],failed:['bad',t('bd.gh.failed'),v.err?errLine(v.err):'']}[v.phase]||['off',v.phase,''];
  setChip('#ghSt',st,tx);$('#ghW').textContent=w;$('#ghChk').disabled=busy||v.phase==='written'||v.phase==='rebooting';
  $('#ghBoot').hidden=v.phase!=='written';
  const go=$('#ghGo');go.hidden=v.phase!=='available';go.textContent=t('bd.gh.updateTo',v.latest);

@@ -180,28 +180,30 @@ not know are skipped.
 ## When something is wrong
 
 **Огляд** shows each part as ok / idle / off / broken. The same comes as
-JSON from `http://<board>/api/health`: one entry per part with a `code`.
+JSON from `http://<board>/api/health`: one entry per part with a `code`; the
+words beside it are the page's (`w.<code>` in `web/i18n/uk.json`, English in
+`en.json`, shown with **EN** in the header).
 
-| code | means | try |
-| --- | --- | --- |
-| `panel_unregistered` | the display is not finishing its handshake | check CAN B wiring and power; reboot the board |
-| `panel_foreign_master` | another radio's sync is on the display bus; MegaOpen is silent there (listens only) and checks again 30 s after it stops, or at a restart | remove the OEM radio from the display bus; if there is none, report it (a false detection) |
-| `panel_cluster_only` | only an instrument cluster answers on this bus, no AFFA display | CAN B is wired to the wrong bus |
-| `media_off` | now playing switched off | **Екран → Показувати музику** |
-| `media_no_panel` | nothing can be drawn | see `panel_unregistered` |
-| `media_no_phone`, `ancs_no_phone` | no iPhone connected | pair from the iPhone's Bluetooth settings |
-| `clock_no_source` | no iPhone, and no clock from the head unit for 2.5 min | pair the iPhone, or check the head unit's UART (health `hu`) |
-| `media_no_track` | iPhone connected, nothing playing yet | start playback |
-| `clock_waiting`, `ancs_waiting` | connected, nothing received yet | wait; notifications need permission on the iPhone |
-| `clock_off` | automatic time is off | **Екран → Час автоматично** |
-| `hu_off` | head-unit UART switched off | **Кнопки → ГУ по UART** |
-| `hu_silent` | no frame from the head unit since boot | check the UART wiring and the head unit's canbox profile (Toyota RAV4, 38400) |
-| `hu_quiet` | the head unit stopped talking | head unit asleep or a loose wire |
-| `hu_dialect_vw` | the head unit is wired and talking, but in the VW canbox profile | in the head unit's car settings, choose the Toyota RAV4 canbox |
-| `keys_none` | no key since boot | press one; check the panel and knob wiring |
-| `knobs_no_expander` | the knob board is not found | QWIIC cable to the PCF8574 |
-| `lights_off`, `lights_fail` | knob rings off / not starting | **Кнопки** light settings; ring wiring |
-| `phone_ble_off`, `phone_advertising` | Bluetooth off / waiting for a phone | **Плата → Bluetooth**; pair |
+| code | Огляд says | means | try |
+| --- | --- | --- | --- |
+| `panel_unregistered` | реєстрацію втрачено: панель не завершує рукостискання | the display is not finishing its handshake | check CAN B wiring and power; reboot the board |
+| `panel_foreign_master` | на шині синхронізація іншої магнітоли — MegaOpen мовчить (лише слухає); перевірить знову через 30 с після її тиші або після перезапуску | another radio's sync is on the display bus; MegaOpen is silent there (listens only) and checks again 30 s after it stops, or at a restart | remove the OEM radio from the display bus; if there is none, report it (a false detection) |
+| `panel_cluster_only` | на цій шині лише щиток приладів, панелі AFFA нема | only an instrument cluster answers on this bus, no AFFA display | CAN B is wired to the wrong bus |
+| `media_off` | екран музики вимкнено | now playing switched off | **Екран → Показувати музику** |
+| `media_no_panel` | панель не зареєстрована, нема де малювати | nothing can be drawn | see `panel_unregistered` |
+| `media_no_phone`, `ancs_no_phone` | телефон не підключено / телефон не підключено | no iPhone connected | pair from the iPhone's Bluetooth settings |
+| `clock_no_source` | нема ні телефона, ні часу від магнітоли | no iPhone, and no clock from the head unit for 2.5 min | pair the iPhone, or check the head unit's UART (health `hu`) |
+| `media_no_track` | телефон підключено, трека ще нема | iPhone connected, nothing playing yet | start playback |
+| `clock_waiting`, `ancs_waiting` | телефон підключено, часу ще не надіслав / підключено, сповіщень ще не було | connected, nothing received yet | wait; notifications need permission on the iPhone |
+| `clock_off` | автоматичний час вимкнено | automatic time is off | **Екран → Час автоматично** |
+| `hu_off` | UART до ГУ вимкнено | head-unit UART switched off | **Кнопки → ГУ по UART** |
+| `hu_silent` | від ГУ жодного кадру з запуску | no frame from the head unit since boot | check the UART wiring and the head unit's canbox profile (Toyota RAV4, 38400) |
+| `hu_quiet` | ГУ замовкло | the head unit stopped talking | head unit asleep or a loose wire |
+| `hu_dialect_vw` | ГУ говорить профілем VW, а плата — Toyota RAV4: у налаштуваннях авто на ГУ вибери Toyota RAV4 | the head unit is wired and talking, but in the VW canbox profile | in the head unit's car settings, choose the Toyota RAV4 canbox |
+| `keys_none` | жодного натискання з запуску | no key since boot | press one; check the panel and knob wiring |
+| `knobs_no_expander` | PCF8574 не знайдено: кабель QWIIC 2, живлення перехідника | the knob board is not found | QWIIC cable to the PCF8574 |
+| `lights_off`, `lights_fail` | вимкнено: Кнопки → Підсвітка / драйвер стрічки не запустився | knob rings off / not starting | **Кнопки** light settings; ring wiring |
+| `phone_ble_off`, `phone_advertising` | Bluetooth вимкнено / видно, але не підключено | Bluetooth off / waiting for a phone | **Плата → Bluetooth**; pair |
 
 If the iPhone will not pair while it is on the board's own WiFi, leave that
 WiFi and try again. For more detail: **Плата → Журнал запусків** (a log per

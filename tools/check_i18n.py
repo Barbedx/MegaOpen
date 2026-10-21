@@ -148,6 +148,13 @@ def main():
                     c = m.group(1)
                     if not c.endswith("_ok") and "w." + c not in base and "e." + c not in base:
                         errors.append("%s: health code %s has no w.%s in uk.json" % (rel, c, c))
+            # Status codes the pages show through errLine(): a failed GitHub
+            # update (GhOta fail(), GhRelease pickText) and the recorder's error.
+            if n in ("GhOta.cpp", "GhRelease.cpp", "CanRecorder.cpp"):
+                pat = r'g_err = "([a-z_]+)"' if n == "CanRecorder.cpp" else r'"(gh_[a-z_]+)'
+                for c in set(re.findall(pat, src)):
+                    if "e." + c not in base:
+                        errors.append("%s: status code %s has no e.%s in uk.json" % (rel, c, c))
             if n == "WebUi.cpp":
                 # A routing destination that cannot take a key says why (putDests).
                 for call in re.finditer(r'dest\(Keys::DEST_\w+,([^;]*)\);', src, re.S):

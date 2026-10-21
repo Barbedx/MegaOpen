@@ -72,19 +72,22 @@ namespace GhOta
             portEXIT_CRITICAL(&s_mux);
         }
 
-        // Failed, with the reason on the page and in the log.
-        void fail(const char* fmt, ...)
+        // Failed: `code` (with its args, "gh_http 503") goes to the page, which
+        // has the words (web/i18n e.<code>); the detail, in English, to the log.
+        void fail(const char* code, const char* fmt = nullptr, ...)
         {
-            char b[sizeof(s_v.err)];
-            va_list ap;
-            va_start(ap, fmt);
-            vsnprintf(b, sizeof(b), fmt, ap);
-            va_end(ap);
+            char d[sizeof(s_v.err) + 64] = "";
+            if (fmt) {
+                va_list ap;
+                va_start(ap, fmt);
+                vsnprintf(d, sizeof(d), fmt, ap);
+                va_end(ap);
+            }
             portENTER_CRITICAL(&s_mux);
             s_v.phase = Phase::Failed;
-            memcpy(s_v.err, b, sizeof(b));
+            snprintf(s_v.err, sizeof(s_v.err), "%s", code);
             portEXIT_CRITICAL(&s_mux);
-            LogBus::printf("[ota] github: %s", b);
+            LogBus::printf("[ota] github: %s%s%s", code, *d ? ": " : "", d);
         }
 
         // mbedTLS into PSRAM for the job: the prebuilt sdkconfig pins it to
@@ -161,7 +164,7 @@ namespace GhOta
             if (!GhRelease::trustedUrl(url)) {
                 char h[48];
                 hostOf(url, h, sizeof(h));
-                fail("refused %s: not GitHub over https", h);
+                fail("gh_host", "refused %s: not GitHub over https", h);
                 return nullptr;
             }
             esp_http_client_config_t cfg = {};
@@ -174,7 +177,7 @@ namespace GhOta
             cfg.buffer_size_tx = 4608;
             cfg.user_agent     = "MegaOpen/" MEGAOPEN_VERSION;   // the API refuses none
             esp_http_client_handle_t c = esp_http_client_init(&cfg);
-            if (!c) { fail("no memory for the HTTP client"); return nullptr; }
+            if (!c) { fail("no_memory", "for the HTTP client"); return nullptr; }
             stage(&View::heapClient);
             if (api) esp_http_client_set_header(c, "Accept", "application/vnd.github+json");
 
@@ -182,7 +185,7 @@ namespace GhOta
             for (; hop < HOPS; ++hop) {
                 const esp_err_t e = esp_http_client_open(c, 0);
                 if (e != ESP_OK) {
-                    fail("cannot connect (%s): no internet, or TLS", esp_err_to_name(e));
+                    fail("gh_connect", "%s: no internet, or TLS", esp_err_to_name(e));
                     break;
                 }
                 stage(&View::heapTls);
@@ -197,25 +200,25 @@ namespace GhOta
                     // (split across reads) or off GitHub stops here.
                     constexpr size_t URL_MAX = 2048;
                     char* u = (char*)psMalloc(URL_MAX);
-                    if (!u) { fail("no memory for the redirect"); break; }
+                    if (!u) { fail("no_memory", "for the redirect"); break; }
                     const bool got = esp_http_client_get_url(c, u, URL_MAX) == ESP_OK;
                     char h[48];
                     hostOf(got ? u : "", h, sizeof(h));
                     LogBus::printf("[ota] github: %d -> %s (%u bytes)", st, h, got ? (unsigned)strlen(u) : 0u);
                     const bool ok = got && GhRelease::trustedUrl(u);
                     heap_caps_free(u);
-                    if (!ok) { fail("redirect to %s refused: not GitHub over https", got ? h : "?"); break; }
+                    if (!ok) { fail("gh_host", "redirect to %s refused: not GitHub over https", got ? h : "?"); break; }
                     continue;
                 }
                 if (st == 403 || st == 429)
-                    fail("GitHub said %d: the API allows 60 checks an hour per address, try later", st);
+                    fail("gh_rate", "GitHub said %d: 60 checks an hour per address", st);
                 else if (st == 404)
-                    fail("GitHub said 404: no published release yet");
+                    fail("gh_none", "GitHub said 404: no published release yet");
                 else
-                    fail("GitHub said %d", st);
+                    { char code[24]; snprintf(code, sizeof(code), "gh_http %d", st); fail(code); }
                 break;
             }
-            if (hop == HOPS) fail("too many redirects");
+            if (hop == HOPS) fail("gh_redirects");
             esp_http_client_close(c);
             esp_http_client_cleanup(c);
             return nullptr;
@@ -259,7 +262,7 @@ namespace GhOta
             BodyReader rd{c};
             const DeserializationError je = deserializeJson(doc, rd, DeserializationOption::Filter(f));
             done(c);
-            if (je) { fail("the release JSON did not parse (%s)", je.c_str()); return; }
+            if (je) { fail("gh_json", "%s", je.c_str()); return; }
 
             GhRelease::Release r;
             const GhRelease::Pick p = GhRelease::pick(doc.as<JsonVariantConst>(), MegaOpen::envName(), r);
@@ -268,7 +271,7 @@ namespace GhOta
             snprintf(s_v.asset, sizeof(s_v.asset), "%s", r.asset);
             s_v.size = r.size;
             portEXIT_CRITICAL(&s_mux);
-            if (p != GhRelease::Pick::OK) { fail("%s", GhRelease::pickText(p)); return; }
+            if (p != GhRelease::Pick::OK) { fail(GhRelease::pickText(p)); return; }
 
             GhRelease::Ver mine;
             const bool newer = !GhRelease::parse(MEGAOPEN_VERSION, mine) ||
@@ -285,13 +288,13 @@ namespace GhOta
             esp_http_client_handle_t c = get(s_rel.sumsUrl, false, len);
             if (!c) return false;
             char* b = (char*)psMalloc(SUMS_MAX);
-            if (!b) { done(c); fail("no memory for SHA256SUMS"); return false; }
+            if (!b) { done(c); fail("no_memory", "for SHA256SUMS"); return false; }
             size_t n = 0;
             for (int k; n < SUMS_MAX && (k = esp_http_client_read(c, b + n, SUMS_MAX - n)) > 0;) n += k;
             done(c);
             const bool ok = GhRelease::sumFor(b, n, s_rel.asset, want);
             heap_caps_free(b);
-            if (!ok) fail("SHA256SUMS has no line for %s", s_rel.asset);
+            if (!ok) fail("gh_no_sum_line", "SHA256SUMS has no line for %s", s_rel.asset);
             return ok;
         }
 
@@ -305,7 +308,7 @@ namespace GhOta
             if (!c) return;
             if (len <= 0 || (s_rel.size && (uint64_t)len != s_rel.size)) {
                 done(c);
-                fail("the image is %lld bytes, the release says %u", (long long)len, (unsigned)s_rel.size);
+                fail("gh_size", "the image is %lld bytes, the release says %u", (long long)len, (unsigned)s_rel.size);
                 return;
             }
             // esp_ota_* and not Arduino's Update (which the page's upload
@@ -315,17 +318,17 @@ namespace GhOta
             const esp_partition_t* part = esp_ota_get_next_update_partition(nullptr);
             if (!part || (uint64_t)len > part->size) {
                 done(c);
-                fail(part ? "the image does not fit the OTA slot" : "no OTA slot");
+                fail("gh_slot", part ? "the image does not fit the OTA slot" : "no OTA slot");
                 return;
             }
             uint8_t* buf = (uint8_t*)heap_caps_malloc(CHUNK, CAP_IN);
-            if (!buf) { done(c); fail("no memory for the download"); return; }
+            if (!buf) { done(c); fail("no_memory", "for the download"); return; }
             esp_ota_handle_t ota = 0;
             const esp_err_t be = esp_ota_begin(part, OTA_WITH_SEQUENTIAL_WRITES, &ota);
             if (be != ESP_OK) {
                 heap_caps_free(buf);
                 done(c);
-                fail("cannot open the OTA slot (%s)", esp_err_to_name(be));
+                fail("gh_slot", "cannot open the OTA slot (%s)", esp_err_to_name(be));
                 return;
             }
             portENTER_CRITICAL(&s_mux);
@@ -394,17 +397,23 @@ namespace GhOta
             heap_caps_free(buf);
             done(c);
 
-            if (broke) { esp_ota_abort(ota); fail("%s at %u of %u bytes", broke, (unsigned)got, (unsigned)len); return; }
+            if (broke) {
+                esp_ota_abort(ota);
+                char code[40];
+                snprintf(code, sizeof(code), "gh_broke %u %u", (unsigned)got, (unsigned)len);
+                fail(code, "%s", broke);
+                return;
+            }
             if (memcmp(have, want, 32) != 0) {
                 esp_ota_abort(ota);
-                fail("SHA-256 does not match SHA256SUMS: nothing was changed");
+                fail("gh_sha", "SHA-256 does not match SHA256SUMS: nothing was changed");
                 return;
             }
             // end() checks the image itself (header, chip, its own hash).
             const esp_err_t ee = esp_ota_end(ota);
-            if (ee != ESP_OK) { fail("the image did not verify (%s)", esp_err_to_name(ee)); return; }
+            if (ee != ESP_OK) { fail("gh_verify", "%s", esp_err_to_name(ee)); return; }
             const esp_err_t se = esp_ota_set_boot_partition(part);
-            if (se != ESP_OK) { fail("cannot set the boot partition (%s)", esp_err_to_name(se)); return; }
+            if (se != ESP_OK) { fail("gh_boot", "cannot set the boot partition (%s)", esp_err_to_name(se)); return; }
 
             // The done line never comes after a good install: the stack's
             // headroom is reported here, at the deepest point it will reach.
@@ -499,7 +508,7 @@ namespace GhOta
                 portENTER_CRITICAL(&s_mux);
                 s_busy    = false;
                 s_v.phase = Phase::Failed;
-                snprintf(s_v.err, sizeof(s_v.err), "no memory for the task");
+                snprintf(s_v.err, sizeof(s_v.err), "no_memory");
                 portEXIT_CRITICAL(&s_mux);
                 return "no_memory";
             }

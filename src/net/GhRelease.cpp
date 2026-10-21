@@ -113,11 +113,12 @@ namespace GhRelease
     const char* pickText(Pick p)
     {
         switch (p) {
+            // Codes: the page has the words (web/i18n e.<code>).
             case Pick::OK:       return "ok";
-            case Pick::NO_TAG:   return "the latest release has no version tag";
-            case Pick::DRAFT:    return "the latest release is a draft or a prerelease";
-            case Pick::NO_ASSET: return "the latest release has no image for this board";
-            case Pick::NO_SUMS:  return "the latest release has no SHA256SUMS";
+            case Pick::NO_TAG:   return "gh_no_tag";     // the latest release has no version tag
+            case Pick::DRAFT:    return "gh_draft";      // a draft or a prerelease
+            case Pick::NO_ASSET: return "gh_no_asset";   // no image for this board
+            case Pick::NO_SUMS:  return "gh_no_sums";    // no SHA256SUMS
         }
         return "?";
     }

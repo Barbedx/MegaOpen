@@ -52,6 +52,6 @@ SCR.home={title:'nav.home',async render(m){
  if(has('ble')){const ph=ch('phone');$('#hPhoneRow').hidden=h.bleMode==='off';chip('#hPhone',ph);$('#hPhoneW').textContent=[whyT(ph),nameOf(CAT.bleModes,h.bleMode)].filter(Boolean).join(' · ')}
  const kd=ch('keys').dest||{};$('#hKeys').innerHTML=CAT.dests.filter(d=>d.built&&kd[d.id]).map(d=>chipH(kd[d.id].live?'ok':'off',d.name)).join('');
  if(c2){canChip($('#hCan'),c2);$('#hCanW').textContent=c2.fps?'':c2.autobaud!=='manual'?t('h.canNone'):t('h.canRate')}
- if(cp){recBtn($('#hRec'),cp);$('#hRecW').textContent=cp.recording?t('h.recW',fmtN(cp.frames),cp.markers):cp.error||''}
+ if(cp){recBtn($('#hRec'),cp);$('#hRecW').textContent=cp.recording?t('h.recW',fmtN(cp.frames),cp.markers):cp.error?errLine(cp.error):''}
  wifiChip($('#hWifi'),$('#hWifiW'),st,t('h.noWifi'));
 }};
