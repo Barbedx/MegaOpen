@@ -22,7 +22,10 @@
 // OEM radio is always heard before we send a sync of our own.
 //
 // onRx() runs inside poll() (the link's raw tap, the panel task); the
-// verdicts are read there and by httpd: relaxed atomics.
+// verdicts are read there and by httpd: relaxed atomics. Its nowMs is when
+// poll() drained the frame, not when it arrived: syncs that queued up before
+// the first poll() read as one burst. That errs on the quiet side (it can
+// only make a master sooner, never miss one).
 // Pure (no Arduino): host-tested in test/test_panelwatch.
 namespace MegaOpen
 {

@@ -2456,6 +2456,7 @@ static void panelWatchStep(uint32_t now)
         s_open = false;
         App::Panel::lib().setPassive(true);
         g_twai.setTxEnabled(false);
+        g_twai.abortTx();       // frames already in the driver's queue too
         const bool lo = g_twai.setListenOnly(true);
         LogBus::printf("[panel] another bus master on the panel bus (sync 0x%03X): MegaOpen is silent "
                        "(passive, TX off, listen-only%s) until it has been quiet %u s",
@@ -2474,7 +2475,13 @@ static void panelWatchStep(uint32_t now)
     // Ours to open and to close: a single foreign sync shuts the gate again
     // for LISTEN_MS, before a second one would make it a master.
     const bool may = g_panelWatch.mayTransmit(now);
-    if (may != s_open) { s_open = may; g_twai.setTxEnabled(may); }
+    if (may != s_open) {
+        s_open = may;
+        g_twai.setTxEnabled(may);
+        // Shut: what is already queued in the driver (up to its TX depth)
+        // must not go out after a foreign sync either.
+        if (!may) g_twai.abortTx();
+    }
 }
 #endif
 
