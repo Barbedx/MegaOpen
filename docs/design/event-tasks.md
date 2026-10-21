@@ -2,12 +2,25 @@
 
 > Design notes kept from development: the plan, its steps and the decisions
 > taken on the way. Where they disagree with the code, the code is right.
+>
+> **Since then** (names below are the ones of 2026-10-09):
+>
+> | here | now |
+> | --- | --- |
+> | `AffaMailbox`, `MailboxIds` | `display/PanelOps` (any-task renders, tickets) |
+> | `TwaiAffaLink`, `bus/TwaiBus`, the TX gate | `affa::TwaiLink` in the AffaDisplay library |
+> | `UiPolicy` | `app/UiTask` |
+> | `vehicle/RaiseTargets` | `proto/canbox/RaiseTargets` |
+> | `bus/Mcp2518Bus` | `bus/Mcp2518Source` |
+> | `CloudLink`, `WsStream` and `/ws`, board V and `src/link/`, `env:devkit`/`bare`/`boardv`/`ledtest` | deleted |
+> | `PaneBuffers`, `App`/`AppContext`, `Telemetry`, `Supervisor`, `CrashLog` | never built as named, or folded into the tasks |
+> | `docs/PLAN-nonblocking-callbacks.md` | deleted; its open items are mapped in §5 here |
 
 Branch `refactor/event-tasks`. Written 2026-10-09. Planning only: no source file was changed to write this.
 
 Target: LilyGO T-2CAN (ESP32-S3 N16R8, `env:t2can`). It sits on the car, drives the AFFA panel on CAN B (TWAI GPIO7/6) and listens to the car on CAN A (MCP2518FD, SPI CS10 SCK12 MOSI11 MISO13 INT8). It maps panel keys, knobs and car frames to Raise/canbox frames on the head-unit UART (Serial1 TX43/RX44, 38400 baud). The DevKit (`env:devkit`) is the bench and is flashed by OTA only. Its COM5 is never opened.
 
-This plan supersedes the open items of `docs/PLAN-nonblocking-callbacks.md`. A1-A8 are mapped to steps in §5.
+This plan superseded the open items of the nonblocking-callbacks plan (since deleted). A1-A8 are mapped to steps in §5.
 
 Owner rules that every step obeys:
 - `src/display` is never pruned. It is only extended.

@@ -120,13 +120,13 @@ The vendor doc's "3.3 V or 5 V depending on the head unit's pull-up" reads like 
 * **`st9r/esp32_arduino_canbox`** — a Raise/RISE implementation for **5 V** Arduinos — is the one that settles it by construction. It requires a divider *down* to the head unit: `Arduino TX --[1.8k]--+-- Head Unit RX` with 3.3k to ground (or 1k/2k). **A divider that turns 5 V into ~3.3 V exists precisely because the head unit's RX expects 3.3 V.** It also says outright: *"RX Arduino < TX Head Unit → Not Connected!"* — that project never connects the head unit's TX at all.
 * **MeganeCAN's own gateway board** (`hardware/meganecan-gw`) carries the nets `GW_TX_HU_RX` / `GW_RX_HU_TX` and **no level-shifter part anywhere in its BOM** — passives, two SN65HVD230 and ESD diodes, nothing else.
 
-**So: connect our TX (GPIO21) → head-unit RX directly. That is what all three do.**
+**So: connect our TX → head-unit RX directly. That is what all three do.** On the T-2CAN the head unit is on QWIIC 1: Serial1 TX = GPIO43, RX = GPIO44 (`src/board/BoardProfile.h`).
 
-The only residual risk is our **RX** (GPIO20), because "depending on the pull-up" is about the *rail the line idles at*, and the ESP32-C3 is not 5 V tolerant. Three mitigations, cheapest first:
+The only residual risk is our **RX** (GPIO44), because "depending on the pull-up" is about the *rail the line idles at*, and the ESP32-S3 is not 5 V tolerant. Three mitigations, cheapest first:
 
 1. **Measure it.** A UART idles HIGH, so a multimeter on the head unit's TX pin reads its logic-high rail directly. 3.3 → wire it; 5 → use 2 or 3.
 2. **Run TX-only**, exactly as `st9r` does — leave the head unit's TX disconnected. Everything we are actually testing (`0x30` version, doors, keys, telemetry) is box→HU. What is lost is the `0x90` responder and the inbound volume on `0x84` idx `0x07`, both of which can wait.
-3. **1 kΩ in series into GPIO20.** The pin's clamp diodes handle the rest, and 1 k is far below what 38400 baud cares about.
+3. **1 kΩ in series into GPIO44.** The pin's clamp diodes handle the rest, and 1 k is far below what 38400 baud cares about.
 
 
 

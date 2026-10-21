@@ -2,6 +2,13 @@
 
 > Design notes kept from development: the plan, its steps and the decisions
 > taken on the way. Where they disagree with the code, the code is right.
+>
+> **Since then:** `/api/canbox/tuning`, `/api/cap/settings`, `/api/routing`,
+> `/api/loglevel` and `/api/messages/enable` are folded into `/api/settings`
+> (the settings registry, `src/cfg/SettingsRegistry.cpp`); the panel alerts
+> moved from `/api/map` to `/api/settings` `alerts`. `/api/link*`, the DevKit
+> + board V setup and `docs/bench.md` with its bench CAN instruments are
+> deleted.
 
 Branch `feat/ui-v2`, cut from `refactor/event-tasks` at 2e04085. Written 2026-10-16.
 
@@ -9,7 +16,7 @@ The source of truth for what the screens look like is the v2 simulator (`py tool
 
 ## Owner rules
 
-These come on top of the rules in `docs/PLAN-event-tasks.md`.
+These come on top of the rules in [event-tasks.md](event-tasks.md).
 
 1. **Simplify, do not pile on.**
    - Every slice reports net lines and the route count, before and after.
