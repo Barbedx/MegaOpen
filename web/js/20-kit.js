@@ -40,7 +40,9 @@ const ERR_T={'busy, try again':'плата зайнята, спробуй ще �
  'bad json':'запит не прочитано','no memory':'плата без вільної памʼяті','not found':'на платі такого нема',
  'key queue full, try again':'черга клавіш повна, спробуй ще','uart queue full, try again':'черга UART повна, спробуй ще',
  'uart task busy, try again':'UART зайнятий, спробуй ще','head-unit UART is off':'ГУ по UART вимкнено',
- 'no such capture file':'такого файлу запису вже нема','no such log':'такого журналу вже нема'};
+ 'no such capture file':'такого файлу запису вже нема','no such log':'такого журналу вже нема',
+ 'battery in 0x7D 04 and fuel in 0x7D 04: the same field, choose one':'АКБ і пальне в 0x7D 04 — одне поле: обери щось одне',
+ 'battery in 0x21/0x23 and the computed range/consumption: the same field, choose one':'АКБ у 0x21/0x23 і розрах. витрата — одне поле: обери щось одне'};
 /* «no <частина>» від маршруту, частини якого збірка не має або вимкнула; лише відомі частини, а не будь-яке «no …» */
 const errMsgT=m=>ERR_T[m]||(/^no (display|ble|can2?|uart|uart ring|vehicle|keymap|knob service|resistive sink|macro engine|wifi manager)$/.test(m||'')?'цього нема в збірці або воно вимкнене ('+m+')':m);
 const errT=e=>(e.status?e.status+' · ':'')+(errMsgT(e.message)||'помилка');

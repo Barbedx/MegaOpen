@@ -64,10 +64,10 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   are off (88c6b9e). Left:
   - every row is a hypothesis until docs/car-test-can-signals.md is run;
   - what each experiment shows on the tablet (one at a time);
-  - battery volts on the tablet: protocol 112 has no field for them (`0x41`
-    decodes into the same codes as `0x7D`). Only a borrowed field (0x21
-    range, 7D 04 idx 5, a 0x23 bar) is left, wrong unit label and all; on
-    the glass and the live page they are there already.
+  - battery volts on the tablet: protocol 112 has no field for them, so
+    the experiment «Напруга АКБ у полі ГУ» (EXP_BATT) puts volts x10 in a
+    borrowed one (0x21 range, 0x7D 04 idx 5 or the 0x23 bar). Left: which
+    one the tablet shows (docs/car-test-can-signals.md).
 - **Track position, duration, play state from the head unit.** Protocol 112
   never sends them (com.syu.ms is a platform-signed system app, patching it
   needs root). Path: a user app with a NotificationListenerService reading

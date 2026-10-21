@@ -64,3 +64,10 @@ Switch one on at a time and note what changes on the tablet's dashboard.
 - **селектор 7D06:** with it on, "Прогін селектора" steps `0x7D 06` D2
   through 0…15, 3, 5 or 8 s a value. Note the D2 at which the tablet shows P,
   R, N or D. This sends only to the tablet, never to the car.
+
+- **Напруга АКБ у полі ГУ:** battery volts x10 in a field the tablet
+  already shows; pick the field next to it (0x21 range, 0x7D 04, 0x23).
+  Engine off, ~12.6 V: **which field shows 126 (or 12.6)?** Write down the
+  field and the screen it is on; with the engine running it should read
+  ~138-145 (13.8-14.5 V). It takes the field from «розрах. витрата» (0x21,
+  0x23) or «пальне в 7D04» (0x7D 04), so those switch off while it is on.

@@ -430,7 +430,10 @@ po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(
   if(r.src==='const'&&!(typeof r.k==='number'&&toInt(r.k,t.dec)>=toInt(t.min,t.dec)&&toInt(r.k,t.dec)<=toInt(t.max,t.dec)))return fail(400,r.id+': k: '+t.min+'..'+t.max);
   E.push([r,t])}
 
- if(q.exp!==undefined&&!(isInt(q.exp)&&q.exp>=0&&q.exp<=15))return fail(400,'exp: 0..15, the experiment bits');
+ if(q.exp!==undefined&&!(isInt(q.exp)&&q.exp>=0&&q.exp<=127))return fail(400,'exp: 0..127, the experiment bits');
+ if(q.exp!==undefined&&q.exp&16){const at=(q.exp>>5)&3;if(at>2)return fail(400,'battery field: 0x21, 0x7D 04 or 0x23');
+  if(at===1&&q.exp&2)return fail(400,'battery in 0x7D 04 and fuel in 0x7D 04: the same field, choose one');
+  if(at!==1&&q.exp&4)return fail(400,'battery in 0x21/0x23 and the computed range/consumption: the same field, choose one')}
  if(q.exp!==undefined){S.huExp=q.exp;emit(2,'HU','[map] head-unit experiments: '+q.exp)}
  if(q.send!==undefined){S.emitter=!!q.send;emit(2,'HU','[map] send to the head unit '+(S.emitter?'on':'off'))}
  if(q.units){if(q.units.fuel!=null)S.tun.fuelUnit=q.units.fuel;if(q.units.trip!=null)S.tun.tripUnit=q.units.trip}

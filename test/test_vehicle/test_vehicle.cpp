@@ -1058,10 +1058,78 @@ void test_selector_probe_goes_out_only_with_its_experiment()
     TEST_ASSERT_FALSE(e.preview(E::MSG_GEAR, s, frame, len));
 }
 
+// Battery volts in a borrowed field (the RAV4 profile has none): volts x10,
+// 12.6 V -> 126, in the one field chosen; never beside the experiment that
+// fills the same field.
+void test_battery_in_a_borrowed_field()
+{
+    TEST_ASSERT_EQUAL_UINT16(126, E::battField(1260));
+    TEST_ASSERT_EQUAL_UINT16(126, E::battField(1255));               // rounded
+    TEST_ASSERT_EQUAL_UINT16(0, E::battField(-5));
+    State s;
+    s.set(SIG_BATT_V, 1260, 1);                                      // 12.60 V
+    s.set(SIG_ODO_CLUSTER, 1000, 1);
+    E e;
+    uint8_t f[64], n = 0;
+    // 0x21: the range, BE at D4-D5.
+    e.setExperiments(E::EXP_BATT | (uint8_t)((uint8_t)E::BattAt::Range21 << 5));
+    TEST_ASSERT_TRUE(e.preview(E::MSG_TRIP, s, f, n));
+    TEST_ASSERT_EQUAL_HEX8(0x21, f[1]);
+    TEST_ASSERT_EQUAL_HEX8(0x00, f[3 + 4]);
+    TEST_ASSERT_EQUAL_HEX8(126, f[3 + 5]);
+    // 0x7D 04 D4-D5, LE; the cluster's odometer carries the frame.
+    e.setExperiments(E::withBattAt(E::EXP_BATT, E::BattAt::Odo7D04));
+    TEST_ASSERT_TRUE(e.preview(E::MSG_ODO, s, f, n));
+    TEST_ASSERT_EQUAL_HEX8(0x04, f[3]);
+    TEST_ASSERT_EQUAL_HEX8(126, f[3 + 4]);
+    TEST_ASSERT_EQUAL_HEX8(0x00, f[3 + 5]);
+    // 0x23: the current value, BE at D1-D2.
+    e.setExperiments(E::withBattAt(E::EXP_BATT, E::BattAt::Hist23));
+    TEST_ASSERT_TRUE(e.preview(E::MSG_FUEL_HIST, s, f, n));
+    TEST_ASSERT_EQUAL_HEX8(0x23, f[1]);
+    TEST_ASSERT_EQUAL_HEX8(0x00, f[3 + 1]);
+    TEST_ASSERT_EQUAL_HEX8(126, f[3 + 2]);
+    // Off: 0x23 has nothing to say, 0x7D 04 keeps F2 08.
+    e.setExperiments(0);
+    TEST_ASSERT_FALSE(e.preview(E::MSG_FUEL_HIST, s, f, n));
+}
+
+void test_battery_and_its_rival_are_never_both_on()
+{
+    const uint8_t at21 = E::withBattAt(E::EXP_BATT, E::BattAt::Range21);
+    const uint8_t at04 = E::withBattAt(E::EXP_BATT, E::BattAt::Odo7D04);
+    const uint8_t at23 = E::withBattAt(E::EXP_BATT, E::BattAt::Hist23);
+    // The web refuses a clash...
+    TEST_ASSERT_NOT_NULL(E::experimentsWhy(at21 | E::EXP_COMPUTED));
+    TEST_ASSERT_NOT_NULL(E::experimentsWhy(at23 | E::EXP_COMPUTED));
+    TEST_ASSERT_NOT_NULL(E::experimentsWhy(at04 | E::EXP_FUEL_7D04));
+    TEST_ASSERT_NOT_NULL(E::experimentsWhy((uint8_t)(E::EXP_BATT | (3 << 5))));   // no field 3
+    TEST_ASSERT_NOT_NULL(E::experimentsWhy(0x80));
+    // ...and takes the rest, the rival of another field included.
+    TEST_ASSERT_NULL(E::experimentsWhy(at21 | E::EXP_FUEL_7D04 | E::EXP_COOLANT | E::EXP_GEAR));
+    TEST_ASSERT_NULL(E::experimentsWhy(at04 | E::EXP_COMPUTED));
+    TEST_ASSERT_NULL(E::experimentsWhy(E::EXP_COMPUTED | E::EXP_FUEL_7D04));
+    // The emitter settles one that got past (an old NVS byte) for the battery.
+    E e;
+    e.setExperiments(at21 | E::EXP_COMPUTED | E::EXP_FUEL_7D04);
+    TEST_ASSERT_EQUAL_HEX8(at21 | E::EXP_FUEL_7D04, e.experiments());
+    e.setExperiments(at04 | E::EXP_FUEL_7D04 | E::EXP_COMPUTED);
+    TEST_ASSERT_EQUAL_HEX8(at04 | E::EXP_COMPUTED, e.experiments());
+    e.setExperiments((uint8_t)(E::EXP_BATT | (3 << 5)));
+    TEST_ASSERT_EQUAL_HEX8(at21, e.experiments());
+    e.setExperiments(0xFF);
+    TEST_ASSERT_EQUAL_HEX8(0, e.experiments() & 0x80);
+    // Without the battery the old switches are as they were.
+    e.setExperiments(E::EXP_COMPUTED | E::EXP_FUEL_7D04);
+    TEST_ASSERT_EQUAL_HEX8(E::EXP_COMPUTED | E::EXP_FUEL_7D04, e.experiments());
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
     RUN_TEST(test_experiments_are_off_by_default_and_each_switches_one_thing);
+    RUN_TEST(test_battery_in_a_borrowed_field);
+    RUN_TEST(test_battery_and_its_rival_are_never_both_on);
     RUN_TEST(test_selector_probe_goes_out_only_with_its_experiment);
     RUN_TEST(test_raise_targets_ids_are_unique_and_name_real_signals);
     RUN_TEST(test_every_sent_raise_target_changes_its_message);

@@ -81,6 +81,37 @@ namespace Canbox
         return (uint8_t)(5 - d);
     }
 
+    const char* Rav4Emitter::experimentsWhy(uint8_t m)
+    {
+        if (m & ~EXP_ALL) return "unknown experiment bits";
+        if (!(m & EXP_BATT)) return nullptr;
+        const uint8_t at = (uint8_t)((m & EXP_BATT_AT) >> 5);
+        if (at > (uint8_t)BattAt::Hist23) return "battery field: 0x21, 0x7D 04 or 0x23";
+        if (at == (uint8_t)BattAt::Odo7D04 && (m & EXP_FUEL_7D04))
+            return "battery in 0x7D 04 and fuel in 0x7D 04: the same field, choose one";
+        if (at != (uint8_t)BattAt::Odo7D04 && (m & EXP_COMPUTED))
+            return "battery in 0x21/0x23 and the computed range/consumption: the same field, choose one";
+        return nullptr;
+    }
+
+    uint8_t Rav4Emitter::sanitizeExperiments(uint8_t m)
+    {
+        m &= EXP_ALL;
+        if (!(m & EXP_BATT)) return m;
+        BattAt at = battAt(m);
+        if ((uint8_t)at > (uint8_t)BattAt::Hist23) { at = BattAt::Range21; m = withBattAt(m, at); }
+        if (at == BattAt::Odo7D04) m &= (uint8_t)~EXP_FUEL_7D04;
+        else                       m &= (uint8_t)~EXP_COMPUTED;
+        return m;
+    }
+
+    uint16_t Rav4Emitter::battField(int32_t v)
+    {
+        if (v <= 0) return 0;
+        const int32_t x = (v + 5) / 10;
+        return (uint16_t)(x > 0xFFFF ? 0xFFFF : x);
+    }
+
     uint8_t Rav4Emitter::pick(const State& s, uint8_t sig, uint8_t computed) const
     {
         if (s.has(sig)) return sig;
@@ -312,7 +343,9 @@ namespace Canbox
                 // EXP_FUEL_7D04 also takes the cluster's odometer (0x5C5) when
                 // 0x5FD is silent: the X84 matrix has no 0x5FD.
                 const bool fuelExp = (_exp & EXP_FUEL_7D04) != 0;
-                const uint8_t odo = s.has(SIG_ODOMETER) ? SIG_ODOMETER : fuelExp && s.has(SIG_ODO_CLUSTER) ? SIG_ODO_CLUSTER : SIG_COUNT;
+                const bool battExp = (_exp & EXP_BATT) && battAt(_exp) == BattAt::Odo7D04;
+                const uint8_t odo = s.has(SIG_ODOMETER) ? SIG_ODOMETER
+                                  : (fuelExp || battExp) && s.has(SIG_ODO_CLUSTER) ? SIG_ODO_CLUSTER : SIG_COUNT;
                 if (odo == SIG_COUNT) return false;
                 uint32_t km = (uint32_t)s.get(odo);
                 cmd = 0x7D; len = 12;
@@ -324,6 +357,10 @@ namespace Canbox
                 if (fuelExp && s.has(SIG_FUEL_LEVEL)) {
                     const uint16_t f = (uint16_t)(s.get(SIG_FUEL_LEVEL) * 10);   // litres x10, LE
                     p[4] = (uint8_t)f; p[5] = (uint8_t)(f >> 8);
+                }
+                if (battExp && s.has(SIG_BATT_V)) {
+                    const uint16_t b = battField(s.get(SIG_BATT_V));            // V x10, LE
+                    p[4] = (uint8_t)b; p[5] = (uint8_t)(b >> 8);
                 }
                 // trip1/trip2, LE u24 each, in 0.1 km.
                 uint32_t t1 = (uint32_t)s.get(SIG_TRIP1);
@@ -347,7 +384,8 @@ namespace Canbox
             }
             case M_TRIP: {
                 const uint8_t range = pick(s, SIG_RANGE, SIG_RANGE_CALC);
-                if (!(s.has(SIG_AVG_SPEED) || s.has(SIG_TRIP_ELAPSED) || range != SIG_COUNT))
+                const bool batt = (_exp & EXP_BATT) && battAt(_exp) == BattAt::Range21 && s.has(SIG_BATT_V);
+                if (!(s.has(SIG_AVG_SPEED) || s.has(SIG_TRIP_ELAPSED) || range != SIG_COUNT || batt))
                     return false;
                 // Big-endian; elapsed is in minutes, not seconds.
                 // mikescotland: p[0..3] zero padding, p[4..5] range (BE16), p[6]
@@ -361,7 +399,8 @@ namespace Canbox
                     putBE16(p + 0, 0);
                     putBE16(p + 2, 0);
                 }
-                putBE16(p + 4, (uint16_t)(range != SIG_COUNT ? s.get(range) : 0));
+                putBE16(p + 4, batt ? battField(s.get(SIG_BATT_V))
+                                    : (uint16_t)(range != SIG_COUNT ? s.get(range) : 0));
                 p[6] = _t.tripUnit;
                 return true;
             }
@@ -375,12 +414,14 @@ namespace Canbox
             }
             case M_FUEL_HIST: {
                 const uint8_t avg = pick(s, SIG_FUEL_AVG, SIG_CONS_AVG);
-                if (avg == SIG_COUNT) return false;
+                const bool batt = (_exp & EXP_BATT) && battAt(_exp) == BattAt::Hist23 && s.has(SIG_BATT_V);
+                if (avg == SIG_COUNT && !batt) return false;
                 // len 13, not 3: the unit's exact-length guard drops 3.
                 // Unused slots are 0xFFFF = invalid, filled from the end.
                 cmd = 0x23; len = _t.histLen ? _t.histLen : 13;
                 p[0] = _t.fuelUnit;
-                putBE16(p + 1, (uint16_t)s.get(avg));           // current trip
+                putBE16(p + 1, batt ? battField(s.get(SIG_BATT_V))   // the borrowed bar
+                                    : (uint16_t)s.get(avg));                 // current trip
                 for (uint8_t i = 3; i + 1 < len; i += 2) putBE16(p + i, 0xFFFF);
                 return true;
             }

@@ -209,7 +209,12 @@ void WebUi::routesMap()
         const bool hasExp = !d["exp"].isNull();
         const int exp = d["exp"] | -1;
         if (hasExp && (!d["exp"].is<int>() || exp < 0 || exp > Canbox::Rav4Emitter::EXP_ALL))
-            return r->reply(400, "text/plain", "exp: 0..15, the experiment bits");
+            return r->reply(400, "text/plain", "exp: 0..127, the experiment bits");
+        // Two experiments in one field are refused, not settled behind the
+        // page's back (the emitter would keep the battery).
+        if (hasExp)
+            if (const char* why = Canbox::Rav4Emitter::experimentsWhy((uint8_t)exp))
+                return r->reply(400, "text/plain", why);
 
         const bool hasUnits = d["units"].is<JsonObject>();
         int fuel = cfg.tuning.fuelUnit, trip = cfg.tuning.tripUnit;
@@ -322,11 +327,13 @@ void WebUi::routesMap()
             if (hasSend) _cfg->saveHuSend(send);
             if (hasExp) {
                 _cfg->saveHuExp((uint8_t)exp);
-                LogBus::printf("[map] head-unit experiments: coolant %s, fuel in 7D04 %s, computed %s, selector %s",
+                static const char* const kAt[] = {"0x21", "0x7D 04", "0x23", "?"};
+                LogBus::printf("[map] head-unit experiments: coolant %s, fuel in 7D04 %s, computed %s, selector %s, battery %s",
                                exp & Canbox::Rav4Emitter::EXP_COOLANT ? "on" : "off",
                                exp & Canbox::Rav4Emitter::EXP_FUEL_7D04 ? "on" : "off",
                                exp & Canbox::Rav4Emitter::EXP_COMPUTED ? "on" : "off",
-                               exp & Canbox::Rav4Emitter::EXP_GEAR ? "on" : "off");
+                               exp & Canbox::Rav4Emitter::EXP_GEAR ? "on" : "off",
+                               exp & Canbox::Rav4Emitter::EXP_BATT ? kAt[(exp >> 5) & 3] : "off");
             }
             if (hasSend) LogBus::printf("[map] send to the head unit %s", send ? "on" : "off");
         }

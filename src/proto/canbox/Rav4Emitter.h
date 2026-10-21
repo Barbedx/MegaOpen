@@ -172,10 +172,29 @@ namespace Canbox
             EXP_GEAR     = 1 << 3,   // 0x7D 06 [00][prnd & 0x0F] (1049 idx 4): the
                                      // only way a 0x7D 06 goes out, test or not;
                                      // a bench sweep finds which value is P/R/N/D
-            EXP_ALL      = 0x0F,
+            EXP_BATT     = 1 << 4,   // battery volts x10 in a borrowed field: the
+                                     // RAV4 profile has none (12.6 V -> 126)
+            EXP_BATT_AT  = 3 << 5,   // which field (BattAt), bits 5-6
+            EXP_ALL      = 0x7F,
         };
-        void    setExperiments(uint8_t m) { _exp = m & EXP_ALL; }
+        // The borrowed field, each with its own unit label on the tablet: the
+        // range in 0x21 (D4-D5, BE; "126 km"), 0x7D 04 D4-D5 (LE, the unit
+        // divides by 10: "12.6"), or the current value of 0x23 (BE, /10).
+        enum class BattAt : uint8_t { Range21 = 0, Odo7D04 = 1, Hist23 = 2 };
+        static BattAt battAt(uint8_t m) { return (BattAt)((m & EXP_BATT_AT) >> 5); }
+        static uint8_t withBattAt(uint8_t m, BattAt a) { return (uint8_t)((m & ~EXP_BATT_AT) | ((uint8_t)a << 5)); }
+        // A switch set the emitter can run: null, or why not. The battery and
+        // the experiment that already fills its field cannot both be on
+        // (0x21/0x23: EXP_COMPUTED; 0x7D 04: EXP_FUEL_7D04), and BattAt 3 is
+        // no field.
+        static const char* experimentsWhy(uint8_t m);
+        // What setExperiments() runs: out-of-range bits dropped; a clash is
+        // settled for the battery (its rival is switched off).
+        static uint8_t sanitizeExperiments(uint8_t m);
+        void    setExperiments(uint8_t m) { _exp = sanitizeExperiments(m); }
         uint8_t experiments() const { return _exp; }
+        // Battery volts x10 (SIG_BATT_V is x100), rounded; the field's value.
+        static uint16_t battField(int32_t battX100);
 
         Rav4Emitter();
 
