@@ -72,12 +72,14 @@ namespace
     }
 
     // ?live=1: every signal, in enum order (the meta's order), as
-    // [value, ageMs, src, verified]: value null when there is none, age null
-    // when CAN never set it; src c=can k=const p=pinned d=derived o=off.
+    // [value, ageMs, src, verified, confirm]: value null when there is none,
+    // age null when CAN never set it; src c=can k=const p=pinned d=derived
+    // o=off; confirm 1 = a CAN hypothesis the owner may ✓, 2 = ✓ by the owner
+    // (the factory row is a hypothesis), may be taken back, 0 = neither.
     // Compact on purpose: the live page polls it every 1.5 s.
     void putLive(ChunkOut& out, const Vehicle::State& st, uint32_t now)
     {
-        uint8_t how[Vehicle::SIG_COUNT];
+        uint8_t how[Vehicle::SIG_COUNT], conf[Vehicle::SIG_COUNT] = {};
         for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) {
             const uint8_t* in = nullptr;
             how[s] = Vehicle::Derived::inputs(s, in) ? 'd' : 'o';
@@ -85,7 +87,12 @@ namespace
         App::Car::decodeTable().read([&](const Vehicle::DecodeTable& t) {
             for (uint8_t i = 0; i < t.nRows; ++i) if (t.row[i].sig < Vehicle::SIG_COUNT) how[t.row[i].sig] = 'c';
             for (uint8_t i = 0; i < t.nK; ++i)    if (t.k[i].sig < Vehicle::SIG_COUNT) how[t.k[i].sig] = 'k';
+            for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s)
+                if (how[s] == 'c') conf[s] = t.measured(s) ? 2 : 1;
         });
+        // Outside the staging mutex: the factory table is flash.
+        for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s)
+            if (conf[s] == 2 && Vehicle::DecodeTable::factoryMeasured(s)) conf[s] = 0;
         char b[64], v[16], a[12];
         out.put(",\"sigs\":[");
         for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) {
@@ -93,9 +100,9 @@ namespace
             const uint32_t age = st.ageMs(s, now);
             if (age == Vehicle::State::NEVER) snprintf(a, sizeof(a), "null");
             else snprintf(a, sizeof(a), "%lu", (unsigned long)age);
-            out.put(b, fit(snprintf(b, sizeof(b), "%s[%s,%s,\"%c\",%d]", s ? "," : "",
+            out.put(b, fit(snprintf(b, sizeof(b), "%s[%s,%s,\"%c\",%d,%u]", s ? "," : "",
                                     st.has(s) ? dec(v, sizeof(v), st.get(s), Vehicle::meta(s).decimals) : "null",
-                                    a, h, Vehicle::verified(s) ? 1 : 0), sizeof(b)));
+                                    a, h, Vehicle::verified(s) ? 1 : 0, (unsigned)conf[s]), sizeof(b)));
         }
         const App::Car::AlertStats as = App::Car::alertStats();
         out.put(b, fit(snprintf(b, sizeof(b), "],\"alertStats\":{\"fired\":%lu,\"shown\":%lu,\"dropped\":%lu}",
@@ -190,6 +197,8 @@ void WebUi::routesMap()
     });
 
     // Any of: {send:bool}, {units:{fuel,trip}}, {exp:n}, {rows:[{id,src,k,can}]},
+    // {confirm:{sig,on}} (the owner's ✓: that signal's CAN rows measured, or
+    // a hypothesis again; reset brings the factory's flags back),
     // {reset:true} (back to decode_defaults.inc: the NVS blob is erased). Every
     // part is checked before any is applied. A row replaces whatever bound
     // that field; the map goes to the car task (no reboot) and to NVS (`decode`).
@@ -229,6 +238,19 @@ void WebUi::routesMap()
         }
 
         const bool reset = d["reset"] | false;
+
+        // {confirm:{sig, on}}: the owner's ✓ on «Авто — наживо» after a car
+        // check: the signal's CAN rows measured (on) or a hypothesis again.
+        const bool hasConf = !d["confirm"].isNull();
+        uint8_t confSig = Vehicle::SIG_COUNT;
+        const bool confOn = d["confirm"]["on"] | true;
+        if (hasConf) {
+            confSig = Vehicle::sigByName(d["confirm"]["sig"] | "");
+            if (confSig >= Vehicle::SIG_COUNT) return r->reply(404, "text/plain", "confirm: no such signal");
+            if (!d["confirm"]["on"].isNull() && !d["confirm"]["on"].is<bool>())
+                return r->reply(400, "text/plain", "confirm.on: true or false");
+        }
+
         Edit ed[MAX_EDITS];
         uint8_t n = 0;
         JsonArrayConst rows = d["rows"].as<JsonArrayConst>();
@@ -265,9 +287,9 @@ void WebUi::routesMap()
         // ---- apply ----
         // The map first: its room check is the last refusal, so a refused
         // request has changed nothing.
-        if (reset || n) {
+        if (reset || n || hasConf) {
             const char* full = nullptr;
-            bool bound = true;
+            bool bound = true, confirmed = true;
             if (!App::Car::decodeTable().edit([&](Vehicle::DecodeTable& t) {
                     // Reset first is safe: factory (62) plus 16 edits always fits.
                     if (reset) t.factory();
@@ -284,6 +306,12 @@ void WebUi::routesMap()
                     }
                     if (rowsLeft > Vehicle::DecodeTable::MAX_ROWS) { full = "the map is full: 96 CAN rows"; return; }
                     if (constsLeft > Vehicle::DecodeTable::MAX_CONSTS) { full = "the map is full: 16 constants"; return; }
+                    // A ✓ needs a CAN row to land on once the edits are in.
+                    if (hasConf) {
+                        bool can = t.rowOf(confSig) >= 0;
+                        for (uint8_t i = 0; i < n; ++i) if (ed[i].sig == confSig) can = ed[i].src == Vehicle::SRC_CAN;
+                        if (!can) { confirmed = false; return; }
+                    }
                     for (uint8_t i = 0; i < n; ++i) {
                         const Edit& e = ed[i];
                         if (e.src == Vehicle::SRC_CAN) {
@@ -308,9 +336,12 @@ void WebUi::routesMap()
                             t.unbind(e.sig);
                         }
                     }
+                    // After the edits: a ✓ in the same request is on the new rows.
+                    if (hasConf) t.setMeasured(confSig, confOn);
                 }))
                 return r->reply(503, "text/plain", "busy, try again");
             if (full) return r->reply(409, "text/plain", full);
+            if (!confirmed) return r->reply(409, "text/plain", "confirm: the signal has no CAN row to confirm");
             // The room check above makes this unreachable; never a quiet 200.
             if (!bound) return r->reply(500, "text/plain", "the map refused a binding: not saved");
         }
@@ -338,11 +369,11 @@ void WebUi::routesMap()
             if (hasSend) LogBus::printf("[map] send to the head unit %s", send ? "on" : "off");
         }
 
-        if (reset || n) {
+        if (reset || n || hasConf) {
             // NVS: the newest table, packed under the staging mutex (the car
             // task only try-takes it), written after. Factory alone = no blob.
             const char* why = nullptr;
-            if (!n) {
+            if (!n && !hasConf) {
                 if (!_cfg->eraseDecode()) why = "NVS erase failed";
             } else {
                 uint8_t* blob = (uint8_t*)malloc(Vehicle::DecodeTable::BLOB_MAX);
@@ -353,8 +384,14 @@ void WebUi::routesMap()
                 else if (!_cfg->saveDecode(blob, len)) why = "NVS write failed";
                 free(blob);
             }
-            LogBus::printf("[map] %s: %u field(s)%s%s", reset ? "back to factory" : "saved", (unsigned)n,
-                           why ? ", NOT in NVS: " : "", why ? why : "");
+            if (hasConf)
+                LogBus::printf("[map] %s %s", Vehicle::meta(confSig).name,
+                               confOn ? "confirmed in the car (measured)" : "back to a hypothesis");
+            if (reset || n)
+                LogBus::printf("[map] %s: %u field(s)%s%s", reset ? "back to factory" : "saved", (unsigned)n,
+                               why ? ", NOT in NVS: " : "", why ? why : "");
+            else if (why)
+                LogBus::printf("[map] NOT in NVS: %s", why);
             if (why) return bad(r, 500, "applied until the next boot only", why);
         }
 

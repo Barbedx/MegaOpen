@@ -44,9 +44,14 @@ locked, 3 both.
 | 15 | A drive of 5 km+ | Витрата зараз/середня, Запас ходу (розрах.), vs the cluster's trip computer | `0x551` b2.0/8 counter |
 | 16 | A steady left turn, then hard braking in a straight line | `accel_lat` and `accel_long` on Наживо: write down the sign of each. The G-метр (pick it on Екран → Картинка 48×48 → G-метр; it is not in the carousel) shows felt force, so its dot should go **right** in the left turn and **up** under braking. This confirms 0x2A0's signs | `0x2A0` b2.0/16, b1.0/8 |
 
-A row that reads right goes measured by dropping its `DF_HYPOTHESIS` (it then
-shows ✓). A row that does not: the capture, the marker and the step number go
-to the next session.
+**After a check passes, press «✓ підтвердити» on that row** of Наживо (a
+derived value has no button: confirm its inputs). The row is saved as measured
+in this board's map, and the `?` goes everywhere: Наживо, the panel menu, the
+car screen, alerts and the G-метр's ring. «↺ скасувати» makes it a hypothesis
+again. «Заводські прив'язки» brings back every hypothesis, so press ✓ again
+after one. A row measured for everyone loses `DF_HYPOTHESIS` in
+`decode_defaults.inc`. A row that does not read right: the capture, the marker
+and the step number go to the next session.
 
 **Alerts.** The bell 🔔 beside a signal on Наживо adds a rule to the
 "Сповіщення на дисплей" card on the same page (up to 16 rules: вище, нижче,

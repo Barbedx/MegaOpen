@@ -89,6 +89,30 @@ namespace Vehicle
         return any;
     }
 
+    bool DecodeTable::setMeasured(uint8_t sig, bool on)
+    {
+        bool any = false;
+        for (uint8_t i = 0; i < nRows; ++i) {
+            if (row[i].sig != sig) continue;
+            row[i].flags = on ? (uint8_t)(row[i].flags & ~DF_HYPOTHESIS) : (uint8_t)(row[i].flags | DF_HYPOTHESIS);
+            any = true;
+        }
+        return any;
+    }
+
+    bool DecodeTable::factoryMeasured(uint8_t sig)
+    {
+        uint8_t n = 0;
+        const DecodeRow* d = CanDecode::defaults(n);
+        bool any = false;
+        for (uint8_t i = 0; i < n; ++i) {
+            if (d[i].sig != sig) continue;
+            if (d[i].flags & DF_HYPOTHESIS) return false;
+            any = true;
+        }
+        return any;
+    }
+
     bool DecodeTable::sameField(const DecodeRow& a, const DecodeRow& b)
     {
         const uint8_t how = DF_LE | DF_SIGNED | DF_EXT;

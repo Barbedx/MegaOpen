@@ -7,7 +7,11 @@
    уся таблиця з 16 рядків; колонки й умови — з CAT.settings. */
 const LV_GRP=['Рух','Кузов','Світло','Поїздка й пальне','Клімат','Радар','Шини','Звук','Налаштування','Двигун','Безпека','Динаміка'];
 const LV_SRC={c:['CAN','ok'],k:['стала','warn'],p:['закріплено','warn'],d:['розрах.','ok'],o:['нема','off']};
-/* meta: [name, unit, decimals, yes/no, group, min, max, label]; sigs: [value, ageMs, src, verified] */
+/* meta: [name, unit, decimals, yes/no, group, min, max, label]; sigs: [value, ageMs, src, verified, confirm]
+   confirm: 1 — гіпотеза на CAN, можна «✓ підтвердити»; 2 — підтверджено тут, можна «↺ скасувати».
+   POST /api/map {confirm:{sig,on}}; «Заводські прив'язки» повертають гіпотези. */
+const LV_CONF=[['Підтвердити: сигнал перевірено в машині, «?» зникне всюди (меню, екран авто, G-метр). «Заводські прив\'язки» повернуть його в гіпотези.',true],
+ ['Скасувати підтвердження: сигнал знову гіпотеза, з «?».',false]];
 const lvName=m=>m[7]||((CAT.raise||[]).find(t=>t.id===m[0])||{}).name||m[0];
 const lvUnit=m=>m[1]&&!/^-?\d|^raw$/.test(m[1])?' '+m[1]:'';
 const lvVal=(m,v)=>v==null?DASH:m[3]?(+v?'так':'ні'):v+lvUnit(m);
@@ -25,16 +29,22 @@ SCR.live={title:'Авто — наживо',hidden:true,async render(m){
  this.draw(r);this.drawAlerts();
  $('[data-f="lvOnly"]').onchange=()=>this.draw(this.last);
  $('#alSave').onclick=e=>{this.A=this.readAlerts();run(e.target,()=>API.post('/api/settings',{alerts:this.A.map(a=>[a[0],a[1],+a[2]||0,parseInt(a[3])||0,!!a[4]])}),'збережено')};
- $('#lvT').onclick=e=>{const b=e.target.closest('[data-add]');if(!b)return;this.A=this.readAlerts();
+ $('#lvT').onclick=e=>{const c=e.target.closest('[data-conf]');
+  if(c){const mm=this.M[+c.dataset.conf],[t,on]=LV_CONF[c.dataset.on==='1'?0:1];
+   ask(c,lvName(mm)+'. '+t,()=>run(c,()=>API.post('/api/map',{confirm:{sig:mm[0],on}}),on?'підтверджено':'знову гіпотеза').then(async()=>this.draw(await API.get('/api/map?live=1'))));return}
+  const b=e.target.closest('[data-add]');if(!b)return;this.A=this.readAlerts();
   const i=this.A.findIndex(a=>!a[0]);if(i<0){sv(svOf($('#alSave')),'bad','усі 16 зайняті');return}
   const mm=this.M[+b.dataset.add];this.A[i]=[mm[0],mm[3]?'rises':'above',0,60,true];this.drawAlerts();$('#alCard').scrollIntoView({behavior:'smooth'})};
 },
-draw(r){this.last=r;const tb=$('#lvT');if(!tb||!r||!r.sigs)return;const only=$('[data-f="lvOnly"]').checked;let h='',g=-1;
+draw(r){this.last=r;const tb=$('#lvT');if(!tb||!r||!r.sigs||$('.ask',tb))return;const only=$('[data-f="lvOnly"]').checked;let h='',g=-1;
  const idx=this.M.map((m,i)=>i).filter(i=>!only||r.sigs[i][0]!=null).sort((a,b)=>this.M[a][4]-this.M[b][4]||a-b);
- for(const i of idx){const m=this.M[i],[v,age,src,ok]=r.sigs[i];
+ for(const i of idx){const m=this.M[i],[v,age,src,ok,cf]=r.sigs[i];
+  const vh=(ok?'✓':`<span class="muted" title="${src==='d'?'розрахунок: підтвердіть його вхідні сигнали':'ще не перевірено в машині'}">?</span>`)+
+   (cf===1?` <button class="btn sm" type="button" data-conf="${i}" data-on="1" title="перевірено в машині">✓ підтвердити</button>`:
+    cf===2?` <button class="btn sm" type="button" data-conf="${i}" data-on="0" title="підтверджено тут; знову гіпотеза">↺ скасувати</button>`:'');
   if(m[4]!==g){g=m[4];h+=`<tr><th colspan="6">${esc(LV_GRP[g]||'')}</th></tr>`}
   const stale=src==='c'&&age!=null&&age>3000,s=LV_SRC[src]||LV_SRC.o;
-  h+=`<tr${stale?' class="muted"':''}><td>${esc(lvName(m))} <small class="mono muted">${esc(m[0])}</small></td><td class="num">${esc(lvVal(m,v))}</td><td class="num">${lvAge(age)}</td><td>${chipH(s[1],s[0])}</td><td>${ok?'✓':'<span class="muted" title="ще не перевірено в машині">?</span>'}</td><td><button class="btn sm" type="button" data-add="${i}" title="сповіщення на дисплей">🔔</button></td></tr>`}
+  h+=`<tr${stale?' class="muted"':''}><td>${esc(lvName(m))} <small class="mono muted">${esc(m[0])}</small></td><td class="num">${esc(lvVal(m,v))}</td><td class="num">${lvAge(age)}</td><td>${chipH(s[1],s[0])}</td><td style="white-space:nowrap">${vh}</td><td><button class="btn sm" type="button" data-add="${i}" title="сповіщення на дисплей">🔔</button></td></tr>`}
  tb.innerHTML=h||'<tr><td colspan="6" class="muted">жодного значення: CAN A мовчить?</td></tr>';
  if(r.alertStats)$('#lvAl').textContent=r.alertStats.fired+' / '+r.alertStats.shown+' / '+r.alertStats.dropped},
 drawAlerts(){const so=[['','—'],...this.M.map(m=>[m[0],lvName(m)])],co=this.C.map(c=>[c[0],c[1]]);

@@ -52,6 +52,12 @@ Do not use the menu while driving.
 or **?** (positioned from Renault's data, not yet checked). It refreshes
 every 2 s.
 
+When you have checked a **?** signal in the car (the steps are in
+`docs/car-test-can-signals.md`), press **✓ підтвердити** on its row. The `?`
+then goes everywhere: the menu, the car screen, alerts and the G-метр.
+**↺ скасувати** takes it back. «Заводські прив'язки» turns every confirmed
+signal back into a **?**.
+
 If the list looks short after an update, see
 [«Заводські прив'язки»](#after-an-update).
 

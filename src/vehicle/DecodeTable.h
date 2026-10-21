@@ -52,6 +52,14 @@ namespace Vehicle
         // Bound to CAN, and every row binding it is measured (no
         // DF_HYPOTHESIS): what Vehicle::verified() reports, pins aside.
         bool measured(uint8_t sig) const;
+        // The owner's ✓ after a car check (POST /api/map {confirm}): every
+        // row binding `sig` measured, or back to a hypothesis. False, with
+        // nothing changed, when no CAN row binds it. factory() brings the
+        // factory's flags back.
+        bool setMeasured(uint8_t sig, bool on);
+        // decode_defaults.inc binds `sig` and has measured it: a ✓ there is
+        // the factory's, not one to take back.
+        static bool factoryMeasured(uint8_t sig);
         // The same bytes, bits and scale: an edit that changes nothing a
         // measurement could have confirmed (the page re-saving a row).
         static bool sameField(const DecodeRow& a, const DecodeRow& b);

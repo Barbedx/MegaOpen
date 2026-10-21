@@ -401,6 +401,9 @@ function mapVal(t){const r=S.map[t.id],ts=S.tests[t.id];if(ts&&ts.until>now())re
 /* WebUiMap.cpp: назву, одиницю й межі поля сторінка бере з каталогу; тут — лише прив'язка і значення */
 /* ?live=1 / ?meta=1 (WebUiMap.cpp putLive/putMeta): живі сигнали — вигадана поїздка; правила — AlertRules */
 const META=SIM_DECODE.meta||[],DERIVED=new Set(SIM_DECODE.derived||[]),BOUND=new Set(SIM_DECODE.rows.map(r=>r.sig));
+/* DecodeTable::factoryMeasured / measured: заводський рядок без hyp; S.conf — ✓/↺ власника (POST {confirm}) */
+const FACT_HYP=new Set(SIM_DECODE.rows.filter(r=>r.can&&r.can.hyp).map(r=>r.sig));S.conf={};
+const measured=n=>BOUND.has(n)&&(S.conf[n]??!FACT_HYP.has(n));
 const decStr=(v,d)=>d?(v/pow10(d)).toFixed(d):String(v);
 const COND=[['above','вище'],['below','нижче'],['rises','зʼявилось'],['falls','зникло'],['changes','змінилось']];
 S.alerts=Array.from({length:16},(_,i)=>i?['','rises',0,5,false]:['fuel_low','rises',0,300,true]);
@@ -413,7 +416,8 @@ function liveVal(n,t){const s=t/1000,w=(p,a,b)=>a+(b-a)*(.5+.5*Math.sin(s/p));
 const mapBase=()=>({send:S.emitter,uart:S.set.uartEnabled,units:{fuel:S.tun.fuelUnit,trip:S.tun.tripUnit},exp:S.huExp||0});
 g('/api/map',q=>{const o=mapBase();o.rows=q.live?[]:C.raise.map(t=>({id:t.id,...S.map[t.id],...mapVal(t)}));
  if(q.live){const t=Date.now();o.sigs=META.map(m=>{const v=liveVal(m[0],t),src=DERIVED.has(m[0])?'d':BOUND.has(m[0])?'c':'o';
-  return [v===undefined?null:decStr(v,m[2]),v===undefined?null:Math.floor(Math.random()*300),src,['door_fl','door_fr','door_rl','door_rr','boot','light_pos','light_dip'].includes(m[0])?1:0]});
+  const ms=src==='c'&&measured(m[0]);
+  return [v===undefined?null:decStr(v,m[2]),v===undefined?null:Math.floor(Math.random()*300),src,ms?1:0,src!=='c'?0:!ms?1:FACT_HYP.has(m[0])?2:0]});
   o.alertStats={fired:0,shown:0,dropped:0}}
  if(q.meta)o.meta=META.map(m=>[m[0],m[1],m[2],m[3],m[4],decStr(m[5],m[2]),decStr(m[6],m[2]),m[7]]);
  return o});
@@ -433,6 +437,9 @@ po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(
   if(r.src==='can'){if(!r.can||typeof r.can!=='object')return fail(400,r.id+': can: {id, byte, len, ...}');const w=canWhy(r.can);if(w)return fail(400,r.id+': '+w)}
   if(r.src==='const'&&!(typeof r.k==='number'&&toInt(r.k,t.dec)>=toInt(t.min,t.dec)&&toInt(r.k,t.dec)<=toInt(t.max,t.dec)))return fail(400,r.id+': k: '+t.min+'..'+t.max);
   E.push([r,t])}
+ if(q.confirm!=null){const n=q.confirm.sig;if(!META.some(m=>m[0]===n))return fail(404,'confirm: no such signal');
+  if(q.confirm.on!=null&&typeof q.confirm.on!=='boolean')return fail(400,'confirm.on: true or false');
+  if(!BOUND.has(n))return fail(409,'confirm: the signal has no CAN row to confirm')}
 
  if(q.exp!==undefined&&!(isInt(q.exp)&&q.exp>=0&&q.exp<=127))return fail(400,'exp: 0..127, the experiment bits');
  if(q.exp!==undefined&&q.exp&16){const at=(q.exp>>5)&3;if(at>2)return fail(400,'battery field: 0x21, 0x7D 04 or 0x23');
@@ -441,7 +448,8 @@ po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(
  if(q.exp!==undefined){S.huExp=q.exp;emit(2,'HU','[map] head-unit experiments: '+q.exp)}
  if(q.send!==undefined){S.emitter=!!q.send;emit(2,'HU','[map] send to the head unit '+(S.emitter?'on':'off'))}
  if(q.units){if(q.units.fuel!=null)S.tun.fuelUnit=q.units.fuel;if(q.units.trip!=null)S.tun.tripUnit=q.units.trip}
- if(q.reset)S.map=defMap();
+ if(q.reset){S.map=defMap();S.conf={}}
+ if(q.confirm!=null){const on=q.confirm.on??true;S.conf[q.confirm.sig]=on;emit(2,'CAN','[map] '+q.confirm.sig+(on?' confirmed in the car (measured)':' back to a hypothesis'))}
  for(const[r,t]of E){const c=r.can||{};S.map[r.id]={src:r.src,can:r.src==='can'?{id:'0x'+hexV(c.id).toString(16).toUpperCase().padStart(3,'0'),byte:c.byte,len:c.len??1,shift:c.shift??0,mask:hexV(c.mask).toString(16).toUpperCase(),mul:c.mul??1,div:c.div??1,add:c.add??0,le:!!c.le,signed:!!c.signed}:null,k:r.src==='const'?toInt(r.k,t.dec)/pow10(t.dec):0}}
  if(q.reset||E.length)emit(2,'CAN','[map] '+(q.reset?'back to factory':'saved')+': '+E.length+' field(s)');
  return ok});

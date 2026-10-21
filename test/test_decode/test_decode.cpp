@@ -560,6 +560,31 @@ void test_the_blob_round_trips_the_factory_table_and_constants()
     TEST_ASSERT_TRUE(dec.load(b.row, b.nRows));
 }
 
+// The owner's ✓ on the live page: a hypothesis goes measured, survives the
+// NVS blob, can be taken back, and factory() brings the hypothesis back.
+void test_a_confirm_flips_the_flag_and_survives_the_blob()
+{
+    static DecodeTable a, b;
+    static uint8_t blob[DecodeTable::BLOB_MAX];
+    a.factory();
+    TEST_ASSERT_FALSE(a.measured(SIG_ACCEL_LAT));
+    TEST_ASSERT_FALSE(DecodeTable::factoryMeasured(SIG_ACCEL_LAT));
+    TEST_ASSERT_TRUE(DecodeTable::factoryMeasured(SIG_DOOR_FL));
+    TEST_ASSERT_TRUE(a.setMeasured(SIG_ACCEL_LAT, true));
+    TEST_ASSERT_TRUE(a.measured(SIG_ACCEL_LAT));
+    const int ri = a.rowOf(SIG_ACCEL_LAT);
+    const uint8_t keep = a.row[ri].flags | DF_HYPOTHESIS;
+    TEST_ASSERT_TRUE(b.unpack(blob, a.pack(blob)));
+    TEST_ASSERT_TRUE(b.measured(SIG_ACCEL_LAT));
+    TEST_ASSERT_FALSE(b.measured(SIG_ACCEL_LONG));              // only that signal
+    TEST_ASSERT_TRUE(b.setMeasured(SIG_ACCEL_LAT, false));      // ↺
+    TEST_ASSERT_FALSE(b.measured(SIG_ACCEL_LAT));
+    TEST_ASSERT_EQUAL_HEX8(keep, b.row[b.rowOf(SIG_ACCEL_LAT)].flags);   // nothing else moved
+    TEST_ASSERT_FALSE(b.setMeasured(SIG_RANGE, true));          // no CAN row: refused
+    a.factory();                                                // «Заводські прив'язки»
+    TEST_ASSERT_FALSE(a.measured(SIG_ACCEL_LAT));
+}
+
 void test_a_bad_blob_is_refused_whole()
 {
     static DecodeTable a, b;
@@ -1098,6 +1123,7 @@ int main(int, char**)
     RUN_TEST(test_fuel_rate_consumption_trip_and_range);
     RUN_TEST(test_derived_signals_name_their_inputs);
     RUN_TEST(test_the_blob_round_trips_the_factory_table_and_constants);
+    RUN_TEST(test_a_confirm_flips_the_flag_and_survives_the_blob);
     RUN_TEST(test_a_bad_blob_is_refused_whole);
     RUN_TEST(test_the_caps_are_96_rows_and_16_constants);
     RUN_TEST(test_binding_replaces_and_keeps_the_order);
