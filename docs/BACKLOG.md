@@ -66,6 +66,14 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   (2026-09-27, ~20 s), fine in the next. Observe before acting; could be the
   carousel on an empty scene.
 
+- **The car screen paints over a key popup too (review, 2026-10-21).** It
+  has no popup gate: a row that changed is repainted within a second (its
+  1 s floor) and covers a volume popup, like the non-Text layouts below.
+  Where: `UiTask.cpp`, the car screen block (`g_carScreen`).
+- **A menu Bool pressed twice quickly toggles once (review, 2026-10-21).**
+  The engine takes the new value from the live setting, which net_svc has
+  not changed yet, so both commits carry the same value. Where:
+  `MenuEngine::key` (Kind::Setting, Bool) and `PanelMenu::applyPending`.
 - **A popup is still painted over in the non-Text layouts.** Only the Text
   layout stops repainting under a popup; the others are slowed to
   `POPUP_PAINT_MS` (1 s) and the next screen covers the popup on this panel,
@@ -141,6 +149,13 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   notify callback while the write waits on the host). Needs a use-count or a
   loop-task-owned detach. Where: `apple_notification_service.cpp`.
 ### Web UI
+
+- **A knob change from the menu can be lost under a web save (review,
+  2026-10-21).** POST /api/settings copies the knob config when the request
+  starts and `setConfig()`s it whole at the end; a menu commit on net_svc in
+  between (`knobsSet`) is overwritten. KnobService's mutex guards each swap,
+  not the read-modify-write. Where: `WebUi.cpp` /api/settings (`kc`),
+  `PanelMenu::applyPending`.
 
 - **`/api/knobs` stays out of the settings registry (decided 2026-10-21).**
   Slice 7 folded `/api/cap/settings`, `/api/loglevel`, `/api/routing`,
