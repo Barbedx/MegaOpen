@@ -1,0 +1,109 @@
+# MegaOpen — agent guide
+
+Firmware for a LilyGO **T-2CAN** (ESP32-S3) in a Renault Mégane II CC. It drives
+the OEM AFFA display panel (Carminat), emulates a Raise/RAV4 canbox towards an
+Android head unit over UART, talks to an iPhone over BLE, and listens to the
+car's CAN. Read `ARCHITECTURE.md` for the block diagram, task table and source
+map; this file is the "where do I look" index for a session in the car.
+
+## Rules for a session
+
+- **Diagnose first, report, then ask.** A finding is not a licence to edit
+  source. Show the evidence (log lines, `/api/health` codes, file:line) and
+  stop unless the owner asks for a fix.
+- **CAN A (the car) is listen-only, always.** Never add a transmit path there.
+- **Never force-push** `master`. Commits use the repo-local identity
+  (`www.andruxa@gmail.com`); check `git log -1 --format='%ae %ce'` before a push.
+- **Opening the USB serial port can reset the board.** Prefer the web log
+  (`/api/logs`) over the COM port.
+- **Every image keeps OTA.** Never flash a build without the web server/OTA.
+- `src/secrets.h` is gitignored (template: `src/secrets.example.h`). Never
+  commit WiFi passwords.
+
+## Reaching the board
+
+| where | address |
+| --- | --- |
+| car (board's own AP `MegaOpen-XXXX`, pass `megaopen`) | `http://192.168.4.1` |
+| home WiFi | `http://megaopen.local` (mDNS) or the router's IP |
+
+## First look when something is wrong
+
+1. `GET /api/health` — one object per chain with `state`, `code`, `why`:
+   `panel`, `media`, `clock`, `keys` (+ `dest` masks), `ancs`, `hu`, `knobs`,
+   `lights`, `phone`. Start from the `code`.
+2. `GET /api/status` — build hash, uptime, heap, RSSI.
+3. `GET /api/logs?since=0` — live log ring; `GET /api/logs/file` — the flash
+   log (survives reboots, written on warnings and before a reboot).
+4. Periodic lines every 10 s tell the story without a debugger:
+
+| tag | what |
+| --- | --- |
+| `[hb]` | uptime, heap, min heap, CAN rx, keys |
+| `[can]`, `AFFA-TWAI` | panel bus: state, tec/rec, bus errors, TX gate ("nobody ACKs"), reinstalls |
+| `[panel]`, `[disp]`, `AFFA` | registration phase, posted/delivered renders, failStreak |
+| `[key]` | key latency p50/p99, drops, source counts |
+| `[hu]` | head-unit UART: acks, replies, desync, drops |
+| `[car]`, `[can2]` | car CAN (MCP2518FD): fps, autobaud, overflows |
+| `[ui]`, `[media]` | glass policy, now-playing source |
+| `[ble]` | iPhone link, AMS/HID queues |
+| `[ota]` | trial / CONFIRMED / rolling back |
+| `[alert]` | panel alert rules |
+| `[mem]`, `[win]`, `[stk]`, `[task]`, `[stall]` | heap, stacks, task ages, loop gaps |
+
+Raise the log level for one session through `/api/settings` `{"logLevel":"DBG"}`
+(volatile; reboot returns to INF). `TRC` shows panel frames and slows the loop.
+
+## Symptom → where to look
+
+| symptom | API / log | code |
+| --- | --- | --- |
+| panel blank, never registers | health `panel`, `[disp]`, `AFFA-TWAI` | `src/app/PanelOwner.*`, `src/display/AffaPort.cpp`; protocol in AffaDisplay (`.pio/libdeps/t2can/AffaDisplay`), sequence in `docs/DISPLAY-INIT-SPEC.md` |
+| panel keys slow / lost | `[key]` p99, drops | `src/keys/AffaKeySource.*`, `src/app/KeysTask.*`, `src/keys/KeyRouter.*` |
+| wrong text / layout on glass | `[ui]`, `[media]` | `src/app/UiTask.*`, `src/display/PanelOps.*`, `MediaScreen.*`, `MediaPane.*`, `GlassGate.h` |
+| panel menu (hold right knob) | — | `src/app/PanelMenu.*`, `src/ui/MenuEngine.*`, `MenuInput.*` |
+| car screen (3 signals) | — | `src/ui/SignalText.*`, `src/app/UiTask.*` |
+| encoders / LED rings | health `knobs`, `lights`; `/api/knobs` | `src/knobs/*`, `src/input/*` |
+| head unit shows nothing / wrong | health `hu`; `/api/canbox/last?in=1`; `/api/messages` | `src/app/HuTask.*`, `src/proto/canbox/Rav4Emitter.*`, `src/sinks/CanboxUartSink.*`; `docs/raise-protocol.md`, `docs/hu-decoder.md` |
+| track title from HU | `[media]` | `src/media/HuMediaSource.*`, `MediaRouter.*` |
+| iPhone: no track / clock / notifications | health `phone`, `media`, `clock`, `ancs`; `[ble]` | `src/ble/*`, `src/apple_*_service.cpp`, `src/current_time_service.cpp`, `src/media/AmsMediaSource.*` |
+| car value wrong / missing | live page `#live` (`/api/map?live=1`), `[car]`, `[can2]` | `src/vehicle/decode_defaults.inc` (factory rows), `CanDecode.*`, `Signals.*`, `Derived.*` (gear, consumption, range); ids in `docs/megane-can-ids.md`, `docs/signal-glossary.md`; car checklist `docs/car-test-can-signals.md` |
+| new signals not shown | saved map hides new factory rows | press **«Заводські прив'язки»** on the map page |
+| alert popup wrong / spam | `[alert]`; rules in `/api/settings` `alerts` | `src/vehicle/AlertRules.*` |
+| car CAN silent | `[can2]` autobaud, `ab=searching` | `src/bus/Mcp2518Source.*`, `Autobaud.*`, `src/app/CarTask.*` |
+| a setting does not apply / save | `POST /api/settings` answers 400 with key + reason | `src/cfg/SettingsRegistry.cpp` (every setting, its range and apply bit), `Config.cpp` (NVS) |
+| web page broken | browser console | `web/js/*.js` (built into the image by `tools/gen_pages.py`), `src/net/WebUi*.cpp` |
+| OTA rolls back | `[ota]` | `src/app/OtaTrial.*`, `OtaVerdict.*` (confirm after 60 s healthy, revert at 180 s) |
+| reboots / heap low | `[hb]`, `[mem]`, flash log | `src/app/Housekeeping.*`, `TaskPlan.h` (priorities, stacks) |
+| WiFi / AP | `/api/wifi` | `src/net/WifiManager.*` |
+
+Pins live only in `src/board/BoardProfile.h`. Feature flags: `src/Features.h`
+plus per-env `-D` in `platformio.ini`.
+
+## Build, test, flash
+
+PlatformIO may not be on PATH: `~/.platformio/penv/Scripts/pio.exe`.
+
+| what | command |
+| --- | --- |
+| car build | `pio run -e t2can` → `.pio/build/t2can/firmware.bin` |
+| other envs | `t2can_usbhid` (USB keyboard), `direct` (DevKit, no panel) |
+| host tests | `pio test -e native` |
+| repo checks | `python tools/check_rules.py`, `tools/build_sim.py`, `tools/check_pages.py` |
+| USB flash | `pio run -e t2can -t upload --upload-port COMx` |
+| OTA | `H=$(md5sum firmware.bin \| cut -d' ' -f1); curl "$B/ota/start?mode=fr&hash=$H"; curl -F "file=@firmware.bin;filename=firmware.bin" "$B/ota/upload"` then wait for `[ota] CONFIRMED` |
+
+## Library
+
+AffaDisplay (`github.com/Barbedx/AffaDisplay`, pinned `#main` in
+`platformio.ini`) owns the AFFA protocol and the panel's CAN link
+(`affa::TwaiLink`, TX gate, bus-off recovery). Library bugs are fixed there,
+not patched in `.pio/libdeps`. Its known gaps are in its `CHANGELOG.md`.
+
+## Docs
+
+`docs/BACKLOG.md` (open work, known bugs), `docs/DISPLAY-INIT-SPEC.md`,
+`docs/raise-protocol.md`, `docs/hu-decoder.md`, `docs/megane-can-ids.md`,
+`docs/signal-glossary.md`, `docs/car-test-can-signals.md`, `docs/knobs.md`,
+`docs/wiring-direct.md`, `docs/design/event-tasks.md`, `docs/design/web-ui.md`,
+`hardware/` (wiring drawings, prints).

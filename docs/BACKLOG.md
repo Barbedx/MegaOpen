@@ -76,6 +76,30 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   `/api/display/raw` with the camera. Where: `MediaScreen` info layout.
 - **Never checked on glass:** the `flow` style, `paneSpeed`, and the
   twelve-scene `pane: auto` carousel. Host-tested only.
+- **Auto-detect the panel family and the head unit — researched 2026-10-21,
+  NOT started.** The owner wants more glass time before the board sends
+  anything it is not sure of. Findings:
+  - `displayType` (carminat | updatelist) is already a runtime NVS setting
+    (Settings.h, SettingsRegistry, AffaPort.cpp builds the object, reboot to
+    apply); both families are compiled into t2can.
+  - A passive (listen-only) check cannot tell Carminat from UpdateList: before
+    registration the panel sends the same `0x3CF` ping and `61 11 01` either
+    way, and the bench panel is universal (it opened both `1C1 70` and
+    `0A9 70`; archive/bench-notes `docs/BENCH-VERIFIED.md`). The family is set
+    by who opens the handshake (`0x3AF` vs `0x3DF`), not by the panel.
+  - Passively detectable: a cluster (only `3CF` DLC 1 `69`, never `61 11`),
+    and a foreign master (an OEM radio's `0x3AF`/`0x3DF`) on the panel bus.
+  - Proposed `displayType=auto`: listen ~1 s; foreign master → stay silent and
+    say so in health; cluster → say so; else try Carminat, and if no `1C1 70` /
+    registration ACK in ~250 ms rebuild as UpdateList (the display object is
+    heap-allocated in AffaPort, cheap). Remember the winner in NVS like
+    `can2Detected`. App-side only, no library change. For this universal panel
+    it almost always ends at Carminat.
+  - Head unit: only the RAV4/Toyota emitter exists. The incoming command set
+    names the profile (Toyota `0x81/0x83/0x84/0x90/0x9D`, VW `0xC0..0xC4`,
+    `0xF3` = not supported, raise-protocol.md), so a health warning "head unit
+    speaks VW, firmware speaks Toyota" is cheap; switching needs a second
+    emitter first.
 
 ### Keys / input
 
