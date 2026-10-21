@@ -49,7 +49,7 @@ to the next session.
 
 **Alerts.** The bell 🔔 beside a signal on Наживо adds a rule to the
 "Сповіщення на дисплей" card on the same page (up to 16 rules: вище, нижче,
-з'явилось, зникло, змінилось, with a pause between popups). The card saves
+з'явилось, зникло, змінилось, with a pause of at least 5 s between popups). The card saves
 through `/api/settings` (`alerts`) like every other setting; a bad cell is
 refused with its row and column. The only factory rule is the low-fuel
 lamp's rising edge. To try one without driving: add "Педаль гальма
