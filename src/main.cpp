@@ -503,6 +503,9 @@ static void bleServiceTask(void*)
         // the write holds this task for 30-130 ms, and the release would wait
         // behind it.
         amsPending = hidOwed ? g_bleKeys.pending() : g_bleKeys.step();
+        // AMS's long read of a cut title holds this task for two GATT round
+        // trips: not while a HID release is owed or key writes wait.
+        Bluetooth::SetKeysBusy(g_bleKeys.hidHoldLeft(millis(), holdLeft) || g_bleKeys.pending());
         BleHub::Service();
         // busyMax here is how long GATT setup, ANCS and one AMS write can hold
         // this task.
@@ -1498,11 +1501,13 @@ static void hkBeat(uint32_t now)
 #endif
 #if FEATURE_BLE
     // The BLE key path since boot: q = the keys-to-ble_svc queue's drops;
+    // ams = AMS writes that went out, fail = ones the stack refused;
     // stale = waited over 300 ms; coal = volume presses folded into one
     // pending count; nolink = owed with no phone connected; vol = AMS
     // commands a volume press sends (measured, sinks/AmsVolumeStep.h).
-    logf("[ble] keys q=%u ams=%u hid=%u stale=%u coal=%u nolink=%u vol=%u",
+    logf("[ble] keys q=%u ams=%u fail=%u hid=%u stale=%u coal=%u nolink=%u vol=%u",
          (unsigned)Sinks::BleKeyQueue::dropped(), (unsigned)g_bleKeys.amsWrites(),
+         (unsigned)g_bleKeys.amsFailed(),
          (unsigned)g_bleKeys.hidPresses(), (unsigned)g_bleKeys.stale(),
          (unsigned)g_bleKeys.coalesced(), (unsigned)g_bleKeys.noLink(),
          (unsigned)g_bleKeys.volSteps());

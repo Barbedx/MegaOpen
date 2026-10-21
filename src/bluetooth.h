@@ -22,6 +22,11 @@ void OnAmsPeerLost();
 
 // --- public status ---
 bool IsConnected();
+// ble_svc, before BleHub::Service(): key work is owed (a HID release, AMS
+// key writes), so ServiceAms() leaves its slow GATT reads for a later pass.
+void SetKeysBusy(bool busy);
+// The AMS link's connection interval in ms (30 without a link). ble_svc.
+uint16_t ConnIntervalMs();
 bool IsTimeSet();
 bool HasBond();
 // Any task: forget every bond; ble_svc does it at its next pass.

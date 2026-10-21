@@ -81,6 +81,8 @@ namespace Bluetooth
 
     namespace
     {
+        // Set by ble_svc each pass (SetKeysBusy), read by ServiceAms on it.
+        bool KeysBusy = false;
         // Requests from other tasks, performed by ServicePending() on ble_svc.
         std::atomic<bool> PeerLostReq{false};
         std::atomic<bool> ClearBondsReq{false};
@@ -89,6 +91,7 @@ namespace Bluetooth
     static void clearBonds();   // below, beside the public status calls
 
     void OnAmsPeerLost() { PeerLostReq.store(true); }
+    void SetKeysBusy(bool busy) { KeysBusy = busy; }
     void ClearBonds()    { ClearBondsReq.store(true); }
 
     // ble_svc only: see OnAmsPeerLost() in bluetooth.h.
@@ -119,8 +122,9 @@ namespace Bluetooth
         if (Connected && Client && Client->isConnected())
             AppleNotificationService::Process();
 #endif
-        // The whole of a track attribute AMS cut short, one per pass.
-        if (AmsUp && Client && Client->isConnected())
+        // The whole of a track attribute AMS cut short, one per pass, and
+        // only when no key is waiting on this task (SetKeysBusy).
+        if (AmsUp && !KeysBusy && Client && Client->isConnected())
             AppleMediaService::Process();
 
         if (millis() - lastSetupAttempt < 800)
@@ -251,6 +255,14 @@ namespace Bluetooth
     }
 
     bool IsConnected() { return Connected && Client && Client->isConnected(); }
+
+    uint16_t ConnIntervalMs()
+    {
+        if (!Client || !Client->isConnected())
+            return 30;
+        const uint16_t units = Client->getConnInfo().getConnInterval();   // 1.25 ms each
+        return units ? (uint16_t)((units * 5u + 3u) / 4u) : 30;
+    }
     bool IsTimeSet()   { return TimeSet; }
     bool HasBond()     { return NimBLEDevice::getNumBonds() > 0; }
 

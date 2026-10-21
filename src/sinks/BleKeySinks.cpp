@@ -95,7 +95,7 @@ namespace Sinks
         return true;
     }
 
-    void BleKeyWorker::volBurstWrite(int8_t dir, uint32_t nowMs)
+    void BleKeyWorker::volBurstBegin(int8_t dir, uint32_t nowMs)
     {
         if (_burst.dir != dir) {
             // One before it not yet measured: its report may still land
@@ -108,7 +108,6 @@ namespace Sinks
             _burst.startMs  = nowMs;
             _burst.clean    = !overlap;
         }
-        ++_burst.writes;
         _burst.endMs = 0;
     }
 
@@ -146,18 +145,34 @@ namespace Sinks
             return false;
         }
 
+        // A write with response paces itself (it waits for the answer); one
+        // without goes out at once, so they are held a connection interval
+        // apart, or a burst queues faster than the link drains it.
+        if (AppleMediaService::RemoteCommandNoResponse() &&
+            (uint32_t)(nowMs - _lastWriteMs) < Bluetooth::ConnIntervalMs())
+            return true;
+
+        // A refused write is counted and not retried (the link is going);
+        // only the ones that went out count, in the burst too, or a
+        // congested link would read as a smaller step.
+        auto wrote = [&](bool ok) {
+            _lastWriteMs = millis();
+            if (ok) ++_amsWrites; else ++_amsFailed;
+            return ok;
+        };
         if (_fifoN) {
             const BleCmd c = _fifo[0];
             for (uint8_t i = 1; i < _fifoN; ++i) _fifo[i - 1] = _fifo[i];
             --_fifoN;
             // It may have waited behind a volume step; the rule is the same.
             if ((uint32_t)(nowMs - c.atMs) > STALE_MS) ++_stale;
-            else { amsCommand(c.action); ++_amsWrites; }
+            else wrote(amsCommand(c.action));
         } else {
-            volBurstWrite(_vol > 0 ? 1 : -1, nowMs);
-            if (_vol > 0) { AppleMediaService::VolumeUp();   --_vol; }
-            else          { AppleMediaService::VolumeDown(); ++_vol; }
-            ++_amsWrites;
+            volBurstBegin(_vol > 0 ? 1 : -1, nowMs);
+            bool ok;
+            if (_vol > 0) { ok = AppleMediaService::VolumeUp();   --_vol; }
+            else          { ok = AppleMediaService::VolumeDown(); ++_vol; }
+            if (wrote(ok)) ++_burst.writes;
             if (!_vol) _burst.endMs = millis();
         }
         return _fifoN || _vol;

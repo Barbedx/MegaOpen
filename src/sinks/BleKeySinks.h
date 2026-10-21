@@ -49,7 +49,8 @@ namespace Sinks
         // release goes out on time, not behind the write.
         bool hidHoldLeft(uint32_t nowMs, uint32_t& leftMs) const;
 
-        uint32_t amsWrites() const   { return _amsWrites; }
+        uint32_t amsWrites() const   { return _amsWrites; }   // that succeeded
+        uint32_t amsFailed() const   { return _amsFailed; }
         uint32_t hidPresses() const  { return _hidPresses; }
         uint32_t stale() const       { return _stale; }
         uint32_t coalesced() const   { return _coalesced; }
@@ -59,7 +60,7 @@ namespace Sinks
     private:
         void accept(const BleCmd& c, uint32_t nowMs);
         // The current volume burst: measured and logged once it has settled.
-        void volBurstWrite(int8_t dir, uint32_t nowMs);
+        void volBurstBegin(int8_t dir, uint32_t nowMs);
         void volBurstSettle(uint32_t nowMs);
 
         BleCmd   _fifo[FIFO_MAX];
@@ -77,6 +78,8 @@ namespace Sinks
         bool     _hidHeld = false;
         uint32_t _hidPressAtMs = 0;
         uint32_t _amsWrites = 0, _hidPresses = 0, _stale = 0, _coalesced = 0, _noLink = 0;
+        uint32_t _amsFailed = 0;      // writes the stack refused (not retried)
+        uint32_t _lastWriteMs = 0;    // paces writes without response
     };
 }
 #endif
