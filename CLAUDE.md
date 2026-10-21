@@ -107,6 +107,7 @@ Tag `vX.Y.Z-rcN` → CI publishes a prerelease (OTA `.bin`, `-factory.bin` for
 the first USB flash, `SHA256SUMS`). The rc's OTA asset is verified on a real
 board (`[ota] CONFIRMED`), then `vX.Y.Z` on the same commit republishes those
 exact files as latest. The tag must match `MEGAOPEN_VERSION` in `src/Version.h`.
+Full procedure and rules: `docs/RELEASING.md`.
 
 ## Docs
 
