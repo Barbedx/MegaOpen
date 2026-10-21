@@ -572,7 +572,9 @@ SIM._call=async function(m,path,params,hdr){
  let st=200,body;const fn=R[m+' '+p];
  if(m==='POST'&&SIM.nextErr){st=SIM.nextErr;SIM.nextErr=0;simErrUi();body={409:'conflict',503:'busy, try again'}[st]}
  /* src/net/RequestGate.h: зміна без X-MegaOpen — 403, як на платі */
- else if((m!=='GET'||p==='/ota/start')&&!(hdr&&hdr['X-MegaOpen']==='1')){st=403;body="a change needs the header X-MegaOpen: 1 (the board's own page sends it)"}
+ else if((m!=='GET'||p==='/ota/start')&&!(hdr&&hdr['X-MegaOpen']==='1')){st=403;body="a change needs the header X-MegaOpen: 1 (the board's own page sends it)";
+  /* сторінка мала б його слати завжди: помилка в консоль ловиться tools/ui_audit.mjs (CI, job ui) */
+  console.error('[sim] '+m+' '+p+' without X-MegaOpen')}
  else if(!fn||!routeBuilt(p)){st=404;body='not found'}
  else{try{const r=fn(q);if(r&&r.__status){st=r.__status;body=r.body}else body=r}catch(e){st=500;body=e.message}}
  JR.unshift({m,p:path,st,ms:now()-t0});if(JR.length>60)JR.pop();jrDraw();

@@ -66,6 +66,10 @@ details.card[open]>summary h2 span:first-child::before{content:"▾ ";}
 .in{min-height:44px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--text);padding:0 10px;font:inherit;font-size:16px;max-width:100%;min-width:0}
 input.in[type=number]{width:92px}
 input.in[type=color]{width:52px;padding:3px}
+/* the ring's LED colours: a row of pickers that must not shrink under a thumb */
+[data-leds]>input.in[type=color]{flex:0 0 40px;min-width:40px}
+/* a link beside a row ("Плата →"): a 40 px target, not a 20 px line of text */
+.row .c>a{display:inline-flex;align-items:center;min-height:40px}
 input.in.code{width:62px;font-family:var(--mono);text-transform:uppercase}
 input.in.grow{flex:1}
 textarea.in{width:100%;min-height:96px;padding:8px 10px;font-family:var(--mono);font-size:13px}
@@ -181,7 +185,7 @@ canvas.glassC{display:block;width:100%;height:auto;border-radius:8px;border:2px 
 /* мапа RAV4 */
 .mapt td{vertical-align:top}
 .mapt td small{display:block;color:var(--mute);font-size:12px}
-.srcb{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:999px;padding:4px 10px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
+.srcb{min-height:40px;border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:999px;padding:4px 10px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
 .srcb.can{color:var(--ok);background:var(--okB);border-color:transparent}.srcb.k{color:var(--acc)}.srcb.no{color:var(--off);cursor:default}
 .mapEd td{background:var(--panel2)}
 .mapEd .mg{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}

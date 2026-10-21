@@ -119,3 +119,32 @@ jobs:
         with:
           name: ui-sim
           path: build/ui-sim.html
+
+  # The web app at phone width (390/360 px, light and dark, every tab) in the
+  # runner's headless Chrome: fails on page overflow, text contrast under
+  # 4.5:1, a control's hit area under 40 px, and any console error (the mock
+  # logs a change sent without X-MegaOpen as one). tools/ui_audit.mjs; the
+  # failing pages' screenshots are kept as an artifact.
+  ui:
+    name: UI at phone width
+    needs: sim
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui-sim
+          path: build/
+      - name: ui_audit
+        env:
+          CHROME: google-chrome
+        run: node tools/ui_audit.mjs build/ui-sim.html build/ui-audit
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-audit
+          path: build/ui-audit/
