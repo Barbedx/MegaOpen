@@ -22,17 +22,17 @@ jobs:
     name: host tests + rules
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # .gitattributes stores text as LF; a file committed with CR anyway
       # (core.autocrlf=false) broke release.yml's version parse once.
       - name: no CR in tracked files
         run: |
           bad=$(git ls-files --eol | awk '$1 == "i/crlf" || $1 == "i/mixed" { print $NF }')
           [ -z "$bad" ] || { echo "::error::stored with CR (git add --renormalize):"; echo "$bad"; exit 1; }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.platformio
@@ -48,7 +48,7 @@ jobs:
       - name: check_rules
         run: python tools/check_rules.py
       # catalog.json, features.json and decode.json for check_nav and build_sim.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: native-build
           path: build/
@@ -63,11 +63,11 @@ jobs:
       matrix:
         env: [t2can, t2can_usbhid, direct]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.platformio
@@ -75,7 +75,7 @@ jobs:
           key: pio-${{ matrix.env }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-${{ matrix.env }}-
       - run: pip install "platformio==${PLATFORMIO_VERSION}"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: native-build
           path: build/
@@ -89,7 +89,7 @@ jobs:
         run: python tools/check_nav.py ${{ matrix.env }}
       - name: check_pages
         run: python tools/check_pages.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: features-${{ matrix.env }}
           path: build/features/${{ matrix.env }}.json
@@ -100,22 +100,22 @@ jobs:
     needs: firmware
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: native-build
           path: build/
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: features-*
           path: build/features/
           merge-multiple: true
       - name: build_sim
         run: python tools/build_sim.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ui-sim
           path: build/ui-sim.html
@@ -131,11 +131,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: ui-sim
           path: build/
@@ -144,7 +144,7 @@ jobs:
           CHROME: google-chrome
         run: node tools/ui_audit.mjs build/ui-sim.html build/ui-audit
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-audit
           path: build/ui-audit/
