@@ -316,9 +316,17 @@ namespace GhOta
             }
             if (!Update.end()) { fail("the image did not verify: %s", Update.errorString()); return; }
 
-            setPhase(Phase::Rebooting);
-            LogBus::printf("[ota] github: %s written, SHA-256 matches; heap min %u of %u; rebooting into the trial",
-                           s_rel.tag, (unsigned)s_v.heapMin, (unsigned)s_v.heapStart);
+            // The done line never comes after a good install: the stack's
+            // headroom is reported here, at the deepest point it will reach.
+            const uint32_t stackFree = uxTaskGetStackHighWaterMark(nullptr);
+            portENTER_CRITICAL(&s_mux);
+            s_v.phase     = Phase::Rebooting;
+            s_v.stackFree = stackFree;
+            portEXIT_CRITICAL(&s_mux);
+            LogBus::printf("[ota] github: %s written, SHA-256 matches; internal heap min %u of %u; "
+                           "stack %u of %u unused; rebooting into the trial",
+                           s_rel.tag, (unsigned)s_v.heapMin, (unsigned)s_v.heapStart,
+                           (unsigned)stackFree, (unsigned)App::Plan::GHOTA_STACK);
             vTaskDelay(pdMS_TO_TICKS(PAGE_SEES_REBOOT_MS));   // the page's next poll shows it
             LogBus::flushAndWait(300);
             ESP.restart();
@@ -338,10 +346,11 @@ namespace GhOta
             }
             // ESP-IDF counts the high-water mark in bytes.
             const uint32_t stackFree = uxTaskGetStackHighWaterMark(nullptr);
-            LogBus::printf("[ota] github: %s done; internal heap %u, task %u, client %u, after TLS %u, "
-                           "min %u (TLS in %s); stack %u of %u unused",
+            LogBus::printf("[ota] github: %s done; internal heap %u, task created %u, running %u, "
+                           "client %u, after TLS %u, min %u (TLS in %s); stack %u of %u unused",
                            job == Job::Check ? "check" : "install", (unsigned)s_v.heapStart,
-                           (unsigned)s_v.heapTask, (unsigned)s_v.heapClient, (unsigned)s_v.heapTls,
+                           (unsigned)s_v.heapCreated, (unsigned)s_v.heapTask,
+                           (unsigned)s_v.heapClient, (unsigned)s_v.heapTls,
                            (unsigned)s_v.heapMin, s_v.tlsInPsram ? "PSRAM" : "internal RAM",
                            (unsigned)stackFree, (unsigned)App::Plan::GHOTA_STACK);
             portENTER_CRITICAL(&s_mux);
@@ -364,7 +373,7 @@ namespace GhOta
             s_v.err[0]   = 0;
             s_v.got      = 0;
             s_v.heapStart = s_v.heapMin = heapNow();
-            s_v.heapTask = s_v.heapClient = s_v.heapTls = 0;
+            s_v.heapCreated = s_v.heapTask = s_v.heapClient = s_v.heapTls = 0;
             portEXIT_CRITICAL(&s_mux);
 
             if (xTaskCreatePinnedToCore(task, "ghota", App::Plan::GHOTA_STACK, (void*)(uintptr_t)job,
@@ -377,6 +386,10 @@ namespace GhOta
                 portEXIT_CRITICAL(&s_mux);
                 return "no memory for the task";
             }
+            // Right after the create, still on httpd: the stack and TCB alone.
+            // The task's own first sample comes whenever priority 1 gets the
+            // core, after whatever httpd and WiFi did meanwhile.
+            stage(&View::heapCreated);
             return nullptr;
         }
     }

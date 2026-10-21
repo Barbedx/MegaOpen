@@ -40,6 +40,7 @@ void WebUi::routesGhOta()
         if (v.err[0]) d["err"] = v.err;
         d["heapStart"]  = v.heapStart;
         d["heapMin"]    = v.heapMin;
+        d["heapCreated"] = v.heapCreated;
         d["heapTask"]   = v.heapTask;
         d["heapClient"] = v.heapClient;
         d["heapTls"]    = v.heapTls;
