@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "../../vehicle/VehicleState.h"
 #include "../../Version.h"
+#include "TempHold.h"
 
 // Everything this firmware can tell a RAV4-profile head unit, on a schedule
 // (ARCHITECTURE.md §7.3). Portable: frames leave through a write callback, time
@@ -152,6 +153,13 @@ namespace Canbox
         static uint8_t lightsMask(const Vehicle::State& s);
 
         uint32_t framesSent() const { return _framesSent; }
+        // 0x28 frames sent whose payload differed from the 0x28 before: each
+        // may pop the head unit's climate overlay. Any task (a counter).
+        uint32_t climateChanges() const { return _climateChanges; }
+        // The A/C form of 0x28 goes out only when one of its signals is
+        // trusted: measured in a car (Vehicle::verified) or pinned by hand (a
+        // test, a constant). A guessed row alone never opens the overlay.
+        static bool acTrusted(const Vehicle::State& s);
 
         // Build one message into a caller-owned buffer without transmitting it.
         bool preview(uint8_t msgIndex, const Vehicle::State& s,
@@ -216,6 +224,9 @@ namespace Canbox
         uint8_t  _exp = 0;               // Exp bits
         Tuning   _t;                    // every value the sources disagree about
         uint32_t _framesSent = 0;
+        uint32_t _climateChanges = 0;
+        uint32_t _last28 = 0;           // FNV of the last 0x28 payload, 0 = none
+        TempHold _temp;                  // the outside temperature shown (tick)
         bool     _msgOn[MAX_MESSAGES];
         Sched    _sched[MAX_MESSAGES];
     };

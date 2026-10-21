@@ -137,6 +137,7 @@ req health GET /api/health
 expect_code "GET /api/health" 200
 has "  hu: dialect field" '"dialect"'
 has "  hu: notSupported field" '"notSupported"'
+has "  hu: climateChanges field" '"climateChanges"'
 has "  panel: foreignMasters field" '"foreignMasters"'
 has "  panel: clusterPings field" '"clusterPings"'
 for code in hu_dialect_vw panel_foreign_master panel_cluster_only; do

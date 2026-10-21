@@ -1086,6 +1086,9 @@ void WebUi::routes()
                 // 0xF3 NACKs: frames of ours the unit says it does not support.
                 o["notSupported"] = _huDialect->notSupported();
             }
+            // 0x28 frames that changed: each may pop the climate overlay
+            // (Rav4Emitter::climateChanges, TempHold.h). A counter, read as is.
+            if (_emitter) o["climateChanges"] = _emitter->climateChanges();
             // Wiring check: nothing at all = wrong pin or no ground; junk and
             // no frames = wired, wrong speed or dialect; bad checksums = noise.
             o["junk"]   = _huRx ? _huRx->junkBytes() : 0;

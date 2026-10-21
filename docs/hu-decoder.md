@@ -186,6 +186,14 @@ someone turns a knob. Two switches change it:
   (DUDUOS 3.8's "in-depth climate control integration"), which is encrypted —
   bench-test what it shows.
 
+**What MegaOpen does about it (2026-10-21).** The outside temperature in
+`0x28` (D5) is held: a new value is shown only after it has stayed for 60 s
+(`src/proto/canbox/TempHold.h`), so a reading flickering between two degrees
+no longer changes the frame. The A/C form (`raise.cmd28` = A/C) is sent only
+when one of its signals is measured in the car or pinned by hand, never from
+guessed rows. `/api/health` hu `climateChanges` counts the changed `0x28`
+frames sent since boot.
+
 One consequence for our current 12-byte outside-temp frame: once D0-D4 carry
 real climate state, every fan/temperature change on the car will pop the
 overlay. That is intended, but it is new behaviour.

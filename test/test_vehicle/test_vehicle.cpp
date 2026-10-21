@@ -1124,12 +1124,84 @@ void test_battery_and_its_rival_are_never_both_on()
     TEST_ASSERT_EQUAL_HEX8(E::EXP_COMPUTED | E::EXP_FUEL_7D04, e.experiments());
 }
 
+// The climate overlay pops on a changed 0x28. The outside temperature in it
+// is held: flicker never changes the frame, a lasting change does after the
+// hold, a test pin at once.
+void test_outside_temp_is_held_against_flicker()
+{
+    Canbox::TempHold h;
+    TEST_ASSERT_EQUAL_INT32(12, h.step(12, 0));          // the first reading at once
+    TEST_ASSERT_EQUAL_INT32(12, h.step(13, 1000));       // flicker 12/13 ...
+    TEST_ASSERT_EQUAL_INT32(12, h.step(12, 2000));
+    TEST_ASSERT_EQUAL_INT32(12, h.step(13, 3000));       // ... the hold restarts
+    TEST_ASSERT_EQUAL_INT32(12, h.step(13, 3000 + Canbox::TempHold::HOLD_MS - 1));
+    TEST_ASSERT_EQUAL_INT32(13, h.step(13, 3000 + Canbox::TempHold::HOLD_MS));
+    TEST_ASSERT_EQUAL_INT32(13, h.step(13, 200000));
+}
+
+static int g_frames28;
+static uint8_t g_d5[8];
+static void cap28(const uint8_t* f, uint8_t n, void*)
+{
+    if (f[1] == 0x28) { if (g_frames28 < 8 && n > 8) g_d5[g_frames28] = f[3 + 5]; ++g_frames28; }
+}
+
+void test_climate_frame_changes_only_on_a_lasting_value()
+{
+    State s;
+    E e;
+    e.begin(cap28, nullptr);
+    g_frames28 = 0;
+    uint32_t t = 0;
+    // 30 minutes of a reading flickering between 12 and 13 C every 2 s.
+    for (int i = 0; i < 900; ++i) {
+        t += 2000;
+        s.set(SIG_OUT_TEMP, (i & 1) ? 13 : 12, t);
+        e.tick(s, t);
+    }
+    TEST_ASSERT_TRUE(g_frames28 > 0);
+    TEST_ASSERT_EQUAL_UINT32(0, e.climateChanges());     // one value the whole time
+    // A real change, held for a minute: one change.
+    for (int i = 0; i < 40; ++i) { t += 2000; s.set(SIG_OUT_TEMP, 15, t); e.tick(s, t); }
+    TEST_ASSERT_EQUAL_UINT32(1, e.climateChanges());
+    // A pinned test value goes at once.
+    s.pin(SIG_OUT_TEMP, 20);
+    uint8_t f[64], n = 0;
+    TEST_ASSERT_TRUE(e.preview(E::MSG_TEMP, s, f, n));
+    TEST_ASSERT_EQUAL_HEX8((20 + 40) * 2, f[3 + 5]);
+}
+
+// The A/C form never goes out on guessed rows: only a measured signal or a
+// hand-pinned one may open the overlay.
+void test_ac_form_needs_a_trusted_signal()
+{
+    State s;
+    E e;
+    e.setCmd28(E::Cmd28::AirCon);
+    uint8_t f[64], n = 0;
+    s.set(SIG_AC_ON, 1, 10);                                     // decoded, not measured
+    Vehicle::setVerified(SIG_AC_ON, false);
+    TEST_ASSERT_FALSE(E::acTrusted(s));
+    TEST_ASSERT_FALSE(e.preview(E::MSG_AC, s, f, n));
+    Vehicle::setVerified(SIG_AC_ON, true);                       // measured in the car
+    TEST_ASSERT_TRUE(e.preview(E::MSG_AC, s, f, n));
+    TEST_ASSERT_EQUAL_HEX8(0x80, f[3]);
+    Vehicle::setVerified(SIG_AC_ON, false);
+    State p;
+    p.pin(SIG_AC_FAN, 3);                                        // a test or a constant
+    TEST_ASSERT_TRUE(E::acTrusted(p));
+    TEST_ASSERT_TRUE(e.preview(E::MSG_AC, p, f, n));
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
     RUN_TEST(test_experiments_are_off_by_default_and_each_switches_one_thing);
     RUN_TEST(test_battery_in_a_borrowed_field);
     RUN_TEST(test_battery_and_its_rival_are_never_both_on);
+    RUN_TEST(test_outside_temp_is_held_against_flicker);
+    RUN_TEST(test_climate_frame_changes_only_on_a_lasting_value);
+    RUN_TEST(test_ac_form_needs_a_trusted_signal);
     RUN_TEST(test_selector_probe_goes_out_only_with_its_experiment);
     RUN_TEST(test_raise_targets_ids_are_unique_and_name_real_signals);
     RUN_TEST(test_every_sent_raise_target_changes_its_message);

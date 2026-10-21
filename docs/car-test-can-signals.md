@@ -55,6 +55,14 @@ refused with its row and column. The only factory rule is the low-fuel
 lamp's rising edge. To try one without driving: add "Педаль гальма
 з'явилось", then press the brake with the ignition on.
 
+**Climate popup on the tablet.** Note `climateChanges` in `/api/health`
+(chain `hu`) before and after a 10-minute drive, and count how often the
+tablet's climate overlay pops up on its own. Each change of the `0x28`
+frame may pop it; the outside temperature in it is now held for 60 s
+against flicker, and the A/C form is sent only from measured or pinned
+signals. Expect 0-2 changes and as many pops; more pops than changes means
+something else opens it (write down what the car was doing).
+
 **Head-unit experiments** (Авто → RAV4 → ГУ → Експерименти ГУ, all off).
 Switch one on at a time and note what changes on the tablet's dashboard.
 - **t° ОР:** coolant in `0x7D 09`.

@@ -221,6 +221,14 @@ namespace Canbox
         if (!n) return;
         _write(frame, n, _ctx);
         ++_framesSent;
+        if (cmd == 0x28) {
+            uint32_t h = 2166136261u;
+            h = (h ^ len) * 16777619u;
+            for (uint8_t b = 0; b < len; ++b) h = (h ^ payload[b]) * 16777619u;
+            if (!h) h = 1;
+            if (_last28 && h != _last28) ++_climateChanges;
+            _last28 = h;
+        }
     }
 
     bool Rav4Emitter::due(Sched& sc, uint32_t nowMs, uint32_t interval,
@@ -260,7 +268,10 @@ namespace Canbox
                 if (!s.has(SIG_OUT_TEMP)) return false;
                 cmd = 0x28; len = 12;
                 for (uint8_t i = 0; i < 12; ++i) p[i] = 0;
-                int32_t t = State::clamp(SIG_OUT_TEMP, s.get(SIG_OUT_TEMP));
+                // The held value (TempHold.h), so a flickering reading does not
+                // change the climate frame; a pinned test value goes at once.
+                const int32_t raw = s.get(SIG_OUT_TEMP);
+                int32_t t = State::clamp(SIG_OUT_TEMP, s.pinned(SIG_OUT_TEMP) || !_temp.have() ? raw : _temp.shown());
                 p[5] = (uint8_t)((t + 40) * 2);
                 return true;
             }
@@ -275,7 +286,7 @@ namespace Canbox
                 };
                 bool any = false;
                 for (uint8_t i = 0; i < sizeof(kAcSigs) && !any; ++i) any = s.has(kAcSigs[i]);
-                if (!any) return false;
+                if (!any || !acTrusted(s)) return false;
 
                 cmd = 0x28; len = 5;
                 p[0] = (uint8_t)((s.get(SIG_AC_ON)         ? 0x80 : 0) |
@@ -619,9 +630,26 @@ namespace Canbox
         return false;
     }
 
+    bool Rav4Emitter::acTrusted(const State& s)
+    {
+        static const uint8_t kSigs[] = {
+            SIG_AC_ON, SIG_AC_COMPRESSOR, SIG_AC_RECIRC, SIG_AC_AUTO_HI,
+            SIG_AC_AUTO_LO, SIG_AC_DUAL, SIG_AC_MAX_FRONT, SIG_AC_REAR,
+            SIG_AC_VENT_UP, SIG_AC_VENT_FACE, SIG_AC_VENT_FLOOR,
+            SIG_AC_DISPLAY_REQ, SIG_AC_FAN, SIG_AC_TEMP_DRV,
+            SIG_AC_TEMP_PASS, SIG_AC_DEFOG, SIG_AC_AQS, SIG_AC_ECO,
+            SIG_AC_UNIT_F,
+        };
+        for (uint8_t sg : kSigs)
+            if (s.pinned(sg) || (s.has(sg) && Vehicle::verified(sg))) return true;
+        return false;
+    }
+
     void Rav4Emitter::tick(const State& s, uint32_t nowMs)
     {
         if (!_enabled) return;
+        // The outside temperature shown in 0x28, held against flicker.
+        if (s.has(SIG_OUT_TEMP) && !s.pinned(SIG_OUT_TEMP)) _temp.step(s.get(SIG_OUT_TEMP), nowMs);
 
         for (uint8_t i = 0; i < M_COUNT; ++i) {
             if (!_msgOn[i]) continue;
