@@ -17,7 +17,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ### Changed
 - Panel menu: the car screen settings moved into Display › Car screen.
 - AffaDisplay v1.3.0 (from v1.1.1). The dev-only `/api/display/inforaw` (glass sweep) sends through the library's `showInfoRow`: the same bytes as before, and the hand-built frame (`display/InfoRaw.h`) is gone. `rows=3` puts the ruler in all three info rows (sweep step 15).
-- CI actions on their current major versions (Node 24).
+- CI and release workflow actions on their current major versions (Node 24).
 
 ### Fixed
 - AffaDisplay v1.1.2: urgent panel jobs (power on/off) go out in the order they were queued; two of them used to go out reversed.

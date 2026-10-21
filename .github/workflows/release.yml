@@ -33,7 +33,7 @@ jobs:
   release:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0            # every tag, to find the rc on this commit
 
@@ -62,11 +62,11 @@ jobs:
           [ -s notes.md ] || { echo "::error::CHANGELOG.md has no '## [$VER]' section"; exit 1; }
 
       # ---- vX.Y.Z-rcN: build and publish a pre-release ----------------------
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: env.RC == '1'
         with:
           python-version: "3.11"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         if: env.RC == '1'
         with:
           path: |
