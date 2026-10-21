@@ -8,6 +8,7 @@
 // two rows say; it never renders, never stores, never sees a key event.
 //
 //   MENU
+//   ├─ < Exit     closes the menu (the cursor opens on the row below it)
 //   ├─ the registry's top-level F_MENU groups (Display, Lights), each a
 //   │  list of its available children; a child group opens another level
 //   ├─ Car data   one row per signal group the car has data for, then the
@@ -54,7 +55,7 @@ namespace MenuUi
         // `m` is read for values and availability; never written here.
         void begin(const Cfg::Model* m, const CarView* car = nullptr);
 
-        // Opens at the root, cursor on the first row.
+        // Opens at the root, cursor on the first row after "< Exit".
         void open();
         void close();
         bool isOpen() const { return _open; }
@@ -90,7 +91,7 @@ namespace MenuUi
         static constexpr uint8_t MAX_DEPTH = 4;
 
     private:
-        enum class Kind : uint8_t { Back, Group, Setting, CarRoot, CarGroup, Signal, PowerOff };
+        enum class Kind : uint8_t { Back, Exit, Group, Setting, CarRoot, CarGroup, Signal, PowerOff };
         struct Item { Kind kind; uint8_t ref; };   // ref: registry index, car group or signal
         struct Level { Kind kind; uint8_t ref; uint8_t cursor; };
 

@@ -92,12 +92,22 @@ void test_root_rows()
     Fixture f;
     TEST_ASSERT_TRUE(f.e.isOpen());
     TEST_ASSERT_EQUAL(0, f.e.depth());
-    TEST_ASSERT_EQUAL(5, f.e.count());
-    TEST_ASSERT_EQUAL_STRING(pad("Display", ">").c_str(), f.item(0).c_str());
-    TEST_ASSERT_EQUAL_STRING(pad("Lights", ">").c_str(), f.item(1).c_str());
-    TEST_ASSERT_EQUAL_STRING(pad("Service", ">").c_str(), f.item(2).c_str());   // the log level
-    TEST_ASSERT_EQUAL_STRING(pad("Car data", ">").c_str(), f.item(3).c_str());
-    TEST_ASSERT_EQUAL_STRING("Power off", f.item(4).c_str());
+    TEST_ASSERT_EQUAL(6, f.e.count());
+    TEST_ASSERT_EQUAL_STRING("< Exit", f.item(0).c_str());
+    TEST_ASSERT_EQUAL_STRING(pad("Display", ">").c_str(), f.item(1).c_str());
+    TEST_ASSERT_EQUAL_STRING(pad("Lights", ">").c_str(), f.item(2).c_str());
+    TEST_ASSERT_EQUAL_STRING(pad("Service", ">").c_str(), f.item(3).c_str());   // the log level
+    TEST_ASSERT_EQUAL_STRING(pad("Car data", ">").c_str(), f.item(4).c_str());
+    TEST_ASSERT_EQUAL_STRING("Power off", f.item(5).c_str());
+    TEST_ASSERT_EQUAL(1, f.e.cursor());     // opens past "< Exit"
+}
+
+void test_exit_row_closes()
+{
+    Fixture f;
+    TEST_ASSERT_TRUE(f.go("< Exit"));
+    TEST_ASSERT_EQUAL(Out::Closed, f.e.key(Cmd::Select));
+    TEST_ASSERT_FALSE(f.e.isOpen());
 }
 
 void test_lights_hidden_without_knobs()
@@ -106,7 +116,7 @@ void test_lights_hidden_without_knobs()
     Cfg::Model noKnobs{&f.s, nullptr};
     f.e.begin(&noKnobs, &f.car);
     f.e.open();
-    TEST_ASSERT_EQUAL(4, f.e.count());
+    TEST_ASSERT_EQUAL(5, f.e.count());
     TEST_ASSERT_TRUE(f.go("Car data"));
 }
 
@@ -139,12 +149,13 @@ void test_submenu_and_back_keep_the_cursor()
     f.go("< Back");
     f.e.key(Cmd::Select);
     TEST_ASSERT_EQUAL(0, f.e.depth());
-    TEST_ASSERT_EQUAL(1, f.e.cursor());     // back on Lights
+    TEST_ASSERT_EQUAL(2, f.e.cursor());     // back on Lights
 }
 
 void test_cursor_wraps()
 {
     Fixture f;
+    f.e.key(Cmd::Prev);                     // onto "< Exit"
     f.e.key(Cmd::Prev);
     TEST_ASSERT_EQUAL(f.e.count() - 1, f.e.cursor());
     f.e.key(Cmd::Next);
@@ -285,11 +296,15 @@ void test_screen_window_and_marker()
     Fixture f;
     Engine::Screen s;
     f.e.screen(s);
-    TEST_ASSERT_EQUAL_STRING(pad("MENU", "1/5", COLS).c_str(), s.header);
+    TEST_ASSERT_EQUAL_STRING(pad("MENU", "2/6", COLS).c_str(), s.header);
     TEST_ASSERT_EQUAL('>', s.row[0][0]);
     TEST_ASSERT_EQUAL(' ', s.row[1][0]);
-    TEST_ASSERT_FALSE(s.more_up);
+    TEST_ASSERT_TRUE(s.more_up);           // "< Exit" above
     TEST_ASSERT_TRUE(s.more_down);
+    f.e.key(Cmd::Prev);
+    f.e.screen(s);
+    TEST_ASSERT_EQUAL_STRING(">< Exit", s.row[0]);
+    TEST_ASSERT_FALSE(s.more_up);
     f.e.key(Cmd::Prev);                    // the last row
     f.e.screen(s);
     TEST_ASSERT_EQUAL_STRING(">Power off", s.row[1]);
@@ -449,6 +464,7 @@ int main(int, char**)
     RUN_TEST(test_signal_row_is_exactly_the_width);
     RUN_TEST(test_car_rows_in_the_registry);
     RUN_TEST(test_root_rows);
+    RUN_TEST(test_exit_row_closes);
     RUN_TEST(test_lights_hidden_without_knobs);
     RUN_TEST(test_web_only_settings_stay_out);
     RUN_TEST(test_submenu_and_back_keep_the_cursor);

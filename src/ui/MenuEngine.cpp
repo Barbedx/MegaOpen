@@ -45,7 +45,7 @@ namespace MenuUi
         _depth = 0;
         _stack[0] = Level{Kind::Group, ROOT, 0};
         build();
-        _cursor = 0;
+        _cursor = _n > 1 ? 1 : 0;      // past "< Exit"
     }
 
     void Engine::close()
@@ -72,7 +72,9 @@ namespace MenuUi
         const Level& lv = _stack[_depth];
         auto add = [&](Kind k, uint8_t ref) { if (_n < MAX_ITEMS) _items[_n++] = Item{k, ref}; };
 
-        if (_depth > 0) add(Kind::Back, 0);
+        // Every level opens with a way out: "< Back", or at the root "< Exit"
+        // (the hold that opened the menu also closes it, but nobody has to know).
+        add(_depth > 0 ? Kind::Back : Kind::Exit, 0);
 
         switch (lv.kind) {
             case Kind::Group: {
@@ -169,6 +171,7 @@ namespace MenuUi
         const Item it = _items[_cursor];
         switch (it.kind) {
             case Kind::Back:     leave(); return Out::Redraw;
+            case Kind::Exit:     close(); return Out::Closed;
             case Kind::Group:    enter(Kind::Group, it.ref); return Out::Redraw;
             case Kind::CarRoot:  enter(Kind::CarRoot, 0); return Out::Redraw;
             case Kind::CarGroup: enter(Kind::CarGroup, it.ref); return Out::Redraw;
@@ -199,6 +202,7 @@ namespace MenuUi
         const Item& it = _items[i];
         switch (it.kind) {
             case Kind::Back:     lay(out, cap, "< Back", nullptr); break;
+            case Kind::Exit:     lay(out, cap, "< Exit", nullptr); break;
             case Kind::Group:    lay(out, cap, Registry::at(it.ref).tag, ">"); break;
             case Kind::CarRoot:  lay(out, cap, "Car data", ">"); break;
             case Kind::CarGroup: lay(out, cap, _car->groupTag(_car->ctx, it.ref), ">"); break;

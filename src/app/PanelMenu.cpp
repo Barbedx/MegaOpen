@@ -28,7 +28,15 @@ namespace App
             // (the menu closing itself, power off).
             std::atomic<uint8_t> s_mode{(uint8_t)Mode::Closed};
             Mode mode() { return (Mode)s_mode.load(std::memory_order_acquire); }
-            void setMode(Mode m) { s_mode.store((uint8_t)m, std::memory_order_release); }
+            // Every move is from one known mode: two tasks race on it, and a
+            // blind store could undo the other's. "Power off" (ui) against a
+            // closing hold (keys) once left Closed with the panel off, where
+            // no knob press wakes it.
+            bool moveMode(Mode from, Mode to)
+            {
+                uint8_t f = (uint8_t)from;
+                return s_mode.compare_exchange_strong(f, (uint8_t)to, std::memory_order_acq_rel);
+            }
 
             // ---- a byte ring, one writer and one reader ---------------------------
             template <uint8_t N>
@@ -74,16 +82,28 @@ namespace App
             // ---- ui task only --------------------------------------------------------
             MenuUi::Engine  s_menu;
             Cfg::Model      s_model;
+            // The menu reads this copy, never the live Settings: those belong
+            // to whoever holds Cfg::Config's lock (httpd, net_svc). Taken with
+            // trySnapshot() when the menu opens and whenever a save() bumped
+            // the generation; a busy lock keeps the old copy for a pass.
+            Cfg::Settings   s_snap;
+            uint32_t        s_snapGen = 0;
+            bool            s_snapOk = false;
             Knobs::Config   s_knobs;          // the menu's copy, for reading
             bool            s_haveKnobs = false;
             bool            s_dirty = false;
             bool            s_popupWas = false;
             uint32_t        s_retryAtMs = 0;  // a refused render, tried again
             uint32_t        s_refreshAtMs = 0;
+            uint32_t        s_lastKeyMs = 0;  // the menu closes IDLE_MS after it
             MenuUi::Engine::Screen s_sent;    // what the glass shows
 
             constexpr uint32_t REFRESH_MS = 1000;   // live values, at most this often
             constexpr uint32_t RETRY_MS   = 100;
+            // A menu left open holds the glass: no media screen, no phone
+            // notification, no car alert. It closes itself after this long
+            // without a key (an edit in progress is dropped).
+            constexpr uint32_t IDLE_MS    = 45000;
 
             // ---- the car's signals, for "Car data" -----------------------------------
             const char* groupTag(void*, uint8_t g)
@@ -127,6 +147,17 @@ namespace App
             }
 
             MenuUi::CarView s_carView;
+
+            // True: s_snap now matches the stored settings.
+            bool refreshSnap()
+            {
+                const uint32_t g = s_d.cfg->generation();
+                if (s_snapOk && g == s_snapGen) return true;
+                if (!s_d.cfg->trySnapshot(s_snap)) return false;
+                s_snapGen = g;
+                s_snapOk = true;
+                return true;
+            }
 
             void refreshKnobs()
             {
@@ -180,8 +211,17 @@ namespace App
                 s_cHead.store((uint8_t)(h + 1), std::memory_order_release);
             }
 
+            void closeMenu(const char* why)
+            {
+                s_menu.close();
+                moveMode(Mode::Open, Mode::Closed);
+                s_d.ops->postClear();
+                LogBus::printf("[menu] closed%s", why);
+            }
+
             void onCommand(uint8_t k, uint32_t now)
             {
+                s_lastKeyMs = now;
                 if (k == K_POWER_ON) {
                     s_menu.close();
                     s_d.ops->postPower(true);
@@ -192,6 +232,7 @@ namespace App
                 }
                 if (k == K_OPEN) {
                     if (s_menu.isOpen()) return;
+                    refreshSnap();
                     refreshKnobs();
                     s_menu.open();
                     s_dirty = true;
@@ -222,14 +263,18 @@ namespace App
                         break;
                     }
                     case MenuUi::Out::Closed:
-                        setMode(Mode::Closed);
-                        s_d.ops->postClear();
-                        LogBus::line("[menu] closed");
+                        closeMenu("");
                         break;
                     case MenuUi::Out::PowerOff:
-                        setMode(Mode::PanelOff);
-                        s_d.ops->postPower(false);
-                        LogBus::line("[menu] panel off: a knob press switches it on");
+                        // Only from Open: a hold that closed the menu in the
+                        // meantime wins, and the panel stays on.
+                        if (moveMode(Mode::Open, Mode::PanelOff)) {
+                            s_d.ops->postPower(false);
+                            LogBus::line("[menu] panel off: a knob press switches it on");
+                        } else {
+                            s_d.ops->postClear();
+                            LogBus::line("[menu] closed before power off: the panel stays on");
+                        }
                         break;
                 }
             }
@@ -238,7 +283,11 @@ namespace App
         void begin(const Deps& d)
         {
             s_d = d;
-            s_model.s = &d.cfg->s();
+            // setup(), before any task that writes Settings: no lock needed.
+            s_snap = d.cfg->s();
+            s_snapGen = d.cfg->generation();
+            s_snapOk = true;
+            s_model.s = &s_snap;
             refreshKnobs();
             if (d.car) {
                 s_carView.groups = groups;
@@ -258,12 +307,10 @@ namespace App
                 case Verdict::Do::Swallow:
                     return true;
                 case Verdict::Do::Open:
-                    setMode(Mode::Open);
-                    s_keys.push(K_OPEN);
+                    if (moveMode(Mode::Closed, Mode::Open)) s_keys.push(K_OPEN);
                     return true;
                 case Verdict::Do::PowerOn:
-                    setMode(Mode::Closed);
-                    s_keys.push(K_POWER_ON);
+                    if (moveMode(Mode::PanelOff, Mode::Closed)) s_keys.push(K_POWER_ON);
                     return true;
                 case Verdict::Do::Command:
                     switch (v.cmd) {
@@ -271,8 +318,7 @@ namespace App
                         case MenuUi::Cmd::Prev:   s_keys.push(K_PREV); break;
                         case MenuUi::Cmd::Select: s_keys.push(K_SELECT); break;
                         case MenuUi::Cmd::Close:
-                            setMode(Mode::Closed);
-                            s_keys.push(K_CLOSE);
+                            if (moveMode(Mode::Open, Mode::Closed)) s_keys.push(K_CLOSE);
                             break;
                     }
                     return true;
@@ -293,11 +339,16 @@ namespace App
             uint8_t k;
             while (s_keys.pop(k)) onCommand(k, now);
             if (!s_menu.isOpen()) { s_popupWas = popupUp; return; }
+            if ((uint32_t)(now - s_lastKeyMs) >= IDLE_MS) { closeMenu(" (idle 45 s)"); return; }
 
             if (s_applied.exchange(false, std::memory_order_acq_rel)) {
                 refreshKnobs();
                 s_dirty = true;
             }
+            // A save from the menu or the web: read the new values. While the
+            // lock is busy the copy is not marked fresh and is retried.
+            if (s_d.cfg->generation() != s_snapGen && !s_menu.editing() && refreshSnap())
+                s_dirty = true;
             // Live values and signals that came or went: redraw only what changed.
             if ((int32_t)(now - s_refreshAtMs) >= 0) {
                 s_refreshAtMs = now + REFRESH_MS;
@@ -318,6 +369,11 @@ namespace App
             for (;;) {
                 const uint8_t t = s_cTail.load(std::memory_order_relaxed);
                 if (t == s_cHead.load(std::memory_order_acquire)) return;
+                // The settings lock, or the commit waits for the next pass: a
+                // web request holds it for its whole handler, and net_svc must
+                // not stall behind one.
+                if (!s_d.cfg->tryLock()) return;
+                struct Held { Cfg::Config* c; ~Held() { c->unlock(); } } held{s_d.cfg};
                 const Commit c = s_commit[t % COMMITS];
                 s_cTail.store((uint8_t)(t + 1), std::memory_order_release);
 
