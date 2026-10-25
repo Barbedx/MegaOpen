@@ -181,7 +181,9 @@ namespace App
                 return publish(now, "fault");
             }
             if (!s_anyFrame || (uint32_t)(now - s_lastFrameMs) >= BUS_QUIET_MS) {
-                // The car is off: our frame would get no ACK.
+                // The car is off: our frame would get no ACK. A probe asked now is
+                // dropped, not kept for whenever the bus wakes.
+                s_probe.store(false);
                 if (!waiting && bus.transmitting()) bus.setTransmit(false, now);
                 return publish(now, "quiet");
             }
