@@ -320,6 +320,7 @@ private:
 #endif
     void routesCanbox();
     void routesMap();            // WebUiMap.cpp
+    void routesAlerts();         // WebUiMap.cpp, /api/alerts (the voice apps)
 #if FEATURE_DIAG
     void routesDiag();           // WebUiMap.cpp, /api/diag
 #endif

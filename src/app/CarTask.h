@@ -103,6 +103,23 @@ namespace App
         struct AlertStats { uint32_t fired = 0, shown = 0, overwritten = 0, dropped = 0; };
         AlertStats alertStats();
 
+        // The last ALERT_LOG alerts shown, numbered from 1 since boot: what the
+        // phone and tablet apps read (GET /api/alerts?since=N) to speak them.
+        // Any task; a copy under a short lock.
+        static constexpr uint8_t ALERT_LOG = 16;
+        struct AlertEntry {
+            uint32_t seq = 0, ms = 0;     // number, and millis() when shown
+            uint8_t  sig = 0, row = 0;    // the signal and the rule (0-based)
+            int32_t  value = 0;
+            char     text[48] = "";       // what the panel showed
+        };
+        // Entries newer than `since` into out (oldest first, at most cap); how
+        // many. `last` = the newest number (0 before any alert).
+        uint8_t alertsSince(uint32_t since, AlertEntry* out, uint8_t cap, uint32_t& last);
+        // A test entry, as if a rule had fired (POST /api/alerts/test): the
+        // apps' voice is checked at the bench. Not shown on the panel.
+        void injectAlert(uint8_t sig, int32_t value, const char* text);
+
         struct Stats {
             uint32_t frames = 0;        // since boot, all sources
             uint32_t fps = 0;           // the last second

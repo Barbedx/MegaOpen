@@ -197,12 +197,13 @@ void test_cluster_backup_battery_and_pedals()
     CanDecode dec;
     TEST_ASSERT_TRUE(dec.loadDefaults());
     State s;
-    // 0x715: MIL 2 and oil level 9 share d3; 15 L in d4 b7-1; 40 x 250 km.
+    // 0x715: MIL 2 and oil level 9 share d3; 15 L in d4 b7-1; 40 x 150 km (the
+    // owner's cluster: 184 = 27600, where DDT's x250 gave 46000).
     dec.apply(frame(0x715, {0, 0, 0, 0xA4, 0x1E, 40}), s, 10);
     TEST_ASSERT_EQUAL_INT32(2, s.get(SIG_MIL));
     TEST_ASSERT_EQUAL_INT32(9, s.get(SIG_OIL_LEVEL));
     TEST_ASSERT_EQUAL_INT32(15, s.get(SIG_FUEL_LEVEL_APV));
-    TEST_ASSERT_EQUAL_INT32(10000, s.get(SIG_SERVICE_KM));
+    TEST_ASSERT_EQUAL_INT32(6000, s.get(SIG_SERVICE_KM));
     // 0x625: 0xDB x 0.0625 = 13.6875 V -> 1368; oil switch and charge lamp.
     dec.apply(frame(0x625, {0x01, 0x80, 0xDB, 0xA0}), s, 10);
     TEST_ASSERT_EQUAL_INT32(1368, s.get(SIG_BATT_V));

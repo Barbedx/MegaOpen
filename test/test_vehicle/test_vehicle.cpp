@@ -1023,9 +1023,9 @@ void test_experiments_are_off_by_default_and_each_switches_one_thing()
     run(E::EXP_COOLANT);
     TEST_ASSERT_TRUE(g_sub09 > 0);
     TEST_ASSERT_EQUAL_INT(0, g_cmd22);
-    run(E::EXP_FUEL_7D04);                          // the cluster's odometer, 31.0 L in D4-D5
+    run(E::EXP_FUEL_7D04);                          // the cluster's odometer, 31 L of 60 = 51.6 % in D4-D5
     TEST_ASSERT_EQUAL_INT(0, g_sub09);
-    const uint8_t odo[] = {0x2E, 0x7D, 0x0C, 0x04, 0x40, 0xE2, 0x01, 0x36, 0x01};
+    const uint8_t odo[] = {0x2E, 0x7D, 0x0C, 0x04, 0x40, 0xE2, 0x01, 0x04, 0x02};   // 516 = 51.6 % x10
     TEST_ASSERT_EQUAL_HEX8_ARRAY(odo, g_odo, sizeof(odo));
     run(E::EXP_COMPUTED);
     TEST_ASSERT_TRUE(g_cmd21 > 0 && g_cmd22 > 0 && g_cmd23 > 0);

@@ -368,7 +368,13 @@ namespace Canbox
                 p[3] = (uint8_t)((km >> 16) & 0xFF);
                 p[4] = 0xF2; p[5] = 0x08;    // in every capture: 2290, /10 -> 1049 idx 5, meaning unknown
                 if (fuelExp && s.has(SIG_FUEL_LEVEL)) {
-                    const uint16_t f = (uint16_t)(s.get(SIG_FUEL_LEVEL) * 10);   // litres x10, LE
+                    // The tank in per cent x10, LE: DUDU draws "518 km [bar] 84%" in its
+                    // status bar from this field (1049 idx 5), and 2290 (229 %) is
+                    // why every canbox's F2 08 shows nothing. Litres over TANK_L.
+                    int32_t pct10 = s.get(SIG_FUEL_LEVEL) * 1000 / TANK_L;
+                    if (pct10 < 0) pct10 = 0;
+                    if (pct10 > 1000) pct10 = 1000;
+                    const uint16_t f = (uint16_t)pct10;
                     p[4] = (uint8_t)f; p[5] = (uint8_t)(f >> 8);
                 }
                 if (battExp && s.has(SIG_BATT_V)) {

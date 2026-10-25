@@ -83,4 +83,4 @@
 { 0x715,   3, 1,  2, 0xFu,        1, 1,      0, SIG_OIL_LEVEL,  0,                           0 },  // b4.2/4
 { 0x715,   3, 1,  6, 0x3u,        1, 1,      0, SIG_MIL,        DF_HYPOTHESIS,               0 },  // b4.0/2
 { 0x715,   4, 1,  1, 0x7Fu,       1, 1,      0, SIG_FUEL_LEVEL_APV, DF_HYPOTHESIS,           0 },  // b5.0/7 litres
-{ 0x715,   5, 1,  0, 0xFFu,     250, 1,      0, SIG_SERVICE_KM, DF_HYPOTHESIS,               0 },  // 250 km/LSB
+{ 0x715,   5, 1,  0, 0xFFu,     150, 1,      0, SIG_SERVICE_KM, DF_HYPOTHESIS,               0 },  // km to the service: DDT says 250 km/LSB, but 184 x 150 = 27600 matches the owner's cluster (27654) and x250 does not

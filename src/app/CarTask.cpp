@@ -10,6 +10,7 @@
 #include <esp_heap_caps.h>
 #include <new>
 #include <atomic>
+#include <string.h>
 #if FEATURE_CAPTURE
 #include "../capture/CanRecorder.h"
 #endif
@@ -51,6 +52,10 @@ namespace App
             Vehicle::AlertEval s_eval;
             uint32_t           s_alertAt = 0, s_shown = 0;
             Snapshot<AlertStats> s_alertPub;
+            // The recent alerts, a ring under its own lock (alertsSince()).
+            portMUX_TYPE s_logMux = portMUX_INITIALIZER_UNLOCKED;
+            AlertEntry   s_log[ALERT_LOG];
+            uint32_t     s_logSeq = 0;
             StaticQueue_t      s_cmdBuf;
             uint8_t            s_cmdStore[CMD_DEPTH * sizeof(Cmd)];
             QueueHandle_t      s_cmd = nullptr;
@@ -205,6 +210,16 @@ namespace App
                     if (s_s.alert) s_s.alert("Car alert", text);
                     ++s_shown;
                     LogBus::printf("[alert] rule %u: %s", (unsigned)(f.row + 1), text);
+                    AlertEntry e;
+                    e.ms = now;
+                    e.sig = f.sig;
+                    e.row = f.row;
+                    e.value = f.value;
+                    memcpy(e.text, text, sizeof(e.text));
+                    portENTER_CRITICAL(&s_logMux);
+                    e.seq = ++s_logSeq;
+                    s_log[(e.seq - 1) % ALERT_LOG] = e;
+                    portEXIT_CRITICAL(&s_logMux);
                 }
                 AlertStats st;
                 st.fired = s_eval.fired();
@@ -477,5 +492,32 @@ namespace App
         Stats stats() { return s_stats.read(); }
         Staged<Vehicle::AlertRules>& alertRules() { return s_alerts; }
         AlertStats alertStats() { return s_alertPub.read(); }
+
+        void injectAlert(uint8_t sig, int32_t value, const char* text)
+        {
+            AlertEntry e;
+            e.ms = millis();
+            e.sig = sig;
+            e.row = 0xFF;                  // no rule: a test
+            e.value = value;
+            snprintf(e.text, sizeof(e.text), "%s", text ? text : "");
+            portENTER_CRITICAL(&s_logMux);
+            e.seq = ++s_logSeq;
+            s_log[(e.seq - 1) % ALERT_LOG] = e;
+            portEXIT_CRITICAL(&s_logMux);
+            LogBus::printf("[alert] test for the apps: %s", e.text);
+        }
+
+        uint8_t alertsSince(uint32_t since, AlertEntry* out, uint8_t cap, uint32_t& last)
+        {
+            uint8_t n = 0;
+            portENTER_CRITICAL(&s_logMux);
+            last = s_logSeq;
+            const uint32_t oldest = s_logSeq > ALERT_LOG ? s_logSeq - ALERT_LOG + 1 : 1;
+            for (uint32_t q = since + 1 < oldest ? oldest : since + 1; q <= s_logSeq && n < cap; ++q)
+                out[n++] = s_log[(q - 1) % ALERT_LOG];
+            portEXIT_CRITICAL(&s_logMux);
+            return n;
+        }
     }
 }

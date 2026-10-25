@@ -1,5 +1,6 @@
 #include "../utils/LogBus.h"
 #include "WifiManager.h"
+#include "../Version.h"
 #include "../Features.h"     // FEATURE_BLE decides whether the radio is shared
 #include <WiFi.h>
 #include <ESPmDNS.h>
@@ -120,6 +121,10 @@ void WifiManager::startMdns()
     MDNS.addService("http", "tcp", 80);
     // For OTA tools.
     MDNS.addService("arduino", "tcp", 3232);
+    // For the phone and tablet apps (the voice alerts): they find the board on
+    // the head unit's hotspot by this, where a .local name does not resolve.
+    MDNS.addService("megaopen", "tcp", 80);
+    MDNS.addServiceTxt("megaopen", "tcp", "fw", MEGAOPEN_VERSION);
     _mdnsUp = true;
     _mdns = host + ".local";
 }

@@ -557,3 +557,48 @@ void WebUi::routesDiag()
     });
 }
 #endif
+
+// ---------------------------------------------------------------------------
+// /api/alerts — the panel alerts for the phone and tablet apps (voice)
+// ---------------------------------------------------------------------------
+// GET ?since=N: the alerts shown after number N (the last 16 at most), oldest
+// first, and `last`, the newest number. `upMs` lets an app see a reboot (the
+// numbers start again from 1). POST /api/alerts/test {sig?}: a test entry.
+void WebUi::routesAlerts()
+{
+    route("/api/alerts", HTTP_GET, [](PsychicRequest* r) {
+        const uint32_t since = r->hasParam("since") ? (uint32_t)strtoul(r->getParam("since")->value().c_str(), nullptr, 10) : 0;
+        static App::Car::AlertEntry list[App::Car::ALERT_LOG];   // httpd is one task
+        uint32_t last = 0;
+        const uint8_t n = App::Car::alertsSince(since, list, App::Car::ALERT_LOG, last);
+        const uint32_t now = millis();
+        JsonDocument d;
+        d["last"] = last;
+        d["upMs"] = now;
+        JsonArray a = d["alerts"].to<JsonArray>();
+        for (uint8_t i = 0; i < n; ++i) {
+            JsonObject o = a.add<JsonObject>();
+            o["seq"]   = list[i].seq;
+            o["agoMs"] = now - list[i].ms;
+            o["sig"]   = Vehicle::meta(list[i].sig).name;
+            o["rule"]  = list[i].row == 0xFF ? -1 : (int)list[i].row;
+            o["value"] = list[i].value;
+            o["text"]  = list[i].text;
+        }
+        String out;
+        serializeJson(d, out);
+        return replyJson(r, out);
+    });
+
+    route("/api/alerts/test", HTTP_POST, [](PsychicRequest* r) {
+        JsonDocument d;
+        deserializeJson(d, r->body());
+        const char* name = d["sig"] | "drive_no_lights";
+        const uint8_t sig = Vehicle::sigByName(name);
+        if (sig >= Vehicle::SIG_COUNT) return r->reply(400, "text/plain", "param sig");
+        char text[48];
+        Vehicle::AlertEval::text(text, sizeof(text), sig, 1, true);
+        App::Car::injectAlert(sig, 1, text);
+        return r->reply(200, "application/json", "{\"ok\":true}");
+    });
+}

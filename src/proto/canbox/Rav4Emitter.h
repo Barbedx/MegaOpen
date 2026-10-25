@@ -67,6 +67,10 @@ namespace Canbox
         bool fromBlob(const uint8_t* in, uint8_t len);
     };
 
+    // The Mégane II's tank, litres: the base of the fuel per cent in 0x7D 04
+    // (EXP_FUEL_7D04). A constant because the tuning blob has no room left.
+    inline constexpr int32_t TANK_L = 60;
+
     class Rav4Emitter {
     public:
         using WriteFn = void (*)(const uint8_t* frame, uint8_t len, void* ctx);
