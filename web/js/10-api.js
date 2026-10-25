@@ -64,7 +64,7 @@ async function upload(file,onP){
   /* те саме тіло multipart, що надіслав би XHR; поступ — лише кінець */
   const fd=new FormData();fd.append('file',file,file.name);
   const rq=new Request('/ota/upload',{method:'POST',body:fd});
-  const r=await linkFetch('POST','/ota/upload',{'Content-Type':rq.headers.get('content-type')},new Uint8Array(await rq.arrayBuffer()));
+  const r=await linkFetch('POST','/ota/upload',{...GATE,'Content-Type':rq.headers.get('content-type')},new Uint8Array(await rq.arrayBuffer()));
   if(r.status>=300)throw Object.assign(new Error(errMsg(r.text,r.status)),{status:r.status});
   onP(100);return {ok:true};
  }
