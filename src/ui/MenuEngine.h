@@ -28,8 +28,9 @@ namespace MenuUi
 {
     inline constexpr uint8_t COLS = 26;        // the header row (small font)
     // What the glass shows of an item row: the big font, ~58 px a cell against
-    // the header's ~45, so 20 cells before the scroll bar (photo 2026-10-25:
-    // a value laid at column 26 was off the glass). Cursor marker included.
+    // the header's ~45, so 20 cells before the scroll bar (glass sweep
+    // 2026-10-25: 20 digits and 20 W in a row, 26 in the header). Cursor
+    // marker included.
     // AffaDisplay's menuRowChars says 26: the frame's field, not the glass.
     inline constexpr uint8_t ROW_COLS = 20;
 

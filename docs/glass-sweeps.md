@@ -60,3 +60,17 @@ curl -X POST -H "X-MegaOpen: 1" "$B/api/display/clear"
   shows whether the width differs per row. If a row shows a different count, the
   cell count is per row, not one number: `showInfoMenu` takes one count for
   all three rows, so the info layout would send each row with `showInfoRow`.
+
+## Results, 2026-10-25 (T-2CAN in the car, owner's photos)
+
+| step | seen |
+| --- | --- |
+| 1-3 | fullscreen row: **22** for digits (`…B12`), W (`…W2WW`) and lowercase (`…i2ab`) alike: no wide-glyph loss |
+| 4 | three rows of 22, all end in `B12` |
+| 5 | menu: header **26** (`…B123456`, small font), row 0 **20** (`…89B`), row 1 W **20** (`…W2`); the rows are the big font, cut by the scroll bar |
+| 6 | info list: all three 8-character rows whole, the highlight box room for ~5 more |
+| 7-15 | not photographed yet |
+
+Applied: `MenuUi::ROW_COLS = 20` (the panel menu's item rows) and
+`MediaScreen::COLS_MENU = 20` (the media menu layout), 1.5.2. AffaDisplay's
+`menuRowChars = 26` is the header's width; the rows are 20 (BACKLOG).

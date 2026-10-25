@@ -71,13 +71,10 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   takes a cell count since v1.2.0). With the owner's photos: pass the measured
   count in MediaScreen's info layout, and DELETE `/api/display/inforaw` and
   `Op::InfoRaw`.
-- **Column widths: 22 is a count, not a pixel budget.** `MediaScreen::
-  COLS_DEFAULT` is 22 since 9d33dc8 (camera-measured; AffaDisplay v1.1.0
-  fullRowChars), for the menu and fullscreen layouts and the splash. The font
-  is proportional (~22 capitals/digits, ~21 lowercase seen), so a row of wide
-  glyphs (W, M) may still be cut: measure them and decide whether styles
-  need a pixel budget. Procedure: docs/glass-sweeps.md (Сервіс → Заміри скла,
-  10 minutes).
+- **Column widths — MEASURED 2026-10-25** (docs/glass-sweeps.md, results).
+  Fullscreen rows hold 22 of anything, W and lowercase included, so no pixel
+  budget is needed. The menu's rows hold 20 (big font) under a 26-wide header:
+  the panel menu and the media menu layout lay rows on 20 since 1.5.2.
 - **Right pane seen blank for a while after a notification** in one capture
   (2026-09-27, ~20 s), fine in the next. Observe before acting; could be the
   carousel on an empty scene.
@@ -204,7 +201,7 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   header row's small font does hold 26. MegaOpen lays rows on
   `MenuUi::ROW_COLS = 20` since 1.5.2. In the library: `PanelGeometry` should
   say 20 for the rows (and maybe carry the header's 26 separately), then a
-  tag and a pin bump; count the cells on glass first.
+  tag and a pin bump (measured: rows 20, header 26, docs/glass-sweeps.md).
 - **BLE pairing vs a phone on the board's AP, on the S3 (2026-10-16).** On the
   T-2CAN the iPhone could not pair while it was joined to `MegaOpen-4580`; off
   that WiFi it connected. Same symptom as the 2026-08-07 DevKit bug, fixed then

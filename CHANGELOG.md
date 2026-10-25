@@ -16,7 +16,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - One TLS job at a time: a GitHub update check refuses with `tls_busy` for the few seconds a log push holds the connection.
 
 ### Fixed
-- Panel menu: an item row is laid on the 20 cells the big font shows, not 26. A setting's value and a submenu's `>` stood past the glass's edge (Lights › Brightness showed no value). The header keeps 26.
+- Panel menu: an item row is laid on the 20 cells the big font shows, not 26. A setting's value and a submenu's `>` stood past the glass's edge (Lights › Brightness showed no value). The header keeps 26. The media screen's menu layout scrolls title and artist in 20 columns too (it lost the last 2). Measured with Сервіс › Заміри скла: menu rows 20, header 26, fullscreen 22 for any glyph.
 
 ## [1.5.1] - 2026-10-21
 

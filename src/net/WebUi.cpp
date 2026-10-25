@@ -1933,8 +1933,8 @@ void WebUi::routesMedia()
             // Persisted. Unknown names must not map to Fullscreen (it hides the pane).
             if (d["layout"].is<const char*>()) {
                 m.layout = MegaOpen::MediaScreen::layoutFromName(d["layout"]);
-                // Width follows the layout (8 beside the pane, 22 elsewhere) unless
-                // the same request carries `cols`.
+                // Width follows the layout (8 beside the pane, 20 for the menu, 22
+                // fullscreen) unless the same request carries `cols`.
                 if (!d["cols"].is<int>()) m.cols = MegaOpen::MediaScreen::colsFor(m.layout);
                 _cfg->s().mediaLayout = MegaOpen::MediaScreen::layoutName(m.layout);
                 save = true;

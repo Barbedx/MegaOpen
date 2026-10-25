@@ -173,7 +173,13 @@ namespace MegaOpen
         // Measured: beside the 48x48 pane an info row shows 8 chars, silently
         // truncated. setText's field is 8 chars by protocol.
         static constexpr uint8_t COLS_INFO = 8;
-        static uint8_t colsFor(Layout l) { return sharesWithPane(l) ? COLS_INFO : COLS_DEFAULT; }
+        // The menu layout's rows are showMenu's big font: 20 cells (glass sweep
+        // 2026-10-25, digits and W alike; its header shows 26).
+        static constexpr uint8_t COLS_MENU = 20;
+        static uint8_t colsFor(Layout l)
+        {
+            return sharesWithPane(l) ? COLS_INFO : l == Layout::Menu ? COLS_MENU : COLS_DEFAULT;
+        }
 
         // Track-change splash: title/artist/album centred, drawn as a fullscreen
         // at full width even when the regular layout is 8 columns. A long title

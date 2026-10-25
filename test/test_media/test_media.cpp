@@ -999,7 +999,7 @@ void test_the_info_layout_is_eight_columns_and_the_others_twenty_two()
     TEST_ASSERT_EQUAL_UINT8(8,  MediaScreen::colsFor(MediaScreen::Layout::Info));
     TEST_ASSERT_EQUAL_UINT8(8,  MediaScreen::colsFor(MediaScreen::Layout::Text));
     TEST_ASSERT_EQUAL_UINT8(22, MediaScreen::colsFor(MediaScreen::Layout::Fullscreen));
-    TEST_ASSERT_EQUAL_UINT8(22, MediaScreen::colsFor(MediaScreen::Layout::Menu));
+    TEST_ASSERT_EQUAL_UINT8(20, MediaScreen::colsFor(MediaScreen::Layout::Menu));
     // The two eight-column layouts are exactly the two that share the glass
     // with the pane, and the splash gate in main.cpp keys off this.
     TEST_ASSERT_TRUE(MediaScreen::sharesWithPane(MediaScreen::Layout::Info));
