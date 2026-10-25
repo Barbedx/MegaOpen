@@ -107,6 +107,15 @@
 #error "FEATURE_USB_HID needs ARDUINO_USB_MODE=0 (TinyUSB); see env:t2can_usbhid"
 #endif
 
+// The USB link to the head unit's app (src/link/UsbLink.h): a TinyUSB vendor
+// interface, so ARDUINO_USB_MODE=0 like the keyboard.
+#ifndef FEATURE_USB_LINK
+#define FEATURE_USB_LINK 0
+#endif
+#if FEATURE_USB_LINK && (!defined(ARDUINO_USB_MODE) || ARDUINO_USB_MODE != 0)
+#error "FEATURE_USB_LINK needs ARDUINO_USB_MODE=0 (TinyUSB)"
+#endif
+
 #if !FEATURE_DISPLAY_CAN && !FEATURE_VEHICLE_CAN
 // Not an error — a headless canbox with only the GPIO matrix is a valid build.
 #endif

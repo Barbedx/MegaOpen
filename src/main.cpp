@@ -109,6 +109,7 @@ static Sinks::UsbHidKeySink g_usbKeys;
 #include "media/HuMediaSource.h"
 #include <ArduinoJson.h>
 #include "app/OtaTrial.h"
+#include "link/UsbLink.h"
 
 // Wiring only — every decision lives in the objects below.
 
@@ -2378,6 +2379,9 @@ void setup()
 #endif
     g_web.begin(g_cfg, g_engine, g_map, g_keySink);
     memMark("web");
+    // The app's link pipes to the web server: after it listens.
+    UsbLink::begin(g_wifi.apSsid().c_str());
+    memMark("usblink");
     // The OTA trial's verdict comes from net_svc (Housekeeping).
     App::OtaTrial::begin();
 

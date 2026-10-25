@@ -1,4 +1,6 @@
 #include "WebUi.h"
+#include "../link/UsbLink.h"
+#include "lwip/sockets.h"
 #include "../cfg/SettingsJson.h"
 #include "../proto/canbox/Rav4Profile.h"
 #include "../proto/canbox/Rav4Catalog.h"
@@ -200,6 +202,14 @@ void WebUi::begin(Cfg::Config& cfg, KeyEngine& engine, KeyMap& map,
     }
     _server.listen(80);
     mem("listen");
+    // No Nagle on the server's sockets: httpd sends the headers and the body
+    // as two writes, and the second waited for the ACK of the first. Over the
+    // USB link the peer is lwIP itself (127.0.0.1), whose delayed ACK made
+    // every small reply 250 ms (docs/design/usb-link.md).
+    _server.onOpen([](PsychicClient* c) {
+        int one = 1;
+        setsockopt(c->socket(), IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+    });
     routes();
     // The one handler for the whole table — see Route in WebUi.h.
     _server.onNotFound([this](PsychicRequest* r) { return dispatch(r); });
@@ -710,6 +720,23 @@ void WebUi::routes()
         d["ghosts"]    = _ghosts ? *_ghosts : 0;
         d["encSteps"]  = _encSteps ? *_encSteps : 0;
         d["heap"]      = ESP.getFreeHeap();
+#if FEATURE_USB_LINK
+        {
+            UsbLink::Stats u;
+            UsbLink::stats(u);
+            JsonObject o = d["usb"].to<JsonObject>();
+            o["mounted"] = u.mounted;
+            o["alive"]   = u.alive;
+            o["hello"]   = u.hello;
+            o["open"]    = u.open;
+            o["reqs"]    = u.reqs;
+            o["fails"]   = u.fails;
+            o["events"]  = u.events;
+            o["rx"]      = u.rxFrames;
+            o["tx"]      = u.txFrames;
+            o["bad"]     = u.bad;
+        }
+#endif
         String out; serializeJson(d, out);
         return replyJson(r, out);
     });

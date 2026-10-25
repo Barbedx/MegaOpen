@@ -118,6 +118,14 @@ namespace App
         constexpr int         LOGPUSH_CORE  = 0;
         constexpr uint32_t    LOGPUSH_STACK = 10240;   // GhOta's plus the token, URL and auth header
 
+        // The USB link (src/link/UsbLink.h): the app's frames, the sockets it
+        // pipes to httpd, the alert events. httpd's priority on its core, so
+        // neither starves the other; woken by TinyUSB's rx callback. 4096: one
+        // JSON document and lwIP calls, the frame buffers are static.
+        constexpr UBaseType_t USBLINK_PRIO  = 2;
+        constexpr int         USBLINK_CORE  = 0;
+        constexpr uint32_t    USBLINK_STACK = 4096;
+
         // LogBus: below everything, on the WiFi core.
         constexpr UBaseType_t LOGBUS_PRIO = 1;
         constexpr int         LOGBUS_CORE = 0;
