@@ -105,10 +105,16 @@ void test_compiled_defaults_load_and_are_sorted()
         TEST_ASSERT_TRUE(dec.row(i - 1).canId <= dec.row(i).canId);
     // Every row is a hypothesis until it is measured in the car; the owner
     // has measured doors, boot, lights and indicators (2026-10-20), and the
-    // instrument illumination against the dash rheostat (2026-10-25).
+    // instrument illumination against the dash rheostat and 26 more ✓'d on
+    // «Авто — наживо» in the car (2026-10-25, the [map] lines of boot 142).
     const uint8_t measured[] = {SIG_DOOR_FL, SIG_DOOR_FR, SIG_DOOR_RL, SIG_DOOR_RR, SIG_BOOT,
                                 SIG_LIGHT_POS, SIG_LIGHT_DIPPED, SIG_LIGHT_MAIN, SIG_IND_LEFT, SIG_IND_RIGHT,
-                                SIG_BACKLIGHT};
+                                SIG_BACKLIGHT,
+                                SIG_SPEED, SIG_RPM, SIG_STEERING, SIG_ODO_CLUSTER, SIG_OUT_TEMP, SIG_ENG_TEMP,
+                                SIG_HANDBRAKE, SIG_REVERSE, SIG_BRAKE, SIG_REAR_DEFROST, SIG_REAR_DEFROST_REQ,
+                                SIG_WIPERS, SIG_FOG_FRONT, SIG_FOG_REAR, SIG_FUEL_LEVEL, SIG_AC_REQUEST,
+                                SIG_AC_COMP_UPC, SIG_CLIM_AC_SEL, SIG_OIL_LEVEL, SIG_CLIM_FAN_STATE, SIG_BATT_V,
+                                SIG_CLUTCH, SIG_NEUTRAL, SIG_REVERSE_UPC, SIG_LOCKED, SIG_BELT_DRV};
     for (uint8_t i = 0; i < dec.rows(); ++i) {
         bool m = false;
         for (uint8_t s : measured) m |= dec.row(i).sig == s;
@@ -287,7 +293,8 @@ void test_measured_means_every_row_and_not_a_hypothesis()
     static DecodeTable t;
     t.factory();
     TEST_ASSERT_TRUE(t.measured(SIG_DOOR_FL));
-    TEST_ASSERT_FALSE(t.measured(SIG_FUEL_LEVEL));              // a hypothesis
+    TEST_ASSERT_TRUE(t.measured(SIG_FUEL_LEVEL));               // ✓ in the car (2026-10-25)
+    TEST_ASSERT_FALSE(t.measured(SIG_SERVICE_KM));              // still a hypothesis
     TEST_ASSERT_FALSE(t.measured(SIG_TPMS_FL));                 // not bound
     TEST_ASSERT_TRUE(t.bindConst(SIG_DOOR_FR, 1));
     TEST_ASSERT_FALSE(t.measured(SIG_DOOR_FR));                 // a constant is not CAN

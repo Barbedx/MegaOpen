@@ -15,6 +15,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Changed
 - `0x645` b1 (instrument illumination) is no longer a hypothesis: the owner saw it follow the rheostat in the car.
+- 26 more factory rows are measured, as the owner ✓'d them on «Авто — наживо» in the car: speed, rpm, steering, odo_cluster, out_temp, eng_temp, handbrake, reverse, brake, rear_defrost, rear_defrost_req, wipers, fog_front, fog_rear, fuel_level, ac_request, ac_comp_upc, clim_ac_sel, oil_level, clim_fan_state, batt_v, clutch, neutral, reverse_upc, locked, belt_drv. «Заводські прив'язки» no longer turns them back into hypotheses.
 - Panel menu › Lights › Brightness follows the knob: each step is applied (and stored) at once, not on the press that ends the edit. Settings marked `F_LIVE` in the registry do this.
 
 ### Fixed
