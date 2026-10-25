@@ -850,6 +850,9 @@ void test_fuel_rate_consumption_trip_and_range()
     TEST_ASSERT_EQUAL_INT32(50, s.get(SIG_TRIP_KM));            // 181 s at 100 km/h
     TEST_ASSERT_EQUAL_INT32(72, s.get(SIG_TRIP_FUEL));          // 9050 counts = 0.724 L
     TEST_ASSERT_EQUAL_INT32(277, s.get(SIG_RANGE_CALC));        // 40 L / 14.4
+    // The trip computer: 3 min 1 s with the engine on, all of it at 100 km/h.
+    TEST_ASSERT_EQUAL_INT32(3, s.get(SIG_TRIP_ELAPSED));        // minutes
+    TEST_ASSERT_INT32_WITHIN(5, 10000, s.get(SIG_AVG_SPEED));   // km/h x100 (mm truncated a step)
     // A glitch and a silence add nothing.
     const int32_t fuel = s.get(SIG_TRIP_FUEL);
     counter(250);

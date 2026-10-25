@@ -27,6 +27,7 @@ namespace Vehicle
         static constexpr int32_t  CRAWL      = 300;     // km/h x100: below it, N
         static constexpr int32_t  MIN_RPM    = 400;
         static constexpr uint32_t AVG_MIN_KM = 50;      // km x10 = 5 km
+        static constexpr uint64_t AVG_SPEED_MIN_MM = 1000000;   // 1 km before an average speed
         static constexpr uint8_t  BAND_PCT   = 12;      // a gear matches within ±12 %
 
         // km/h per 1000 rpm x10, 1st..6th; 0 = no such gear. The defaults are a
@@ -64,5 +65,6 @@ namespace Vehicle
         uint32_t _winCounts = 0, _winMs = 0;
         uint64_t _winMm = 0;
         uint64_t _totCounts = 0, _totMm = 0;
+        uint64_t _totMs = 0;       // engine-on time since boot (counter frames flowing)
     };
 }

@@ -30,7 +30,9 @@ namespace Vehicle
             case SIG_TRIP_FUEL:  return give(kRate, list);
             case SIG_CONS_INST:
             case SIG_CONS_AVG:
-            case SIG_TRIP_KM:    return give(kCons, list);
+            case SIG_TRIP_KM:
+            case SIG_AVG_SPEED:
+            case SIG_TRIP_ELAPSED: return give(kCons, list);
             case SIG_RANGE_CALC: return give(kRange, list);
             default:             list = nullptr; return 0;
         }
@@ -101,7 +103,7 @@ namespace Vehicle
         // km/h x100 over ms: v/100 km/h is v/360 mm a ms.
         const uint64_t mm = speed > 0 ? (uint64_t)speed * dt / 360 : 0;
         _winCounts += step; _winMs += dt; _winMm += mm;
-        _totCounts += step; _totMm += mm;
+        _totCounts += step; _totMm += mm; _totMs += dt;
         if (_winMs < WINDOW_MS) return;
 
         // 80 mm³ a count: L/h = counts x 288 / ms; L/100km = counts x 8 / mm x 1000.
@@ -112,6 +114,11 @@ namespace Vehicle
         put(s, SIG_TRIP_FUEL, (int64_t)(_totCounts * 8 / 1000), now);
         const int64_t km10 = (int64_t)(_totMm / 100000);
         put(s, SIG_TRIP_KM, km10, now);
+        // The trip computer's pair, as the cluster keeps them: time with the
+        // engine on, and distance over that time (from 1 km, when it means
+        // something). km/h x100 = mm / ms x 360.
+        put(s, SIG_TRIP_ELAPSED, (int64_t)(_totMs / 60000), now);
+        if (_totMm >= AVG_SPEED_MIN_MM && _totMs) put(s, SIG_AVG_SPEED, (int64_t)(_totMm * 360 / _totMs), now);
         if (km10 < AVG_MIN_KM || !_totMm) return;
         const int64_t avg = (int64_t)(_totCounts * 80000 / _totMm);
         put(s, SIG_CONS_AVG, avg, now);
