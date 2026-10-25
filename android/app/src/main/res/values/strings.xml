@@ -60,4 +60,14 @@
     <string name="upd_error">Update failed: %1$s</string>
     <string name="upd_failed">Not installed: %1$s</string>
     <string name="upd_allow">Allow MegaOpen Voice to install apps, then press the button again</string>
+
+    <string name="st_usb">On USB: %1$s</string>
+    <string name="h_board_page">Board settings</string>
+    <string name="board_page">Open the board\'s page</string>
+    <string name="board_page_note">Over USB when the board is plugged into this device; otherwise in the browser over WiFi.</string>
+    <string name="board_page_none">No board: plug it into USB, or let the app find it over WiFi first</string>
+    <string name="link_opening">Connecting to the board over USB…</string>
+    <string name="link_none">No board on USB (%1$s). Plug the board into this device\'s USB and allow access.</string>
+    <string name="link_saved">Saved: %1$s</string>
+    <string name="link_failed">Not saved: %1$s</string>
 </resources>

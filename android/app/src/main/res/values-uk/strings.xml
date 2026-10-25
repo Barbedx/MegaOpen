@@ -60,4 +60,14 @@
     <string name="upd_error">Не вдалося оновити: %1$s</string>
     <string name="upd_failed">Не встановлено: %1$s</string>
     <string name="upd_allow">Дозвольте MegaOpen Голос встановлювати застосунки й натисніть кнопку ще раз</string>
+
+    <string name="st_usb">По USB: %1$s</string>
+    <string name="h_board_page">Налаштування плати</string>
+    <string name="board_page">Відкрити сторінку плати</string>
+    <string name="board_page_note">По USB, коли плата підключена до цього пристрою; інакше в браузері по WiFi.</string>
+    <string name="board_page_none">Плати нема: підключіть її по USB або дайте застосунку знайти її по WiFi</string>
+    <string name="link_opening">З\'єднуюсь з платою по USB…</string>
+    <string name="link_none">Плати на USB нема (%1$s). Підключіть плату до USB цього пристрою й дозвольте доступ.</string>
+    <string name="link_saved">Збережено: %1$s</string>
+    <string name="link_failed">Не збережено: %1$s</string>
 </resources>

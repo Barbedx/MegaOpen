@@ -2,6 +2,7 @@ package ua.megaopen.voice
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -49,6 +50,12 @@ class MainActivity : Activity() {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
         }
         setContentView(build())
+        if (prefs.enabled) AlertService.start(this)
+    }
+
+    // The board plugged into USB opened us (USB_DEVICE_ATTACHED): the service connects.
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
         if (prefs.enabled) AlertService.start(this)
     }
 
@@ -115,6 +122,11 @@ class MainActivity : Activity() {
         }
         col.addView(row(host, find))
         col.addView(note(R.string.host_note))
+        col.addView(Button(this).apply {
+            setText(R.string.board_page)
+            setOnClickListener { openBoard() }
+        })
+        col.addView(note(R.string.board_page_note))
 
         // ---- the voice
         col.addView(title(R.string.h_voice))
@@ -287,6 +299,24 @@ class MainActivity : Activity() {
         }.start()
     }
 
+    /** USB first (the page inside the app), else the browser at the WiFi address. */
+    private fun openBoard() {
+        if (UsbBoard.find(this) != null) {
+            startActivity(Intent(this, BoardActivity::class.java))
+            return
+        }
+        val h = AlertService.host ?: prefs.host.ifEmpty { null }
+        if (h == null) {
+            toast(getString(R.string.board_page_none))
+            return
+        }
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("http://$h/")))
+        } catch (_: Exception) {
+            toast(getString(R.string.board_page_none))
+        }
+    }
+
     private fun findBoard(button: Button) {
         button.isEnabled = false
         toast(getString(R.string.searching))
@@ -307,6 +337,12 @@ class MainActivity : Activity() {
         }
         Thread {
             val msg = try {
+                if (UsbBoard.connected) {
+                    val r = UsbBoard.request("POST", "/api/alerts/test", mapOf("Content-Type" to "application/json"),
+                        org.json.JSONObject().put("sig", sig).toString().toByteArray())
+                    if (r.code != 200) throw java.io.IOException("HTTP ${r.code} ${r.text()}")
+                    return@Thread runOnUiThread { toast(getString(R.string.test_sent, "USB")) }
+                }
                 val h = AlertService.host ?: prefs.host.ifEmpty { null } ?: Board.discover(this)
                 if (h == null) getString(R.string.not_found)
                 else {
@@ -358,9 +394,11 @@ class MainActivity : Activity() {
 
 /** The installed version, without generating BuildConfig. */
 object BuildConfigVersion {
-    fun name(a: Activity): String = try {
+    fun name(a: Context): String = try {
         a.packageManager.getPackageInfo(a.packageName, 0).versionName ?: "?"
     } catch (_: Exception) {
         "?"
     }
+
+    fun app(a: Context): String = name(a)
 }

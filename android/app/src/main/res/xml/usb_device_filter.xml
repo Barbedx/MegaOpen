@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The MegaOpen board (src/link/UsbLink.h): Espressif VID, the board's own PID
+     (variants/t2can/pins_arduino.h). Android offers to open the app when it is
+     plugged in; «Always» there also grants the USB permission. -->
+<resources>
+    <usb-device vendor-id="12346" product-id="32963" />
+</resources>

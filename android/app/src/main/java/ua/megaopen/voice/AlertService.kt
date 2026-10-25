@@ -61,6 +61,15 @@ class AlertService : Service() {
         }
         shown = getString(R.string.st_starting)
         startForeground(NOTE_ID, note(shown))
+        registerReceiver(UsbBoard.detach, UsbBoard.filter)
+        UsbBoard.onEvent(usbEvent)
+    }
+
+    // The board on USB pushes its alerts: nothing to poll.
+    private val usbEvent: (org.json.JSONObject) -> Unit = { j ->
+        if (j.optString("t") == "alert") {
+            say(Board.Alert(j.optLong("seq"), 0, j.optString("sig"), j.optLong("value"), j.optString("text")))
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -73,6 +82,11 @@ class AlertService : Service() {
 
     override fun onDestroy() {
         quit = true
+        UsbBoard.offEvent(usbEvent)
+        try {
+            unregisterReceiver(UsbBoard.detach)
+        } catch (_: Exception) {
+        }
         worker?.interrupt()
         worker = null
         speaker.shutdown()
@@ -88,6 +102,15 @@ class AlertService : Service() {
         var fails = 0
         while (!quit) {
             try {
+                // The board on USB first (docs/design/usb-link.md): its alerts
+                // come as events, WiFi is not asked.
+                if (UsbBoard.connected || UsbBoard.open(this)) {
+                    host = null
+                    since = -1      // back on WiFi later: from the board's mark then
+                    setStatus(getString(R.string.st_usb, UsbBoard.hello?.optString("name") ?: "MegaOpen"))
+                    Thread.sleep(1000)
+                    continue
+                }
                 val want = prefs.host
                 if (want.isNotEmpty() && want != h) {
                     h = want
