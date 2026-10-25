@@ -396,7 +396,7 @@ namespace Cfg
             G("lights", "Lights", nullptr, WM),
             {"ledEnabled", "Lights on", "lights", SType::Bool, WM, AP_KNOBS,
              0, 1, 0, nullptr, nullptr, K_GET(k.ledEnabled), K_PUT(k.ledEnabled = v != 0)},
-            {"ledBrightness", "Brightness", "lights", SType::Int, WM, AP_KNOBS,
+            {"ledBrightness", "Brightness", "lights", SType::Int, WM | F_LIVE, AP_KNOBS,
              0, 255, 15, nullptr, nullptr, K_GET(k.brightness), K_PUT(k.brightness = (uint8_t)v)},
             G("lights.r", "Right knob", "lights", WM),
             {"ledR.react", "Reaction", "lights.r", SType::Enum, WM, AP_KNOBS,

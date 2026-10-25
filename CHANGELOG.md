@@ -9,6 +9,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Added
 - Panel menu: the board's address at the root, before «Power off» (`IP 192.168.234.46`, or `AP MegaOpen-XXXX` on its own hotspot). Choosing it closes the menu and shows the same full-size notice as on connect, with the mDNS name. It is no longer only once per connection.
+- The last crash in the log: at boot, a coredump on flash becomes one `W [crash]` line (task, pc, cause, the image's ELF sha, the backtrace) and is erased. It reaches the flash log and the log push. The release run keeps each build's ELF as an artifact (`elf-vX.Y.Z-rcN`, 90 days) to decode it.
+
+### Changed
+- Panel menu › Lights › Brightness follows the knob: each step is applied (and stored) at once, not on the press that ends the edit. Settings marked `F_LIVE` in the registry do this.
 
 ### Fixed
 - Log push: one file a minute, as meant. The lines logged during a push (a few kB) counted as a backlog, so the next file went 3 s later: a file every ~8 s, four times the commits. Only a backlog of 16 kB or more (a spool filled offline) drains fast now.

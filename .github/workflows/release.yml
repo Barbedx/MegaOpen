@@ -93,6 +93,17 @@ jobs:
           done
           (cd dist && sha256sum *.bin > SHA256SUMS)
           cat dist/SHA256SUMS
+          # The ELFs, for a board's `[crash]` line (addr2line): an artifact of
+          # this run, not a release asset, so the release keeps its files.
+          mkdir -p elf
+          for e in $ENVS; do cp ".pio/build/$e/firmware.elf" "elf/megaopen-$e-$VER.elf"; done
+      - uses: actions/upload-artifact@v7
+        if: env.RC == '1'
+        with:
+          name: elf-${{ github.ref_name }}
+          path: elf/
+          retention-days: 90
+          if-no-files-found: error
       - name: Publish pre-release
         if: env.RC == '1'
         run: |

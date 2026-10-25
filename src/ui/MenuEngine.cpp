@@ -157,6 +157,14 @@ namespace MenuUi
                 const int32_t v = Registry::stepped(e, _editValue, c == Cmd::Next ? +1 : -1);
                 if (v == _editValue) return Out::None;
                 _editValue = v;
+                // A live entry is stored at every step (the lights follow the
+                // knob); the press that ends the edit then has nothing to add.
+                if (e.flags & F_LIVE) {
+                    _commitEntry = &e;
+                    _commitValue = v;
+                    Registry::set(*_m, e, v);
+                    return Out::Commit;
+                }
                 return Out::Redraw;
             }
             _editing = false;

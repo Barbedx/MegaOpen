@@ -217,6 +217,28 @@ void test_int_edit_in_brackets_then_commit()
     TEST_ASSERT_EQUAL_STRING(pad("Carousel", "40s").c_str(), f.item(f.e.cursor()).c_str());
 }
 
+
+// A live entry (the lights' brightness) is stored at every step, so the LEDs
+// follow the knob; the press that ends the edit adds nothing.
+void test_live_entry_commits_every_step()
+{
+    Fixture f;
+    f.go("Lights");
+    f.e.key(Cmd::Select);
+    TEST_ASSERT_TRUE(f.go("Brightness"));
+    const int32_t was = f.k.brightness;
+    TEST_ASSERT_EQUAL(Out::Redraw, f.e.key(Cmd::Select));
+    TEST_ASSERT_TRUE(f.e.editing());
+    TEST_ASSERT_EQUAL(Out::Commit, f.e.key(Cmd::Next));
+    TEST_ASSERT_EQUAL_PTR(find("ledBrightness"), f.e.commitEntry());
+    TEST_ASSERT_TRUE(f.e.commitValue() != was);
+    TEST_ASSERT_EQUAL_INT32(f.e.commitValue(), f.k.brightness);   // stored already
+    TEST_ASSERT_EQUAL(Out::Commit, f.e.key(Cmd::Next));
+    TEST_ASSERT_TRUE(f.e.editing());
+    TEST_ASSERT_EQUAL(Out::Redraw, f.e.key(Cmd::Select));            // nothing left to keep
+    TEST_ASSERT_FALSE(f.e.editing());
+}
+
 void test_edit_back_to_same_value_is_no_commit()
 {
     Fixture f;
@@ -595,6 +617,7 @@ int main(int, char**)
     RUN_TEST(test_bool_toggles_at_once);
     RUN_TEST(test_bool_pressed_twice_toggles_twice);
     RUN_TEST(test_int_edit_in_brackets_then_commit);
+    RUN_TEST(test_live_entry_commits_every_step);
     RUN_TEST(test_edit_back_to_same_value_is_no_commit);
     RUN_TEST(test_enum_wraps_while_editing);
     RUN_TEST(test_int_stops_at_its_end);

@@ -40,6 +40,7 @@
 #include "utils/Staged.h"
 #include "utils/Snapshot.h"
 #include <esp_heap_caps.h>
+#include <esp_core_dump.h>
 
 #if FEATURE_VEHICLE_CAN
 #include "vehicle/CanSniffer.h"
@@ -1646,6 +1647,36 @@ static void hkBeatSlow(uint32_t)
     }
 }
 
+// The last crash, from the coredump partition (the prebuilt SDK writes an ELF
+// coredump there on every panic): which task, where, why, and the backtrace,
+// as one warning line, so the flash log and the log push carry it home. Then
+// the image is erased: the next crash writes a new one, and this line is never
+// repeated for an old one. Decode with the ELF of that build (`elf=`):
+//   xtensa-esp32s3-elf-addr2line -pfiaC -e firmware.elf <pc> <bt...>
+static void logCrash()
+{
+    if (esp_core_dump_image_check() != ESP_OK) return;
+    auto* s = (esp_core_dump_summary_t*)heap_caps_malloc(sizeof(esp_core_dump_summary_t),
+                                                         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!s) return;
+    if (esp_core_dump_get_summary(s) == ESP_OK) {
+        char bt[16 * 11 + 1];
+        size_t n = 0;
+        const uint32_t depth = s->exc_bt_info.depth < 16 ? s->exc_bt_info.depth : 16;
+        bt[0] = 0;
+        for (uint32_t i = 0; i < depth && n < sizeof(bt) - 12; ++i)
+            n += snprintf(bt + n, sizeof(bt) - n, " 0x%08x", (unsigned)s->exc_bt_info.bt[i]);
+        s->exc_task[sizeof(s->exc_task) - 1] = 0;
+        LOGW("crash", "task=%s pc=0x%08x cause=%u vaddr=0x%08x elf=%.16s bt%s:%s", s->exc_task,
+             (unsigned)s->exc_pc, (unsigned)s->ex_info.exc_cause, (unsigned)s->ex_info.exc_vaddr,
+             (const char*)s->app_elf_sha256, s->exc_bt_info.corrupted ? "(corrupted)" : "", bt);
+    } else {
+        LOGW("crash", "a coredump is on flash but its summary did not read");
+    }
+    heap_caps_free(s);
+    esp_core_dump_image_erase();
+}
+
 // Why this boot happened, and how many there have been: tells a real reboot
 // (panic, watchdog, brownout) from a freeze that only looked like one.
 static void logBootReason()
@@ -1683,6 +1714,7 @@ static void logBootReason()
     logf("[boot] build=%s fw=" MEGAOPEN_VERSION " board=%s reason=%s boots=%u crashes=%u psram=%u",
          MegaOpen::buildId(), Board::NAME, why, (unsigned)boots, (unsigned)crashes,
          (unsigned)ESP.getPsramSize());
+    logCrash();
 }
 
 void setup()

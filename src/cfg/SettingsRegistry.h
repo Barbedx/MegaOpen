@@ -48,6 +48,8 @@ namespace Cfg
         F_MENU = 0x02,     // the panel menu
         F_RO   = 0x04,     // shown, never written from outside (net_svc owns it)
         F_VOLATILE = 0x08, // RAM only: applied at once, never saved, gone at a reboot
+        F_LIVE     = 0x10, // the panel menu applies every step while editing, not on the press
+                           // that keeps it: a value you watch change (the knob lights)
     };
 
     // Who must hear about a change. The registry only edits the model; the
