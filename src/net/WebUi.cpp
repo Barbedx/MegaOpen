@@ -844,6 +844,7 @@ void WebUi::routes()
             serializeJson(d, w);
         }
 #endif
+        mapToFile(out);   // the CAN map and the head-unit emitter
         out.put("}");
         return out.finish();
     });
@@ -875,15 +876,25 @@ void WebUi::routes()
             clamped = knobsFromJson(kj, kc, &kerr);
         }
 #endif
+        // The CAN map and the head-unit emitter are checked before anything
+        // is applied, like the rest; applied after the settings.
+        bool mapIn = false, huIn = false;
+        if (const char* why = mapFromFile(d["decode"], d["hu"], true, mapIn, huIn))
+            return r->reply(400, "text/plain", why);
         String out;
         const char* type = "text/plain";
         const int st = settingsPost(d["settings"].as<JsonObjectConst>(), dry, true, out, type, &kerr);
         if (st != 200) return r->reply(st, type, out.c_str());
+        if (!dry && (mapIn || huIn))
+            if (const char* why = mapFromFile(d["decode"], d["hu"], false, mapIn, huIn))
+                return r->reply(500, "text/plain", why);
 
         JsonDocument o;
         deserializeJson(o, out);
         if (dry) {
             o["knobs"] = knobs;
+            o["map"]   = mapIn;      // the file carries the CAN map
+            o["hu"]    = huIn;       // and the head-unit emitter
             JsonArray cl = o["clamped"].to<JsonArray>();
 #if FEATURE_KNOBS
             for (uint16_t b = 1; b; b = (uint16_t)(b << 1))

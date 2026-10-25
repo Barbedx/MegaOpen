@@ -83,6 +83,7 @@ cfgBind(){
   const ch=p.changes||[],fw=p.fileFw&&p.fileFw!==this.fw?row(t('bd.otherFw'),chipH('warn',p.fileFw),t('bd.otherFwH')):'';
   prev.innerHTML=fw+row(ch.length?t('bd.willChange',ch.length):t('bd.noChange'),p.reboot?chipH('warn',t('bd.needRestart')):'',ch.map(lbl).map(esc).join(' · '))+
    (p.knobs?row(t('bd.knobs'),'',t('bd.knobsFile')+((p.clamped||[]).length?t('bd.clamped',p.clamped.map(esc).join(', ')):'')):'')+
+   (p.map||p.hu?row(t('bd.mapFile'),'',t('bd.mapFileH')):'')+
    ((p.skipped||[]).length?row(t('bd.skipped'),chipH('off',String(p.skipped.length)),p.skipped.map(lbl).map(esc).join(' · ')):'')+
    (p.unknown?row(t('bd.unknown'),chipH('off',String(p.unknown)),t('bd.unknownH')):'')+
    `<div class="fr"><button class="btn pri" type="button" id="cfgGo">${t('bd.apply')}</button><button class="btn" type="button" id="cfgNo">${t('bd.cancel')}</button></div>`;

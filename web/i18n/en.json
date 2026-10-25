@@ -801,7 +801,7 @@
  "bd.bootThis": "This boot",
  "bd.download": "Download",
  "bd.toFile": "Settings to a file",
- "bd.toFileH": "All settings and knobs to a .json file; from a file after you review the changes. Wi-Fi passwords stay out of the file.",
+ "bd.toFileH": "All settings, the knobs and the CAN map (with the ✓ checks) to a .json file; from a file after you review the changes. Wi-Fi passwords stay out of the file.",
  "bd.saveFile": "Save to a file",
  "bd.fileLbl": "Settings file",
  "bd.ui": "Interface",
@@ -1392,5 +1392,7 @@
  "bd.ghPre": "Test versions (rc)",
  "bd.ghPreH": "On: «Check» takes the newest version on GitHub, test builds (rc) included, before they become stable. Off: stable only. The 3 min rollback works the same.",
  "k.set.ledDash": "Follow the dashboard",
- "k.set.ledDashGain": "Dashboard gain"
+ "k.set.ledDashGain": "Dashboard gain",
+ "bd.mapFile": "CAN map and head unit",
+ "bd.mapFileH": "The file carries the CAN table (bindings, the ✓ checks) and what the board sends to the head unit: they replace the current ones."
 }

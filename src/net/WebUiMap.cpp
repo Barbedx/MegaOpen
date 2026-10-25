@@ -1,5 +1,7 @@
 #include "WebUi.h"
 #include <math.h>
+#include <esp_heap_caps.h>
+#include <mbedtls/base64.h>
 #include "../app/CarTask.h"
 #include "../app/HuTask.h"
 #include "../proto/canbox/RaiseTargets.h"
@@ -405,4 +407,94 @@ void WebUi::routesMap()
         snprintf(b, sizeof(b), "{\"ok\":true,\"bytes\":\"%s\"}", hex);
         return r->reply(200, "application/json", b);
     });
+}
+
+// ---------------------------------------------------------------------------
+// The map in the settings file (GET/POST /api/config, WebUi.cpp)
+// ---------------------------------------------------------------------------
+// `decode`: the decode table exactly as NVS keeps it (DecodeTable::pack: the
+// bindings, the constants, the owner's ✓), base64. `hu`: the head-unit
+// emitter, as POST /api/map takes it. A file without them leaves both alone.
+
+void WebUi::mapToFile(ChunkOut& out)
+{
+    uint8_t* blob = (uint8_t*)heap_caps_malloc_prefer(Vehicle::DecodeTable::BLOB_MAX, 2,
+                                                      MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT,
+                                                      MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    const size_t b64cap = 4 * ((Vehicle::DecodeTable::BLOB_MAX + 2) / 3) + 1;
+    char* b64 = blob ? (char*)heap_caps_malloc_prefer(b64cap, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT,
+                                                      MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
+                     : nullptr;
+    size_t len = 0, olen = 0;
+    if (b64 && App::Car::decodeTable().read([&](const Vehicle::DecodeTable& t) { len = t.pack(blob); }) &&
+        mbedtls_base64_encode((unsigned char*)b64, b64cap, &olen, blob, len) == 0) {
+        out.put(",\"decode\":\"");
+        out.put(b64, olen);
+        out.put("\"");
+    }
+    heap_caps_free(b64);
+    heap_caps_free(blob);
+
+    App::Hu::EmitterCfg c;
+    if (App::Hu::emitterCfg().peek(c)) {
+        char b[120];
+        out.put(b, fit(snprintf(b, sizeof(b), ",\"hu\":{\"send\":%s,\"units\":{\"fuel\":%u,\"trip\":%u},\"exp\":%u}",
+                                c.enabled ? "true" : "false", (unsigned)c.tuning.fuelUnit,
+                                (unsigned)c.tuning.tripUnit, (unsigned)c.exp), sizeof(b)));
+    }
+}
+
+const char* WebUi::mapFromFile(JsonVariantConst decode, JsonVariantConst hu, bool dry, bool& changedMap,
+                               bool& changedHu)
+{
+    changedMap = changedHu = false;
+    // Static: 2.4 kB each, and only the config POST uses them (httpd is one task).
+    static Vehicle::DecodeTable table;
+    static uint8_t blob[Vehicle::DecodeTable::BLOB_MAX];
+    size_t len = 0;
+    if (!decode.isNull()) {
+        const char* s = decode.as<const char*>();
+        if (!s) return "decode: not_text";
+        if (mbedtls_base64_decode(blob, sizeof(blob), &len, (const unsigned char*)s, strlen(s)) != 0)
+            return "decode: bad_base64";
+        if (!table.unpack(blob, len)) return "decode: bad_table";
+        changedMap = true;
+    }
+
+    App::Hu::EmitterCfg c;
+    if (!hu.isNull()) {
+        if (!hu.is<JsonObjectConst>()) return "hu: not_object";
+        if (!App::Hu::emitterCfg().peek(c)) return "busy";
+        if (hu["send"].is<bool>()) c.enabled = hu["send"].as<bool>() && _cfg->s().uartEnabled;
+        const int fuel = hu["units"]["fuel"] | (int)c.tuning.fuelUnit;
+        const int trip = hu["units"]["trip"] | (int)c.tuning.tripUnit;
+        bool fok = false, tok = false;
+        for (const auto& u : Canbox::FUEL_UNITS) fok |= u.v == fuel;
+        for (const auto& u : Canbox::TRIP_UNITS) tok |= u.v == trip;
+        if (!fok) return "hu: units.fuel";
+        if (!tok) return "hu: units.trip";
+        c.tuning.fuelUnit = (uint8_t)fuel;
+        c.tuning.tripUnit = (uint8_t)trip;
+        const int exp = hu["exp"] | (int)c.exp;
+        if (exp < 0 || exp > Canbox::Rav4Emitter::EXP_ALL) return "hu: exp";
+        if (const char* why = Canbox::Rav4Emitter::experimentsWhy((uint8_t)exp)) return why;
+        c.exp = (uint8_t)exp;
+        changedHu = true;
+    }
+    if (dry) return nullptr;
+
+    if (changedMap) {
+        if (!App::Car::decodeTable().edit([&](Vehicle::DecodeTable& t) { t = table; })) return "busy";
+        if (!_cfg->saveDecode(blob, len)) return "nvs_failed";
+        LogBus::printf("[map] set from a settings file: %u bytes", (unsigned)len);
+    }
+    if (changedHu) {
+        if (!App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& e) { e = c; })) return "busy";
+        _cfg->saveTuning(c.tuning);
+        _cfg->saveHuSend(c.enabled);
+        _cfg->saveHuExp(c.exp);
+        LogBus::printf("[map] head unit set from a settings file: send %s, exp %u", c.enabled ? "on" : "off",
+                       (unsigned)c.exp);
+    }
+    return nullptr;
 }
