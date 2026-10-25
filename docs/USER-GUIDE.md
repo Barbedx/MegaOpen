@@ -169,6 +169,23 @@ saved list of signal bindings, and signals added by the update do not show.
 Press **Заводські прив'язки** once. It replaces your own bindings with the
 new factory list.
 
+## Voice alerts on the head unit
+
+The panel's alerts («Lights off!», «Handbrake on!», low fuel, your own rules)
+can also be said out loud by the head unit. Install **MegaOpen Voice**
+(`megaopen-voice-X.Y.Z.apk` from the release, Android 7 or newer, no root) on
+the tablet, open it and switch on «Озвучувати попередження плати».
+
+- The board must be on the tablet's network (its hotspot). Leave the address
+  empty and the app finds it; type the IP from the panel menu if it does not.
+- «Тестове попередження з плати» makes the board add a test «lights off»; the
+  app says it within two seconds. That checks the board, the network and the
+  voice in one go.
+- No Ukrainian voice: «Налаштування синтезу мовлення», install the Google
+  speech engine's Ukrainian voice, or pick English.
+- The head unit closes it in the background: exempt it from battery
+  optimisation or put it on the auto-start list.
+
 ## Settings to a file
 
 **Плата → Налаштування у файл.** **Зберегти у файл** downloads every setting

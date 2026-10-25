@@ -4,6 +4,7 @@
 #                 megaopen-<env>-X.Y.Z.bin           the app, for OTA (/update)
 #                 megaopen-<env>-X.Y.Z-factory.bin   bootloader + partitions +
 #                                                    boot_app0 + app, USB at 0x0
+#                 megaopen-voice-X.Y.Z.apk           the voice app (android/)
 #                 SHA256SUMS
 #   vX.Y.Z      on the SAME commit does not rebuild: it takes the assets of the
 #               newest vX.Y.Z-rc* release on that commit, checks SHA256SUMS and
@@ -73,6 +74,22 @@ jobs:
             ~/.platformio
             .pio/libdeps
           key: pio-release-${{ hashFiles('platformio.ini') }}
+      # The voice app goes out with the firmware it talks to (android/).
+      - uses: actions/setup-java@v5
+        if: env.RC == '1'
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v5
+        if: env.RC == '1'
+        with:
+          gradle-version: "8.9"
+      - name: Voice app
+        if: env.RC == '1'
+        run: |
+          gradle -p android assembleRelease --no-daemon
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/megaopen-voice-$VER.apk"
       - name: Build
         if: env.RC == '1'
         run: |
@@ -94,7 +111,7 @@ jobs:
               *) ;;
             esac
           done
-          (cd dist && sha256sum *.bin > SHA256SUMS)
+          (cd dist && sha256sum *.bin *.apk > SHA256SUMS)
           cat dist/SHA256SUMS
           # The ELFs (copied above) go up as an artifact of this run, not a
           # release asset, so the release keeps its files.
@@ -116,6 +133,7 @@ jobs:
             echo
             echo "First flash over USB: \`esptool.py write_flash 0x0 megaopen-<env>-$VER-factory.bin\`."
             echo "Later updates: \`megaopen-<env>-$VER.bin\` from the board's /update page."
+            echo "Voice alerts on the head unit: install \`megaopen-voice-$VER.apk\` (Android 7+, no root)."
           } > release.md
           cat release.md
           gh release create "$GITHUB_REF_NAME" --title "MegaOpen $GITHUB_REF_NAME" \
