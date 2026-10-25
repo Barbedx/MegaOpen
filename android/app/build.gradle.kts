@@ -22,12 +22,23 @@ android {
         versionCode = code
         versionName = fwVersion
     }
+    // The release key lives in the repo's secrets (release.yml writes it to
+    // MO_KEYSTORE); one key for every release, so each installs over the last.
+    // Without it (CI on a push, a local build) the debug key signs.
+    val ks = System.getenv("MO_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (ks != null) create("release") {
+            storeFile = ks
+            storeType = "pkcs12"
+            storePassword = System.getenv("MO_KEYSTORE_PASS")
+            keyAlias = "megaopen"
+            keyPassword = System.getenv("MO_KEYSTORE_PASS")
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Signed with the debug key (CI): installable as is, no keystore
-            // in a public repo. An update with another key needs a reinstall.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (ks != null) "release" else "debug")
         }
     }
     compileOptions {

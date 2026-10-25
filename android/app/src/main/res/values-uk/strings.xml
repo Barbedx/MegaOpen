@@ -47,4 +47,17 @@
     <string name="autostart">Запускати разом з магнітолою</string>
     <string name="start_note">Якщо магнітола закриває фонові застосунки, вимкніть для MegaOpen Голос оптимізацію батареї або додайте його в автозапуск.</string>
     <string name="version">Версія %1$s</string>
+
+    <string name="h_update">Оновлення</string>
+    <string name="upd_pre">Тестові версії (rc)</string>
+    <string name="upd_check">Перевірити</string>
+    <string name="upd_checking">Перевіряю GitHub…</string>
+    <string name="upd_available">Нова: %1$s</string>
+    <string name="upd_none">Це найновіша</string>
+    <string name="upd_install">Оновити до %1$s</string>
+    <string name="upd_loading">Завантажую… %1$d%%</string>
+    <string name="upd_confirm">Підтвердіть встановлення в системному вікні</string>
+    <string name="upd_error">Не вдалося оновити: %1$s</string>
+    <string name="upd_failed">Не встановлено: %1$s</string>
+    <string name="upd_allow">Дозвольте MegaOpen Голос встановлювати застосунки й натисніть кнопку ще раз</string>
 </resources>

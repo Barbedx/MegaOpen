@@ -47,4 +47,17 @@
     <string name="autostart">Start with the head unit</string>
     <string name="start_note">If the head unit closes background apps, exempt MegaOpen Voice from battery optimisation or add it to the auto-start list.</string>
     <string name="version">Version %1$s</string>
+
+    <string name="h_update">Updates</string>
+    <string name="upd_pre">Test versions (rc)</string>
+    <string name="upd_check">Check</string>
+    <string name="upd_checking">Checking GitHub…</string>
+    <string name="upd_available">New: %1$s</string>
+    <string name="upd_none">This is the newest</string>
+    <string name="upd_install">Update to %1$s</string>
+    <string name="upd_loading">Downloading… %1$d%%</string>
+    <string name="upd_confirm">Confirm the install in the system window</string>
+    <string name="upd_error">Update failed: %1$s</string>
+    <string name="upd_failed">Not installed: %1$s</string>
+    <string name="upd_allow">Allow MegaOpen Voice to install apps, then press the button again</string>
 </resources>

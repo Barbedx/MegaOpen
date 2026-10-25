@@ -183,6 +183,9 @@ the tablet, open it and switch on «Озвучувати попередженн�
   voice in one go.
 - No Ukrainian voice: «Налаштування синтезу мовлення», install the Google
   speech engine's Ukrainian voice, or pick English.
+- Updates: Оновлення › «Перевірити» in the app, from the same releases as the
+  board; Android asks to confirm the install. The first time it asks to allow
+  installing apps from MegaOpen Голос.
 - The head unit closes it in the background: exempt it from battery
   optimisation or put it on the auto-start list.
 

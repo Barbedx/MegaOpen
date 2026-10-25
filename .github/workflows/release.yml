@@ -86,8 +86,20 @@ jobs:
           gradle-version: "8.9"
       - name: Voice app
         if: env.RC == '1'
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          MO_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
         run: |
+          # The release key, or no release: a debug-signed APK would not
+          # install over the last one (the app updates itself).
+          [ -n "$KS_B64" ] || { echo "::error::secret ANDROID_KEYSTORE_B64 missing"; exit 1; }
+          export MO_KEYSTORE="$RUNNER_TEMP/voice.p12"
+          echo "$KS_B64" | base64 -d > "$MO_KEYSTORE"
           gradle -p android assembleRelease --no-daemon
+          rm -f "$MO_KEYSTORE"
+          signer=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$signer" verify --print-certs android/app/build/outputs/apk/release/app-release.apk | grep -i 'SHA-256'
+          "$signer" verify --print-certs android/app/build/outputs/apk/release/app-release.apk | grep -qi 'c6dd740be3026a422b0a17efd43fdf9b8868e732c72901017913b1b9b4f8c6ae' || { echo "::error::APK not signed with the MegaOpen Voice key"; exit 1; }
           mkdir -p dist
           cp android/app/build/outputs/apk/release/app-release.apk "dist/megaopen-voice-$VER.apk"
       - name: Build

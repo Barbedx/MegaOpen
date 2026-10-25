@@ -38,6 +38,27 @@ class Prefs(ctx: Context) {
         get() = sp.getLong("interval", 1500L)
         set(v) = sp.edit().putLong("interval", v.coerceIn(500L, 10000L)).apply()
 
+    /** Updates: the rc channel (Updater.newest). */
+    var pre: Boolean
+        get() = sp.getBoolean("pre", false)
+        set(v) = sp.edit().putBoolean("pre", v).apply()
+
+    /** The release tag this install came from ("" when put on by hand). */
+    var installedTag: String
+        get() = sp.getString("tag", "") ?: ""
+        set(v) = sp.edit().putString("tag", v).apply()
+
+    /** The tag handed to the installer, until it reports. */
+    var pendingTag: String
+        get() = sp.getString("pendingTag", "") ?: ""
+        set(v) = sp.edit().putString("pendingTag", v).apply()
+
+    /** The install went through: the pending tag is now this one's. */
+    fun settleTag() {
+        val t = pendingTag
+        if (t.isNotEmpty()) sp.edit().putString("tag", t).putString("pendingTag", "").apply()
+    }
+
     fun alertOn(sig: String) = sp.getBoolean("on_$sig", true)
     fun setAlertOn(sig: String, v: Boolean) = sp.edit().putBoolean("on_$sig", v).apply()
 

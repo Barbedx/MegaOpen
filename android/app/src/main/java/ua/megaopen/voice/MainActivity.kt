@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.provider.Settings
 import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
@@ -195,9 +197,93 @@ class MainActivity : Activity() {
             setOnCheckedChangeListener { _, on -> prefs.autostart = on }
         })
         col.addView(note(R.string.start_note))
-        col.addView(note(getString(R.string.version, BuildConfigVersion.name(this))))
+
+        // ---- updates, from the same GitHub releases as the board
+        col.addView(title(R.string.h_update))
+        updState = note(version())
+        col.addView(updState)
+        updButton = Button(this).apply {
+            visibility = View.GONE
+            setOnClickListener { installUpdate(this) }
+        }
+        col.addView(CheckBox(this).apply {
+            setText(R.string.upd_pre)
+            isChecked = prefs.pre
+            setOnCheckedChangeListener { _, on ->
+                prefs.pre = on
+                found = null
+                updButton.visibility = View.GONE
+            }
+        })
+        val check = Button(this).apply {
+            setText(R.string.upd_check)
+            setOnClickListener { checkUpdate(this, quiet = false) }
+        }
+        col.addView(row(check, updButton))
+        checkUpdate(check, quiet = true)
 
         return ScrollView(this).apply { addView(col) }
+    }
+
+    private lateinit var updState: TextView
+    private lateinit var updButton: Button
+    private var found: Updater.Release? = null
+
+    private fun version(): String = getString(R.string.version, BuildConfigVersion.name(this)) +
+        prefs.installedTag.let { if (it.isEmpty()) "" else " ($it)" }
+
+    private fun checkUpdate(button: Button, quiet: Boolean) {
+        button.isEnabled = false
+        if (!quiet) updState.text = getString(R.string.upd_checking)
+        val pre = prefs.pre
+        Thread {
+            var r: Updater.Release? = null
+            var err: String? = null
+            try {
+                r = Updater.newest(pre)
+            } catch (e: Exception) {
+                err = e.message ?: e.javaClass.simpleName
+            }
+            val newer = r != null && Updater.isNewer(r, Updater.mine(this, prefs))
+            runOnUiThread {
+                button.isEnabled = true
+                found = if (newer) r else null
+                updState.text = when {
+                    err != null -> if (quiet) version() else getString(R.string.upd_error, err)
+                    newer -> version() + "\n" + getString(R.string.upd_available, r!!.tag)
+                    else -> version() + "\n" + getString(R.string.upd_none)
+                }
+                updButton.visibility = if (newer) View.VISIBLE else View.GONE
+                if (newer) updButton.text = getString(R.string.upd_install, r!!.tag)
+            }
+        }.start()
+    }
+
+    private fun installUpdate(button: Button) {
+        val r = found ?: return
+        if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+            toast(getString(R.string.upd_allow))
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            } catch (_: Exception) {
+            }
+            return
+        }
+        button.isEnabled = false
+        Thread {
+            val err = try {
+                Updater.install(this, prefs, r) { pct ->
+                    runOnUiThread { updState.text = getString(R.string.upd_loading, pct) }
+                }
+                null
+            } catch (e: Exception) {
+                e.message ?: e.javaClass.simpleName
+            }
+            runOnUiThread {
+                button.isEnabled = true
+                updState.text = if (err == null) getString(R.string.upd_confirm) else getString(R.string.upd_error, err)
+            }
+        }.start()
     }
 
     private fun findBoard(button: Button) {
