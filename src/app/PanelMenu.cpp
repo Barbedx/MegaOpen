@@ -156,6 +156,14 @@ namespace App
 
             MenuUi::CarView s_carView;
 
+            // "IP 192.168.1.15" / "AP MegaOpen-4580": the notice's first row.
+            void addrRow(void*, char* out, size_t cap)
+            {
+                char body[40];
+                s_d.address(out, cap, body, sizeof(body));
+            }
+            MenuUi::AddressView s_addrView;
+
             // True: s_snap now matches the stored settings.
             bool refreshSnap()
             {
@@ -275,6 +283,12 @@ namespace App
                     case MenuUi::Out::Closed:
                         closeMenu("");
                         break;
+                    case MenuUi::Out::Address:
+                        // The menu hands the glass back; the notice waits for
+                        // that (it is polite) and then shows the address full size.
+                        closeMenu("");
+                        if (s_d.showAddress) s_d.showAddress();
+                        break;
                     case MenuUi::Out::PowerOff:
                         // Only from Open: a hold that closed the menu in the
                         // meantime wins, and the panel stays on.
@@ -305,7 +319,8 @@ namespace App
                 s_carView.signals = signals;
                 s_carView.row = sigRow;
             }
-            s_menu.begin(&s_model, d.car ? &s_carView : nullptr);
+            if (d.address) s_addrView.row = addrRow;
+            s_menu.begin(&s_model, d.car ? &s_carView : nullptr, d.address ? &s_addrView : nullptr);
         }
 
         bool filter(const Keys::Event& e)

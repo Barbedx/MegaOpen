@@ -31,10 +31,11 @@ namespace MenuUi
         }
     }
 
-    void Engine::begin(Model* m, const CarView* car)
+    void Engine::begin(Model* m, const CarView* car, const AddressView* addr)
     {
         _m = m;
         _car = car;
+        _addr = addr;
         _open = false;
     }
 
@@ -91,6 +92,7 @@ namespace MenuUi
                 }
                 if (lv.ref == ROOT) {
                     if (_car && _car->groups) add(Kind::CarRoot, 0);
+                    if (_addr && _addr->row) add(Kind::Address, 0);
                     add(Kind::PowerOff, 0);
                 }
                 break;
@@ -177,6 +179,7 @@ namespace MenuUi
             case Kind::CarRoot:  enter(Kind::CarRoot, 0); return Out::Redraw;
             case Kind::CarGroup: enter(Kind::CarGroup, it.ref); return Out::Redraw;
             case Kind::Signal:   return Out::None;
+            case Kind::Address:  close(); return Out::Address;
             case Kind::PowerOff: close(); return Out::PowerOff;
             case Kind::Setting: {
                 const SEntry& e = Registry::at(it.ref);
@@ -209,6 +212,12 @@ namespace MenuUi
             case Kind::CarRoot:  lay(out, cap, "Car data", ">"); break;
             case Kind::CarGroup: lay(out, cap, _car->groupTag(_car->ctx, it.ref), ">"); break;
             case Kind::PowerOff: lay(out, cap, "Power off", nullptr); break;
+            case Kind::Address: {
+                char row[COLS + 1];
+                _addr->row(_addr->ctx, row, sizeof(row));
+                lay(out, cap, row, nullptr);
+                break;
+            }
             case Kind::Signal: {
                 char row[COLS + 1];
                 _car->row(_car->ctx, it.ref, row, sizeof(row));

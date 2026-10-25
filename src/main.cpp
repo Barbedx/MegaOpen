@@ -1498,6 +1498,26 @@ static bool hkWifiSeen()
 // (src/net/IpNotice.h): "IP 192.168.1.15 / megaopen.local" on the home
 // network, "AP MegaOpen-XXXX / 192.168.4.1" on our own. Polite: it waits out
 // the menu and a glass hold (App::Ui::queueNotice).
+#if FEATURE_DISPLAY_CAN
+// The address as the panel shows it, two rows: "IP 192.168.1.15" over the
+// mDNS name (empty with mDNS off), or "AP MegaOpen-XXXX" over 192.168.4.1.
+// The connect notice (net_svc) and the panel menu's address row (ui task).
+static void addressText(char* head, size_t hn, char* body, size_t bn)
+{
+    body[0] = 0;
+    if (g_wifi.connecting()) {
+        snprintf(head, hn, "WiFi joining");
+    } else if (g_wifi.isSta() && WiFi.status() == WL_CONNECTED) {
+        snprintf(head, hn, "IP %s", WiFi.localIP().toString().c_str());
+        snprintf(body, bn, "%s", g_wifi.mdnsHost().c_str());
+    } else if (WiFi.getMode() & WIFI_AP) {
+        snprintf(head, hn, "AP %s", g_wifi.apSsid().c_str());
+        snprintf(body, bn, "%s", WiFi.softAPIP().toString().c_str());
+    } else {
+        snprintf(head, hn, "WiFi down");
+    }
+}
+#endif
 static void hkWifi(uint32_t now)
 {
     g_wifi.loop(now);
@@ -1517,17 +1537,10 @@ static void hkWifi(uint32_t now)
         ip = (uint32_t)WiFi.softAPIP();
     }
     if (!s_notice.tick(now, m, ip)) return;
-    char head[40];
-    String body;
-    if (m == IpNotice::Mode::Sta) {
-        snprintf(head, sizeof(head), "IP %s", WiFi.localIP().toString().c_str());
-        body = g_wifi.mdnsHost();          // empty with mDNS off
-    } else {
-        snprintf(head, sizeof(head), "AP %s", g_wifi.apSsid().c_str());
-        body = WiFi.softAPIP().toString();
-    }
-    App::Ui::queueNotice(head, body.c_str());
-    logf("[wifi] on the panel: %s / %s\n", head, body.c_str());
+    char head[40], body[40];
+    addressText(head, sizeof(head), body, sizeof(body));
+    App::Ui::queueNotice(head, body);
+    logf("[wifi] on the panel: %s / %s\n", head, body);
 #endif
 }
 
@@ -1784,6 +1797,14 @@ void setup()
         };
         m.stageMedia = [](const Cfg::Settings& s) {
             g_media.setMode(MediaRouter::modeFromStr(s.mediaSource.c_str()));
+        };
+        // The address row, and on Select the same notice as on connect.
+        m.address = addressText;
+        m.showAddress = [] {
+            char head[40], body[40];
+            addressText(head, sizeof(head), body, sizeof(body));
+            App::Ui::queueNotice(head, body);
+            logf("[menu] address on the panel: %s / %s\n", head, body);
         };
         App::PanelMenu::begin(m);
     }

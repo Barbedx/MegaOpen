@@ -41,6 +41,11 @@ namespace App
             // ui: the media screen, pane, popups. media: the track-name source.
             void (*stageUi)(const Cfg::Settings& s) = nullptr;
             void (*stageMedia)(const Cfg::Settings& s) = nullptr;
+            // The board's address, null: no row in the menu. head = the row
+            // ("IP 192.168.1.15"), body = the second line (the mDNS name or
+            // 192.168.4.1). ui task. showAddress: the notice, full size.
+            void (*address)(char* head, size_t hn, char* body, size_t bn) = nullptr;
+            void (*showAddress)() = nullptr;
         };
 
         // setup(), before the keys and ui tasks start.

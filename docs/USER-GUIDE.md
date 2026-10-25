@@ -39,8 +39,10 @@ Settings and car data on the car's own display.
 | leave a group | `< Back` |
 | close | `< Exit` (the top row), hold the right knob again, or wait 45 s |
 
-The root rows are **Display**, **Lights**, **Service**, **Car data** and
-**Power off**. A yes/no setting toggles on a press; a number or a list opens
+The root rows are **Display**, **Lights**, **Service**, **Car data**, the
+board's address (`IP 192.168.x.y`, or `AP MegaOpen-XXXX` on its own hotspot)
+and **Power off**. Pressing the address shows it full size with the
+`megaopen.local` name, the same as when WiFi connects. A yes/no setting toggles on a press; a number or a list opens
 in `[brackets]`: turn to change, press to keep. Changes are saved at once and
 are the same values as on the web.
 

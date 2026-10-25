@@ -278,6 +278,28 @@ void test_power_off()
     TEST_ASSERT_FALSE(f.e.isOpen());
 }
 
+
+// The address row: at the root before "Power off" when the glue gives one;
+// choosing it shuts the menu for the full-size notice.
+void test_address_row()
+{
+    Fixture f;
+    TEST_ASSERT_FALSE(f.go("IP "));                 // no AddressView: no row
+    AddressView a;
+    a.row = [](void*, char* out, size_t cap) { snprintf(out, cap, "IP 192.168.234.46"); };
+    f.e.begin(&f.m, &f.car, &a);
+    f.e.open();
+    TEST_ASSERT_EQUAL(7, f.e.count());
+    TEST_ASSERT_EQUAL_STRING("IP 192.168.234.46", f.item(5).c_str());
+    TEST_ASSERT_EQUAL_STRING("Power off", f.item(6).c_str());
+    TEST_ASSERT_TRUE(f.go("IP "));
+    Engine::Screen s;
+    f.e.screen(s);
+    TEST_ASSERT_TRUE(strlen(s.row[0]) <= ROW_COLS);
+    TEST_ASSERT_EQUAL(Out::Address, f.e.key(Cmd::Select));
+    TEST_ASSERT_FALSE(f.e.isOpen());
+}
+
 // ---- the car ------------------------------------------------------------------------
 
 void test_car_groups_with_data_only()
@@ -578,6 +600,7 @@ int main(int, char**)
     RUN_TEST(test_int_stops_at_its_end);
     RUN_TEST(test_close_from_inside_an_edit);
     RUN_TEST(test_power_off);
+    RUN_TEST(test_address_row);
     RUN_TEST(test_car_groups_with_data_only);
     RUN_TEST(test_refresh_when_data_goes);
     RUN_TEST(test_screen_window_and_marker);

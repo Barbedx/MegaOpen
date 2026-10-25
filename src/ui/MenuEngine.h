@@ -46,6 +46,13 @@ namespace MenuUi
         void*       ctx = nullptr;
     };
 
+    // The board's address, from the glue: one row at the root ("IP 192.168.1.15",
+    // "AP MegaOpen-4580"), ASCII, at most ROW_COLS - 1. Null: no row.
+    struct AddressView {
+        void  (*row)(void* ctx, char* out, size_t cap) = nullptr;
+        void* ctx = nullptr;
+    };
+
     enum class Cmd : uint8_t { Next, Prev, Select, Close };
 
     enum class Out : uint8_t {
@@ -54,6 +61,7 @@ namespace MenuUi
         Commit,     // a value to store: commitEntry() / commitValue(); redraw too
         Closed,     // the menu shut
         PowerOff,   // "Power off" chosen; the menu shut
+        Address,    // the address row chosen; the menu shut (the glue shows it full size)
     };
 
     class Engine {
@@ -63,7 +71,7 @@ namespace MenuUi
         // value, and a second press reads it, before the owner has stored the
         // first (a Bool pressed twice toggles twice). The owner re-reads its
         // copy once its commits are through.
-        void begin(Cfg::Model* m, const CarView* car = nullptr);
+        void begin(Cfg::Model* m, const CarView* car = nullptr, const AddressView* addr = nullptr);
 
         // Opens at the root, cursor on the first row after "< Exit".
         void open();
@@ -101,7 +109,7 @@ namespace MenuUi
         static constexpr uint8_t MAX_DEPTH = 4;
 
     private:
-        enum class Kind : uint8_t { Back, Exit, Group, Setting, CarRoot, CarGroup, Signal, PowerOff };
+        enum class Kind : uint8_t { Back, Exit, Group, Setting, CarRoot, CarGroup, Signal, Address, PowerOff };
         struct Item { Kind kind; uint8_t ref; };   // ref: registry index, car group or signal
         struct Level { Kind kind; uint8_t ref; uint8_t cursor; };
 
@@ -113,6 +121,7 @@ namespace MenuUi
 
         Cfg::Model*       _m = nullptr;
         const CarView*    _car = nullptr;
+        const AddressView* _addr = nullptr;
         bool    _open = false;
         bool    _editing = false;
         int32_t _editValue = 0;

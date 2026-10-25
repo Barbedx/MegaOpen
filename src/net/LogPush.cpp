@@ -19,7 +19,11 @@ namespace LogPush
     {
         constexpr int      TIMEOUT_MS = 20000;
         constexpr uint32_t FIRST_MS   = 20000;   // after the link comes up: let the boot settle
-        constexpr uint32_t DRAIN_MS   = 3000;    // more than one file waits: the next one soon
+        constexpr uint32_t DRAIN_MS   = 3000;    // a backlog waits: the next file soon
+        // What counts as a backlog: a spool that filled offline (the garage).
+        // The lines logged during the push itself (a few kB in its seconds) wait
+        // for the next minute; draining on those sent a file every ~8 s.
+        constexpr uint32_t BACKLOG_BYTES = 16 * 1024;
         constexpr uint32_t CAP_PS = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
         constexpr uint32_t CAP_IN = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
         void* psMalloc(size_t n) { return heap_caps_malloc_prefer(n, 2, CAP_PS, CAP_IN); }
@@ -238,7 +242,7 @@ namespace LogPush
                 s_okAt = millis();
                 s_okAt += !s_okAt;
                 s_backoff = 0;
-                s_nextAt = millis() + (queued ? DRAIN_MS : PERIOD_MS);
+                s_nextAt = millis() + (queued >= BACKLOG_BYTES ? DRAIN_MS : PERIOD_MS);
                 portEXIT_CRITICAL(&s_mux);
                 LogBus::printf("[push] %s/boot-%05u/%04u.log: %u bytes in %u ms%s; %u queued; "
                                "internal heap %u, stack %u of %u unused",
