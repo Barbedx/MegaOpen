@@ -296,7 +296,7 @@ namespace LogPush
         {
             Preferences p;
             p.begin("logpush", true);
-            const bool on = p.getBool("on", false);
+            const bool on = p.getBool("on", true);   // on by default: a token is the only step
             const String tok = p.getString("tok", "");
             String repo = p.getString("repo", "");
             p.end();

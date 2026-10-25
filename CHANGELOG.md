@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-10-25
+
+### Added
+- The log to a private GitHub repository, for reading a drive from home: Плата › «Логи в GitHub». On a network with internet (the head unit's hotspot) the board puts the new lines into the repo as a file once a minute (`mo-XXXX/boot-NNNNN/PPPP.log`); without internet they wait in a 1 MB PSRAM spool (about an hour and a half) and go once the link is back. On by default: paste a fine-grained token (Contents read/write on that one repository) and it starts. The token is never shown back. `/api/logpush`, `[push]` lines.
+
+### Changed
+- One TLS job at a time: a GitHub update check refuses with `tls_busy` for the few seconds a log push holds the connection.
+
 ## [1.5.1] - 2026-10-21
 
 ### Changed

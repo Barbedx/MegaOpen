@@ -559,7 +559,7 @@ po('/api/fw/check',()=>{const v=ghView();if(S.wifi.mode!=='sta')return fail(409,
 po('/api/fw/reboot',()=>{const v=ghView();if(v.phase!=='written')return fail(409,'fw_nothing');S.gh.phase='reboot';return ok});
 po('/api/fw/install',()=>{const v=ghView();if(v.phase!=='available')return fail(409,'fw_no_newer');Object.assign(S.gh,{phase:'downloading',at:now(),got:0});return ok});
 /* LogPush (src/net/LogPush.cpp): на STA з токеном — файл на хвилину; токен назад не віддається */
-const lpView=()=>{const v=S.lp||(S.lp={on:false,tok:false,repo:'Barbedx/megaopen-logs',files:0,sent:0,at:now()});
+const lpView=()=>{const v=S.lp||(S.lp={on:true,tok:false,repo:'Barbedx/megaopen-logs',files:0,sent:0,at:now()});
  const live=v.on&&v.tok&&S.wifi.mode==='sta';if(live&&now()-v.at>60000){v.files++;v.sent+=Math.round(rnd(6000,14000));v.at=now()}
  return {state:!v.on||!v.tok?'off':'waiting',on:v.on,hasToken:v.tok,repo:v.repo,device:'mo-4580',status:v.files?201:0,files:v.files,sent:v.sent,lost:0,
   queued:Math.round(Math.min(now()-v.at,600000)/60000*9000),spool:1048576,okAgoMs:v.files?now()-v.at:0,nextInMs:live?Math.max(0,60000-(now()-v.at)):0,heapMin:S.heap}};
