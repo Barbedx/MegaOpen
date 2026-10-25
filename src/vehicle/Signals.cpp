@@ -185,6 +185,7 @@ namespace Vehicle
         {"trip_km",         "km",   0, 9999999, 1, false, GRP_TRIP},
         {"prnd",            "0-15", 0,      15, 0, false, GRP_DRIVE},
         {"bonnet",          "",     0,       1, 0, true,  GRP_BODY},
+        {"intake_temp",     "C",    -40,     215, 0, false, GRP_ENGINE},
     };
 
     static_assert(sizeof(kMeta) / sizeof(kMeta[0]) == SIG_COUNT,

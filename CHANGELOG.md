@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- Signal `intake_temp`, the intake air: `0x061` (ECM_to_GCU) byte 8 − 40 °C, from the X84 broadcast matrix (v84.05), a hypothesis until checked in the car. A saved map shows it after «Заводські прив'язки».
+
 ## [1.5.3] - 2026-10-25
 
 ### Added

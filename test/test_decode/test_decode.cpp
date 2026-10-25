@@ -549,7 +549,7 @@ void test_the_blob_round_trips_the_factory_table_and_constants()
 {
     static DecodeTable a, b;
     a.factory();
-    TEST_ASSERT_EQUAL_UINT8(62, a.nRows);
+    TEST_ASSERT_EQUAL_UINT8(63, a.nRows);
     writeForTheSimulator(a);
     TEST_ASSERT_TRUE(a.bindConst(SIG_KEY_ON, 1));
     TEST_ASSERT_TRUE(a.bindConst(SIG_OUT_TEMP, -12));

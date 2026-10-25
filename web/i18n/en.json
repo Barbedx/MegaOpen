@@ -1394,5 +1394,6 @@
  "k.set.ledDash": "Follow the dashboard",
  "k.set.ledDashGain": "Dashboard gain",
  "bd.mapFile": "CAN map and head unit",
- "bd.mapFileH": "The file carries the CAN table (bindings, the ✓ checks) and what the board sends to the head unit: they replace the current ones."
+ "bd.mapFileH": "The file carries the CAN table (bindings, the ✓ checks) and what the board sends to the head unit: they replace the current ones.",
+ "k.sig.intake_temp": "Engine: intake air"
 }

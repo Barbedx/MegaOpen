@@ -229,6 +229,9 @@ namespace Vehicle
         // broadcast matrix has no bonnet contact, so no factory row: bind it
         // by hand if a car has one. Last, so the saved map's indices hold.
         SIG_BONNET,
+        // 0x061 (ECM_to_GCU) b7 - 40: the intake air, per the X84 broadcast matrix
+        // (v84.05). Last, like SIG_BONNET, so the saved map's indices hold.
+        SIG_INTAKE_TEMP,
 
         SIG_COUNT
     };

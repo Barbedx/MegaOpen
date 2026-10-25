@@ -20,6 +20,7 @@
 //   0x60D b5         a second engine temperature; 0x551 b0 is the one used.
 //
 //  id      start n  shift mask        mul div add       signal              flags                      holdMs
+{ 0x061,   7, 1,  0, 0xFFu,       1, 1,    -40, SIG_INTAKE_TEMP, DF_HYPOTHESIS,              0 },  // ECM_to_GCU b8 (v84.05): intake air, raw - 40
 { 0x0C2,   0, 2,  0, 0xFFFFu,     1, 1, -32767, SIG_STEERING,   0,                           0 },  // b1.0/16: 0.1 deg/LSB, -3276.7, so 0x7FFF is centre
 { 0x181,   0, 2,  0, 0xFFFFu,     1, 8,      0, SIG_RPM,        0,                           0 },  // raw / 8
 { 0x181,   3, 1,  0, 0xFFu,     423, 100,  -68, SIG_THROTTLE,   DF_HYPOTHESIS,               0 },  // pedal: % = raw x 0.423 - 6.768; 0x10 released
