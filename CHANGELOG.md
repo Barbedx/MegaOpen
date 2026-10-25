@@ -19,6 +19,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Fixed
 - Log push: one file a minute, as meant. The lines logged during a push (a few kB) counted as a backlog, so the next file went 3 s later: a file every ~8 s, four times the commits. Only a backlog of 16 kB or more (a spool filled offline) drains fast now.
+- Head unit, «t° ОР» experiment (`0x7D 09`): the tablet showed 199 at 95 °C. Its "oil temp" is (78 − D2) mod 256, not D2 − 40 (the owner's sweep: D2 0 → 78, 40 → 38, 78 → 0, 160 → 174); the coolant now goes out as D2 = 78 − T and reads right. Below 0 °C it shows 0.
 
 ## [1.5.2] - 2026-10-25
 

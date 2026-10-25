@@ -1036,9 +1036,10 @@ void test_experiments_are_off_by_default_and_each_switches_one_thing()
     s.pin(SIG_FUEL_INST, 99);
     TEST_ASSERT_TRUE(e.preview(E::MSG_FUEL_INST, s, frame, len));
     TEST_ASSERT_EQUAL_HEX8(99, frame[5]);
-    // The coolant frame itself: 0x7D 09 [00][90 + 40].
+    // The coolant frame itself: 0x7D 09 [00][78 - 90 = 0xF4]; the tablet
+    // shows (78 - D2) mod 256 (owner's sweep 2026-10-25), so 90.
     TEST_ASSERT_TRUE(e.preview(E::MSG_COOLANT, s, frame, len));
-    const uint8_t cool[] = {0x2E, 0x7D, 0x03, 0x09, 0x00, 130};
+    const uint8_t cool[] = {0x2E, 0x7D, 0x03, 0x09, 0x00, 0xF4};
     TEST_ASSERT_EQUAL_HEX8_ARRAY(cool, frame, sizeof(cool));
 }
 

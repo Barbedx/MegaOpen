@@ -76,7 +76,7 @@ the only authority. This is that authority. Sub-command is D0, data starts at D1
 | `05` | doors: `b7` FR, `b6` FL, `b5` RR, `b4` RL, `b3` tailgate, **`b2` bonnet** | a second door frame with the bonnet bit — no checksum trap | **new** |
 | `06` | D1 `b0` → code 139 + 1049 idx 3, `b1` → 138, `b6` → 1049 idx 12; **D2 low nibble → 1049 idx 4** | layout of a status frame; a 4-bit field is the shape of PRND. Bench sweep needed | **new** |
 | `08` | steering, see §2a | | **new** |
-| `09` | **D2 − 40 → 1049 idx 2** (D1 unused) | a temperature in °C+40 on the dashboard channel — coolant is the obvious candidate (`0x551` b0 / `0x60D` b5 have it) | **new** |
+| `09` | **shown as (78 − D2) mod 256 °C**, labelled "oil temp" on the tablet (D1 unused). Read from the decoder as D2 − 40 → 1049 idx 2; the owner's sweep 2026-10-25 says otherwise: D2 0 → 78, 40 → 38, 78 → 0, 160 → 174 | MegaOpen sends coolant there as D2 = 78 − T (`0x551` b0, confirmed in the car) | **measured** |
 | `0A` | D1-D2 LE u16 → code 154, **raw, unscaled** | the ×4 is applied by the consumer (launcher), not here — cannot be checked from `com.syu.ms` | = ours |
 | `0D` | D1: `b2-3` → 145, `b4` → 146, `b5` → 147, `b6-7` → 148 | unknown | **new** |
 | `F0` | D1…D6 raw → codes 255-260 | settings block | new |

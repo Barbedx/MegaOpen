@@ -571,13 +571,16 @@ namespace Canbox
             }
             case M_COOLANT: {
                 if (!s.has(SIG_ENG_TEMP)) return false;
-                // D1 unused, D2 = °C + 40 (docs/hu-decoder.md §2b): coolant is the
-                // obvious candidate for that dashboard temperature.
-                int32_t t = s.get(SIG_ENG_TEMP) + 40;
+                // D1 unused. The tablet shows (78 - D2) mod 256, in °C, on its
+                // "oil temp" (owner's sweep 2026-10-25: D2 0 -> 78, 40 -> 38,
+                // 78 -> 0, 160 -> 174; docs/hu-decoder.md §2b), not D2 - 40 as
+                // read from the decoder. So D2 = 78 - T, wrapping for T > 78;
+                // below 0 °C it would show 256 + T, so the floor is 0.
+                int32_t t = s.get(SIG_ENG_TEMP);
                 if (t < 0) t = 0;
                 if (t > 255) t = 255;
                 cmd = 0x7D; len = 3;
-                p[0] = 0x09; p[1] = 0x00; p[2] = (uint8_t)t;
+                p[0] = 0x09; p[1] = 0x00; p[2] = (uint8_t)(78 - t);
                 return true;
             }
             case M_GEAR: {
