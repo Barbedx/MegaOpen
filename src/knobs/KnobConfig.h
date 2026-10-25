@@ -165,6 +165,15 @@ namespace Knobs
         // 1 A Schottky. Raise it when the strip has its own supply.
         uint16_t maxMilliamps   = 400;
 
+        // ---- the dashboard's dimmer -------------------------------------------
+        // Follow the instrument illumination off the car's CAN (the glue feeds
+        // it: Service::setDashSource): master = dash level x dashGain %. Lights
+        // off (the car sends 0xFF) or no fresh value: `brightness`, as usual.
+        // In v5's two spare bytes, so an older blob reads as off / 100 %.
+        bool     dashFollow     = false;
+        uint8_t  dashGain       = 100;    // percent, DASH_GAIN_MIN..MAX
+        static constexpr uint8_t DASH_GAIN_MIN = 10, DASH_GAIN_MAX = 250;
+
         Config();
         // Brings every field into its limits; returns which groups it had to
         // change (CLAMP_* bits), so a settings file's preview can say so.

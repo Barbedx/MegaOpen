@@ -11,7 +11,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - Panel menu: the board's address at the root, before «Power off» (`IP 192.168.234.46`, or `AP MegaOpen-XXXX` on its own hotspot). Choosing it closes the menu and shows the same full-size notice as on connect, with the mDNS name. It is no longer only once per connection.
 - The last crash in the log: at boot, a coredump on flash becomes one `W [crash]` line (task, pc, cause, the image's ELF sha, the backtrace) and is erased. It reaches the flash log and the log push. The release run keeps each build's ELF as an artifact (`elf-vX.Y.Z-rcN`, 90 days) to decode it.
 
+- Lights › «Follow dash» and «Dash gain» (menu and web): the knob rings dim with the instrument illumination off the car's CAN (`0x645` b1, the dash rheostat), times the gain (10-250 %). With the car's lights off (`0xFF`) or no fresh value, «Brightness» as before. Off by default; stored in the knob blob's two spare bytes, so older settings load unchanged.
+
 ### Changed
+- `0x645` b1 (instrument illumination) is no longer a hypothesis: the owner saw it follow the rheostat in the car.
 - Panel menu › Lights › Brightness follows the knob: each step is applied (and stored) at once, not on the press that ends the edit. Settings marked `F_LIVE` in the registry do this.
 
 ### Fixed

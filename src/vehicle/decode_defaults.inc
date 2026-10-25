@@ -71,7 +71,7 @@
 { 0x625,   2, 1,  0, 0xFFu,      25, 4,      0, SIG_BATT_V,     DF_HYPOTHESIS,               0 },  // 0.0625 V/LSB -> V x100
 { 0x625,   3, 1,  5, 0x1u,        1, 1,      0, SIG_BATT_LAMP,  DF_HYPOTHESIS,               0 },  // b4.2/1
 { 0x625,   3, 1,  7, 0x1u,        1, 1,      0, SIG_OIL_PRESS_SW, DF_HYPOTHESIS,             0 },  // b4.0/1
-{ 0x645,   1, 1,  0, 0xFFu,       1, 1,      0, SIG_BACKLIGHT,  DF_HYPOTHESIS,               0 },  // 0x00-0xFE, 0xFF = off
+{ 0x645,   1, 1,  0, 0xFFu,       1, 1,      0, SIG_BACKLIGHT,  0,                           0 },  // 0x00-0xFE, 0xFF = off; owner-confirmed 2026-10-25 (follows the dash rheostat)
 { 0x651,   0, 1,  0, 0x1u,        1, 1,      0, SIG_AIRBAG_FAULT, DF_HYPOTHESIS,             0 },  // b1.7/1
 { 0x651,   0, 1,  1, 0x1u,        1, 1,      0, SIG_PASS_AIRBAG_OFF, DF_HYPOTHESIS,          0 },  // b1.6/1
 { 0x651,   1, 1,  0, 0x3u,        1, 1,      0, SIG_BELT_DRV,   DF_HYPOTHESIS | DF_STATE2 | DF_STATE2_INV, 0 },  // b2.6/2

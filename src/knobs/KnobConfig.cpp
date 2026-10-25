@@ -80,6 +80,8 @@ namespace Knobs
         // Floor: below it the limiter blacks out a merely idling chain.
         if (maxMilliamps < 200)   fix(maxMilliamps, (uint16_t)200, CLAMP_CURRENT);
         if (maxMilliamps > 20000) fix(maxMilliamps, (uint16_t)20000, CLAMP_CURRENT);
+        if (dashGain < DASH_GAIN_MIN) fix(dashGain, (uint8_t)DASH_GAIN_MIN, CLAMP_LEVELS);
+        if (dashGain > DASH_GAIN_MAX) fix(dashGain, (uint8_t)DASH_GAIN_MAX, CLAMP_LEVELS);
         return c;
     }
 
@@ -154,7 +156,8 @@ namespace Knobs
         w.u8(enc[1].ppd);
         w.bind(enc[1].cw); w.bind(enc[1].ccw); w.bind(enc[1].click); w.bind(enc[1].hold);
         w.u16(enc[1].holdMs);
-        w.u8(0); w.u8(0);                        // spare
+        w.u8(dashFollow ? 0x01 : 0);             // the dash dimmer (was spare)
+        w.u8(dashGain);
     }
 
     bool Config::fromBlob(const uint8_t* in, uint8_t len)
@@ -199,6 +202,9 @@ namespace Knobs
             c.enc[1].ppd = r.u8();
             c.enc[1].cw = r.bind(); c.enc[1].ccw = r.bind(); c.enc[1].click = r.bind(); c.enc[1].hold = r.bind();
             c.enc[1].holdMs = r.u16();
+            c.dashFollow = r.u8() & 0x01;
+            const uint8_t g = r.u8();
+            c.dashGain = g ? g : 100;           // 0: a blob from before the field
         }
         // Before v5 the right knob's hold had no job: it opens the menu now.
         // A hold someone bound on purpose is kept.

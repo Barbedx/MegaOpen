@@ -283,6 +283,37 @@ void test_config_supply_default_is_what_a_usb_port_can_give()
     TEST_ASSERT_EQUAL_UINT8(FEET_LEDS, c.feetCount);
 }
 
+
+// The dash dimmer lives in v5's two spare bytes: it round-trips, a blob from
+// before it (zeros there) reads as off at 100 %, and the gain is clamped.
+void test_config_blob_dash_dimmer()
+{
+    Config a;
+    a.dashFollow = true;
+    a.dashGain = 180;
+    uint8_t blob[Config::BLOB_SIZE];
+    a.toBlob(blob);
+    Config b;
+    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
+    TEST_ASSERT_TRUE(b.dashFollow);
+    TEST_ASSERT_EQUAL_UINT8(180, b.dashGain);
+
+    blob[Config::BLOB_SIZE - 2] = 0;
+    blob[Config::BLOB_SIZE - 1] = 0;
+    Config old;
+    TEST_ASSERT_TRUE(old.fromBlob(blob, sizeof(blob)));
+    TEST_ASSERT_FALSE(old.dashFollow);
+    TEST_ASSERT_EQUAL_UINT8(100, old.dashGain);
+
+    Config c;
+    c.dashGain = 3;
+    c.sanitize();
+    TEST_ASSERT_EQUAL_UINT8(Config::DASH_GAIN_MIN, c.dashGain);
+    c.dashGain = 255;
+    c.sanitize();
+    TEST_ASSERT_EQUAL_UINT8(Config::DASH_GAIN_MAX, c.dashGain);
+}
+
 void test_config_refuses_a_foreign_blob()
 {
     uint8_t blob[Config::BLOB_SIZE];
@@ -1060,6 +1091,7 @@ int main(int, char**)
     RUN_TEST(test_pot_bad_calibration_falls_back_to_full_range);
     RUN_TEST(test_config_defaults_are_silent);
     RUN_TEST(test_config_blob_round_trip);
+    RUN_TEST(test_config_blob_dash_dimmer);
     RUN_TEST(test_config_refuses_a_foreign_blob);
     RUN_TEST(test_config_sanitize_strips_phases_and_caps_leds);
     RUN_TEST(test_config_reads_a_v3_blob_with_one_encoder);

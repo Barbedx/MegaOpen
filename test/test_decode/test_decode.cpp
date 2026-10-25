@@ -104,9 +104,11 @@ void test_compiled_defaults_load_and_are_sorted()
     for (uint8_t i = 1; i < dec.rows(); ++i)
         TEST_ASSERT_TRUE(dec.row(i - 1).canId <= dec.row(i).canId);
     // Every row is a hypothesis until it is measured in the car; the owner
-    // has measured doors, boot, lights and indicators (2026-10-20).
+    // has measured doors, boot, lights and indicators (2026-10-20), and the
+    // instrument illumination against the dash rheostat (2026-10-25).
     const uint8_t measured[] = {SIG_DOOR_FL, SIG_DOOR_FR, SIG_DOOR_RL, SIG_DOOR_RR, SIG_BOOT,
-                                SIG_LIGHT_POS, SIG_LIGHT_DIPPED, SIG_LIGHT_MAIN, SIG_IND_LEFT, SIG_IND_RIGHT};
+                                SIG_LIGHT_POS, SIG_LIGHT_DIPPED, SIG_LIGHT_MAIN, SIG_IND_LEFT, SIG_IND_RIGHT,
+                                SIG_BACKLIGHT};
     for (uint8_t i = 0; i < dec.rows(); ++i) {
         bool m = false;
         for (uint8_t s : measured) m |= dec.row(i).sig == s;

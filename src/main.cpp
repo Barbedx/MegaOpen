@@ -1964,6 +1964,13 @@ void setup()
     {
         Knobs::Config kc;
         g_cfg.loadKnobs(kc);
+        // The dash's dimmer for «Follow dash»: the instrument illumination off
+        // the car's CAN (0x645 b1), 0xFF = the lights are off; stale after 3 s.
+        g_knobs.setDashSource([]() -> int16_t {
+            if (!g_state.fresh(Vehicle::SIG_BACKLIGHT, millis(), 3000)) return -1;
+            const int32_t v = g_state.get(Vehicle::SIG_BACKLIGHT);
+            return v < 0 || v >= 0xFF ? -1 : (int16_t)v;
+        });
         // Each event straight onto the KeyBus: a click as one Tap item, so a
         // full lane drops the press and its release together or not at all.
         g_knobs.begin(kc, [](const Keys::Event& e, bool pair, void*) {

@@ -55,6 +55,12 @@ namespace Knobs
 
         void begin(const Config& c, PostFn post, void* ctx);
 
+        // The dashboard's dimmer for Config::dashFollow: 0..254, or -1 when the
+        // car has none to give (lights off, no fresh value). Called on the
+        // knob task once a frame; null: the lights never follow. Before begin().
+        using DashFn = int16_t (*)();
+        void setDashSource(DashFn f) { _dash = f; }
+
         Config config();
         void   setConfig(const Config& c);
         Live   live();
@@ -94,6 +100,7 @@ namespace Knobs
         SemaphoreHandle_t _lock = nullptr;
         PostFn            _post = nullptr;
         void*             _postCtx = nullptr;
+        DashFn            _dash = nullptr;
         TaskHandle_t      _task = nullptr;
         int               _regId = -1;      // App::Tasks entry; written before the task starts
     public:
