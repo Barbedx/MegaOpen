@@ -37,8 +37,8 @@
     <string name="phrase_note">Empty phrase: the default (grey). {v} is replaced by the value.</string>
 
     <string name="h_test">Test</string>
-    <string name="test_board">Raise a test alert on the board</string>
-    <string name="test_note">The board adds a test «lights off» to its alert list (the panel does not show it); this app should say it within two seconds.</string>
+    <string name="test_board_one">From the board: %1$s</string>
+    <string name="test_note">The board adds that alert to its list as a test (the panel does not show it); this app should say it within two seconds.</string>
     <string name="test_off">Switch the voice on first</string>
     <string name="test_sent">Sent to %1$s, listen</string>
     <string name="test_failed">The board refused: %1$s</string>

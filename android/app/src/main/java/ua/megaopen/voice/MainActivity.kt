@@ -184,9 +184,10 @@ class MainActivity : Activity() {
 
         // ---- the chain, end to end
         col.addView(title(R.string.h_test))
-        col.addView(Button(this).apply {
-            setText(R.string.test_board)
-            setOnClickListener { testBoard() }
+        // One per alert the app knows: the board raises it as if the car had.
+        for (k in Phrases.KNOWN) col.addView(Button(this).apply {
+            text = getString(R.string.test_board_one, getString(k.label))
+            setOnClickListener { testBoard(k.sig) }
         })
         col.addView(note(R.string.test_note))
 
@@ -299,7 +300,7 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    private fun testBoard() {
+    private fun testBoard(sig: String) {
         if (!prefs.enabled) {
             toast(getString(R.string.test_off))
             return
@@ -309,7 +310,7 @@ class MainActivity : Activity() {
                 val h = AlertService.host ?: prefs.host.ifEmpty { null } ?: Board.discover(this)
                 if (h == null) getString(R.string.not_found)
                 else {
-                    Board.test(h, "drive_no_lights")
+                    Board.test(h, sig)
                     getString(R.string.test_sent, h)
                 }
             } catch (e: Exception) {

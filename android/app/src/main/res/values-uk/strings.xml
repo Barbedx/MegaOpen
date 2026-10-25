@@ -37,8 +37,8 @@
     <string name="phrase_note">Порожня фраза: стандартна (сіра). {v} замінюється значенням.</string>
 
     <string name="h_test">Перевірка</string>
-    <string name="test_board">Тестове попередження з плати</string>
-    <string name="test_note">Плата додає тестове «без фар» до свого списку попереджень (на панелі не показує); застосунок має сказати його за дві секунди.</string>
+    <string name="test_board_one">З плати: %1$s</string>
+    <string name="test_note">Плата додає це попередження до свого списку як тест (на панелі не показує); застосунок має сказати його за дві секунди.</string>
     <string name="test_off">Спершу увімкніть озвучення</string>
     <string name="test_sent">Надіслано на %1$s, слухайте</string>
     <string name="test_failed">Плата відмовила: %1$s</string>
