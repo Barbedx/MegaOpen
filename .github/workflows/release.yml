@@ -82,6 +82,9 @@ jobs:
             pio run -e "$e" -t factory
             cp ".pio/build/$e/firmware.bin"         "dist/megaopen-$e-$VER.bin"
             cp ".pio/build/$e/firmware-factory.bin" "dist/megaopen-$e-$VER-factory.bin"
+            # The ELF, for a board's `[crash]` line (addr2line), copied now: a
+            # later env's build does not keep this one's.
+            mkdir -p elf && cp ".pio/build/$e/firmware.elf" "elf/megaopen-$e-$VER.elf"
             # The stamp tools/version.py baked in (/api/status "build"): this
             # commit, never "-dirty", or every bug report quotes a ghost.
             stamp=$(grep -a -o "${GITHUB_SHA:0:7}[0-9a-f]*[-a-z]*@20[0-9T:-]*" ".pio/build/$e/firmware.bin" | head -1 || true)
@@ -93,10 +96,8 @@ jobs:
           done
           (cd dist && sha256sum *.bin > SHA256SUMS)
           cat dist/SHA256SUMS
-          # The ELFs, for a board's `[crash]` line (addr2line): an artifact of
-          # this run, not a release asset, so the release keeps its files.
-          mkdir -p elf
-          for e in $ENVS; do cp ".pio/build/$e/firmware.elf" "elf/megaopen-$e-$VER.elf"; done
+          # The ELFs (copied above) go up as an artifact of this run, not a
+          # release asset, so the release keeps its files.
       - uses: actions/upload-artifact@v7
         if: env.RC == '1'
         with:
