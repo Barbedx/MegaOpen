@@ -38,7 +38,7 @@ function envCatalog(c0,F){const c=JSON.parse(JSON.stringify(c0));c.features=F?{.
 /* маршрути, що є лише з функцією (як #if у WebUi*.cpp); решта — в кожній збірці */
 const GATES=[[/^\/api\/(display|affamap|media)(\/|$)/,F=>F.display],[/^\/api\/ble(\/|$)/,F=>F.display&&F.ble],[/^\/api\/notifications$/,F=>F.ancs],
  [/^\/api\/can2$/,F=>F.can2],[/^\/api\/can(\/|$)/,F=>F.vehicle],[/^\/api\/cap(\/|$)/,F=>F.capture],[/^\/api\/knobs(\/|$)/,F=>F.knobs],
- [/^\/api\/keymap(\/|$)/,F=>F.matrix],[/^\/api\/res(\/|$)/,F=>F.res],[/^\/api\/logs\/(file|format)$/,F=>F.logfs],[/^\/api\/fw(\/|$)/,F=>F.ghota],[/^\/api\/logpush$/,F=>F.logpush]];
+ [/^\/api\/keymap(\/|$)/,F=>F.matrix],[/^\/api\/res(\/|$)/,F=>F.res],[/^\/api\/logs\/(file|format)$/,F=>F.logfs],[/^\/api\/fw(\/|$)/,F=>F.ghota],[/^\/api\/logpush$/,F=>F.logpush],[/^\/api\/diag$/,F=>F.diag]];
 const routeBuilt=p=>{const g=GATES.find(([re])=>re.test(p));return !g||!!g[1](CATALOG.features)};
 const C=CATALOG,LVL=C.enums.logLevels.map(e=>e.name),DESTS=C.dests.map(d=>d.id),DNAME=Object.fromEntries(C.dests.map(d=>[d.id,d.name]));
 const lay=id=>C.layouts.find(l=>l.id===id)||C.layouts.find(l=>l.id==='fullscreen');
@@ -563,6 +563,15 @@ const lpView=()=>{const v=S.lp||(S.lp={on:true,tok:false,repo:'Barbedx/megaopen-
  return {state:!v.on||!v.tok?'off':'waiting',on:v.on,hasToken:v.tok,repo:v.repo,device:'mo-4580',status:v.files?201:0,files:v.files,sent:v.sent,lost:0,
   queued:Math.round(Math.min(now()-v.at,600000)/60000*9000),spool:1048576,okAgoMs:v.files?now()-v.at:0,nextInMs:live?Math.max(0,60000-(now()-v.at)):0,heapMin:S.heap}};
 g('/api/logpush',lpView);
+/* CarDiag (src/app/CarDiag.cpp): 21 C1 клімату; проба — одна відповідь, опитування — салон повільно гріється */
+const dgView=()=>{const v=S.dg||(S.dg={on:false,interval:5,ok:0,sent:0,last:'',at:0,cabin:9.5});
+ if(v.on&&now()-v.at>v.interval*1000){v.at=now();v.sent++;v.ok++;v.last='ok';v.cabin=Math.min(24,v.cabin+0.5)}
+ const b=Math.round((v.cabin+40)*2);return {on:v.on,interval:v.interval,state:v.on?'idle':'off',last:v.last,nrc:0,
+  reply:v.last?'61 C1 01 31 02 82 03 64 '+b.toString(16).toUpperCase().padStart(2,'0')+' 14 00 B0':'',lastAgoMs:v.at?now()-v.at:0,ok:v.ok,timeouts:0,negatives:0,bad:0,sent:v.sent,tx:v.on,
+  ...(v.last?{cabin:v.cabin,sun:60}:{})}};
+g('/api/diag',dgView);
+po('/api/diag',q=>{dgView();const v=S.dg;if(q.interval!==undefined&&!(q.interval>=2&&q.interval<=60))return fail(400,'param interval');
+ if(typeof q.on==='boolean')v.on=q.on;if(q.interval!==undefined)v.interval=q.interval;if(q.probe){v.at=now();v.sent++;v.ok++;v.last='ok';emit(2,'CAN','[diag] climate 21C1: cabin '+v.cabin+' C')}return ok});
 po('/api/logpush',q=>{lpView();const v=S.lp;
  if(q.token&&!/^[A-Za-z0-9_]{20,255}$/.test(q.token))return fail(400,'push_token_bad');
  if(q.repo!==undefined&&!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(q.repo))return fail(400,'push_repo_bad');

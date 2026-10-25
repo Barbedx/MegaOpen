@@ -37,6 +37,7 @@
 #include "app/OneShot.h"
 #include "app/Housekeeping.h"
 #include "app/CarTask.h"
+#include "app/CarDiag.h"
 #include "utils/Staged.h"
 #include "utils/Snapshot.h"
 #include <esp_heap_caps.h>
@@ -2306,6 +2307,9 @@ void setup()
             if (App::PanelMenu::isOpen() || App::PanelMenu::panelOff()) return false;
             return !App::Ui::status().read().glassHeld;
         };
+#endif
+#if FEATURE_DIAG
+        App::CarDiag::begin(&g_state);   // the switches, before the car task runs
 #endif
         App::Car::begin(cs);
         free(blob);

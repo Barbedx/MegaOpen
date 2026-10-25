@@ -161,6 +161,7 @@ namespace Catalog
         FEATURE_ROW("uart",    FEATURE_CANBOX_UART),
         FEATURE_ROW("ghota",   FEATURE_GH_OTA),
         FEATURE_ROW("logpush", FEATURE_LOG_PUSH),
+        FEATURE_ROW("diag",    FEATURE_DIAG),
     };
     #undef FEATURE_ROW
     const size_t FEATURE_COUNT = sizeof(FEATURES) / sizeof(FEATURES[0]);

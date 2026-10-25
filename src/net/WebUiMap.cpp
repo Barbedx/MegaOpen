@@ -4,6 +4,7 @@
 #include <mbedtls/base64.h>
 #include "../app/CarTask.h"
 #include "../app/HuTask.h"
+#include "../app/CarDiag.h"
 #include "../proto/canbox/RaiseTargets.h"
 #include "../vehicle/DecodeTable.h"
 #include "../vehicle/Derived.h"
@@ -498,3 +499,61 @@ const char* WebUi::mapFromFile(JsonVariantConst decode, JsonVariantConst hu, boo
     }
     return nullptr;
 }
+
+#if FEATURE_DIAG
+// ---------------------------------------------------------------------------
+// /api/diag — the climate ECU's 21 C1 on CAN A (src/app/CarDiag.h)
+// ---------------------------------------------------------------------------
+// GET: the switches, what it is doing, the last reply. POST {on?, interval?,
+// probe?}: on/interval are saved (switching on clears a latched bus fault);
+// probe = one request now, its reply in the log.
+void WebUi::routesDiag()
+{
+    route("/api/diag", HTTP_GET, [](PsychicRequest* r) {
+        App::CarDiag::View v;
+        App::CarDiag::view(v);
+        char hex[3 * sizeof(v.reply) + 1] = "";
+        size_t k = 0;
+        for (uint8_t i = 0; i < v.replyLen && k + 4 < sizeof(hex); ++i)
+            k += snprintf(hex + k, sizeof(hex) - k, "%s%02X", i ? " " : "", v.reply[i]);
+        JsonDocument d;
+        d["on"]        = v.on;
+        d["interval"]  = v.intervalS;
+        d["state"]     = v.state;
+        d["last"]      = v.last;
+        d["nrc"]       = v.nrc;
+        d["reply"]     = hex;
+        d["lastAgoMs"] = v.lastAgoMs;
+        d["ok"]        = v.ok;
+        d["timeouts"]  = v.timeouts;
+        d["negatives"] = v.negatives;
+        d["bad"]       = v.bad;
+        d["sent"]      = v.sent;
+        d["tx"]        = v.tx;
+        if (v.haveValues) {
+            d["cabin"] = v.cabinX10 / 10.0;
+            d["sun"]   = v.sunWm2;
+        }
+        String out;
+        serializeJson(d, out);
+        return replyJson(r, out);
+    });
+
+    route("/api/diag", HTTP_POST, [](PsychicRequest* r) {
+        JsonDocument d;
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
+        App::CarDiag::View v;
+        App::CarDiag::view(v);
+        const bool hasOn = d["on"].is<bool>(), hasIv = d["interval"].is<int>();
+        if (hasOn || hasIv) {
+            const int iv = hasIv ? d["interval"].as<int>() : v.intervalS;
+            if (iv < App::CarDiag::INTERVAL_MIN_S || iv > App::CarDiag::INTERVAL_MAX_S)
+                return r->reply(400, "text/plain", "param interval");
+            if (const char* why = App::CarDiag::set(hasOn ? d["on"].as<bool>() : v.on, (uint8_t)iv))
+                return r->reply(400, "text/plain", why);
+        }
+        if (d["probe"] | false) App::CarDiag::probe();
+        return r->reply(200, "application/json", "{\"ok\":true}");
+    });
+}
+#endif

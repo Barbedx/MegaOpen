@@ -1,6 +1,7 @@
 #include "../Features.h"
 #include "CarTask.h"
 #include "Rt.h"
+#include "CarDiag.h"
 #include "../vehicle/CanDecode.h"
 #include "../vehicle/Derived.h"
 #include "../utils/LogBus.h"
@@ -267,6 +268,9 @@ namespace App
             void frame(const Frame& f, uint32_t now)
             {
                 if (s_s.state && s_decode.apply(f, *s_s.state, now)) s_derived.update(*s_s.state, now);
+#if FEATURE_DIAG
+                CarDiag::frame(f, now);      // the climate's reply, and the bus is alive
+#endif
                 if (s_s.tap) s_s.tap(f);
                 if (s_s.sniffer) {
                     // 11-bit and 29-bit ids apart: bit 31 marks
@@ -367,6 +371,9 @@ namespace App
                         }
                     }
 
+#if FEATURE_DIAG
+                    CarDiag::loop(now);          // after the frames: their replies are in
+#endif
                     if ((uint32_t)(now - fpsAt) >= 1000) {
                         fpsAt = now;
                         s_fps = s_fpsCount;

@@ -28,7 +28,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(ROOT, "web")
 LANGS = ("uk", "en")
 # Keys built at run time ('w.'+code, 's.'+state, 'e.'+code, a screen's title key).
-KEY_PREFIXES = ("w.", "s.", "e.", "k.", "nav.", "dr.t.", "kb.why.", "sc.panelHint.", "sc.clk.", "bd.ble.",
+KEY_PREFIXES = ("w.", "ca.diag.", "s.", "e.", "k.", "nav.", "dr.t.", "kb.why.", "sc.panelHint.", "sc.clk.", "bd.ble.",
                 "kb.cw", "kb.ccw", "kb.click", "kb.hold", "ca.hu.", "ca.hucmd.", "ca.hufld.", "ca.exp.",
                 "ca.battAt.", "lv.grp.", "lv.src.")
 CATALOG = os.path.join(ROOT, "build", "catalog.json")

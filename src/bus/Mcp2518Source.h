@@ -14,9 +14,14 @@
 //
 // LISTEN-ONLY, IN THE CHIP. The controller's own ListenOnly mode never drives
 // the bus — no ACK, no error frames, no TX — so a firmware bug cannot touch the
-// car. There is no send path at all. Classic CAN only: FD frames are counted
-// and dropped (Frame carries 8 bytes), and so are remote frames, which carry no
-// payload.
+// car. The one exception is the diagnostic read (src/diag/ClimDiag.h, the
+// owner's opt-in): setTransmit() puts the chip in normal mode, only on a
+// locked or hand-set rate, and send() is its only way out. Any sign of trouble
+// on the bus (TEC past the warning level, error passive, bus off) drops it
+// straight back to listen-only and latches txFault().
+//
+// Classic CAN only: FD frames are counted and dropped (Frame carries 8 bytes),
+// and so are remote frames, which carry no payload.
 //
 // OUR ISR, NOT THE LIBRARY'S. The library's isr() would wake its own
 // "ACAN2517Handler" task (priority 16, any core), which drains the chip with
@@ -63,8 +68,24 @@ public:
     // search on its next wake. A single word, one writer.
     void requestRate(uint32_t manualBps);
 
+    // ---- the diagnostic read (car task; src/diag/ClimDiag.h is the only user) --
+    // Normal mode (the chip ACKs and may send) or back to listen-only: a
+    // controller restart either way, a few ms of frames lost. false: refused,
+    // because the rate is still being searched, or a fault is latched.
+    bool setTransmit(bool on, uint32_t nowMs);
+    bool transmitting() const { return _tx; }
+    // One classic 11-bit frame. false: listen-only, or the chip's queue is full.
+    bool send(uint32_t id, const uint8_t* data, uint8_t len);
+    // Normal mode ended on its own (bus trouble); setTransmit(true) is refused
+    // until clearTxFault().
+    bool txFault() const { return _txFault; }
+    void clearTxFault() { _txFault = false; }
+
     struct Status {
         bool     live = false;        // the controller is running, listen-only
+        bool     tx = false;          // normal mode (the diagnostic read), not listen-only
+        bool     txFault = false;     // normal mode ended on bus trouble
+        uint32_t txFrames = 0;        // frames sent since boot
         uint8_t  state = 0;           // Autobaud::State: 0 searching, 1 locked, 2 manual
         uint32_t bps = 0;             // the rate it is listening on now
         uint32_t detected = 0;        // the rate that locked, 0 = none yet
@@ -87,7 +108,8 @@ public:
 private:
     Mcp2518Source() = default;
 
-    // Car task. end() if running, then begin() on `bps`, listen-only.
+    // Car task. end() if running, then begin() on `bps`: listen-only, or
+    // normal mode while _tx.
     bool start(uint32_t bps, uint32_t nowMs);
     void stop();
     void publish(uint32_t nowMs);
@@ -95,6 +117,8 @@ private:
     bool     _live = false;
     bool     _begun = false;          // begin() ran (succeeded or not) since the last end()
     bool     _spiUp = false;
+    bool     _tx = false, _txFault = false;
+    uint32_t _txFrames = 0, _txCheckAtMs = 0;
     uint32_t _manual = 0, _saved = 0;
     Bus::Autobaud _ab;
     std::atomic<uint32_t> _req{0xFFFFFFFFu};   // a requested manual rate, none = all ones

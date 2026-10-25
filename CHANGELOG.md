@@ -5,7 +5,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.5.4] - 2026-10-25
+
 ### Added
+- The cabin temperature, read from the climate ECU: Авто › «Діагностика клімату», **off by default**. The board's first transmit on the car bus, for one request only: `21 C1` to the climate ECU (`0x744` → `0x764`, KWP2000 over ISO-TP), and the flow control `30 00 00` its multi-frame reply needs. No diagnostic session is opened (PyRen and DDT4all send `10 C0` first; the owner saw the cluster reboot when a tool opened diagnostics), no tester present, no other ECU, no write. «Спробувати один раз» sends one request and logs the reply (`[diag] climate 21C1: cabin … C`); «Читати салон» polls every 2-60 s (5 by default). New signals `cabin_temp` and `clim_sun` on «Авто — наживо». The controller goes to normal mode only on a locked bus rate and while the read is on, never on a quiet bus; a transmit error count past 96, error passive or bus off puts it straight back to listen-only and latches off (`W [can2] diagnostic read stopped`). A negative reply stops the polling; three timeouts back off for a minute. `/api/diag`; `tools/check_rules.py` fails on any other transmit path to CAN A. `CLAUDE.md`'s CAN A rule says so.
 - Signal `intake_temp`, the intake air: `0x061` (ECM_to_GCU) byte 8 − 40 °C, from the X84 broadcast matrix (v84.05), a hypothesis until checked in the car. A saved map shows it after «Заводські прив'язки».
 
 ### Changed

@@ -25,7 +25,8 @@ const mapEd=r=>{const c=r.can||{id:'',byte:0,len:1,shift:0,mask:'FF',mul:1,div:1
  <div class="mf" style="margin-top:8px"><span class="mw" data-raw style="color:var(--mute)"></span>${has('vehicle')?`<button class="btn sm" type="button" data-learn>${t('ca.learn')}</button>`:''}<button class="btn sm pri" type="button" data-save>${t('ca.save')}</button><button class="btn sm" type="button" data-close>✕</button></div></td></tr>`};
 SCR.car={title:'nav.car',async render(m){
  const C2=has('can2'),CP=has('capture'),V=has('vehicle');
- const[c2,cp,mp,cb]=await Promise.all([getIf(C2,'/api/can2'),getIf(CP,'/api/cap'),API.get('/api/map'),getIf(V,'/api/can')]);
+ const DG=has('diag');
+ const[c2,cp,mp,cb,dg]=await Promise.all([getIf(C2,'/api/can2'),getIf(CP,'/api/cap'),API.get('/api/map'),getIf(V,'/api/can'),getIf(DG,'/api/diag')]);
  this.n=0;this.filesSig='';this.grp='all';this.learn={};this.mp=mp;
  /* фільтр за групою: значення — 'all' або назва групи, як у data-g рядка */
  const groups=[['all',t('ca.all')],...[...new Set(CAT.raise.map(x=>x.group))].map(g=>[g,g])];
@@ -34,6 +35,9 @@ SCR.car={title:'nav.car',async render(m){
  (C2?card('CAN A',row(t('ca.bus'),'<span id="cSt" class="chip off">…</span>','<span id="cStW"></span>')+
   `<div class="kv"><div><small>${t('ca.fps')}</small><b id="cFps"></b></div><div><small>${t('ca.total')}</small><b id="cFr"></b></div><div><small>rec / tec</small><b id="cErr"></b></div><div><small>${t('ca.overflows')}</small><b id="cOv"></b></div></div>`+
   row(t('ca.speed'),sel('/api/can2|bitrate',enumOpts('canRates'),c2.setting||0),'',t('ca.speedH'))):notBuilt('CAN A','CAN A'))+
+ /* діагностика клімату (CarDiag): 21 C1 на CAN A, лише за вмикачем; проба — один запит */
+ (dg?card(t('ca.diag'),row(t('ca.diagOn'),sw('/api/diag|on',dg.on),t('ca.diagOnSub'),t('ca.diagH'))+row(t('ca.diagIv'),num('/api/diag|interval',dg.interval,'min="2" max="60"'))+
+  row(t('ca.diagSt'),'<span id="dSt" class="chip off">…</span>','<span id="dW"></span>')+`<div class="fr"><button class="btn" type="button" id="dProbe">${t('ca.diagProbe')}</button></div>`,'cDiag'):'')+
  (CP?card(t('ca.rec'),`<div class="fr"><button class="btn rec big" id="cRec" type="button" style="flex:1">…</button></div>`+
   `<div class="fr"><input class="in" id="mkT" placeholder="${esc(t('ca.markPh'))}" maxlength="40" data-nosave><button class="btn pri" type="button" id="mkGo">${t('ca.mark')}</button></div>`+
   `<div class="pad"><div class="seg wrap" id="quick">${quickMarks().map(q=>`<button type="button" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></div>`+
@@ -54,6 +58,7 @@ SCR.car={title:'nav.car',async render(m){
  fold(t('ca.hu'),row(t('ca.show'),seg('#huIn',[['1',t('ca.fromHu')],['0',t('ca.everything')]],'1'),'',t('ca.huH'))+`<div class="tw"><table><thead><tr><th>${t('ca.ago')}</th><th>${t('ca.who')}</th><th>${t('ca.cmd')}</th><th>${t('ca.data')}</th></tr></thead><tbody id="huLog"></tbody></table></div>`,'cHu')+
  (V?fold(t('ca.ids'),row(t('ca.idTable'),sw('/api/can/sniff|on',!!cb.sniff),'',t('ca.idTableH'))+`<div class="fr"><button class="btn" type="button" id="idBase">${t('ca.baseline')}</button><button class="btn" type="button" id="idClr">${t('ca.clear')}</button></div><div class="tw"><table><thead><tr><th>ID</th><th>${t('ca.count')}</th><th>${t('ca.bytes')}</th></tr></thead><tbody id="ids"></tbody></table></div>`,'cIds'):'');
  $$('.card:not(.custom)',m).forEach(c=>saver(c,genericSave,'[data-k]'));
+ if(dg)$('#dProbe').onclick=e=>run(e.target,async()=>{await API.post('/api/diag',{probe:true});setTimeout(()=>this.diag(),1500)},t('ca.diagSent'));
  if(CP){$('#cRec').onclick=e=>run(e.target,()=>API.post(e.target.classList.contains('on')?'/api/cap/stop':'/api/cap/start')).then(()=>this.tick(true));
  const mk=(tx,b)=>run(b,()=>API.post('/api/cap/mark?t='+encodeURIComponent(tx)),t('ca.marked',tx));
  $('#mkGo').onclick=e=>{const tx=$('#mkT').value.trim()||t('ca.markDefault');mk(tx,e.target).then(()=>$('#mkT').value='')};
@@ -112,6 +117,11 @@ async map(){const mp=this.mp=await API.get('/api/map');if(!$('#map'))return;
  put($('[data-k="/api/map|send"]'),mp.send)},
 async files(force){const l=(await API.get('/api/cap/list')).files||[];const sig=JSON.stringify(l.map(f=>[f.f,f.protected,f.current,Math.round(f.size/65536)]));const el=$('#files');if(!el)return;
  if(!force&&(sig===this.filesSig||el.parentElement.querySelector('.ask')))return;this.filesSig=sig;el.innerHTML=l.length?l.slice().reverse().map(fileRow).join(''):`<div class="row muted">${esc(t('ca.noFiles'))}</div>`},
+/* CarDiag: стан (чип), остання відповідь і салон */
+async diag(){if(!has('diag')||!$('#dSt'))return;const v=await API.get('/api/diag');
+ const ok=v.last==='ok',bad=v.state==='fault'||v.state==='stopped'||v.last==='negative';
+ setChip('#dSt',bad?'bad':ok?'ok':v.state==='off'?'off':'warn',t('ca.diag.'+v.state));
+ $('#dW').textContent=(v.cabin!==undefined?t('ca.diagCabin',v.cabin.toFixed(1),v.sun):'')+(v.last?' · '+v.last+(v.nrc?' 7F 21 '+v.nrc.toString(16).toUpperCase().padStart(2,'0'):''):'')+(v.reply?' · '+v.reply:'')},
 async tick(force){this.n++;const[c2,cp]=await Promise.all([getIf(has('can2'),'/api/can2'),getIf(has('capture'),'/api/cap')]);if(!$('#cMap'))return;
  if(c2){canChip($('#cSt'),c2);
  $('#cStW').textContent=c2.autobaud!=='manual'?t('ca.autobaud'):t('ca.manual',c2.setting/1000)+(c2.fps?'':t('ca.checkRate'));
@@ -122,6 +132,7 @@ async tick(force){this.n++;const[c2,cp]=await Promise.all([getIf(has('can2'),'/a
  $('#pSt').textContent=fmtB(cp.capBytes)+' / '+fmtB(cp.budget);const pb=$('#pBar');pb.style.width=(cp.capBytes/cp.budget*100)+'%';pb.style.background=cp.capBytes/cp.budget>cp.settings.fill/100*.95?'var(--warn)':'var(--acc)';
  put($('[data-k="/api/settings|cap.autostart"]'),cp.settings.autostart);put($('[data-k="/api/settings|cap.mode"]'),cp.settings.mode)}
  await this.map();if(cp&&(this.n%10===0||force))await this.files();
+ await this.diag();
  const hl=$('#cHu');if(hl&&hl.open){const r=await API.get('/api/canbox/last?in='+$('#huIn').dataset.v);const tb=$('#huLog');if(tb)tb.innerHTML=(r.frames||[]).map(huRow).join('')||`<tr><td colspan="4" class="muted">${esc(t('ca.empty'))}</td></tr>`}
  const ids=$('#cIds');if(ids&&ids.open&&$('[data-k="/api/can/sniff|on"]').checked){const r=await API.get('/api/can/ids');const tb=$('#ids');if(tb)tb.innerHTML=r.ids.map(idRow).map(x=>`<tr><td class="mono">${x.id}</td><td class="num">${fmtN(x.count)}</td><td class="mono">${x.bytes.map((b,i)=>x.ch[i]?`<span class="ch">${b}</span>`:b).join(' ')}</td></tr>`).join('')||`<tr><td colspan="3" class="muted">${esc(t('ca.empty'))}</td></tr>`}
 }};

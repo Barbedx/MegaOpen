@@ -232,6 +232,10 @@ namespace Vehicle
         // 0x061 (ECM_to_GCU) b7 - 40: the intake air, per the X84 broadcast matrix
         // (v84.05). Last, like SIG_BONNET, so the saved map's indices hold.
         SIG_INTAKE_TEMP,
+        // From the climate ECU's `21 C1` (src/app/CarDiag.h), not a broadcast
+        // frame: the cabin, °C x10, and the sun sensor, W/m².
+        SIG_CABIN_TEMP,
+        SIG_CLIM_SUN,
 
         SIG_COUNT
     };

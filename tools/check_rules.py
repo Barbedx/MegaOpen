@@ -199,6 +199,24 @@ for rel in ['src/net/WebUi.cpp', 'src/net/WebUiMacro.cpp', 'src/net/WebUiRes.cpp
     check(rel, src, r'\btwai_\w+\s*\(', 'httpd never calls the TWAI driver: Diag::CanBench')
     check(rel, src, r'\b_disp\b', 'httpd reads the panel\'s snapshot (_panel), never the library')
 
+# ---- CAN A: listen-only, but for the climate read ---------------------------------
+# The car bus is written in one place: Mcp2518Source puts the chip in normal mode
+# and sends, and only CarDiag (through Diag::Exchange's allowlist) asks it to.
+TX_OWNER = 'src/bus/Mcp2518Source.cpp'
+TX_CALLERS = {'src/app/CarDiag.cpp'}
+for dirpath, _, files in os.walk(os.path.join(ROOT, 'src')):
+    for fn in files:
+        if not fn.endswith(('.cpp', '.h')):
+            continue
+        rel = os.path.relpath(os.path.join(dirpath, fn), ROOT).replace(os.sep, '/')
+        src = strip_comments(read(rel))
+        if rel != TX_OWNER:
+            check(rel, src, r'\bNormal20B\b|\bg_can\s*\.\s*tryToSend\b',
+                  'CAN A is listen-only: normal mode and sending live in Mcp2518Source only')
+        if rel not in TX_CALLERS:
+            check(rel, src, r'\bMcp2518Source\b[^;]*\.\s*(send|setTransmit)\s*\(',
+                  'only CarDiag transmits on CAN A (the climate read, src/diag/ClimDiag.h)')
+
 if problems:
     print('check_rules: %d problem(s)' % len(problems))
     for p in problems:

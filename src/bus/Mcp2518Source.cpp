@@ -41,6 +41,8 @@ namespace
     constexpr uint32_t BDIAG1_RX_ERRORS = (1u << 29) | (1u << 28) | (1u << 27) |
                                           (1u << 21) | (1u << 20) | (1u << 19);
     constexpr uint32_t BDIAG0_RX_COUNTS = 0x00FF00FFu;
+    // CiTREC (DS20005688 §4.4): TXBO 21 bus off, TXBP 20 transmit error passive.
+    constexpr uint32_t TREC_TXBO = 1u << 21, TREC_TXBP = 1u << 20;
 
     // How often the search reads the error registers (SPI, ~20 us each).
     constexpr uint32_t ERR_CHECK_MS   = 100;
@@ -94,11 +96,14 @@ bool Mcp2518Source::start(uint32_t bps, uint32_t nowMs)
 {
     stop();
     ACAN2517FDSettings s(ACAN2517FDSettings::OSC_40MHz, bps, DataBitRateFactor::x1);
-    s.mRequestedMode = ACAN2517FDSettings::ListenOnly;
+    // Listen-only, the board's way on the car bus. Normal mode (classic 2.0B)
+    // only for the diagnostic read the owner switched on (setTransmit()).
+    s.mRequestedMode = _tx ? ACAN2517FDSettings::Normal20B : ACAN2517FDSettings::ListenOnly;
     // The car bus runs ~1500 frames/s; 256 is ~170 ms of slack against a
     // stalled car task, and the chip's own FIFO is behind that.
     s.mDriverReceiveFIFOSize = 256;
-    // Nothing is ever sent: give the chip's RAM to reception.
+    // At most one diagnostic frame in flight: give the rest of the chip's RAM
+    // to reception.
     s.mDriverTransmitFIFOSize = 1;
     s.mControllerTransmitFIFOSize = 1;
     s.mControllerTXQSize = 0;
@@ -159,9 +164,29 @@ bool Mcp2518Source::begin()
 
 void Mcp2518Source::service(uint32_t nowMs)
 {
-    // A rate set (or cleared) on the web: start the search over.
+    // Normal mode watched every ERR_CHECK_MS: the transmit error counter past
+    // the warning level (96), error passive or bus off is a bus our frames
+    // trouble: back to listen-only at once, and latched until the owner
+    // switches the read on again. A dead controller, too.
+    if (_tx && (uint32_t)(nowMs - _txCheckAtMs) >= ERR_CHECK_MS) {
+        _txCheckAtMs = nowMs;
+        const uint32_t trec = _live ? g_can.errorCounters() : 0;
+        const uint32_t tec = (trec >> 8) & 0xFFu;
+        const bool passiveOrOff = (trec & (TREC_TXBP | TREC_TXBO)) != 0;
+        if (!_live || tec >= 96 || passiveOrOff) {
+            _txFault = true;
+            LogBus::printf("W [can2] diagnostic read stopped: %s (tec=%u trec=0x%08lX); listen-only",
+                           !_live ? "controller down" : passiveOrOff ? "error passive / bus off" : "transmit errors",
+                           (unsigned)tec, (unsigned long)trec);
+            _tx = false;
+            if (_live) start(_ab.rate(), nowMs);
+        }
+    }
+
+    // A rate set (or cleared) on the web: start the search over, listen-only.
     const uint32_t req = _req.exchange(NO_REQUEST, std::memory_order_acq_rel);
     if (req != NO_REQUEST) {
+        _tx = false;
         _manual = Bus::Autobaud::valid(req) ? req : 0;
         _ab.begin(_manual, _saved, nowMs);
         const bool ok = start(_ab.rate(), nowMs);
@@ -261,6 +286,9 @@ void Mcp2518Source::publish(uint32_t nowMs)
         s.ringPeak    = g_can.driverReceiveBufferPeakCount();
     }
     s.trec          = _trec;
+    s.tx            = _tx;
+    s.txFault       = _txFault;
+    s.txFrames      = _txFrames;
     s.bdiag1        = _bdiag1;
     s.restarts      = _restarts;
     s.cycles        = _ab.cycles();
@@ -315,5 +343,41 @@ IVehicleSource::Stats Mcp2518Source::stats() const
     s.frames  = _frames;
     s.dropped = _fdDropped + _remoteDropped;
     return s;
+}
+
+// ---- the diagnostic read --------------------------------------------------------
+
+bool Mcp2518Source::setTransmit(bool on, uint32_t nowMs)
+{
+    if (on == _tx) return true;
+    // Normal mode on a wrong rate would put error frames on the car's bus:
+    // only a rate the search locked, or the one set by hand.
+    if (on && (_txFault || !(_ab.locked() || _manual) || !_live)) return false;
+    _tx = on;
+    const bool ok = start(_ab.rate(), nowMs);
+    _txCheckAtMs = nowMs;
+    LogBus::printf("[can2] %s at %uk%s", on ? "normal mode (diagnostic read)" : "back to listen-only",
+                   kbps(_ab.rate()), ok ? "" : " - begin FAILED");
+    if (!ok) {
+        _tx = false;
+        start(_ab.rate(), nowMs);
+        _retryAtMs = nowMs + RETRY_MS;
+        return false;
+    }
+    return true;
+}
+
+bool Mcp2518Source::send(uint32_t id, const uint8_t* data, uint8_t len)
+{
+    if (!_tx || !_live || !data || len > 8 || id > 0x7FF) return false;
+    CANFDMessage m;
+    m.id = id;
+    m.ext = false;
+    m.type = CANFDMessage::CAN_DATA;
+    m.len = len;
+    memcpy(m.data, data, len);
+    if (!g_can.tryToSend(m)) return false;
+    ++_txFrames;
+    return true;
 }
 #endif

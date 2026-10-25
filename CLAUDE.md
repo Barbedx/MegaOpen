@@ -11,7 +11,12 @@ map; this file is the "where do I look" index for a session in the car.
 - **Diagnose first, report, then ask.** A finding is not a licence to edit
   source. Show the evidence (log lines, `/api/health` codes, file:line) and
   stop unless the owner asks for a fix.
-- **CAN A (the car) is listen-only, always.** Never add a transmit path there.
+- **CAN A (the car) is listen-only, except the climate read.** The owner's opt-in
+  (2026-10-25, Авто › «Діагностика клімату», off by default): `src/app/CarDiag.*`
+  sends `21 C1` to the climate ECU (0x744) through `src/diag/ClimDiag.*`, whose
+  allowlist is that one request and its flow control. No session (`10 xx`), no
+  other ECU, no write. Never add another transmit path; `tools/check_rules.py`
+  fails on one.
 - **Never force-push** `master`. Commits use the repo-local identity
   (`www.andruxa@gmail.com`); check `git log -1 --format='%ae %ce'` before a push.
 - **Opening the USB serial port can reset the board.** Prefer the web log
@@ -81,6 +86,7 @@ Raise the log level for one session through `/api/settings` `{"logLevel":"DBG"}`
 | reboots / heap low | `[hb]`, `[mem]`, flash log | `src/app/Housekeeping.*`, `TaskPlan.h` (priorities, stacks) |
 | WiFi / AP | `/api/wifi` | `src/net/WifiManager.*` |
 | remote log not arriving | `/api/logpush` (`state`, `err`), `[push]` | `src/net/LogPush.*`, `TlsJob.*`; the files: `gh api repos/Barbedx/megaopen-logs/contents/mo-XXXX` or clone the repo |
+| climate read (cabin temp) | `/api/diag` (`state`, `last`, `reply`), `[diag]`, `W [can2] diagnostic read stopped` | `src/app/CarDiag.*`, `src/diag/ClimDiag.*`, `src/bus/Mcp2518Source.*` (`setTransmit`, `send`) |
 
 Pins live only in `src/board/BoardProfile.h`. Feature flags: `src/Features.h`
 plus per-env `-D` in `platformio.ini`.

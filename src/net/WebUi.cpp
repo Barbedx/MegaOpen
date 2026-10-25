@@ -1246,6 +1246,9 @@ void WebUi::routes()
 #if FEATURE_LOG_PUSH
     routesLogPush();
 #endif
+#if FEATURE_DIAG
+    routesDiag();
+#endif
 #if FEATURE_RESISTIVE_KEYS
     routesRes();
 #endif

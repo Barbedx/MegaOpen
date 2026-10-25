@@ -86,6 +86,15 @@
 #error "FEATURE_LOG_PUSH needs PSRAM for its spool"
 #endif
 
+// The climate ECU's `21 C1` on CAN A (src/app/CarDiag.h, src/diag/ClimDiag.h):
+// the one transmit on the car bus, off until the owner switches it on.
+#ifndef FEATURE_DIAG
+#define FEATURE_DIAG 0
+#endif
+#if FEATURE_DIAG && !FEATURE_CAN2
+#error "FEATURE_DIAG needs FEATURE_CAN2 (the car bus it reads on)"
+#endif
+
 // Media keys to the head unit as a wired USB keyboard (S3 native USB only; needs
 // ARDUINO_USB_MODE=0, i.e. TinyUSB). src/sinks/UsbKeySink.*.
 #ifndef FEATURE_USB_HID
