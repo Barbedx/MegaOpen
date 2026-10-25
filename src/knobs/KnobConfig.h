@@ -167,12 +167,25 @@ namespace Knobs
 
         // ---- the dashboard's dimmer -------------------------------------------
         // Follow the instrument illumination off the car's CAN (the glue feeds
-        // it: Service::setDashSource): master = dash level x dashGain %. Lights
-        // off (the car sends 0xFF) or no fresh value: `brightness`, as usual.
+        // it: Service::setDashSource). `brightness` is then the ceiling: the
+        // dash at full (254) x dashGain 100 % lights the rings at `brightness`,
+        // a dimmed dash proportionally less (dashMaster). Lights off (the car
+        // sends 0xFF) or no fresh value: `brightness`, as usual.
         // In v5's two spare bytes, so an older blob reads as off / 100 %.
         bool     dashFollow     = false;
         uint8_t  dashGain       = 100;    // percent, DASH_GAIN_MIN..MAX
         static constexpr uint8_t DASH_GAIN_MIN = 10, DASH_GAIN_MAX = 250;
+        static constexpr uint8_t DASH_FULL = 254;   // the dash's brightest (0xFF is "off")
+        // The master brightness for a dash level (0..254, or < 0 for none):
+        // brightness x min(dash x gain %, 254) / 254, at least 1 while lit.
+        static uint8_t dashMaster(uint8_t brightness, int16_t dash, uint8_t gainPct)
+        {
+            if (dash < 0) return brightness;
+            int32_t level = (int32_t)dash * gainPct / 100;
+            if (level > DASH_FULL) level = DASH_FULL;
+            const int32_t m = (int32_t)brightness * level / DASH_FULL;
+            return (uint8_t)(m < 1 && brightness ? 1 : m);
+        }
 
         Config();
         // Brings every field into its limits; returns which groups it had to

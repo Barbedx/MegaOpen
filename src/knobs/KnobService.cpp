@@ -347,15 +347,10 @@ namespace Knobs
                     _lights.setLevel(ZONE_LEFT, _src.pot().level(), now);
                     if (c.potMode == PotMode::Brightness) _lights.setMaster(_src.pot().level());
                 }
-                // The dash's dimmer, scaled; its absence falls back to the
-                // set brightness (configure() put it there).
-                if (c.dashFollow && _dash) {
-                    const int16_t d = _dash();
-                    int32_t m = d < 0 ? c.brightness : (int32_t)d * c.dashGain / 100;
-                    if (m < 1) m = 1;
-                    if (m > 255) m = 255;
-                    _lights.setMaster((uint8_t)m);
-                }
+                // The dash's dimmer under the set brightness, its ceiling
+                // (Config::dashMaster); its absence: the brightness itself.
+                if (c.dashFollow && _dash)
+                    _lights.setMaster(Config::dashMaster(c.brightness, _dash(), c.dashGain));
 
                 const bool changed = _lights.tick(now);
                 if (changed || !everShown || (uint32_t)(now - shownAt) >= REFRESH_MS) {

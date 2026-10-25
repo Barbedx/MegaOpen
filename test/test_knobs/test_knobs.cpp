@@ -314,6 +314,19 @@ void test_config_blob_dash_dimmer()
     TEST_ASSERT_EQUAL_UINT8(Config::DASH_GAIN_MAX, c.dashGain);
 }
 
+// «Brightness» is the ceiling: the dash at full with 100 % lights the rings at
+// it, a dimmed dash proportionally less; no dash value: the brightness itself.
+void test_dash_master_is_under_the_brightness()
+{
+    TEST_ASSERT_EQUAL_UINT8(100, Config::dashMaster(100, 254, 100));   // full dash: the ceiling
+    TEST_ASSERT_EQUAL_UINT8(50,  Config::dashMaster(100, 127, 100));   // half dash: half
+    TEST_ASSERT_EQUAL_UINT8(100, Config::dashMaster(100, 127, 200));   // the gain lifts it ...
+    TEST_ASSERT_EQUAL_UINT8(100, Config::dashMaster(100, 254, 250));   // ... never past the ceiling
+    TEST_ASSERT_EQUAL_UINT8(1,   Config::dashMaster(100, 0, 100));     // dimmed right down: still lit
+    TEST_ASSERT_EQUAL_UINT8(0,   Config::dashMaster(0, 254, 100));     // brightness 0 stays dark
+    TEST_ASSERT_EQUAL_UINT8(180, Config::dashMaster(180, -1, 100));    // lights off / no car
+}
+
 void test_config_refuses_a_foreign_blob()
 {
     uint8_t blob[Config::BLOB_SIZE];
@@ -1092,6 +1105,7 @@ int main(int, char**)
     RUN_TEST(test_config_defaults_are_silent);
     RUN_TEST(test_config_blob_round_trip);
     RUN_TEST(test_config_blob_dash_dimmer);
+    RUN_TEST(test_dash_master_is_under_the_brightness);
     RUN_TEST(test_config_refuses_a_foreign_blob);
     RUN_TEST(test_config_sanitize_strips_phases_and_caps_leds);
     RUN_TEST(test_config_reads_a_v3_blob_with_one_encoder);
