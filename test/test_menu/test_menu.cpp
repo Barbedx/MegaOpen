@@ -68,7 +68,7 @@ namespace
     };
 
     // A row as the menu lays it out: left text, right text flush with column w.
-    std::string pad(const char* l, const char* r, size_t w = COLS - 1)
+    std::string pad(const char* l, const char* r, size_t w = ROW_COLS - 1)
     {
         std::string s(l);
         s.append(w - strlen(l) - strlen(r), ' ');
@@ -332,7 +332,7 @@ void test_screen_window_and_marker()
     TEST_ASSERT_TRUE(s.more_up);
     TEST_ASSERT_FALSE(s.more_down);
     TEST_ASSERT_TRUE(strlen(s.header) <= COLS);
-    TEST_ASSERT_TRUE(strlen(s.row[0]) <= COLS);
+    TEST_ASSERT_TRUE(strlen(s.row[0]) <= ROW_COLS);
 }
 
 // Every row the menu can show fits the panel and is ASCII.
@@ -344,8 +344,10 @@ void test_every_row_fits()
         for (uint8_t i = 0; i < f.e.count(); ++i) {
             while (f.e.cursor() != i) f.e.key(Cmd::Next);
             f.e.screen(s);
+            // The header on the small font, the item rows on the big one.
+            TEST_ASSERT_TRUE(strlen(s.header) <= COLS);
             for (const char* r : {s.header, s.row[0], s.row[1]}) {
-                TEST_ASSERT_TRUE(strlen(r) <= COLS);
+                if (r != s.header) TEST_ASSERT_TRUE(strlen(r) <= ROW_COLS);
                 for (const char* p = r; *p; ++p) TEST_ASSERT_TRUE(*p >= 0x20 && *p < 0x7F);
             }
         }

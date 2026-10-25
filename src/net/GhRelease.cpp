@@ -80,17 +80,17 @@ namespace GhRelease
         a["browser_download_url"] = true;
     }
 
-    Pick pick(JsonVariantConst rel, const char* env, Release& out)
+    Pick pick(JsonVariantConst rel, const char* env, Release& out, bool allowPre)
     {
         out = Release{};
         const char* tag = rel["tag_name"] | (const char*)nullptr;
         if (!copy(out.tag, sizeof(out.tag), tag) || !parse(tag, out.ver)) return Pick::NO_TAG;
-        if ((rel["draft"] | false) || (rel["prerelease"] | false)) return Pick::DRAFT;
+        if ((rel["draft"] | false) || (!allowPre && (rel["prerelease"] | false))) return Pick::DRAFT;
 
-        // The file name carries the version without the 'v' (release.yml's $VER).
-        const char* ver = (tag[0] == 'v' || tag[0] == 'V') ? tag + 1 : tag;
-        if (snprintf(out.asset, sizeof(out.asset), "megaopen-%s-%s.bin", env, ver) >=
-            (int)sizeof(out.asset))
+        // The file name carries X.Y.Z, no 'v' and no -rcN (release.yml's $VER is
+        // MEGAOPEN_VERSION, which an rc shares with its final).
+        if (snprintf(out.asset, sizeof(out.asset), "megaopen-%s-%u.%u.%u.bin", env, (unsigned)out.ver.maj,
+                     (unsigned)out.ver.min, (unsigned)out.ver.pat) >= (int)sizeof(out.asset))
             return Pick::NO_ASSET;
 
         bool bin = false, sums = false;
@@ -108,6 +108,42 @@ namespace GhRelease
         if (!bin) return Pick::NO_ASSET;
         if (!sums) return Pick::NO_SUMS;
         return Pick::OK;
+    }
+
+    void filterList(JsonDocument& f)
+    {
+        JsonDocument one;
+        filter(one);
+        f.clear();
+        f.add(one);
+    }
+
+    Pick pickNewest(JsonArrayConst list, const char* env, bool allowPre, Release& out)
+    {
+        out = Release{};
+        Pick first = Pick::NO_TAG;
+        bool any = false, refused = false;
+        for (JsonVariantConst rel : list) {
+            Release r;
+            const Pick p = pick(rel, env, r, allowPre);
+            if (p != Pick::OK) {
+                if (!refused) { first = p; refused = true; }
+                continue;
+            }
+            if (!any || compare(r.ver, out.ver) > 0) out = r;
+            any = true;
+        }
+        return any ? Pick::OK : first;
+    }
+
+    bool newer(const Ver& rel, const char* mine, const char* installed)
+    {
+        Ver m;
+        if (!parse(mine, m)) return true;
+        Ver i;
+        if (installed && parse(installed, i) && i.maj == m.maj && i.min == m.min && i.pat == m.pat)
+            m.rc = i.rc;
+        return compare(rel, m) > 0;
     }
 
     const char* pickText(Pick p)

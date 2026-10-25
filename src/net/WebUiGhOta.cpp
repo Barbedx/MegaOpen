@@ -46,9 +46,19 @@ void WebUi::routesGhOta()
         JsonArray st = d["stepMs"].to<JsonArray>();
         for (int i = 0; i < 10; ++i) { sm.add(v.stepMin[i]); st.add(v.stepMs[i]); }
         d["tlsInPsram"] = v.tlsInPsram;
+        d["pre"]        = v.pre;
         String out;
         serializeJson(d, out);
         return replyJson(r, out);
+    });
+
+    // {pre: bool}: the test channel (an rc too) or finals only.
+    route("/api/fw/channel", HTTP_POST, [](PsychicRequest* r) {
+        JsonDocument d;
+        if (deserializeJson(d, r->body()) || !d["pre"].is<bool>())
+            return r->reply(400, "text/plain", "param pre");
+        const char* why = GhOta::setPre(d["pre"].as<bool>());
+        return why ? fwBusy(r, why) : r->reply(200, "application/json", "{\"ok\":true}");
     });
 
     route("/api/fw/check", HTTP_POST, [](PsychicRequest* r) {

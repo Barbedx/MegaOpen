@@ -3,7 +3,7 @@
    виклики йдуть у мок; це єдине місце, де сторінка знає про симулятор. */
 /* ці маршрути приймають JSON; решта — форма (urlencoded) */
 const JSON_PATHS=new Set(['/api/settings','/api/display','/api/media','/api/wifi','/api/affamap','/api/knobs','/api/macros','/api/map','/api/map/test','/api/config',
- '/api/keymap','/api/res','/api/res/map','/api/res/auto','/api/res/learn','/api/logpush']);
+ '/api/keymap','/api/res','/api/res/map','/api/res/auto','/api/res/learn','/api/logpush','/api/fw/channel']);
 /* форма: так/ні йде як 1/0 — прошивка порівнює з "1" (paramStr(r,"on")=="1") */
 const formBody=params=>new URLSearchParams(Object.entries(params).map(([k,v])=>[k,v===true?'1':v===false?'0':String(v)]));
 /* текст помилки: прошивка відповідає text/plain, рідше JSON з error */

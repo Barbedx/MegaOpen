@@ -181,6 +181,68 @@ void test_trusted_url_refuses_plain_http_lookalikes_and_tricks()
     TEST_ASSERT_FALSE(trustedUrl(nullptr));
 }
 
+
+// GET /releases as release.yml publishes an rc and its predecessor: the rc's
+// asset carries X.Y.Z only (MEGAOPEN_VERSION is shared with the final).
+static const char* LIST =
+    "[{\"tag_name\":\"v1.5.2-rc1\",\"draft\":false,\"prerelease\":true,\"body\":\"x\",\"assets\":["
+    "{\"name\":\"megaopen-t2can-1.5.2.bin\",\"size\":1650000,\"browser_download_url\":"
+    "\"https://github.com/Barbedx/MegaOpen/releases/download/v1.5.2-rc1/megaopen-t2can-1.5.2.bin\"},"
+    "{\"name\":\"SHA256SUMS\",\"size\":600,\"browser_download_url\":"
+    "\"https://github.com/Barbedx/MegaOpen/releases/download/v1.5.2-rc1/SHA256SUMS\"}]},"
+    "{\"tag_name\":\"v1.6.0\",\"draft\":true,\"prerelease\":false,\"assets\":[]},"
+    "{\"tag_name\":\"v1.5.1\",\"draft\":false,\"prerelease\":false,\"assets\":["
+    "{\"name\":\"megaopen-t2can-1.5.1.bin\",\"size\":1640000,\"browser_download_url\":"
+    "\"https://github.com/Barbedx/MegaOpen/releases/download/v1.5.1/megaopen-t2can-1.5.1.bin\"},"
+    "{\"name\":\"SHA256SUMS\",\"size\":600,\"browser_download_url\":"
+    "\"https://github.com/Barbedx/MegaOpen/releases/download/v1.5.1/SHA256SUMS\"}]}]";
+
+static Pick newestFrom(const char* json, bool pre, Release& r)
+{
+    JsonDocument f, doc;
+    filterList(f);
+    TEST_ASSERT_TRUE(deserializeJson(doc, json, DeserializationOption::Filter(f)) ==
+                     DeserializationError::Ok);
+    TEST_ASSERT_FALSE(doc[0]["body"].is<const char*>());
+    return pickNewest(doc.as<JsonArrayConst>(), "t2can", pre, r);
+}
+
+void test_the_test_channel_takes_the_newest_rc_and_its_xyz_asset()
+{
+    Release r;
+    TEST_ASSERT_TRUE(newestFrom(LIST, true, r) == Pick::OK);
+    TEST_ASSERT_EQUAL_STRING("v1.5.2-rc1", r.tag);
+    TEST_ASSERT_EQUAL_STRING("megaopen-t2can-1.5.2.bin", r.asset);
+    TEST_ASSERT_EQUAL(1, r.ver.rc);
+    TEST_ASSERT_EQUAL_STRING(
+        "https://github.com/Barbedx/MegaOpen/releases/download/v1.5.2-rc1/SHA256SUMS", r.sumsUrl);
+}
+
+void test_the_stable_list_skips_the_rc_and_the_draft()
+{
+    Release r;
+    TEST_ASSERT_TRUE(newestFrom(LIST, false, r) == Pick::OK);
+    TEST_ASSERT_EQUAL_STRING("v1.5.1", r.tag);
+    TEST_ASSERT_TRUE(newestFrom("[]", true, r) == Pick::NO_TAG);
+    TEST_ASSERT_TRUE(newestFrom("[{\"tag_name\":\"v2.0.0\",\"draft\":true,\"assets\":[]}]", true, r) ==
+                     Pick::DRAFT);
+}
+
+void test_newer_tells_rc1_from_rc2_by_the_installed_tag()
+{
+    // rc1 installed from GitHub: the image says 1.5.2, NVS says v1.5.2-rc1.
+    TEST_ASSERT_TRUE(newer(V("v1.5.2-rc2"), "1.5.2", "v1.5.2-rc1"));
+    TEST_ASSERT_FALSE(newer(V("v1.5.2-rc1"), "1.5.2", "v1.5.2-rc1"));
+    TEST_ASSERT_TRUE(newer(V("v1.5.2"), "1.5.2", "v1.5.2-rc1"));   // the final of the rc
+    // Unknown or another version's tag: the image counts as its final.
+    TEST_ASSERT_FALSE(newer(V("v1.5.2-rc2"), "1.5.2", nullptr));
+    TEST_ASSERT_FALSE(newer(V("v1.5.2-rc2"), "1.5.2", "v1.5.1"));
+    TEST_ASSERT_FALSE(newer(V("v1.5.2"), "1.5.2", ""));
+    TEST_ASSERT_TRUE(newer(V("v1.5.2-rc1"), "1.5.1", "v1.5.1"));
+    TEST_ASSERT_FALSE(newer(V("v1.5.1"), "1.5.2", "v1.5.2-rc1"));
+    TEST_ASSERT_TRUE(newer(V("v1.0.0"), "garbage", nullptr));
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -196,5 +258,8 @@ int main(int, char**)
     RUN_TEST(test_sum_for_does_not_match_a_prefix_or_a_missing_name);
     RUN_TEST(test_trusted_url_takes_githubs_https_hosts_only);
     RUN_TEST(test_trusted_url_refuses_plain_http_lookalikes_and_tricks);
+    RUN_TEST(test_the_test_channel_takes_the_newest_rc_and_its_xyz_asset);
+    RUN_TEST(test_the_stable_list_skips_the_rc_and_the_draft);
+    RUN_TEST(test_newer_tells_rc1_from_rc2_by_the_installed_tag);
     return UNITY_END();
 }

@@ -2,6 +2,7 @@
 #if FEATURE_GH_OTA
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
 #include <Update.h>
 #include <esp_http_client.h>
 #include <esp_heap_caps.h>
@@ -24,6 +25,8 @@ namespace GhOta
     namespace
     {
         constexpr const char* LATEST_URL = "https://api.github.com/repos/" GH_OTA_REPO "/releases/latest";
+        // The test channel: the ten newest, prereleases included, newest first.
+        constexpr const char* LIST_URL   = "https://api.github.com/repos/" GH_OTA_REPO "/releases?per_page=10";
         constexpr int      HOPS       = 5;       // github.com -> the asset CDN is one
         constexpr int      TIMEOUT_MS = 15000;
         // The download's read and flash-write unit, in INTERNAL RAM: a source in
@@ -44,6 +47,33 @@ namespace GhOta
         // ElegantOTA's session: open, and when it last showed signs of life.
         volatile bool     s_local   = false;
         volatile uint32_t s_localAt = 0;
+
+        // The channel, NVS "fw"/"pre": false = finals only (the default),
+        // true = the newest release, an rc included. Read at the first use.
+        volatile bool s_pre = false;
+        bool          s_preRead = false;
+        void readPre()
+        {
+            if (s_preRead) return;
+            Preferences p;
+            p.begin("fw", true);
+            s_pre = p.getBool("pre", false);
+            p.end();
+            s_preRead = true;
+        }
+
+        // The tag the last GitHub install wrote, NVS "fw"/"tag": an rc carries
+        // its final's version, so only this tells rc1 from rc2
+        // (GhRelease::newer). A rollback leaves it naming the image that
+        // failed, which is then not offered again: what a failed rc deserves.
+        void installedTag(char* out, size_t n)
+        {
+            Preferences p;
+            p.begin("fw", true);
+            const String t = p.getString("tag", "");
+            p.end();
+            snprintf(out, n, "%s", t.c_str());
+        }
 
         // Speed fresh and exactly 0: the one state the reboot may take by itself.
         bool parked()
@@ -223,18 +253,24 @@ namespace GhOta
 
         void runCheck()
         {
+            // The test channel reads the list (an rc is never "latest"); the
+            // stable one reads the latest final alone.
+            const bool pre = s_pre;
             int64_t len = 0;
-            esp_http_client_handle_t c = get(LATEST_URL, true, len);
+            esp_http_client_handle_t c = get(pre ? LIST_URL : LATEST_URL, true, len);
             if (!c) return;
             JsonDocument f(&s_json), doc(&s_json);
-            GhRelease::filter(f);
+            if (pre) GhRelease::filterList(f);
+            else     GhRelease::filter(f);
             BodyReader rd{c};
             const DeserializationError je = deserializeJson(doc, rd, DeserializationOption::Filter(f));
             done(c);
             if (je) { fail("gh_json", "%s", je.c_str()); return; }
 
             GhRelease::Release r;
-            const GhRelease::Pick p = GhRelease::pick(doc.as<JsonVariantConst>(), MegaOpen::envName(), r);
+            const GhRelease::Pick p =
+                pre ? GhRelease::pickNewest(doc.as<JsonArrayConst>(), MegaOpen::envName(), true, r)
+                    : GhRelease::pick(doc.as<JsonVariantConst>(), MegaOpen::envName(), r);
             portENTER_CRITICAL(&s_mux);
             snprintf(s_v.latest, sizeof(s_v.latest), "%s", r.tag);
             snprintf(s_v.asset, sizeof(s_v.asset), "%s", r.asset);
@@ -242,12 +278,13 @@ namespace GhOta
             portEXIT_CRITICAL(&s_mux);
             if (p != GhRelease::Pick::OK) { fail(GhRelease::pickText(p)); return; }
 
-            GhRelease::Ver mine;
-            const bool newer = !GhRelease::parse(MEGAOPEN_VERSION, mine) ||
-                               GhRelease::compare(r.ver, mine) > 0;
+            char installed[24];
+            installedTag(installed, sizeof(installed));
+            const bool newer = GhRelease::newer(r.ver, MEGAOPEN_VERSION, installed);
             s_rel = r;
             setPhase(newer ? Phase::Available : Phase::Current);
-            LogBus::printf("[ota] github: latest %s, this %s: %s", r.tag, MEGAOPEN_VERSION,
+            LogBus::printf("[ota] github: %s %s, this %s (installed as %s): %s", pre ? "newest" : "latest",
+                           r.tag, MEGAOPEN_VERSION, installed[0] ? installed : "?",
                            newer ? "update available" : "up to date");
         }
 
@@ -383,6 +420,12 @@ namespace GhOta
             if (ee != ESP_OK) { fail("gh_verify", "%s", esp_err_to_name(ee)); return; }
             const esp_err_t se = esp_ota_set_boot_partition(part);
             if (se != ESP_OK) { fail("gh_boot", "cannot set the boot partition (%s)", esp_err_to_name(se)); return; }
+            {
+                Preferences p;
+                p.begin("fw", false);
+                p.putString("tag", s_rel.tag);
+                p.end();
+            }
 
             // The done line never comes after a good install: the stack's
             // headroom is reported here, at the deepest point it will reach.
@@ -513,12 +556,48 @@ namespace GhOta
 
     void view(View& out)
     {
+        readPre();
         portENTER_CRITICAL(&s_mux);
         out = s_v;
+        out.pre = s_pre;
         portEXIT_CRITICAL(&s_mux);
     }
 
-    const char* check() { return start(Job::Check); }
+    const char* check()
+    {
+        readPre();
+        return start(Job::Check);
+    }
+
+    bool pre()
+    {
+        readPre();
+        return s_pre;
+    }
+
+    const char* setPre(bool on)
+    {
+        readPre();
+        portENTER_CRITICAL(&s_mux);
+        const bool busy = s_busy;
+        portEXIT_CRITICAL(&s_mux);
+        if (busy) return "fw_running";   // the running job read the old channel
+        Preferences p;
+        if (!p.begin("fw", false)) return "nvs";
+        p.putBool("pre", on);
+        p.end();
+        s_pre = on;
+        // The last check answered for the other channel: ask again.
+        portENTER_CRITICAL(&s_mux);
+        if (s_v.phase == Phase::Current || s_v.phase == Phase::Available || s_v.phase == Phase::Failed) {
+            s_v.phase = Phase::Idle;
+            s_v.latest[0] = s_v.asset[0] = s_v.err[0] = 0;
+            s_v.size = 0;
+        }
+        portEXIT_CRITICAL(&s_mux);
+        LogBus::printf("[ota] github: channel %s", on ? "test (rc included)" : "stable");
+        return nullptr;
+    }
 
     const char* install()
     {

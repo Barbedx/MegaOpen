@@ -9,7 +9,7 @@ namespace MenuUi
     namespace
     {
         constexpr uint8_t ROOT = 0xFF;
-        constexpr uint8_t TEXT = COLS - 1;      // column 0 is the cursor marker
+        constexpr uint8_t TEXT = ROW_COLS - 1;  // column 0 is the cursor marker
 
         // `left` from column 0, `right` flush with the end; `right` wins the
         // space when both do not fit.

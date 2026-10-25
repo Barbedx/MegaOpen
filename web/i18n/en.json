@@ -1390,5 +1390,7 @@
  "e.push_heap": "Low on free memory, push postponed",
  "e.push_token_bad": "A token is Latin letters, digits and _, 20–255 characters",
  "e.push_repo_bad": "Repository as owner/name",
- "e.nvs": "Could not save the settings"
+ "e.nvs": "Could not save the settings",
+ "bd.ghPre": "Test versions (rc)",
+ "bd.ghPreH": "On: «Check» takes the newest version on GitHub, test builds (rc) included, before they become stable. Off: stable only. The 3 min rollback works the same."
 }

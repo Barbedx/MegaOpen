@@ -150,7 +150,7 @@ namespace App
             // "eng_temp" ... "92C" (src/ui/SignalText.h); "--" past STALE_MS.
             void sigRow(void*, uint8_t s, char* out, size_t cap)
             {
-                MenuUi::signalRow(out, cap, MenuUi::COLS - 1, Vehicle::meta(s), s_d.car->get(s),
+                MenuUi::signalRow(out, cap, MenuUi::ROW_COLS - 1, Vehicle::meta(s), s_d.car->get(s),
                                   s_d.car->ageMs(s, millis()) <= MenuUi::STALE_MS, Vehicle::verified(s));
             }
 

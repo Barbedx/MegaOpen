@@ -548,12 +548,14 @@ g('/ota/start',()=>'OK');
 /* GhOta (src/net/GhOta.cpp): check -> available (наступний патч), install -> поступ -> перезавантаження */
 const ghNext=()=>{const p=S.fw.split('.').map(Number);p[2]++;return p.join('.')};
 const ghView=()=>{const v=S.gh||(S.gh={phase:'idle',latest:'',asset:'',size:0,got:0,heapStart:0,heapMin:0,tlsInPsram:true});
- if(v.phase==='checking'&&now()-v.at>1200){v.phase='available';v.latest='v'+ghNext();v.asset='megaopen-t2can-'+ghNext()+'.bin';v.size=1572353}
+ if(v.phase==='checking'&&now()-v.at>1200){v.phase='available';v.latest='v'+ghNext()+(S.ghPre?'-rc1':'');v.asset='megaopen-t2can-'+ghNext()+'.bin';v.size=1572353}
  if(v.phase==='downloading'){v.got=Math.min(v.size,Math.round((now()-v.at)/6000*v.size));v.heapMin=Math.min(v.heapMin,v.heapStart-Math.round(rnd(3000,6000)));
   if(v.got>=v.size)v.phase='written'}
  if(v.phase==='reboot'){v.phase='rebooting';S.fw=v.latest.slice(1);S.build='github '+v.latest;setTimeout(()=>{S.gh=null;doBoot()},1500)}
- return {fw:S.fw,env:'t2can',...v}};
+ return {fw:S.fw,env:'t2can',...v,pre:!!S.ghPre}};
 g('/api/fw',ghView);
+po('/api/fw/channel',q=>{if(typeof q.pre!=='boolean')return fail(400,'param pre');const v=ghView();if(v.phase==='checking'||v.phase==='downloading')return fail(409,'fw_running');
+ S.ghPre=q.pre;if(['current','available','failed'].includes(S.gh.phase))Object.assign(S.gh,{phase:'idle',latest:'',asset:'',size:0});return ok});
 po('/api/fw/check',()=>{const v=ghView();if(S.wifi.mode!=='sta')return fail(409,'fw_ap');
  if(v.phase==='written')return fail(409,'fw_written');if(v.phase==='checking'||v.phase==='downloading')return fail(409,'fw_running');Object.assign(S.gh,{phase:'checking',at:now(),err:undefined,heapStart:S.heap,heapMin:S.heap});return ok});
 po('/api/fw/reboot',()=>{const v=ghView();if(v.phase!=='written')return fail(409,'fw_nothing');S.gh.phase='reboot';return ok});

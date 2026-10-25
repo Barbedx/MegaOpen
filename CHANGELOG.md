@@ -10,8 +10,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ### Added
 - The log to a private GitHub repository, for reading a drive from home: Плата › «Логи в GitHub». On a network with internet (the head unit's hotspot) the board puts the new lines into the repo as a file once a minute (`mo-XXXX/boot-NNNNN/PPPP.log`); without internet they wait in a 1 MB PSRAM spool (about an hour and a half) and go once the link is back. On by default: paste a fine-grained token (Contents read/write on that one repository) and it starts. The token is never shown back. `/api/logpush`, `[push]` lines.
 
+- Плата › Оновлення: «Тестові версії (rc)». On, «Перевірити» takes the newest release on GitHub, an rc included (`/releases`, the ten newest); off (the default), the latest final as before. The board remembers which tag it installed from (NVS `fw/tag`), since an rc's image carries its final's version: rc2 is offered over rc1, and the final over its rc. `POST /api/fw/channel {pre}`, `/api/fw` `pre`.
+
 ### Changed
 - One TLS job at a time: a GitHub update check refuses with `tls_busy` for the few seconds a log push holds the connection.
+
+### Fixed
+- Panel menu: an item row is laid on the 20 cells the big font shows, not 26. A setting's value and a submenu's `>` stood past the glass's edge (Lights › Brightness showed no value). The header keeps 26.
 
 ## [1.5.1] - 2026-10-21
 

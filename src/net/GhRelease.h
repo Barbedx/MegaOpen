@@ -24,11 +24,13 @@ namespace GhRelease
     // What one GET of /releases/latest needs to keep; ArduinoJson's filter
     // drops the rest (the notes, the author, every other asset field).
     void filter(JsonDocument& f);
+    // The same for GET /releases (a list, newest first): every element.
+    void filterList(JsonDocument& f);
 
     enum class Pick : uint8_t {
         OK,
         NO_TAG,       // no tag_name, or one that is not a version
-        DRAFT,        // a draft or a prerelease: never offered
+        DRAFT,        // a draft; or a prerelease where only finals are offered
         NO_ASSET,     // no megaopen-<env>-<ver>.bin in this release
         NO_SUMS,      // no SHA256SUMS: nothing to check the image against
     };
@@ -43,7 +45,19 @@ namespace GhRelease
     };
     // `rel` is the filtered /releases/latest document; env is PlatformIO's
     // name for this image ("t2can").
-    Pick pick(JsonVariantConst rel, const char* env, Release& out);
+    // allowPre: the test channel, where an rc is offered too (never a draft).
+    Pick pick(JsonVariantConst rel, const char* env, Release& out, bool allowPre = false);
+    // The highest version in a /releases list that pick() accepts. Nothing
+    // accepted: the first refusal (NO_TAG for an empty list).
+    Pick pickNewest(JsonArrayConst list, const char* env, bool allowPre, Release& out);
+
+    // Whether `rel` is above the running image. An rc carries its final's
+    // version (release.yml: the tag's X.Y.Z must match MEGAOPEN_VERSION), so
+    // the image alone cannot tell rc1 from rc2: `installed` is the tag the
+    // last GitHub install wrote (NVS), used when its X.Y.Z is this image's.
+    // Unknown (null, another version): the image counts as the final, and no
+    // rc of its own version is offered. A `mine` that does not parse: newer.
+    bool newer(const Ver& rel, const char* mine, const char* installed);
     const char* pickText(Pick p);
 
     // A URL the update may fetch: https:// and one of GitHub's hosts (the API,

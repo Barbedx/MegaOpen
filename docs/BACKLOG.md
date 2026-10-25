@@ -198,6 +198,13 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   service that issues per-board keys. The previous boot's flash log is not
   pushed (only what the spool holds), so a crash shows up only up to its
   last pushed minute plus the flash log read locally.
+- **AffaDisplay: `menuRowChars = 26` is the frame's field, not the glass
+  (2026-10-25).** The menu's item rows use the big font, ~20 cells before the
+  scroll bar (photo of Lights › Brightness, its value off the edge); the
+  header row's small font does hold 26. MegaOpen lays rows on
+  `MenuUi::ROW_COLS = 20` since 1.5.2. In the library: `PanelGeometry` should
+  say 20 for the rows (and maybe carry the header's 26 separately), then a
+  tag and a pin bump; count the cells on glass first.
 - **BLE pairing vs a phone on the board's AP, on the S3 (2026-10-16).** On the
   T-2CAN the iPhone could not pair while it was joined to `MegaOpen-4580`; off
   that WiFi it connected. Same symptom as the 2026-08-07 DevKit bug, fixed then

@@ -65,8 +65,15 @@ namespace GhOta
         // and how long each tenth took. 0 = not reached.
         uint32_t stepMin[10] = {}, stepMs[10] = {};
         bool     tlsInPsram = false;
+        bool     pre = false;          // the test channel (pre())
     };
     void view(View& out);
+
+    // The channel a check reads, NVS "fw"/"pre": false (default) = the latest
+    // final only; true = the newest of the ten newest releases, an rc
+    // included (GhRelease::pickNewest). httpd; refused while a job runs.
+    bool        pre();
+    const char* setPre(bool on);
 
     // nullptr: the job started. Otherwise why not (a job is running, or for
     // install(), no newer release from a check this boot).

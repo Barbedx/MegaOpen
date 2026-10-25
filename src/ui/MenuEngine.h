@@ -26,7 +26,12 @@
 // Pure (no Arduino): the native tests drive it with a fake car.
 namespace MenuUi
 {
-    inline constexpr uint8_t COLS = 26;        // a row of the panel's list screen
+    inline constexpr uint8_t COLS = 26;        // the header row (small font)
+    // What the glass shows of an item row: the big font, ~58 px a cell against
+    // the header's ~45, so 20 cells before the scroll bar (photo 2026-10-25:
+    // a value laid at column 26 was off the glass). Cursor marker included.
+    // AffaDisplay's menuRowChars says 26: the frame's field, not the glass.
+    inline constexpr uint8_t ROW_COLS = 20;
 
     // What the menu knows of the car, from the glue. Signals are ids the
     // glue understands; the menu only lists and prints them.

@@ -19,7 +19,7 @@ const allSettings=(se,have)=>{let h='';for(const f of CAT.settings||[]){
  return h};
 SCR.board={title:'nav.board',async render(m){
  const B=has('ble');
- const[st,se,lg,lp]=await Promise.all([API.get('/api/status'),API.get('/api/settings'),getIf(has('logfs'),'/api/logs'),getIf(has('logpush'),'/api/logpush')]);
+ const[st,se,lg,lp,fw]=await Promise.all([API.get('/api/status'),API.get('/api/settings'),getIf(has('logfs'),'/api/logs'),getIf(has('logpush'),'/api/logpush'),getIf(has('ghota'),'/api/fw')]);
  const ssid2=se.ssid2||'',un=t('bd.unchanged');
  m.innerHTML=
  card(t('bd.wifi'),row(t('bd.now'),'<span id="wNow" class="chip off">…</span>','<span id="wNowW"></span>')+
@@ -32,6 +32,7 @@ SCR.board={title:'nav.board',async render(m){
   `<div id="bLive"${se.bleMode==='off'?' hidden':''}>${row(t('bd.state'),'<span id="bSt" class="chip off">…</span>','<span id="bName"></span>')}<div class="fr"><button class="btn dng" type="button" id="bForget">${t('bd.forget')}</button></div></div>`):'')+
  card(t('bd.update'),`<div class="kv"><div><small>${t('bd.fw')}</small><b>${esc(se.fw)}</b></div><div><small>${t('bd.build')}</small><b>${esc(se.build)}</b></div></div>`+
   (has('ghota')?row(t('bd.gh'),'<span id="ghSt" class="chip off">…</span>','<span id="ghW"></span>',t('bd.ghH'))+
+   row(t('bd.ghPre'),sw('/api/fw/channel|pre',fw&&fw.pre),'',t('bd.ghPreH'))+
    `<div class="fr"><button class="btn" type="button" id="ghChk">${t('bd.check')}</button><button class="btn pri" type="button" id="ghGo" hidden>${t('bd.updateBtn')}</button><button class="btn pri" type="button" id="ghBoot" hidden>${t('bd.restart')}</button></div><div class="pad" id="ghP" hidden><div class="bar big"><i id="ghBar"></i></div></div>`+row('','',t('bd.orFile')):'')+
   `<div class="fr"><input type="file" id="otaF" accept=".bin" class="in" style="flex:1"><button class="btn pri" type="button" id="otaGo">${t('bd.updateBtn')}</button></div><div class="pad" id="otaP" hidden><div class="bar big"><i id="otaBar"></i></div></div>`,'cOta','custom')+
  /* логи в GitHub (LogPush): токен ніколи не повертається, лише hasToken */
@@ -59,7 +60,7 @@ SCR.board={title:'nav.board',async render(m){
  $('#otaGo').onclick=async e=>{const f=$('#otaF').files[0];const b=e.target;if(!f){sv(svOf(b),'bad',t('bd.pickBin'));return}b.disabled=true;$('#otaP').hidden=false;const s=svOf(b);
   const onP=p=>{$('#otaBar').style.width=p+'%';sv(s,'busy');s.textContent=p+'%'};
   try{await reboot(()=>upload(f,onP),undefined,t('bd.newFw',f.name))}catch(err){sv(s,'bad',errT(err))}b.disabled=false};
- if(has('ghota')){$('#ghChk').onclick=e=>run(e.target,async()=>{await API.post('/api/fw/check');await this.gh()},t('bd.checking'));
+ if(has('ghota')){saver($('#cOta'),genericSave,'[data-k]');$('#ghChk').onclick=e=>run(e.target,async()=>{await API.post('/api/fw/check');await this.gh()},t('bd.checking'));
   $('#ghGo').onclick=e=>ask(e.target,t('bd.ghAsk',this.ghTag),()=>run(e.target,async()=>{await API.post('/api/fw/install');await this.gh()},t('bd.downloading')));
   $('#ghBoot').onclick=e=>ask(e.target,t('bd.bootAsk',this.ghTag),()=>run(e.target,async()=>{await API.post('/api/fw/reboot');await this.gh()},t('bd.restarting')))}
  if(has('logfs'))$('#logs').onclick=e=>{const b=e.target.closest('[data-n]');if(b)run(b,()=>download('/api/logs/file?n='+b.dataset.n,'boot-'+b.dataset.n+'.log'))};
