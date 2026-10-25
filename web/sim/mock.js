@@ -38,7 +38,7 @@ function envCatalog(c0,F){const c=JSON.parse(JSON.stringify(c0));c.features=F?{.
 /* маршрути, що є лише з функцією (як #if у WebUi*.cpp); решта — в кожній збірці */
 const GATES=[[/^\/api\/(display|affamap|media)(\/|$)/,F=>F.display],[/^\/api\/ble(\/|$)/,F=>F.display&&F.ble],[/^\/api\/notifications$/,F=>F.ancs],
  [/^\/api\/can2$/,F=>F.can2],[/^\/api\/can(\/|$)/,F=>F.vehicle],[/^\/api\/cap(\/|$)/,F=>F.capture],[/^\/api\/knobs(\/|$)/,F=>F.knobs],
- [/^\/api\/keymap(\/|$)/,F=>F.matrix],[/^\/api\/res(\/|$)/,F=>F.res],[/^\/api\/logs\/(file|format)$/,F=>F.logfs],[/^\/api\/fw(\/|$)/,F=>F.ghota]];
+ [/^\/api\/keymap(\/|$)/,F=>F.matrix],[/^\/api\/res(\/|$)/,F=>F.res],[/^\/api\/logs\/(file|format)$/,F=>F.logfs],[/^\/api\/fw(\/|$)/,F=>F.ghota],[/^\/api\/logpush$/,F=>F.logpush]];
 const routeBuilt=p=>{const g=GATES.find(([re])=>re.test(p));return !g||!!g[1](CATALOG.features)};
 const C=CATALOG,LVL=C.enums.logLevels.map(e=>e.name),DESTS=C.dests.map(d=>d.id),DNAME=Object.fromEntries(C.dests.map(d=>[d.id,d.name]));
 const lay=id=>C.layouts.find(l=>l.id===id)||C.layouts.find(l=>l.id==='fullscreen');
@@ -558,6 +558,16 @@ po('/api/fw/check',()=>{const v=ghView();if(S.wifi.mode!=='sta')return fail(409,
  if(v.phase==='written')return fail(409,'fw_written');if(v.phase==='checking'||v.phase==='downloading')return fail(409,'fw_running');Object.assign(S.gh,{phase:'checking',at:now(),err:undefined,heapStart:S.heap,heapMin:S.heap});return ok});
 po('/api/fw/reboot',()=>{const v=ghView();if(v.phase!=='written')return fail(409,'fw_nothing');S.gh.phase='reboot';return ok});
 po('/api/fw/install',()=>{const v=ghView();if(v.phase!=='available')return fail(409,'fw_no_newer');Object.assign(S.gh,{phase:'downloading',at:now(),got:0});return ok});
+/* LogPush (src/net/LogPush.cpp): на STA з токеном — файл на хвилину; токен назад не віддається */
+const lpView=()=>{const v=S.lp||(S.lp={on:false,tok:false,repo:'Barbedx/megaopen-logs',files:0,sent:0,at:now()});
+ const live=v.on&&v.tok&&S.wifi.mode==='sta';if(live&&now()-v.at>60000){v.files++;v.sent+=Math.round(rnd(6000,14000));v.at=now()}
+ return {state:!v.on||!v.tok?'off':'waiting',on:v.on,hasToken:v.tok,repo:v.repo,device:'mo-4580',status:v.files?201:0,files:v.files,sent:v.sent,lost:0,
+  queued:Math.round(Math.min(now()-v.at,600000)/60000*9000),spool:1048576,okAgoMs:v.files?now()-v.at:0,nextInMs:live?Math.max(0,60000-(now()-v.at)):0,heapMin:S.heap}};
+g('/api/logpush',lpView);
+po('/api/logpush',q=>{lpView();const v=S.lp;
+ if(q.token&&!/^[A-Za-z0-9_]{20,255}$/.test(q.token))return fail(400,'push_token_bad');
+ if(q.repo!==undefined&&!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(q.repo))return fail(400,'push_repo_bad');
+ if(typeof q.on==='boolean')v.on=q.on;if(q.token)v.tok=true;if(q.repo!==undefined)v.repo=q.repo;if(q.now)v.at=now()-60001;return ok});
 po('/ota/upload',q=>{if(!q.size)return fail(400,'param file');S.build='ota '+new Date().toISOString().slice(0,16);setTimeout(doBoot,200);return 'OK'});
 function uart(dir,b){const p=b.split(' ');S.hu.count++;S.uartRing.push({dir,cmd:p[1]||'00',len:Math.max(0,p.length-4),total:p.length,at:now(),data:p.slice(3,-1).join(''),ascii:'',u16:false});if(S.uartRing.length>40)S.uartRing.shift()}
 

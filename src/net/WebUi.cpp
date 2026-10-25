@@ -1232,6 +1232,9 @@ void WebUi::routes()
 #if FEATURE_GH_OTA
     routesGhOta();
 #endif
+#if FEATURE_LOG_PUSH
+    routesLogPush();
+#endif
 #if FEATURE_RESISTIVE_KEYS
     routesRes();
 #endif

@@ -178,6 +178,26 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   measure on the board: internal heap during a download (`[ota] github: …
   heap min`, also in `/api/fw`). Known limit: the API allows 60 unauthenticated
   checks an hour per public address, and the page says so on a 403.
+- **Remote logs to GitHub (owner, 2026-10-25) — WRITTEN 2026-10-25, not yet
+  run on a board.** The board is in the car on the head unit's hotspot
+  (`megayozh`, mobile internet); the owner reads its log from home. Every
+  line the flash log keeps also goes to a 1 MB spool in PSRAM; once a minute
+  on STA, with the switch on and a token set, a job PUTs what came since the
+  last push as one file through the contents API:
+  `Barbedx/megaopen-logs/mo-XXXX/boot-NNNNN/PPPP.log` (`sys/boots`, the part
+  number this boot). Offline (the garage) the spool fills and the next push
+  sends it, 64 kB a file 3 s apart; a spool that wraps first loses its oldest
+  lines and the next file says how many bytes. 401/404 stop it until the
+  page saves new settings; the rest back off 1 → 10 min. The token
+  (fine-grained, Contents read/write on that one repo) is in NVS `logpush`,
+  never sent back. One TLS job at a time with GhOta (`src/net/TlsJob.*`:
+  both move mbedTLS to PSRAM, a global). Плата → «Логи в GitHub»;
+  `src/net/LogPush.*`, routes `/api/logpush` (`WebUiLogPush.cpp`), `[push]`
+  lines. `FEATURE_LOG_PUSH` on the T-2CAN envs. Open: a token per board does
+  not scale to other people's boards (owner's plan); that needs an ingest
+  service that issues per-board keys. The previous boot's flash log is not
+  pushed (only what the spool holds), so a crash shows up only up to its
+  last pushed minute plus the flash log read locally.
 - **BLE pairing vs a phone on the board's AP, on the S3 (2026-10-16).** On the
   T-2CAN the iPhone could not pair while it was joined to `MegaOpen-4580`; off
   that WiFi it connected. Same symptom as the 2026-08-07 DevKit bug, fixed then

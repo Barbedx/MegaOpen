@@ -51,6 +51,7 @@ map; this file is the "where do I look" index for a session in the car.
 | `[ui]`, `[media]` | glass policy, now-playing source |
 | `[ble]` | iPhone link, AMS/HID queues |
 | `[ota]` | trial / CONFIRMED / rolling back |
+| `[push]` | log push to GitHub: file sent, bytes queued, GitHub's refusal |
 | `[alert]` | panel alert rules |
 | `[mem]`, `[win]`, `[stk]`, `[task]`, `[stall]` | heap, stacks, task ages, loop gaps |
 
@@ -79,6 +80,7 @@ Raise the log level for one session through `/api/settings` `{"logLevel":"DBG"}`
 | OTA rolls back | `[ota]` | `src/app/OtaTrial.*`, `OtaVerdict.*` (confirm after 60 s healthy, revert at 180 s) |
 | reboots / heap low | `[hb]`, `[mem]`, flash log | `src/app/Housekeeping.*`, `TaskPlan.h` (priorities, stacks) |
 | WiFi / AP | `/api/wifi` | `src/net/WifiManager.*` |
+| remote log not arriving | `/api/logpush` (`state`, `err`), `[push]` | `src/net/LogPush.*`, `TlsJob.*`; the files: `gh api repos/Barbedx/megaopen-logs/contents/mo-XXXX` or clone the repo |
 
 Pins live only in `src/board/BoardProfile.h`. Feature flags: `src/Features.h`
 plus per-env `-D` in `platformio.ini`.

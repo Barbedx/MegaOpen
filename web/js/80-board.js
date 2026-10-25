@@ -19,7 +19,7 @@ const allSettings=(se,have)=>{let h='';for(const f of CAT.settings||[]){
  return h};
 SCR.board={title:'nav.board',async render(m){
  const B=has('ble');
- const[st,se,lg]=await Promise.all([API.get('/api/status'),API.get('/api/settings'),getIf(has('logfs'),'/api/logs')]);
+ const[st,se,lg,lp]=await Promise.all([API.get('/api/status'),API.get('/api/settings'),getIf(has('logfs'),'/api/logs'),getIf(has('logpush'),'/api/logpush')]);
  const ssid2=se.ssid2||'',un=t('bd.unchanged');
  m.innerHTML=
  card(t('bd.wifi'),row(t('bd.now'),'<span id="wNow" class="chip off">…</span>','<span id="wNowW"></span>')+
@@ -34,6 +34,11 @@ SCR.board={title:'nav.board',async render(m){
   (has('ghota')?row(t('bd.gh'),'<span id="ghSt" class="chip off">…</span>','<span id="ghW"></span>',t('bd.ghH'))+
    `<div class="fr"><button class="btn" type="button" id="ghChk">${t('bd.check')}</button><button class="btn pri" type="button" id="ghGo" hidden>${t('bd.updateBtn')}</button><button class="btn pri" type="button" id="ghBoot" hidden>${t('bd.restart')}</button></div><div class="pad" id="ghP" hidden><div class="bar big"><i id="ghBar"></i></div></div>`+row('','',t('bd.orFile')):'')+
   `<div class="fr"><input type="file" id="otaF" accept=".bin" class="in" style="flex:1"><button class="btn pri" type="button" id="otaGo">${t('bd.updateBtn')}</button></div><div class="pad" id="otaP" hidden><div class="bar big"><i id="otaBar"></i></div></div>`,'cOta','custom')+
+ /* логи в GitHub (LogPush): токен ніколи не повертається, лише hasToken */
+ (lp?card(t('bd.push'),row(t('bd.pushSt'),'<span id="pSt" class="chip off">…</span>','<span id="pW"></span>',t('bd.pushH'))+
+  row(t('bd.pushOn'),sw('/api/logpush|on',lp.on))+row(t('bd.pushTok'),txt('/api/logpush|token','',lp.hasToken?t('bd.pushTokSet'):'github_pat_…','in','password'),'',t('bd.pushTokH'))+
+  row(t('bd.pushRepo'),txt('/api/logpush|repo',lp.repo,'owner/name'),t('bd.pushDev',lp.device))+
+  `<div class="fr"><button class="btn" type="button" id="pNow">${t('bd.pushNow')}</button></div>`,'cPush'):'')+
  (has('logfs')?card(t('bd.log'),row('','',t('bd.logH'))+`<div id="logs">${(lg.files||[]).map(f=>row(f.n?t('bd.bootN',f.n):t('bd.bootThis'),`<button class="btn sm" type="button" data-n="${f.n}">${t('bd.download')}</button>`,fmtB(f.size))).join('')}</div>`,'','custom'):'')+
  '<div id="allSlot"></div>'+
  card(t('bd.toFile'),row('','',t('bd.toFileH'))+
@@ -43,6 +48,7 @@ SCR.board={title:'nav.board',async render(m){
  $('#allSlot').outerHTML=fold(t('bd.all'),row('','',t('bd.allH'))+allSettings(se,m.innerHTML),'cAll');
  saver($('#cWifi'),genericSave,'[data-k]');
  saver($('#cAll'),genericSave,'[data-k]');
+ this.lp=!!lp;if(lp){saver($('#cPush'),genericSave,'[data-k]');$('#pNow').onclick=e=>run(e.target,async()=>{await API.post('/api/logpush',{now:true});await this.push()})}
  if(B){saver($('[data-k="rb:/api/settings|bleMode"]').closest('.card'),genericSave,'[data-k]');
  $('[data-k="rb:/api/settings|bleMode"]').addEventListener('change',e=>{$('#bHint').textContent=bleHint(e.target.value)});
  $('#bForget').onclick=e=>ask(e.target,t('bd.forgetAsk'),()=>run(e.target,()=>API.post('/api/ble/unbond')).then(()=>this.tick()))}
@@ -97,8 +103,14 @@ async gh(){const v=await API.get('/api/fw');if(!$('#ghSt'))return;this.ghTag=v.l
  const go=$('#ghGo');go.hidden=v.phase!=='available';go.textContent=t('bd.gh.updateTo',v.latest);
  $('#ghP').hidden=v.phase!=='downloading';$('#ghBar').style.width=pct+'%';
  if(v.phase==='rebooting'&&!REBOOTING)reboot(async()=>{},undefined,t('bd.gh.from',v.latest))},
+/* LogPush: стан з /api/logpush -> чип і рядок (файли, надіслано, у черзі, помилка) */
+async push(){const v=await API.get('/api/logpush');if(!$('#pSt'))return;
+ const[st,tx]={off:['off',t('bd.push.off')],waiting:['ok',t('bd.push.waiting')],pushing:['warn',t('bd.push.pushing')],stopped:['bad',t('bd.push.stopped')]}[v.state]||['off',v.state];
+ setChip('#pSt',v.err&&v.state!=='stopped'?'warn':st,tx);
+ $('#pW').textContent=t('bd.push.stats',v.files,fmtB(v.sent),fmtB(v.queued))+(v.okAgoMs?' · '+t('bd.push.ago',Math.round(v.okAgoMs/1000)):'')+(v.lost?' · '+t('bd.push.lost',fmtB(v.lost)):'')+(v.err?' · '+errLine(v.err):'')},
 async tick(){const[st,ble]=await Promise.all([API.get('/api/status'),getIf(has('display')&&has('ble')&&!this.bleOff,'/api/ble')]);if(!$('#wNow'))return;
  if(has('ghota'))await this.gh();
+ if(this.lp)await this.push();
  wifiChip($('#wNow'),$('#wNowW'),st,t('bd.noNets'));
  if(this.bleOff||!ble)return;
  setChip('#bSt',ble.connected?'ok':ble.bonded?'warn':'off',ble.connected?t('bd.bt.connected'):ble.bonded?t('bd.bt.bonded'):t('bd.bt.none'));

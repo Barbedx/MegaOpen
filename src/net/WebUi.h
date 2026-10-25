@@ -348,6 +348,9 @@ private:
     void routesGhOta();          // WebUiGhOta.cpp
     void gateLocalOta();         // after ElegantOTA.begin(): one OTA owner
 #endif
+#if FEATURE_LOG_PUSH
+    void routesLogPush();        // WebUiLogPush.cpp
+#endif
     // Host and X-MegaOpen (RequestGate.h), for dispatch() and the OTA filter.
     RequestGate::Why gateWhy(PsychicRequest* r);
     // The mDNS name at boot: still announced after a rename until a restart.

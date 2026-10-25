@@ -112,6 +112,12 @@ namespace App
         constexpr int         GHOTA_CORE  = 0;
         constexpr uint32_t    GHOTA_STACK = 8192;
 
+        // Log push (src/net/LogPush.h): the same shape as GhOta's, one TLS
+        // job at a time with it (TlsJob.h). Created once a minute at most.
+        constexpr UBaseType_t LOGPUSH_PRIO  = 1;
+        constexpr int         LOGPUSH_CORE  = 0;
+        constexpr uint32_t    LOGPUSH_STACK = 10240;   // GhOta's plus the token, URL and auth header
+
         // LogBus: below everything, on the WiFi core.
         constexpr UBaseType_t LOGBUS_PRIO = 1;
         constexpr int         LOGBUS_CORE = 0;

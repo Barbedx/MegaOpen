@@ -7,9 +7,9 @@
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
 #include <mbedtls/md.h>
-#include <mbedtls/platform.h>
 #include "GhRelease.h"
 #include "GhRoots.h"
+#include "TlsJob.h"
 #include "../Version.h"
 #include "../app/TaskPlan.h"
 #include "../utils/LogBus.h"
@@ -90,23 +90,7 @@ namespace GhOta
             LogBus::printf("[ota] github: %s%s%s", code, *d ? ": " : "", d);
         }
 
-        // mbedTLS into PSRAM for the job: the prebuilt sdkconfig pins it to
-        // internal RAM (MBEDTLS_INTERNAL_MEM_ALLOC), and a handshake's ~40 kB
-        // there is most of what is free with BLE up. Internal RAM when PSRAM
-        // is full. heap_caps_free frees either, so the swap back is safe with
-        // blocks still out.
-        void* psramCalloc(size_t n, size_t size)
-        {
-            return heap_caps_calloc_prefer(n, size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT,
-                                           MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        }
-        // What IDF's own allocator does under MBEDTLS_INTERNAL_MEM_ALLOC; its
-        // header declares it without extern "C", so C++ cannot link to it.
-        void* internalCalloc(size_t n, size_t size)
-        {
-            return heap_caps_calloc(n, size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        }
-
+        // mbedTLS itself goes to PSRAM for the job (TlsJob::InPsram).
         // Everything else the job allocates and could keep in PSRAM: the
         // download chunk, SHA256SUMS, the JSON pools. Internal RAM when there
         // is no PSRAM (heap_caps_free frees either).
@@ -131,21 +115,6 @@ namespace GhOta
             if (h < s_v.heapMin) s_v.heapMin = h;
             portEXIT_CRITICAL(&s_mux);
         }
-
-        struct TlsInPsram {
-            bool on = false;
-            TlsInPsram()
-            {
-#if CONFIG_SPIRAM
-                on = psramFound();
-                if (on) mbedtls_platform_set_calloc_free(psramCalloc, heap_caps_free);
-#endif
-            }
-            ~TlsInPsram()
-            {
-                if (on) mbedtls_platform_set_calloc_free(internalCalloc, heap_caps_free);
-            }
-        };
 
         // The host of a URL, for a log line: at most `n` bytes.
         void hostOf(const char* url, char* out, size_t n)
@@ -456,13 +425,14 @@ namespace GhOta
             const Job job = (Job)(uintptr_t)arg;
             stage(&View::heapTask);
             {
-                TlsInPsram tls;
+                TlsJob::InPsram tls;
                 portENTER_CRITICAL(&s_mux);
                 s_v.tlsInPsram = tls.on;
                 portEXIT_CRITICAL(&s_mux);
                 if (job == Job::Check) runCheck();
                 else                   runInstall();
             }
+            TlsJob::release();   // mbedTLS is back on its own allocator
             View v;
             view(v);
             if (v.phase == Phase::Written) waitAndReboot();
@@ -494,6 +464,11 @@ namespace GhOta
                 portEXIT_CRITICAL(&s_mux);
                 return "fw_no_newer";   // check first
             }
+            // The log push may be mid-upload: a few seconds at most.
+            if (!TlsJob::claim("ghota")) {
+                portEXIT_CRITICAL(&s_mux);
+                return "tls_busy";
+            }
             s_busy       = true;
             s_v.phase    = job == Job::Check ? Phase::Checking : Phase::Downloading;
             s_v.err[0]   = 0;
@@ -505,6 +480,7 @@ namespace GhOta
             if (xTaskCreatePinnedToCore(task, "ghota", App::Plan::GHOTA_STACK, (void*)(uintptr_t)job,
                                         App::Plan::GHOTA_PRIO, nullptr,
                                         App::core(App::Plan::GHOTA_CORE)) != pdPASS) {
+                TlsJob::release();
                 portENTER_CRITICAL(&s_mux);
                 s_busy    = false;
                 s_v.phase = Phase::Failed;

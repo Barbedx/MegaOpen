@@ -77,6 +77,15 @@
 #define FEATURE_GH_OTA 0
 #endif
 
+// The log pushed to a private GitHub repository over STA (src/net/LogPush.*):
+// a 1 MB spool in PSRAM, one file a minute. PSRAM boards only.
+#ifndef FEATURE_LOG_PUSH
+#define FEATURE_LOG_PUSH 0
+#endif
+#if FEATURE_LOG_PUSH && !defined(BOARD_HAS_PSRAM)
+#error "FEATURE_LOG_PUSH needs PSRAM for its spool"
+#endif
+
 // Media keys to the head unit as a wired USB keyboard (S3 native USB only; needs
 // ARDUINO_USB_MODE=0, i.e. TinyUSB). src/sinks/UsbKeySink.*.
 #ifndef FEATURE_USB_HID

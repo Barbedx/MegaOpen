@@ -20,6 +20,7 @@
 #include "net/WebUi.h"
 #include "net/WifiManager.h"
 #include "net/IpNotice.h"
+#include "net/LogPush.h"
 #include <WiFi.h>          // the heartbeat reports SSID/BSSID/gateway directly
 #include "utils/Log.h"
 #include "utils/LogBus.h"
@@ -207,6 +208,13 @@ static void serialSink(const char* line, int len, uint32_t)
     Serial.write((const uint8_t*)line, len);
     Serial.write('\n');
 }
+#if FEATURE_LOG_PUSH
+// What the flash log keeps, for GitHub (src/net/LogPush.h).
+static void pushSink(const char* line, int len, uint32_t ms)
+{
+    if (!isWebOnly(line) && !isHuEcho(line)) LogPush::sink(line, len, ms);
+}
+#endif
 #if FEATURE_LOGFS
 // The [hu] ring echo never goes to flash, whatever the serial switch says: it
 // is one line per head-unit frame, the volume that made the flash log erase
@@ -1493,6 +1501,9 @@ static bool hkWifiSeen()
 static void hkWifi(uint32_t now)
 {
     g_wifi.loop(now);
+#if FEATURE_LOG_PUSH
+    LogPush::tick(now, g_wifi.isSta() && !g_wifi.connecting() && WiFi.status() == WL_CONNECTED);
+#endif
 #if FEATURE_DISPLAY_CAN
     static IpNotice s_notice;
     IpNotice::Mode m = IpNotice::Mode::None;
@@ -1682,6 +1693,19 @@ void setup()
         // Run on the LogBus task by flushAndWait(): the flash log's RAM buffer
         // to /log/0.log, synced.
         LogBus::onFlush(LogFile::flushNow);
+    }
+#endif
+#if FEATURE_LOG_PUSH
+    const bool push = LogPush::begin();
+    if (push) LogBus::addSink(pushSink);
+    {
+        LogPush::View v;
+        LogPush::view(v);
+        if (push)
+            logf("[push] spool %u kB in PSRAM; %s, repo %s, device %s", (unsigned)(v.spoolBytes / 1024),
+                 v.on ? (v.hasToken ? "on" : "on, no token") : "off", v.repo, v.device);
+        else
+            logf("[push] no memory for the spool: log push off this boot");
     }
 #endif
     // Below the loop task (raised in setup()'s tail), on the core WiFi lives on.
