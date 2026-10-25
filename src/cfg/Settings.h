@@ -44,7 +44,7 @@ namespace Cfg
         Str      displayType = "carminat";   // carminat | updatelist
         bool     funcReg     = true;         // we are the master: run FUNCSREG ourselves
         // The page's developer mode, told to the board: RAM only, never saved,
-        // off after every boot. Opens the dev-only test routes (inforaw).
+        // off after every boot. Shows the page's developer tools.
         bool     devMode     = false;
 
         // BLE role: off | ams (phone: now-playing + clock) | keyboard (HID to the

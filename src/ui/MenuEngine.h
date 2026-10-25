@@ -31,7 +31,7 @@ namespace MenuUi
     // the header's ~45, so 20 cells before the scroll bar (glass sweep
     // 2026-10-25: 20 digits and 20 W in a row, 26 in the header). Cursor
     // marker included.
-    // AffaDisplay's menuRowChars says 26: the frame's field, not the glass.
+    // AffaDisplay 1.4.0+ says the same (kMenuRowCols, menuRowChars).
     inline constexpr uint8_t ROW_COLS = 20;
 
     // What the menu knows of the car, from the glue. Signals are ids the

@@ -64,13 +64,10 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   needs root). Path: a user app with a NotificationListenerService reading
   MediaSession, sending to the board over WiFi.
 
-- **Info list truncates to 8 characters** (`kInfoCells`), seen on camera with a
-  row box that is visibly wider. Sweep: docs/glass-sweeps.md steps 7-14,
-  through the dev-only `/api/display/inforaw` (declared length 0x0C..0x13).
-  The route sends through AffaDisplay's `showInfoRow` (v1.3.0; `showInfoMenu`
-  takes a cell count since v1.2.0). With the owner's photos: pass the measured
-  count in MediaScreen's info layout, and DELETE `/api/display/inforaw` and
-  `Op::InfoRaw`.
+- **Info list: 8 characters — MEASURED 2026-10-25.** Declared 9 to 16 cells
+  (one row and all three) all showed 8 on glass: 8 is the width, not a
+  library default. The sweep route `/api/display/inforaw` and `Op::InfoRaw`
+  are gone (1.5.2); AffaDisplay 1.4.1 records it.
 - **Column widths — MEASURED 2026-10-25** (docs/glass-sweeps.md, results).
   Fullscreen rows hold 22 of anything, W and lowercase included, so no pixel
   budget is needed. The menu's rows hold 20 (big font) under a 26-wide header:
@@ -195,13 +192,10 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   service that issues per-board keys. The previous boot's flash log is not
   pushed (only what the spool holds), so a crash shows up only up to its
   last pushed minute plus the flash log read locally.
-- **AffaDisplay: `menuRowChars = 26` is the frame's field, not the glass
-  (2026-10-25).** The menu's item rows use the big font, ~20 cells before the
-  scroll bar (photo of Lights › Brightness, its value off the edge); the
-  header row's small font does hold 26. MegaOpen lays rows on
-  `MenuUi::ROW_COLS = 20` since 1.5.2. In the library: `PanelGeometry` should
-  say 20 for the rows (and maybe carry the header's 26 separately), then a
-  tag and a pin bump (measured: rows 20, header 26, docs/glass-sweeps.md).
+- **AffaDisplay: the menu's widths — DONE in v1.4.0/v1.4.1 (2026-10-25).**
+  `menuRowChars` 20, new `menuHeaderChars` 26, `kMenuRowCols`/`kMenuHeaderCols`;
+  MegaOpen pins v1.4.1 and static_asserts its own widths against them
+  (`src/display/PanelOps.cpp`).
 - **BLE pairing vs a phone on the board's AP, on the S3 (2026-10-16).** On the
   T-2CAN the iPhone could not pair while it was joined to `MegaOpen-4580`; off
   that WiFi it connected. Same symptom as the 2026-08-07 DevKit bug, fixed then

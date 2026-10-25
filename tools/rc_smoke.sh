@@ -119,7 +119,6 @@ fi
 # ---- settings and the settings file (dry runs only) ----------------------------
 req settings GET /api/settings
 expect_code "GET /api/settings" 200
-DEVMODE=$(grep -o '"devMode": *[a-z]*' "$BODY" | head -1)
 
 req bad_two POST '/api/settings?dry=1' "${GATE[@]}" -H 'Content-Type: application/json' \
     --data '{"keyPopup":"x","logLevel":"NOPE"}'
@@ -147,14 +146,6 @@ req config_pass POST '/api/config?dry=1' "${GATE[@]}" -H 'Content-Type: applicat
     --data '{"format":"megaopen-config","schema":1,"settings":{"apPass":"xxxxxxxxxx"}}'
 expect_code "a file carrying apPass refused" 400
 has "  apPass: file_forbidden" "^apPass: file_forbidden$"
-
-# ---- the dev-only route ---------------------------------------------------------
-req inforaw POST '/api/display/inforaw?len=0x0C&text=rc' "${GATE[@]}"
-case "$DEVMODE" in
-    *true) echo "SKIP  inforaw: devMode is on (switch it off and rerun to check the 403)" ;;
-    *)     if [ "$CODE" = 404 ]; then echo "SKIP  inforaw: no display in this build"
-           else expect_code "inforaw refused without devMode" 403; has "  dev_off" "^dev_off$"; fi ;;
-esac
 
 # ---- health: the HU dialect and the panel bus watch -----------------------------
 req health GET /api/health

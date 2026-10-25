@@ -63,9 +63,6 @@ SCR.service={title:'nav.service',async render(m){
   ['fullscreen',{l1:RD.slice(0,22),l2:RD.slice(0,22),l3:RD.slice(0,22)},t('sv.sw.4')],
   ['menu',{header:RD,row0:RD,row1:RW},t('sv.sw.5')],
   ['info',{l1:'12345678',l2:'WWWWWWWW',l3:'abcdefgh'},t('sv.sw.6')],
-  /* лише для розробника (inforaw, 403 без devMode): рядок 1 з довшою заявленою довжиною */
-  ...[0x0C,0x0D,0x0E,0x0F,0x10,0x11,0x12,0x13].map(n=>['inforaw',{len:'0x'+h2(n),offset:'0x41',text:'123456789ABCDEFG'},t('sv.sw.raw',h2(n),n-3)]),
-  ['inforaw',{len:'0x13',rows:'3',text:'123456789ABCDEFG'},t('sv.sw.raw3')],
  ];
  let swI=-1;const swStep=async b=>{swI++;if(swI>=SW.length){swI=-1;$('#swN').textContent=t('sv.done');$('#swW').textContent='';b.textContent=t('sv.start');await API.post('/api/display/clear');return {note:t('sv.end')}}
   const[c,q,w]=SW[swI];$('#swN').textContent=(swI+1)+'/'+SW.length;$('#swW').textContent=w;b.textContent=t('sv.next');await API.post('/api/display/'+c+'?'+new URLSearchParams(q));return {note:t('sv.step',swI+1)}};

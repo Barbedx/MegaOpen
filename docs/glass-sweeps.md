@@ -29,8 +29,6 @@ gives the width directly.
 | 4 | fullscreen, three rows of 22 digits | all three end in `B12`? |
 | 5 | menu: header digits, row 0 digits, row 1 W | last visible in each |
 | 6 | info list: `12345678`, `WWWWWWWW`, `abcdefgh` | how much empty room is left in each row's box, in characters |
-| 7-14 | info row 1 with a longer declared length, `0x0C` … `0x13` (9 … 16 cells of `123456789ABCDEFG`) | how many characters row 1 shows at each step, or if it stops drawing |
-| 15 | all three info rows, `0x13` (16 cells of `123456789ABCDEFG` in each) | characters visible in each row: does the width differ per row? |
 
 Each step is the same as a web request, for a laptop instead of the page:
 
@@ -50,16 +48,8 @@ curl -X POST -H "X-MegaOpen: 1" "$B/api/display/clear"
 * Step 5: the menu layout's width and the header's.
 * Step 6: the room in the box at the library's 8 cells
   (`10 0B 76 60 <offset> t0..t7`).
-* Steps 7-14: the real cell count. They go through `POST
-  /api/display/inforaw?len=0x0C&offset=0x41&text=…`, a dev-only route
-  (403 unless **Режим розробника** is on; length clamped to `0x0B`…`0x13`,
-  offset `0x40`…`0x4F`, prefix `0x40`…`0x7F`). The result becomes a cell
-  count in the library's `showInfoMenu`, and the route goes.
-* Step 15: the same route with `rows=3` (`len=0x13&rows=3&text=…`): the text
-  in all three rows at the OEM offsets `0x41`/`0x44`/`0x48`, so the photo
-  shows whether the width differs per row. If a row shows a different count, the
-  cell count is per row, not one number: `showInfoMenu` takes one count for
-  all three rows, so the info layout would send each row with `showInfoRow`.
+* Steps 7-15 (a longer declared info row, through a dev-only route) ran on
+  2026-10-25 and showed 8 at every length; the route is gone since 1.5.2.
 
 ## Results, 2026-10-25 (T-2CAN in the car, owner's photos)
 
@@ -69,7 +59,7 @@ curl -X POST -H "X-MegaOpen: 1" "$B/api/display/clear"
 | 4 | three rows of 22, all end in `B12` |
 | 5 | menu: header **26** (`…B123456`, small font), row 0 **20** (`…89B`), row 1 W **20** (`…W2`); the rows are the big font, cut by the scroll bar |
 | 6 | info list: all three 8-character rows whole, the highlight box room for ~5 more |
-| 7-15 | not photographed yet |
+| 7-15 | info row declared 9 to 16 cells, one row and all three: **8** every time, so 8 is the width |
 
 Applied: `MenuUi::ROW_COLS = 20` (the panel menu's item rows) and
 `MediaScreen::COLS_MENU = 20` (the media menu layout), 1.5.2. AffaDisplay's

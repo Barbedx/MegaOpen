@@ -1449,29 +1449,6 @@ void WebUi::routesDisplay()
         return posted(r, _ops->postInfoPopup(l1.c_str(), l2.c_str(), l3.c_str()));
     });
 
-    // DEV ONLY, for the glass sweep (docs/glass-sweeps.md step 7): one info row
-    // with a declared length of 0x0B..0x13 (8..16 cells), clamped; offset
-    // 0x40..0x4F and prefix 0x40..0x7F or 400. 403 unless the page's developer
-    // mode is on (devMode, RAM only). Goes when the library's showInfoMenu
-    // takes a cell count.
-    route("/api/display/inforaw", HTTP_POST, [this, posted](PsychicRequest* r) {
-        if (!_ops) return r->reply(503, "text/plain", "not_built display");
-        if (!_cfg->s().devMode) return r->reply(403, "text/plain", "dev_off");
-        // 0x0B..0x13 = the library's showInfoRow at 8..16 cells; clamped.
-        const uint32_t lenIn = paramU32(r, "len", "11", 0);
-        const uint8_t len = lenIn < 0x0B ? 0x0B : lenIn > 0x13 ? 0x13 : (uint8_t)lenIn;
-        const uint32_t off = paramU32(r, "offset", "0x41", 0);
-        const uint32_t pre = paramU32(r, "prefix", "0x60", 0);
-        if (off < 0x40 || off > 0x4F) return r->reply(400, "text/plain", "param offset");
-        if (pre < 0x40 || pre > 0x7F) return r->reply(400, "text/plain", "param prefix");
-        // rows=3: the same text in all three rows at the OEM offsets (offset unused),
-        // so a photo shows whether the width differs per row.
-        const uint32_t rows = paramU32(r, "rows", "1", 0);
-        if (rows != 1 && rows != 3) return r->reply(400, "text/plain", "param rows");
-        return posted(r, _ops->postInfoRaw(paramStr(r, "text").c_str(), len, (uint8_t)pre, (uint8_t)off,
-                                           (uint8_t)rows));
-    });
-
     // No hide: a fullscreen is not an overlay, setText() over it replaces it
     // (measured on the panel). `02 54 03` is popup?hide=1.
     route("/api/display/fullscreen", HTTP_POST, [this, posted](PsychicRequest* r) {

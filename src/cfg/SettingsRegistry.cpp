@@ -493,8 +493,7 @@ namespace Cfg
             {"logLevel", "Log level", "service", SType::Enum, WM | F_VOLATILE, AP_NONE,
              0, 0, 0, nullptr, &kLogLevels, [](const Model&) -> int32_t { return (int32_t)Log::level(); },
              [](Model&, int32_t v) { Log::setLevel((LogLevel)v); }},
-            // Set by the page's «Режим розробника»; off at boot. Dev-only test
-            // routes answer 403 without it (/api/display/inforaw).
+            // Set by the page's «Режим розробника»; off at boot.
             {"devMode", "Dev mode", "service", SType::Bool, W | F_VOLATILE, AP_NONE,
              0, 1, 0, nullptr, nullptr, S_GET(s.devMode), S_PUT(s.devMode = v != 0)},
 

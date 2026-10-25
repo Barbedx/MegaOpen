@@ -895,8 +895,6 @@
  "sv.sw.4": "Three rows of 22: are all three whole (each ends in B12)",
  "sv.sw.5": "Menu: header, a row of digits, a row of W: the last visible ones",
  "sv.sw.6": "Info: 8 characters in each row; how much room is left on the right of the frame",
- "sv.sw.raw": "Info, row 1, length 0x{0} ({1} characters): how many are visible",
- "sv.sw.raw3": "Info, all three rows, length 0x13 (16 characters): how many are visible in each row",
  "sv.done": "done",
  "sv.end": "finished, display handed back",
  "sv.step": "step {0}: take a photo",

@@ -212,12 +212,8 @@ boot), and **Сервіс → Лог** (live).
 
 ## For developers
 
-**Плата → Інтерфейс → Режим розробника** shows the **Сервіс** tab and tells
-the board (until its next reboot) to accept the dev-only test routes:
-
-* `POST /api/display/inforaw?len=0x0B..0x13&offset=0x41&prefix=0x60&text=…`:
-  one info-list row with a longer declared length, for the glass sweep in
-  [glass-sweeps.md](glass-sweeps.md). It goes once the sweep has its answer.
+**Плата → Інтерфейс → Режим розробника** shows the **Сервіс** tab (the board
+keeps the switch until its next reboot).
 
 ## Coming next
 

@@ -1,6 +1,21 @@
 #include "PanelOps.h"
 #include <string.h>
+#include "MediaScreen.h"
+#include "../ui/MenuEngine.h"
 #include "../utils/LogBus.h"
+
+// The widths MegaOpen lays text on are the library's, measured on glass
+// (docs/glass-sweeps.md, AffaDisplay 1.4.1). The layout code is host-tested
+// without the library, so it keeps its own numbers; a pin that moves one
+// stops the build here.
+static_assert(MenuUi::COLS == affa::carminat::kMenuHeaderCols, "menu header width != the library's");
+static_assert(MenuUi::ROW_COLS == affa::carminat::kMenuRowCols, "menu row width != the library's");
+static_assert(MegaOpen::MediaScreen::COLS_MENU == affa::carminat::kMenuRowCols,
+              "media menu layout width != the library's menu row");
+static_assert(MegaOpen::MediaScreen::COLS_DEFAULT == affa::carminat::kFullscreenCols,
+              "fullscreen width != the library's");
+static_assert(MegaOpen::MediaScreen::COLS_INFO == affa::carminat::kInfoCells,
+              "info row width != the library's");
 
 namespace MegaOpen
 {
@@ -30,7 +45,6 @@ namespace MegaOpen
             case Op::MessageBox:     return "msgbox";
             case Op::SelectButton:   return "msgbox/select";
             case Op::InfoPopup:      return "info";
-            case Op::InfoRaw:        return "info/raw";
             case Op::Key:            return "key";
             case Op::Abort:          return "abort";
             case Op::Resync:         return "resync";
@@ -52,7 +66,6 @@ namespace MegaOpen
             case Op::MessageBox:
             case Op::SelectButton:
             case Op::InfoPopup:
-            case Op::InfoRaw:
                 return true;
             default:
                 return false;
@@ -110,15 +123,6 @@ namespace MegaOpen
     {
         Req r; r.op = Op::InfoPopup;
         copyStr(r.a, l1); copyStr(r.b, l2); copyStr(r.c, l3);
-        return accepted(submit(r));
-    }
-
-    bool PanelOps::postInfoRaw(const char* text, uint8_t len, uint8_t prefix, uint8_t offset,
-                               uint8_t rows)
-    {
-        Req r; r.op = Op::InfoRaw;
-        copyStr(r.a, text);
-        r.p[0] = len; r.p[1] = prefix; r.p[2] = offset; r.p[3] = rows;
         return accepted(submit(r));
     }
 
@@ -293,21 +297,6 @@ namespace MegaOpen
                                         r.p[0], r.p[1] == 0xFF ? 0 : r.p[1]);
                 break;
             }
-            // DEV ONLY: one row through the library (the glass gate above it):
-            // declared length len = 3 header bytes + the cells. A length under
-            // 4 is BadArgument here, a cell count over the library's is there.
-            case Op::InfoRaw:
-                if (!_carminat || r.p[0] < 4)
-                    res = affa::Submitted::refused(_carminat ? affa::Result::BadArgument
-                                                             : affa::Result::NotSupported);
-                else if (r.p[3] == 3)
-                    res = _carminat->showInfoMenu(r.a, r.a, r.a, affa::carminat::kInfoOffset0,
-                                                  affa::carminat::kInfoOffset1,
-                                                  affa::carminat::kInfoOffset2, r.p[1],
-                                                  (uint8_t)(r.p[0] - 3));
-                else
-                    res = _carminat->showInfoRow(r.a, r.p[2], r.p[1], (uint8_t)(r.p[0] - 3));
-                break;
             // The pane: copied into the library's pool at the call.
             case Op::NavBitmap:
                 res = (_carminat && r.img)
