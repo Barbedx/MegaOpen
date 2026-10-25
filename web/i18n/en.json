@@ -1414,5 +1414,7 @@
  "ca.diag.fault": "bus error — switched off",
  "k.sig.cabin_temp": "Climate: cabin",
  "k.sig.clim_sun": "Climate: sun",
- "ca.diag.refused": "bus rate not found yet"
+ "ca.diag.refused": "bus rate not found yet",
+ "k.sig.drive_no_lights": "Driving without headlights",
+ "k.sig.drive_handbrake": "Driving with the handbrake on"
 }

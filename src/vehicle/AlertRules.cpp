@@ -14,6 +14,16 @@ namespace Vehicle
         r[0].cond = AC_RISES;
         r[0].cooldownS = 300;
         r[0].on = true;
+        // Driving off (or switching off) with no headlights, and with the
+        // handbrake up: the owner's two, 2026-10-25 (Vehicle::Derived).
+        r[1].sig = SIG_DRIVE_NO_LIGHTS;
+        r[1].cond = AC_RISES;
+        r[1].cooldownS = 60;
+        r[1].on = true;
+        r[2].sig = SIG_DRIVE_HANDBRAKE;
+        r[2].cond = AC_RISES;
+        r[2].cooldownS = 30;
+        r[2].on = true;
     }
 
     int32_t AlertRules::get(uint8_t row, uint8_t col) const
@@ -180,8 +190,13 @@ namespace Vehicle
         return true;
     }
 
+    static int clampLen(int n, size_t cap) { return n < 0 ? 0 : (size_t)n < cap ? n : (int)cap - 1; }
+
     int AlertEval::text(char* b, size_t cap, uint8_t sig, int32_t v, bool verified)
     {
+        // The two safety reminders say what to do, not a signal and a 1.
+        if (sig == SIG_DRIVE_NO_LIGHTS && v) return clampLen(snprintf(b, cap, "Lights off!"), cap);
+        if (sig == SIG_DRIVE_HANDBRAKE && v) return clampLen(snprintf(b, cap, "Handbrake on!"), cap);
         const Meta& m = meta(sig);
         char num[24];
         if (m.decimals) {

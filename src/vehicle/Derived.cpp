@@ -10,6 +10,8 @@ namespace Vehicle
         const uint8_t kRate[]  = {SIG_FUEL_COUNTER};
         const uint8_t kCons[]  = {SIG_FUEL_COUNTER, SIG_SPEED};
         const uint8_t kRange[] = {SIG_FUEL_COUNTER, SIG_SPEED, SIG_FUEL_LEVEL};
+        const uint8_t kNoLights[]  = {SIG_SPEED, SIG_LIGHT_DIPPED, SIG_LIGHT_MAIN};
+        const uint8_t kHandbrake[] = {SIG_SPEED, SIG_HANDBRAKE};
 
         template <size_t N>
         uint8_t give(const uint8_t (&a)[N], const uint8_t*& list) { list = a; return (uint8_t)N; }
@@ -34,6 +36,8 @@ namespace Vehicle
             case SIG_AVG_SPEED:
             case SIG_TRIP_ELAPSED: return give(kCons, list);
             case SIG_RANGE_CALC: return give(kRange, list);
+            case SIG_DRIVE_NO_LIGHTS: return give(kNoLights, list);
+            case SIG_DRIVE_HANDBRAKE: return give(kHandbrake, list);
             default:             list = nullptr; return 0;
         }
     }
@@ -58,6 +62,7 @@ namespace Vehicle
             _speedTs = s.stamp(SIG_SPEED);
             _rpmTs   = s.stamp(SIG_RPM);
             gear(s, now);
+            safety(s, now);
         }
         if (s.stamp(SIG_FUEL_COUNTER) != _cntTs) {
             _cntTs = s.stamp(SIG_FUEL_COUNTER);
@@ -123,5 +128,25 @@ namespace Vehicle
         const int64_t avg = (int64_t)(_totCounts * 80000 / _totMm);
         put(s, SIG_CONS_AVG, avg, now);
         if (avg > 0 && s.has(SIG_FUEL_LEVEL)) put(s, SIG_RANGE_CALC, (int64_t)s.get(SIG_FUEL_LEVEL) * 1000 / avg, now);
+    }
+}
+
+namespace Vehicle
+{
+    // Moving with no headlights, or with the handbrake up: each a yes/no with
+    // its own speed band (on at or above, off below the lower edge), so a car
+    // crawling round the threshold does not flicker. No speed, no light or no
+    // handbrake value: no.
+    void Derived::safety(State& s, uint32_t now)
+    {
+        const int32_t v = s.has(SIG_SPEED) ? s.get(SIG_SPEED) : 0;   // km/h x100
+        _movingLights = v >= (_movingLights ? LIGHTS_OFF_SPEED : LIGHTS_ON_SPEED);
+        _movingBrake  = v >= (_movingBrake ? BRAKE_OFF_SPEED : BRAKE_ON_SPEED);
+        const bool beams = (s.has(SIG_LIGHT_DIPPED) && s.get(SIG_LIGHT_DIPPED)) ||
+                           (s.has(SIG_LIGHT_MAIN) && s.get(SIG_LIGHT_MAIN));
+        const bool knownLights = s.has(SIG_LIGHT_DIPPED) || s.has(SIG_LIGHT_MAIN);
+        put(s, SIG_DRIVE_NO_LIGHTS, _movingLights && knownLights && !beams ? 1 : 0, now);
+        put(s, SIG_DRIVE_HANDBRAKE,
+            _movingBrake && s.has(SIG_HANDBRAKE) && s.get(SIG_HANDBRAKE) ? 1 : 0, now);
     }
 }

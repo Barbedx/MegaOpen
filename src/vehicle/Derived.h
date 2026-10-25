@@ -28,6 +28,9 @@ namespace Vehicle
         static constexpr int32_t  MIN_RPM    = 400;
         static constexpr uint32_t AVG_MIN_KM = 50;      // km x10 = 5 km
         static constexpr uint64_t AVG_SPEED_MIN_MM = 1000000;   // 1 km before an average speed
+        // km/h x100: the speed bands of drive_no_lights and drive_handbrake.
+        static constexpr int32_t  LIGHTS_ON_SPEED = 1000, LIGHTS_OFF_SPEED = 500;
+        static constexpr int32_t  BRAKE_ON_SPEED  = 500,  BRAKE_OFF_SPEED  = 300;
         static constexpr uint8_t  BAND_PCT   = 12;      // a gear matches within ±12 %
 
         // km/h per 1000 rpm x10, 1st..6th; 0 = no such gear. The defaults are a
@@ -54,6 +57,7 @@ namespace Vehicle
     private:
         void gear(State& s, uint32_t now);
         void fuel(State& s, uint32_t now);
+        void safety(State& s, uint32_t now);
 
         Gears    _g;
         uint32_t _speedTs = 0, _rpmTs = 0, _cntTs = 0;
@@ -66,5 +70,6 @@ namespace Vehicle
         uint64_t _winMm = 0;
         uint64_t _totCounts = 0, _totMm = 0;
         uint64_t _totMs = 0;       // engine-on time since boot (counter frames flowing)
+        bool     _movingLights = false, _movingBrake = false;
     };
 }

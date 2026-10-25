@@ -1414,5 +1414,7 @@
  "ca.diag.fault": "помилка шини — вимкнено",
  "k.sig.cabin_temp": "Клімат: салон",
  "k.sig.clim_sun": "Клімат: сонце",
- "ca.diag.refused": "швидкість шини ще не знайдена"
+ "ca.diag.refused": "швидкість шини ще не знайдена",
+ "k.sig.drive_no_lights": "Їду без фар",
+ "k.sig.drive_handbrake": "Їду з ручником"
 }

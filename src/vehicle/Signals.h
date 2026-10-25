@@ -236,6 +236,11 @@ namespace Vehicle
         // frame: the cabin, °C x10, and the sun sensor, W/m².
         SIG_CABIN_TEMP,
         SIG_CLIM_SUN,
+        // Safety, derived (Vehicle::Derived): moving at 10 km/h or more with neither
+        // the dipped nor the main beam on; moving at 5 km/h or more with the
+        // handbrake up. Yes/no, for the panel alerts.
+        SIG_DRIVE_NO_LIGHTS,
+        SIG_DRIVE_HANDBRAKE,
 
         SIG_COUNT
     };

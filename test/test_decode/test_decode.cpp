@@ -875,17 +875,52 @@ void test_derived_signals_name_their_inputs()
 
 // ---- panel alerts --------------------------------------------------------------------
 
-void test_alert_factory_is_the_low_fuel_edge_alone()
+void test_alert_factory_is_low_fuel_lights_and_handbrake()
 {
     AlertRules a;
     a.factory();
     TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LOW, a.r[0].sig);
     TEST_ASSERT_EQUAL_UINT8(AC_RISES, a.r[0].cond);
     TEST_ASSERT_TRUE(a.r[0].on);
-    for (uint8_t i = 1; i < AlertRules::ROWS; ++i) {
+    TEST_ASSERT_EQUAL_UINT8(SIG_DRIVE_NO_LIGHTS, a.r[1].sig);
+    TEST_ASSERT_EQUAL_UINT8(SIG_DRIVE_HANDBRAKE, a.r[2].sig);
+    TEST_ASSERT_TRUE(a.r[1].on && a.r[2].on);
+    TEST_ASSERT_EQUAL_UINT8(AC_RISES, a.r[1].cond);
+    for (uint8_t i = 3; i < AlertRules::ROWS; ++i) {
         TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, a.r[i].sig);
         TEST_ASSERT_FALSE(a.r[i].on);
     }
+}
+
+
+// The safety pair (Derived::safety): moving with no beam on, or with the
+// handbrake up, each with its own speed band; and the text the panel shows.
+void test_driving_without_lights_or_with_the_handbrake()
+{
+    Derived d;
+    State s;
+    uint32_t t = 100;
+    auto at = [&](int32_t kmh100) { t += 50; s.set(SIG_SPEED, kmh100, t); s.set(SIG_RPM, 2000, t); d.update(s, t); };
+    s.set(SIG_LIGHT_DIPPED, 0, t); s.set(SIG_LIGHT_MAIN, 0, t); s.set(SIG_HANDBRAKE, 1, t);
+    at(0);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_DRIVE_NO_LIGHTS));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_DRIVE_HANDBRAKE));
+    at(600);                                                    // 6 km/h: the handbrake band only
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_DRIVE_NO_LIGHTS));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_DRIVE_HANDBRAKE));
+    at(1200);                                                   // 12 km/h, no beams
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_DRIVE_NO_LIGHTS));
+    at(700);                                                    // under 10, above 5: still on
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_DRIVE_NO_LIGHTS));
+    s.set(SIG_LIGHT_DIPPED, 1, t); at(700);                     // dipped on: off
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_DRIVE_NO_LIGHTS));
+    s.set(SIG_HANDBRAKE, 0, t); at(700);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_DRIVE_HANDBRAKE));
+    char b[32];
+    AlertEval::text(b, sizeof(b), SIG_DRIVE_NO_LIGHTS, 1, false);
+    TEST_ASSERT_EQUAL_STRING("Lights off!", b);
+    AlertEval::text(b, sizeof(b), SIG_DRIVE_HANDBRAKE, 1, false);
+    TEST_ASSERT_EQUAL_STRING("Handbrake on!", b);
 }
 
 void test_alert_cells_check_their_ranges_and_round_trip()
@@ -982,6 +1017,7 @@ void test_alert_threshold_has_hysteresis_and_newest_wins()
 {
     AlertRules a;
     a.factory();
+    for (uint8_t i = 1; i < AlertRules::ROWS; ++i) a.r[i] = AlertRule{};   // rows 1.. are this test's
     a.r[0].on = false;
     // batt_v below 11.80 V at the shortest pause (5 s); the band is
     // 1600/50 = 0.32 V. Readings 6 s apart, so the pause never decides.
@@ -1023,6 +1059,7 @@ void test_alert_threshold_at_the_range_end_still_rearms()
 {
     AlertRules a;
     a.factory();
+    for (uint8_t i = 1; i < AlertRules::ROWS; ++i) a.r[i] = AlertRule{};   // rows 1.. are this test's
     a.r[0].on = false;
     a.set(1, AlertRules::C_SIG, SIG_FUEL_LOW);
     a.set(1, AlertRules::C_COND, AC_ABOVE);
@@ -1177,7 +1214,8 @@ int main(int, char**)
 
 {
     UNITY_BEGIN();
-    RUN_TEST(test_alert_factory_is_the_low_fuel_edge_alone);
+    RUN_TEST(test_alert_factory_is_low_fuel_lights_and_handbrake);
+    RUN_TEST(test_driving_without_lights_or_with_the_handbrake);
     RUN_TEST(test_alert_cells_check_their_ranges_and_round_trip);
     RUN_TEST(test_alert_low_fuel_edge_fires_once_and_waits_for_the_glass);
     RUN_TEST(test_alert_already_on_at_first_sight_counts_as_rising);

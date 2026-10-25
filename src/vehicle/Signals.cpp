@@ -188,6 +188,8 @@ namespace Vehicle
         {"intake_temp",     "C",    -40,     215, 0, false, GRP_ENGINE},
         {"cabin_temp",      "C",   -400,    875, 1, false, GRP_CLIMATE},
         {"clim_sun",        "W/m2",   0,    765, 0, false, GRP_CLIMATE},
+        {"drive_no_lights", "",       0,       1, 0, true,  GRP_SAFETY},
+        {"drive_handbrake", "",       0,       1, 0, true,  GRP_SAFETY},
     };
 
     static_assert(sizeof(kMeta) / sizeof(kMeta[0]) == SIG_COUNT,

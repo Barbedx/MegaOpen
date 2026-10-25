@@ -392,7 +392,7 @@ void test_alert_cells_read_the_rules()
     TEST_ASSERT_EQUAL_INT32(Vehicle::AC_RISES, Registry::cell(f.m, e, 0, COND));
     TEST_ASSERT_EQUAL_INT32(1, Registry::cell(f.m, e, 0, ON));
     // An empty row is the last enum row, and its id is "".
-    const int32_t empty = Registry::cell(f.m, e, 1, SIG);
+    const int32_t empty = Registry::cell(f.m, e, 3, SIG);       // rows 1-2: the lights and handbrake rules
     TEST_ASSERT_EQUAL_INT32(Registry::colMax(e.tab->col[SIG]), empty);
     TEST_ASSERT_EQUAL_STRING("", e.tab->col[SIG].en->id((uint8_t)empty));
     TEST_ASSERT_EQUAL(empty, Registry::colEnumIndex(e.tab->col[SIG], ""));
