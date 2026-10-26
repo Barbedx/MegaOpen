@@ -5,6 +5,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-10-26
+
+1.6.0 and everything after its rcs, as one version both the board and MegaOpen Companion see as newer than any 1.6.0 (an rc1 put on by hand took itself for the final).
+
+### Added
+- `[drive]` every 10 s while the car runs: speed, rpm, the gear ratio and gear, clutch, neutral, reverse, the three lights, the handbrake and the two reminders' signals, so a whole drive can be read from the pushed log.
+- The gear learner: steady speed/rpm ratios with the clutch up, binned; once a minute `[gear] steady ratios seen: …` lists the peaks (one a gear) next to the table in use.
+- Settings › «Передачі»: the table (km/h per 1000 rpm x10, 1st..5th), live. The defaults were computed, not measured: copy the learned peaks here.
+- The head-unit map shows «рахує плата» instead of «+ прив'язати» on a field the board computes itself (average speed, trip time, gear, consumption): it needs no CAN binding.
+- Авто — наживо › правила: «Додати заводські правила» puts the low fuel, no headlights and handbrake rules into empty rows (switches them on if present) and saves; your own rules stay.
+
 ## [1.6.0] - 2026-10-26
 
 The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companion-app.md).

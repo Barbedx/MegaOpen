@@ -620,7 +620,7 @@ static const char* const kNotInRegistry[] = {"ssid", "pass", "mdnsName", "apName
 // the number. Host layout: std::string fields.
 void test_settings_struct_unchanged()
 {
-    TEST_ASSERT_EQUAL_MESSAGE(sizeof(std::string) * 11 + 80, sizeof(Settings),
+    TEST_ASSERT_EQUAL_MESSAGE(sizeof(std::string) * 11 + 88, sizeof(Settings),
                               "Cfg::Settings changed: add a registry entry, then update this size");
     // Every other field: count the entries that write Settings.
     size_t n = 0;
@@ -628,8 +628,8 @@ void test_settings_struct_unchanged()
         const SEntry& e = Registry::at(i);
         if (scalar(e) && !(e.flags & F_VOLATILE) && !(e.apply & (AP_KNOBS | AP_CAR | AP_CAP | AP_HU))) ++n;
     }
-    // 44 scalar/enum fields in Settings (carSig counts three), all in the registry.
-    TEST_ASSERT_EQUAL(44, n);
+    // 49 scalar/enum fields in Settings (carSig counts three, gearRatio five), all in the registry.
+    TEST_ASSERT_EQUAL(49, n);
     (void)kNotInRegistry;
 }
 

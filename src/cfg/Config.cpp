@@ -24,6 +24,11 @@ namespace Cfg
         _s.wifiAuto = _p.getBool("wifiAuto", false);
         _s.remindLightsKmh = _p.getUChar("rmLights", 10);
         _s.remindBrakeKmh  = _p.getUChar("rmBrake", 5);
+        {
+            static const uint16_t def[5] = {75, 136, 200, 270, 352};
+            static const char* const key[5] = {"gr1", "gr2", "gr3", "gr4", "gr5"};
+            for (int i = 0; i < 5; ++i) _s.gearRatio[i] = _p.getUShort(key[i], def[i]);
+        }
         _s.apPass = _p.getString("apPass", MO_AP_PASS);
 
         _s.timing.debounceMs     = _p.getUShort("dbMs",   20);
@@ -146,6 +151,10 @@ namespace Cfg
         _p.putBool  ("wifiAuto", _s.wifiAuto);
         _p.putUChar ("rmLights", _s.remindLightsKmh);
         _p.putUChar ("rmBrake",  _s.remindBrakeKmh);
+        {
+            static const char* const key[5] = {"gr1", "gr2", "gr3", "gr4", "gr5"};
+            for (int i = 0; i < 5; ++i) _p.putUShort(key[i], _s.gearRatio[i]);
+        }
         _p.putString("apPass", _s.apPass);
 
         _p.putUShort("dbMs",  _s.timing.debounceMs);

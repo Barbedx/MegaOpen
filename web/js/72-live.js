@@ -56,7 +56,7 @@ SCR.live={title:'lv.title',hidden:true,async render(m){
   `<div class="tw"><table><thead><tr><th>${t('lv.thSig')}</th><th>${t('lv.thNow')}</th><th>${t('lv.thAge')}</th><th>${t('lv.thSrc')}</th><th title="${esc(t('lv.checkedT'))}">✓</th><th></th></tr></thead><tbody id="lvT"></tbody></table></div>`,'lvCard','custom full')+
  card(t('lv.alCard'),row('','',t('lv.alH'))+
   `<div class="tw"><table><thead><tr><th>${t('lv.thSig')}</th><th>${t('lv.thCond')}</th><th>${t('lv.thThr')}</th><th>${t('lv.thPause')}</th><th>${t('lv.thOn')}</th></tr></thead><tbody id="alT"></tbody></table></div>`+
-  `<div class="fr"><button class="btn pri" type="button" id="alSave">${t('lv.alSave')}</button></div>`,'alCard','custom');
+  `<div class="fr"><button class="btn pri" type="button" id="alSave">${t('lv.alSave')}</button><button class="btn" type="button" id="alFac">${t('lv.alFactory')}</button></div>`,'alCard','custom');
  this.draw(r);this.drawAlerts();recAdd(this.M,r);this.drawRec();
  $('[data-f="lvOnly"]').onchange=()=>this.draw(this.last);
  $('#rcGo').onclick=()=>{REC.on=!REC.on&&REC.n<REC_MAX;if(REC.on){REC.M=REC.M||this.M;const a=$('[data-f="lvAuto"]');if(a)a.checked=true}this.drawRec()};
@@ -66,6 +66,13 @@ SCR.live={title:'lv.title',hidden:true,async render(m){
  $('#rcCsv').onclick=e=>{if(!REC.rows.length){sv(svOf(e.target),'bad',t('lv.empty'));return}recSave();sv(svOf(e.target),'ok','CSV');this.drawRec()};
  $('#rcClr').onclick=e=>{const b=e.target;if(!REC.saved&&!b.dataset.sure){b.dataset.sure=1;b.textContent=t('lv.notSaved');return}
   Object.assign(REC,{on:false,rows:[],n:0,bytes:0,M:null});recSaved(true);delete b.dataset.sure;b.textContent=t('lv.clear');this.drawRec()};
+ /* заводські правила (src/vehicle/AlertRules.cpp factory()) у порожні рядки; свої лишаються */
+ $('#alFac').onclick=e=>{this.A=this.readAlerts();let add=0,full=false;
+  for(const f of [['fuel_low','rises',0,300,true],['drive_no_lights','rises',0,60,true],['drive_handbrake','rises',0,30,true]]){
+   const have=this.A.find(a=>a[0]===f[0]);if(have){have[4]=true;continue}
+   const i=this.A.findIndex(a=>!a[0]);if(i<0){full=true;break}this.A[i]=f.slice();add++}
+  this.drawAlerts();if(full){sv(svOf(e.target),'bad',t('lv.all16'));return}
+  run(e.target,()=>API.post('/api/settings',{alerts:this.A.map(a=>[a[0],a[1],+a[2]||0,parseInt(a[3])||0,!!a[4]])}),t('lv.alFactoryDone',add))};
  $('#alSave').onclick=e=>{this.A=this.readAlerts();run(e.target,()=>API.post('/api/settings',{alerts:this.A.map(a=>[a[0],a[1],+a[2]||0,parseInt(a[3])||0,!!a[4]])}),t('lv.saved'))};
  $('#lvT').onclick=e=>{const c=e.target.closest('[data-conf]');
   if(c){const mm=this.M[+c.dataset.conf],on=c.dataset.on==='1';

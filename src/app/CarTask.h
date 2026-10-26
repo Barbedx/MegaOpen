@@ -83,6 +83,9 @@ namespace App
         // ---- any task: the reminders' speeds (Settings › Reminders), km/h ------
         // Two bytes the car task reads on its next frame; 0 = that one off.
         void setReminderSpeeds(uint8_t lightsKmh, uint8_t brakeKmh);
+        // Settings › Gears: km/h per 1000 rpm x10, 1st..5th; applied at the
+        // next frame. Any task.
+        void setGears(const uint16_t ratio[5]);
 
         // ---- any task: State's pins, applied by the car task ------------------
         // Zero wait; a full queue drops the edit and counts it.

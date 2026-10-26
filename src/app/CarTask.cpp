@@ -48,6 +48,89 @@ namespace App
             Vehicle::CanDecode s_decode;
             Vehicle::Derived   s_derived;
             volatile uint8_t   s_rmLights = Vehicle::Derived::LIGHTS_KMH, s_rmBrake = Vehicle::Derived::BRAKE_KMH;
+            // Settings › Gears: written by any task, applied by this one.
+            portMUX_TYPE       s_gearMux = portMUX_INITIALIZER_UNLOCKED;
+            uint16_t           s_gearSet[5] = {75, 136, 200, 270, 352};
+            volatile bool      s_gearDirty = false;
+
+            // The gear learner: steady ratios with the clutch up, binned (2 units
+            // a bin, km/h per 1000 rpm x10), sampled at most every 200 ms; the
+            // peaks go to the log once a minute ([gear]). This task's own.
+            constexpr uint16_t LEARN_BINS = 300;
+            constexpr uint32_t LEARN_SAMPLE_MS = 200, LEARN_LOG_MS = 60000;
+            uint16_t s_hist[LEARN_BINS] = {};
+            int32_t  s_lastRatio = 0;
+            uint32_t s_learnAt = 0, s_learnLogAt = 0, s_learnN = 0;
+
+            void learn(const Vehicle::State& st, uint32_t now)
+            {
+                using namespace Vehicle;
+                if ((uint32_t)(now - s_learnAt) < LEARN_SAMPLE_MS) return;
+                s_learnAt = now;
+                if (!st.has(SIG_SPEED) || !st.has(SIG_RPM)) return;
+                const int32_t v = st.get(SIG_SPEED), rpm = st.get(SIG_RPM);
+                const bool clutch = st.has(SIG_CLUTCH) && st.get(SIG_CLUTCH);
+                const bool neutral = st.has(SIG_NEUTRAL) && st.get(SIG_NEUTRAL);
+                const bool rev = st.has(SIG_REVERSE) && st.get(SIG_REVERSE);
+                if (v < 1500 || rpm < 1100 || clutch || neutral || rev) { s_lastRatio = 0; return; }
+                const int32_t ratio = (int32_t)((int64_t)v * 100 / rpm);
+                // Steady: within 3 % of the last sample (no shift, no slip).
+                const bool steady = s_lastRatio && (ratio > s_lastRatio ? ratio - s_lastRatio : s_lastRatio - ratio) * 100 <= s_lastRatio * 3;
+                s_lastRatio = ratio;
+                if (!steady || ratio / 2 >= LEARN_BINS) return;
+                if (s_hist[ratio / 2] < 0xFFFF) ++s_hist[ratio / 2];
+                ++s_learnN;
+            }
+
+            // The peaks: bins (smoothed over 3) above their neighbours within
+            // ±8 %, each with at least 25 samples (5 s steady), up to 6.
+            void learnLog(uint32_t now)
+            {
+                if ((uint32_t)(now - s_learnLogAt) < LEARN_LOG_MS || s_learnN < 25) return;
+                s_learnLogAt = now;
+                char out[160];
+                int n = 0;
+                uint8_t found = 0;
+                for (uint16_t b = 1; b + 1 < LEARN_BINS && found < 6; ++b) {
+                    const uint32_t c = (uint32_t)s_hist[b - 1] + s_hist[b] + s_hist[b + 1];
+                    if (c < 25) continue;
+                    const uint16_t w = (uint16_t)(b * 8 / 100 + 1);
+                    bool top = true;
+                    for (uint16_t k = b > w ? b - w : 1; k <= b + w && k + 1 < LEARN_BINS && top; ++k) {
+                        if (k == b) continue;
+                        const uint32_t ck = (uint32_t)s_hist[k - 1] + s_hist[k] + s_hist[k + 1];
+                        if (ck > c || (ck == c && k < b)) top = false;
+                    }
+                    if (!top) continue;
+                    n += snprintf(out + n, sizeof(out) - n, " %u (%lu s)", (unsigned)(b * 2 + 1),
+                                  (unsigned long)(c * LEARN_SAMPLE_MS / 1000));
+                    ++found;
+                }
+                uint16_t g[5];
+                portENTER_CRITICAL(&s_gearMux);
+                memcpy(g, s_gearSet, sizeof(g));
+                portEXIT_CRITICAL(&s_gearMux);
+                LogBus::printf("[gear] steady ratios seen (km/h per 1000 rpm x10, clutch up):%s; table %u %u %u %u %u",
+                               found ? out : " none yet", g[0], g[1], g[2], g[3], g[4]);
+            }
+
+            // Every 10 s while the car moves or runs: what the gear and the
+            // reminders are computed from, so a drive can be read afterwards.
+            void driveLine()
+            {
+                using namespace Vehicle;
+                const State* st = s_s.state;
+                if (!st || !st->has(SIG_SPEED)) return;
+                const int32_t v = st->get(SIG_SPEED), rpm = st->has(SIG_RPM) ? st->get(SIG_RPM) : 0;
+                if (v == 0 && rpm == 0) return;
+                auto g = [&](uint8_t s) -> long { return st->has(s) ? (long)st->get(s) : -9; };
+                LogBus::printf("[drive] %ld.%02ld km/h %ld rpm ratio %ld gear %ld clutch %ld N %ld R %ld "
+                               "lights pos/dip/main %ld/%ld/%ld handbrake %ld; no_lights %ld handbrake_moving %ld",
+                               (long)(v / 100), (long)(v % 100), (long)rpm, g(SIG_GEAR_RATIO), g(SIG_GEAR),
+                               g(SIG_CLUTCH), g(SIG_NEUTRAL), g(SIG_REVERSE), g(SIG_LIGHT_POS),
+                               g(SIG_LIGHT_DIPPED), g(SIG_LIGHT_MAIN), g(SIG_HANDBRAKE),
+                               g(SIG_DRIVE_NO_LIGHTS), g(SIG_DRIVE_HANDBRAKE));
+            }
             // The panel alert rules: httpd stages, this task applies and evaluates.
             Staged<Vehicle::AlertRules> s_alerts;
             Vehicle::AlertEval s_eval;
@@ -285,7 +368,16 @@ namespace App
             {
                 if (s_s.state && s_decode.apply(f, *s_s.state, now)) {
                     s_derived.setReminderSpeeds(s_rmLights, s_rmBrake);
+                    if (s_gearDirty) {
+                        Vehicle::Derived::Gears gs;
+                        portENTER_CRITICAL(&s_gearMux);
+                        for (int i = 0; i < 5; ++i) gs.ratio[i] = s_gearSet[i];
+                        s_gearDirty = false;
+                        portEXIT_CRITICAL(&s_gearMux);
+                        s_derived.setGears(gs);
+                    }
                     s_derived.update(*s_s.state, now);
+                    learn(*s_s.state, now);
                 }
 #if FEATURE_DIAG
                 CarDiag::frame(f, now);      // the climate's reply, and the bus is alive
@@ -342,6 +434,8 @@ namespace App
                                (unsigned long)s_cmdDrops.load(std::memory_order_relaxed), src);
                 s_drainMax = 0;
                 s_busyMaxUs = 0;
+                driveLine();
+                learnLog(millis());
             }
 
             void run(void*)
@@ -447,6 +541,17 @@ namespace App
 
         bool         running() { return s_task != nullptr; }
         TaskHandle_t task()    { return s_task; }
+
+        void setGears(const uint16_t ratio[5])
+        {
+            portENTER_CRITICAL(&s_gearMux);
+            const bool same = !memcmp(s_gearSet, ratio, sizeof(s_gearSet));
+            if (!same) {
+                memcpy(s_gearSet, ratio, sizeof(s_gearSet));
+                s_gearDirty = true;
+            }
+            portEXIT_CRITICAL(&s_gearMux);
+        }
 
         void setReminderSpeeds(uint8_t lightsKmh, uint8_t brakeKmh)
         {
