@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>MegaOpen USB</title>
+<link rel="icon" href="data:,">
+<script>
+// The board's page reloads itself (the language switch), and its frame then
+// loads this address: give it back to the shell around it, which draws the
+// board's page again. shell.js does nothing in such a frame.
+try{if(window!==top&&parent.__moShell){window.__moFramed=true;document.documentElement.hidden=true;parent.__moShell.redraw()}}catch(e){}
+</script>
+<style>
+:root{color-scheme:light;--bg:#e7eaed;--panel:#fff;--line:#d0d6dc;--text:#0e1216;--mute:#58626c;--acc:#0a5fd8;--accT:#fff;--ok:#0d7434;--okB:#d6f0de;--warn:#8f5200;--warnB:#fbe8c0;--bad:#bd2218;--badB:#f8d9d5;--ov:rgba(8,10,12,.72)}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#090b0d;--panel:#13171b;--line:#29313a;--text:#e7ecf1;--mute:#8a95a1;--acc:#3f8cff;--accT:#04101f;--ok:#3fd072;--okB:#11301e;--warn:#f2a93b;--warnB:#36270d;--bad:#ff5b50;--badB:#3b1512;--ov:rgba(0,0,0,.8)}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;display:flex;flex-direction:column}
+#bar{display:flex;align-items:center;gap:8px;padding:4px 12px;min-height:36px;border-bottom:1px solid var(--line);background:var(--panel);font-size:13px}
+#bar b{font-size:14px;letter-spacing:.02em}
+#bar .sp{flex:1}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--mute);flex:none}
+.dot.on{background:var(--ok)}.dot.wait{background:var(--warn)}.dot.bad{background:var(--bad)}
+#st{color:var(--mute);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button{font:inherit;font-weight:700;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--text);padding:6px 12px;cursor:pointer;min-height:32px}
+button.pri{background:var(--acc);border-color:var(--acc);color:var(--accT);font-size:16px;padding:12px 20px;min-height:48px}
+button:disabled{opacity:.55;cursor:default}
+#intro{flex:1;overflow:auto;padding:24px 16px}
+#intro .card{max-width:520px;margin:0 auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+#intro h1{font-size:20px;margin:0 0 8px}
+#intro p{margin:8px 0}
+#intro .muted{color:var(--mute);font-size:13px}
+#intro .act{margin:16px 0}
+#err{background:var(--badB);color:var(--bad);border-radius:9px;padding:10px 12px;font-weight:600}
+#err:empty{display:none}
+#box{flex:1;position:relative;min-height:0}
+#box iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:var(--bg)}
+#lost{position:absolute;inset:0;background:var(--ov);color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;font-weight:700;z-index:2}
+#toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);max-width:calc(100% - 32px);background:var(--text);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:13px;font-weight:600;opacity:0;transition:opacity .2s;pointer-events:none;z-index:5}
+#toast.on{opacity:.95}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div id="bar">
+ <span class="dot" id="dot"></span><b>MegaOpen</b><span id="st"></span>
+ <span class="sp"></span>
+ <button id="lang" type="button">EN</button>
+ <button id="off" type="button" hidden></button>
+</div>
+<main id="intro">
+ <div class="card">
+  <h1 id="h1"></h1>
+  <p id="lead"></p>
+  <div class="act"><button class="pri" id="go" type="button"></button></div>
+  <p id="err"></p>
+  <p class="muted" id="n1"></p>
+  <p class="muted" id="n2"></p>
+  <p class="muted" id="n3"></p>
+ </div>
+</main>
+<div id="box" hidden><div id="lost" hidden></div></div>
+<div id="toast"></div>
+<script type="module" src="shell.js"></script>
+</body>
+</html>

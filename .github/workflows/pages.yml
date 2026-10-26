@@ -1,0 +1,83 @@
+# The WebUSB page (web/usb/, docs/design/usb-link.md) on GitHub Pages, at
+# https://barbedx.github.io/MegaOpen/usb/ — the address the board's WebUSB
+# descriptor names (USB_WEBUSB_URL in platformio.ini). It is the shell only:
+# the board's own page comes over USB. A pull request runs the link's tests
+# and deploys nothing.
+name: Pages
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - web/usb/**
+      - tools/test_webusb.mjs
+      - .github/workflows/pages.yml
+  pull_request:
+    paths:
+      - web/usb/**
+      - tools/test_webusb.mjs
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: link tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - run: node tools/test_webusb.mjs
+
+  # Pages is the owner's switch (Settings › Pages › Source: GitHub Actions).
+  # While it is off the deploy is skipped, not failed; turned on, run this
+  # workflow once by hand.
+  pages:
+    name: pages on?
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: read
+    outputs:
+      on: ${{ steps.q.outputs.on }}
+    steps:
+      - id: q
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" > /dev/null 2>&1; then
+            echo "on=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::GitHub Pages is off for this repository: nothing deployed."
+          fi
+
+  deploy:
+    name: deploy
+    needs: pages
+    if: needs.pages.outputs.on == '1'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}usb/
+    steps:
+      - uses: actions/checkout@v7
+      - name: site
+        run: mkdir -p _site/usb && cp web/usb/* _site/usb/
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v5

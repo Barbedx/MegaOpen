@@ -153,3 +153,60 @@ own AP. The OTA trial counts the app on the link as a way in, like WiFi
 Two things that turned WiFi straight back on: the core's auto-reconnect answers
 the disconnect that stopping causes (off before stopping, `start()` puts it
 back), and loop() going on into the AP's join retry in the same pass.
+
+## The WebUSB page
+
+`web/usb/` is the same settings page in a desktop or Android Chrome/Edge, over
+the same link: https://barbedx.github.io/MegaOpen/usb/, the address WebUSB on
+`t2can` names. Chrome then offers it when the board is plugged in. GitHub Pages
+serves only a shell (`.github/workflows/pages.yml`): the board's own page comes
+over USB, so it is always the firmware's.
+
+| file | what |
+| --- | --- |
+| `link.js` | the frames, the HTTP framing as `Http.kt`, a `Board` on a WebUSB device: the app's `UsbBoard.kt` |
+| `shell.js` | the chooser, the bar, `GET /` over the link drawn in a frame, `window.MOLink` in that frame |
+| `index.html` | the shell; its first script hands a reloaded frame back to the shell |
+| `sw.js` | the shell's four files kept, so it opens without internet after one visit |
+
+The shell asks for vendor 303A with an interface of class FF, sends HELLO
+without `"net"`, and gives the frame `MOLink.request/download/saveText` before
+the page's own script runs: 10-api.js takes the app's path unchanged. The frame
+is written with `document.open()`, so its URL is the shell's and the page's
+`#board` links stay in the same document. The page's language switch reloads
+the frame onto the shell's address; the shell's first script sees itself framed
+and has the parent draw the board's page again. A `fetch('/…')` of the page's
+own (`/i18n/en.json`) goes over the link too.
+
+Where the app and the browser differ:
+
+- **Idle channels.** The board drops a channel quiet for 15 s with `91 timeout`,
+  which can cross a new request on it. The page sends `11 CLOSE` on its own
+  idle channels at 10 s.
+- **A lost request.** A GET answered by `91` or by FIN with no bytes yet, when
+  the server dropped the socket under it, is sent again once. A POST is not.
+- **The page's own timeout.** `11 CLOSE`, then a PING with a number. The
+  channel is used again only when that PONG is back, behind anything the board
+  had sent on it.
+- **An error answer.** The server may close after a status of 400 or more. The
+  channel waits up to 300 ms for that FIN before the next request.
+- **A cut frame.** `send()` gives up a frame after 500 ms without room and the
+  channel closes without a word. The cut frame's length would make a parser
+  wait for bytes that never come, swallowing the frames after it. The page's
+  parser stops waiting once a whole frame with a good CRC follows, and the
+  answers in flight are dropped: a GET goes again once, a POST fails.
+- **Silence.** No frame for 15 s ends the link. The page reconnects by itself
+  after a replug or a reboot: the browser keeps the device allowed.
+
+To the board the page is an app on the link: it pings every second, so with
+«Без WiFi, коли є USB» on, WiFi stops 10 s after it connects and comes back
+30 s after the tab closes.
+
+Only one program holds the vendor interface: the app, the page, or
+`tools/usb_link.py`. On Windows the WinUSB binding is the MS OS 2.0 descriptor,
+which only `t2can` has; under `t2can_usbhid` the page cannot open the board.
+
+Tests: `node tools/test_webusb.mjs` (CI, the Pages workflow) runs `link.js`
+against a fake board. `node tools/webusb_e2e.mjs` runs the whole page in
+headless Chrome with a fake device, the real `PAGE_APP_GZ` and the simulator's
+mock board behind it.
