@@ -572,7 +572,8 @@ const dgView=()=>{const v=S.dg||(S.dg={on:false,interval:5,ok:0,sent:0,last:'',a
   ...(v.last?{cabin:v.cabin,sun:60}:{})}};
 g('/api/diag',dgView);
 po('/api/diag',q=>{dgView();const v=S.dg;if(q.interval!==undefined&&!(q.interval>=2&&q.interval<=60))return fail(400,'param interval');
- if(typeof q.on==='boolean')v.on=q.on;if(q.interval!==undefined)v.interval=q.interval;if(q.probe){v.at=now();v.sent++;v.ok++;v.last='ok';emit(2,'CAN','[diag] climate 21C1: cabin '+v.cabin+' C')}return ok});
+ if(typeof q.on==='boolean')v.on=q.on;if(q.interval!==undefined)v.interval=q.interval;if(q.probe){v.at=now();v.sent++;v.ok++;v.last='ok';emit(2,'CAN','[diag] climate 21C1: cabin '+v.cabin+' C')}
+ if(q.sweep){v.at=now();v.sent+=6;v.last='ok';emit(2,'CAN','[diag] sweep done; bus now 808 fps, 61 ids (before 61, lowest during 61)')}return ok});
 po('/api/logpush',q=>{lpView();const v=S.lp;
  if(q.token&&!/^[A-Za-z0-9_]{20,255}$/.test(q.token))return fail(400,'push_token_bad');
  if(q.repo!==undefined&&!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(q.repo))return fail(400,'push_repo_bad');

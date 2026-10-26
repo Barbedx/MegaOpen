@@ -30,6 +30,30 @@ namespace App
             std::atomic<uint8_t>  s_interval{INTERVAL_DEFAULT_S};
             std::atomic<uint32_t> s_gen{0};          // bumped by set(): clears a stop
             std::atomic<bool>     s_probe{false};
+            std::atomic<bool>     s_sweepReq{false};
+
+            // ---- the sweep (the car task's) ----
+            struct Step { uint8_t req[2]; const char* what; };
+            const Step SWEEP[] = {
+                {{0x21, 0xC1}, "21 C1, no session"},
+                {{0x10, 0xC0}, "10 C0, open the extended session"},
+                {{0x21, 0xC1}, "21 C1 in the session"},
+                {{0x3E, 0x01}, "3E 01, tester present"},
+                {{0x21, 0xC1}, "21 C1 after tester present"},
+                {{0x10, 0x81}, "10 81, back to the default session"},
+            };
+            constexpr uint8_t  SWEEP_N = sizeof(SWEEP) / sizeof(SWEEP[0]);
+            constexpr uint32_t SWEEP_GAP_MS = 2000;   // between steps: the bus line in between
+            int8_t   s_sweep = -1;           // the step waiting or next; -1 none
+            bool     s_sweepSent = false;     // that step's request is out
+            uint32_t s_sweepAt = 0;
+            uint16_t s_sweepIds0 = 0, s_sweepIdsMin = 0;
+
+            // The bus a second at a time, for the sweep's lines: frames and
+            // distinct standard ids. A cluster that reboots drops its ids.
+            uint8_t  s_idBits[256] = {};
+            uint32_t s_winFrames = 0, s_winStart = 0;
+            uint16_t s_busIds = 0, s_busFps = 0;
 
             // The car task's own.
             uint32_t s_seenGen = 0;
@@ -123,6 +147,92 @@ namespace App
                 portEXIT_CRITICAL(&s_mux);
             }
 
+            // The sweep, while one runs: true when it owns this pass.
+            bool sweepLoop(uint32_t now, ::Mcp2518Source& bus)
+            {
+                using S = Diag::Exchange::Status;
+                if (s_sweep < 0) {
+                    if (!s_sweepReq.load()) return false;
+                    if (s_ex.status() == S::Waiting) return false;      // a poll first
+                    s_sweepReq.store(false);
+                    if (!s_anyFrame || (uint32_t)(now - s_lastFrameMs) >= BUS_QUIET_MS) {
+                        LogBus::line("W [diag] sweep: the car bus is quiet (ignition off?), nothing sent");
+                        return false;
+                    }
+                    if (!bus.transmitting() && !bus.setTransmit(true, now)) {
+                        LogBus::line("W [diag] sweep: the controller would not transmit (rate not locked), nothing sent");
+                        return false;
+                    }
+                    s_ex.clear();
+                    s_sweep = 0;
+                    s_sweepSent = false;
+                    s_sweepAt = now + SWEEP_GAP_MS;
+                    s_sweepIds0 = s_busIds;
+                    s_sweepIdsMin = s_busIds;
+                    LogBus::printf("[diag] sweep: %u steps to 0x744; bus before: %u fps, %u ids", (unsigned)SWEEP_N,
+                                   (unsigned)s_busFps, (unsigned)s_busIds);
+                    publish(now, "sweep");
+                    return true;
+                }
+                const Step& st = SWEEP[s_sweep];
+                if (!s_sweepSent) {
+                    if ((int32_t)(now - s_sweepAt) < 0) return true;
+                    if (bus.txFault()) {
+                        LogBus::printf("W [diag] sweep: bus fault before step %d, stopped (bus %u fps, %u ids)",
+                                       s_sweep + 1, (unsigned)s_busFps, (unsigned)s_busIds);
+                        s_sweep = -1;
+                        return true;
+                    }
+                    LogBus::printf("[diag] sweep %d/%u: %s; bus %u fps, %u ids", s_sweep + 1, (unsigned)SWEEP_N, st.what,
+                                   (unsigned)s_busFps, (unsigned)s_busIds);
+                    s_ex.start(st.req, 2, now);
+                    s_sweepSent = true;
+                    portENTER_CRITICAL(&s_mux);
+                    ++s_v.sent;
+                    portEXIT_CRITICAL(&s_mux);
+                    return true;
+                }
+                if (s_ex.status() == S::Waiting) return true;
+                char b[3 * 24 + 1];
+                hex(b, sizeof(b), s_ex.reply(), s_ex.replyLen() < 24 ? s_ex.replyLen() : 24);
+                const S r = s_ex.status();
+                if (r == S::Negative)
+                    LogBus::printf("W [diag] sweep %d/%u: %02X %02X -> 7F %02X %02X (refused)", s_sweep + 1,
+                                   (unsigned)SWEEP_N, st.req[0], st.req[1], st.req[0], s_ex.nrc());
+                else
+                    LogBus::printf("%s[diag] sweep %d/%u: %02X %02X -> %s%s%s", r == S::Ok ? "" : "W ", s_sweep + 1,
+                                   (unsigned)SWEEP_N, st.req[0], st.req[1], Diag::Exchange::statusId(r),
+                                   s_ex.replyLen() ? ", reply " : "", s_ex.replyLen() ? b : "");
+                Diag::ClimValues cv;
+                if (r == S::Ok && Diag::decode21C1(s_ex.reply(), s_ex.replyLen(), cv)) {
+                    LogBus::printf("[diag] sweep: cabin %d.%d C, sun %u W/m2", cv.cabinX10 / 10, abs(cv.cabinX10 % 10),
+                                   (unsigned)cv.sunWm2);
+                    if (s_state) {
+                        s_state->set(Vehicle::SIG_CABIN_TEMP, cv.cabinX10, now);
+                        s_state->set(Vehicle::SIG_CLIM_SUN, cv.sunWm2, now);
+                    }
+                }
+                portENTER_CRITICAL(&s_mux);
+                s_v.last = Diag::Exchange::statusId(r);
+                s_v.nrc = s_ex.nrc();
+                s_v.replyLen = s_ex.replyLen() < sizeof(s_v.reply) ? s_ex.replyLen() : sizeof(s_v.reply);
+                memcpy(s_v.reply, s_ex.reply(), s_v.replyLen);
+                portEXIT_CRITICAL(&s_mux);
+                s_resultAt = now;
+                s_ex.clear();
+                ++s_sweep;
+                s_sweepSent = false;
+                s_sweepAt = now + SWEEP_GAP_MS;
+                if (s_sweep >= SWEEP_N) {
+                    LogBus::printf("[diag] sweep done; bus now %u fps, %u ids (before %u, lowest during %u)",
+                                   (unsigned)s_busFps, (unsigned)s_busIds, (unsigned)s_sweepIds0,
+                                   (unsigned)s_sweepIdsMin);
+                    s_sweep = -1;
+                    s_nextAt = now + SWEEP_GAP_MS;
+                }
+                return true;
+            }
+
             void load()
             {
                 Preferences p;
@@ -148,14 +258,27 @@ namespace App
         {
             s_lastFrameMs = nowMs;
             s_anyFrame = true;
+            ++s_winFrames;
+            if (!f.extended && f.id < 2048) s_idBits[f.id >> 3] |= (uint8_t)(1u << (f.id & 7));
             if (!f.extended && f.id == Diag::CLIM_RESP) s_ex.onFrame(f.id, f.data, f.len, nowMs);
         }
 
         void loop(uint32_t now)
         {
             ::Mcp2518Source& bus = ::Mcp2518Source::instance();
+            if ((uint32_t)(now - s_winStart) >= 1000) {
+                uint16_t ids = 0;
+                for (uint8_t b : s_idBits) ids = (uint16_t)(ids + __builtin_popcount(b));
+                s_busIds = ids;
+                s_busFps = (uint16_t)(s_winFrames * 1000u / (uint32_t)(now - s_winStart ? now - s_winStart : 1));
+                memset(s_idBits, 0, sizeof(s_idBits));
+                s_winFrames = 0;
+                s_winStart = now;
+                if (s_sweep >= 0 && ids < s_sweepIdsMin) s_sweepIdsMin = ids;
+            }
             s_ex.tick(now);
             using S = Diag::Exchange::Status;
+            if (sweepLoop(now, bus)) return;
             if (s_ex.status() != S::Idle && s_ex.status() != S::Waiting) result(now);
 
             const uint32_t gen = s_gen.load(std::memory_order_acquire);
@@ -225,6 +348,12 @@ namespace App
             s_gen.fetch_add(1, std::memory_order_release);
             LogBus::printf("[diag] climate read %s, every %u s", on ? "ON" : "off", (unsigned)intervalS);
             return nullptr;
+        }
+
+        void sweep()
+        {
+            s_gen.fetch_add(1, std::memory_order_release);
+            s_sweepReq.store(true);
         }
 
         void probe()

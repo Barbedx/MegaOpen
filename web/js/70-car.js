@@ -37,7 +37,7 @@ SCR.car={title:'nav.car',async render(m){
   row(t('ca.speed'),sel('/api/can2|bitrate',enumOpts('canRates'),c2.setting||0),'',t('ca.speedH'))):notBuilt('CAN A','CAN A'))+
  /* діагностика клімату (CarDiag): 21 C1 на CAN A, лише за вмикачем; проба — один запит */
  (dg?card(t('ca.diag'),row(t('ca.diagOn'),sw('/api/diag|on',dg.on),t('ca.diagOnSub'),t('ca.diagH'))+row(t('ca.diagIv'),num('/api/diag|interval',dg.interval,'min="2" max="60"'))+
-  row(t('ca.diagSt'),'<span id="dSt" class="chip off">…</span>','<span id="dW"></span>')+`<div class="fr"><button class="btn" type="button" id="dProbe">${t('ca.diagProbe')}</button></div>`,'cDiag'):'')+
+  row(t('ca.diagSt'),'<span id="dSt" class="chip off">…</span>','<span id="dW"></span>')+`<div class="fr"><button class="btn" type="button" id="dProbe">${t('ca.diagProbe')}</button><button class="btn" type="button" id="dSweep">${t('ca.diagSweep')}</button></div>`+row('','',t('ca.diagSweepH')),'cDiag'):'')+
  (CP?card(t('ca.rec'),`<div class="fr"><button class="btn rec big" id="cRec" type="button" style="flex:1">…</button></div>`+
   `<div class="fr"><input class="in" id="mkT" placeholder="${esc(t('ca.markPh'))}" maxlength="40" data-nosave><button class="btn pri" type="button" id="mkGo">${t('ca.mark')}</button></div>`+
   `<div class="pad"><div class="seg wrap" id="quick">${quickMarks().map(q=>`<button type="button" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></div>`+
@@ -58,6 +58,7 @@ SCR.car={title:'nav.car',async render(m){
  fold(t('ca.hu'),row(t('ca.show'),seg('#huIn',[['1',t('ca.fromHu')],['0',t('ca.everything')]],'1'),'',t('ca.huH'))+`<div class="tw"><table><thead><tr><th>${t('ca.ago')}</th><th>${t('ca.who')}</th><th>${t('ca.cmd')}</th><th>${t('ca.data')}</th></tr></thead><tbody id="huLog"></tbody></table></div>`,'cHu')+
  (V?fold(t('ca.ids'),row(t('ca.idTable'),sw('/api/can/sniff|on',!!cb.sniff),'',t('ca.idTableH'))+`<div class="fr"><button class="btn" type="button" id="idBase">${t('ca.baseline')}</button><button class="btn" type="button" id="idClr">${t('ca.clear')}</button></div><div class="tw"><table><thead><tr><th>ID</th><th>${t('ca.count')}</th><th>${t('ca.bytes')}</th></tr></thead><tbody id="ids"></tbody></table></div>`,'cIds'):'');
  $$('.card:not(.custom)',m).forEach(c=>saver(c,genericSave,'[data-k]'));
+ if(dg)$('#dSweep').onclick=e=>ask(e.target,t('ca.diagSweepAsk'),()=>run(e.target,async()=>{await API.post('/api/diag',{sweep:true});setTimeout(()=>this.diag(),2000)},t('ca.diagSent')));
  if(dg)$('#dProbe').onclick=e=>run(e.target,async()=>{await API.post('/api/diag',{probe:true});setTimeout(()=>this.diag(),1500)},t('ca.diagSent'));
  if(CP){$('#cRec').onclick=e=>run(e.target,()=>API.post(e.target.classList.contains('on')?'/api/cap/stop':'/api/cap/start')).then(()=>this.tick(true));
  const mk=(tx,b)=>run(b,()=>API.post('/api/cap/mark?t='+encodeURIComponent(tx)),t('ca.marked',tx));

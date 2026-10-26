@@ -8,15 +8,18 @@
 // ISO-TP, physical addressing, 0x744 -> 0x764.
 //
 // THE ONLY TRANSMIT ON THE CAR BUS. CAN A is listen-only (CLAUDE.md) except
-// for what this file lets out, and it lets out exactly two frames:
-//   * the request `02 21 C1` to 0x744 (allowed());
-//   * flow control `30 00 00` to 0x744, only in answer to a first frame from
-//     0x764 while that request waits.
-// No session (`10 xx`): opening one is what PyRen and DDT4all do first, and
-// what the owner saw reboot the cluster; the DDT database lists `21C1` as
-// allowed without one. No tester present, no functional (0x7DF) address, no
-// other ECU, no write. Frames are sent as PyRen's ELM sends them with CAF0:
-// the bytes given, no padding (DLC 3).
+// for what this file lets out, all of it to 0x744:
+//   * the read `21 C1` (allowed());
+//   * for the owner's one-shot sweep only (App::CarDiag::sweep(), 1.6.0-rc3):
+//     `10 C0` (open the extended session, as PyRen and DDT4all do first),
+//     `3E 01` (tester present) and `10 81` (back to the default session);
+//   * flow control `30 00 00`, only in answer to a first frame from 0x764
+//     while a request waits.
+// The polling read never opens a session: opening one is what the owner saw
+// reboot the cluster once, and the sweep is how that is checked, by hand,
+// with the bus watched before and after each step. No functional (0x7DF)
+// address, no other ECU, no write, no clear. Frames are sent as PyRen's ELM
+// sends them with CAF0: the bytes given, no padding.
 //
 // Pure (no Arduino): the host tests drive it with a fake send and a fake clock.
 namespace Diag
@@ -28,7 +31,7 @@ namespace Diag
     constexpr uint8_t  REPLY_MAX = 64;
 
     // The allowlist, the one choke point: the request bytes (no ISO-TP PCI)
-    // this file may send. Today `21 C1` and nothing else.
+    // this file may send: `21 C1`, `10 C0`, `3E 01`, `10 81`, nothing else.
     bool allowed(const uint8_t* req, uint8_t n);
 
     // false: not sent (the controller refused or is listen-only).

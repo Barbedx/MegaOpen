@@ -554,6 +554,7 @@ void WebUi::routesDiag()
                 return r->reply(400, "text/plain", why);
         }
         if (d["probe"] | false) App::CarDiag::probe();
+        if (d["sweep"] | false) App::CarDiag::sweep();
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
 }

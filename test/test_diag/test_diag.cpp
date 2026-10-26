@@ -31,16 +31,31 @@ namespace
 void setUp() { g_sent.clear(); g_sendOk = true; }
 void tearDown() {}
 
-void test_only_21_c1_is_allowed_and_nothing_else_leaves()
+void test_only_the_sweeps_four_requests_are_allowed_and_nothing_else_leaves()
 {
     Exchange e(fakeSend, nullptr);
-    const uint8_t session[] = {0x10, 0xC0}, clear[] = {0x14, 0xFF, 0x00}, other[] = {0x21, 0xC2};
-    TEST_ASSERT_FALSE(e.start(session, 2, 0));
-    TEST_ASSERT_TRUE(e.status() == Exchange::Status::Refused);
+    const uint8_t clear[] = {0x14, 0xFF, 0x00}, other[] = {0x21, 0xC2}, prog[] = {0x10, 0x85},
+                  write[] = {0x3B, 0x01}, reset[] = {0x11, 0x01}, tp00[] = {0x3E, 0x00};
     TEST_ASSERT_FALSE(e.start(clear, 3, 0));
+    TEST_ASSERT_TRUE(e.status() == Exchange::Status::Refused);
     TEST_ASSERT_FALSE(e.start(other, 2, 0));
+    TEST_ASSERT_FALSE(e.start(prog, 2, 0));
+    TEST_ASSERT_FALSE(e.start(write, 2, 0));
+    TEST_ASSERT_FALSE(e.start(reset, 2, 0));
+    TEST_ASSERT_FALSE(e.start(tp00, 2, 0));
     TEST_ASSERT_FALSE(e.start(nullptr, 0, 0));
     TEST_ASSERT_EQUAL(0, (int)g_sent.size());
+    const uint8_t ok[][2] = {{0x21, 0xC1}, {0x10, 0xC0}, {0x3E, 0x01}, {0x10, 0x81}};
+    for (const auto& r : ok) TEST_ASSERT_TRUE(Diag::allowed(r, 2));
+}
+
+void test_a_session_reply_50_c0_is_ok()
+{
+    Exchange e(fakeSend, nullptr);
+    const uint8_t s[] = {0x10, 0xC0};
+    TEST_ASSERT_TRUE(e.start(s, 2, 0));
+    rx(e, {0x02, 0x50, 0xC0}, 10);
+    TEST_ASSERT_TRUE(e.status() == Exchange::Status::Ok);
 }
 
 void test_the_request_is_02_21_c1_to_0x744_unpadded()
@@ -140,7 +155,8 @@ void test_decode_wants_61_c1()
 int main(int, char**)
 {
     UNITY_BEGIN();
-    RUN_TEST(test_only_21_c1_is_allowed_and_nothing_else_leaves);
+    RUN_TEST(test_only_the_sweeps_four_requests_are_allowed_and_nothing_else_leaves);
+    RUN_TEST(test_a_session_reply_50_c0_is_ok);
     RUN_TEST(test_the_request_is_02_21_c1_to_0x744_unpadded);
     RUN_TEST(test_a_multi_frame_reply_gets_one_flow_control_and_decodes);
     RUN_TEST(test_other_ids_and_frames_before_the_request_are_ignored);

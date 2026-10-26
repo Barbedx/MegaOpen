@@ -42,11 +42,17 @@ namespace App
         // nullptr or a refusal code.
         const char* set(bool on, uint8_t intervalS);
         void probe();
+        // The owner's one-shot check of every variant, each step logged with
+        // its reply and the bus around it ([diag] sweep): 21 C1 without a
+        // session; 10 C0; 21 C1 in it; 3E 01; 21 C1; 10 81 (always, last).
+        // The bus line (frames and distinct ids a second) shows a cluster
+        // that reboots: its ids go missing. Polling waits meanwhile.
+        void sweep();
 
         struct View {
             bool     on = false;
             uint8_t  intervalS = INTERVAL_DEFAULT_S;
-            const char* state = "off";    // off | idle | waiting | quiet | backoff | stopped | fault | refused
+            const char* state = "off";    // off | idle | waiting | quiet | backoff | stopped | fault | refused | sweep
             const char* last = "";        // Exchange::statusId of the last result
             uint8_t  nrc = 0;
             uint8_t  reply[24] = {};      // the last reply's first bytes

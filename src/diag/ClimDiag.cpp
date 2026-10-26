@@ -5,7 +5,9 @@ namespace Diag
 {
     bool allowed(const uint8_t* req, uint8_t n)
     {
-        return req && n == 2 && req[0] == 0x21 && req[1] == 0xC1;
+        if (!req || n != 2) return false;
+        const uint16_t r = (uint16_t)(req[0] << 8 | req[1]);
+        return r == 0x21C1 || r == 0x10C0 || r == 0x3E01 || r == 0x1081;
     }
 
     bool Exchange::start(const uint8_t* req, uint8_t n, uint32_t nowMs)
