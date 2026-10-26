@@ -375,9 +375,25 @@ namespace LogPush
             s_rotAtScan = LogFile::rotations();
             s_pastN = 0;
             int cur = -1;
+            // The oldest files may have lost their boot's first file (a long
+            // drive rotates past it). Each boot starts a file of its own, so a
+            // headless run just before boot B's first file is boot B - 1's tail.
+            int hFirst = -1, hLast = -1;
+            bool known = false;
             for (int n = LogFile::FILES - 1; n >= 1; --n) {
                 if (!loadFile(n)) continue;
                 const uint32_t b = bootIn();
+                if (!b && !known) {
+                    if (hFirst < 0) hFirst = n;
+                    hLast = n;
+                    continue;
+                }
+                if (b && !known) {
+                    known = true;
+                    const uint32_t t = b - 1;
+                    if (hFirst >= 0 && t > rec && t < s_boot && s_pastN < (int)LogFile::FILES)
+                        s_past[s_pastN++] = {t, t == pb ? pms + 1 : 0, (int8_t)hFirst, (int8_t)hLast};
+                }
                 if (b) {
                     cur = -1;
                     if (b > rec && b < s_boot && s_pastN < (int)LogFile::FILES) {
