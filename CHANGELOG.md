@@ -25,6 +25,9 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 - The T-2CAN builds use TinyUSB (`ARDUINO_USB_MODE=0`) with the board's own USB PID (`variants/t2can`, 303A:80C3) and a composite device descriptor. About 23 kB of DRAM at boot.
 - The web server's sockets have TCP_NODELAY: a small reply no longer waits for a delayed ACK (over the link 250 -> 7 ms).
 
+### Fixed
+- With Bluetooth off, `/api/ble` (the page's Overview) asked NimBLE for its bonds and the board rebooted on an assert in the stack's lock (the car on 1.5.3, `httpd`, `getNumBonds`). It now answers «no bond» while the stack is down.
+
 ## [1.5.4] - 2026-10-25
 
 ### Added

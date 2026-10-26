@@ -265,7 +265,10 @@ namespace Bluetooth
         return units ? (uint16_t)((units * 5u + 3u) / 4u) : 30;
     }
     bool IsTimeSet()   { return TimeSet; }
-    bool HasBond()     { return NimBLEDevice::getNumBonds() > 0; }
+    // Not with the stack down (Bluetooth off): NimBLE's store lock is not there
+    // then, and asking for it asserted and rebooted the board (httpd, /api/ble,
+    // the car on 1.5.3, 2026-10-26).
+    bool HasBond()     { return NimBLEDevice::isInitialized() && NimBLEDevice::getNumBonds() > 0; }
 
     // ble_svc only (ClearBonds() asks for it).
     static void clearBonds()
