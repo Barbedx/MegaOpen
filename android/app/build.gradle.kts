@@ -19,7 +19,22 @@ val netHosts = listOf("api.github.com", "github.com", "objects.githubusercontent
 val usbVid = 0x303A
 val usbPid = 0x80C3
 
+// The board's settings page, the same files the board serves (tools/export_page.py
+// over tools/gen_pages.py), in the app's assets under page/. The app shows its own
+// copy when the board runs the same firmware or has no page (FEATURE_WEB_PAGE=0).
+val pageDir = layout.buildDirectory.dir("generated/page")
+val python = providers.environmentVariable("MO_PYTHON").getOrElse("python3")
+val exportPage by tasks.registering(Exec::class) {
+    val repo = rootProject.projectDir.parentFile
+    inputs.dir(File(repo, "web"))
+    inputs.files(File(repo, "tools/gen_pages.py"), File(repo, "tools/export_page.py"), File(repo, "src/Version.h"))
+    outputs.dir(pageDir)
+    commandLine(python, File(repo, "tools/export_page.py").path, pageDir.get().dir("page").asFile.path)
+}
+tasks.named("preBuild") { dependsOn(exportPage) }
+
 android {
+    sourceSets["main"].assets.srcDir(pageDir)
     namespace = "ua.megaopen.companion"
     compileSdk = 34
     defaultConfig {

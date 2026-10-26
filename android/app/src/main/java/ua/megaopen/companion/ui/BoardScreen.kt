@@ -79,7 +79,7 @@ private fun BoardPage(board: Board) {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             addJavascriptInterface(Bridge(c, board, io) { code -> post { evaluateJavascript(code, null) } }, "MOLink")
-            webViewClient = PageClient(board)
+            webViewClient = PageClient(c, board)
             webChromeClient = object : WebChromeClient() {
                 override fun onShowFileChooser(v: WebView, cb: ValueCallback<Array<Uri>>, p: FileChooserParams): Boolean {
                     pick?.onReceiveValue(null)
@@ -95,13 +95,42 @@ private fun BoardPage(board: Board) {
 
 private const val HOST = "megaopen.board"
 
-private class PageClient(private val board: Board) : WebViewClient() {
+/**
+ * Every GET of the page's host. The page itself ("/", "/i18n/en.json") is the
+ * app's own copy of web/ (assets/page, tools/export_page.py) when the board
+ * runs the same firmware, or has no page of its own (FEATURE_WEB_PAGE=0);
+ * else the board's, which knows its own API. Everything else is the board's.
+ */
+private class PageClient(private val ctx: Context, private val board: Board) : WebViewClient() {
+    private val ownFw: String = try {
+        JSONObject(ctx.assets.open("page/page.json").bufferedReader().use { it.readText() }).optString("fw")
+    } catch (e: Exception) {
+        ""
+    }
+
+    private fun own(path: String): WebResourceResponse? {
+        val (file, mime) = when (path) {
+            "/" -> "page/index.html" to "text/html"
+            "/i18n/en.json" -> "page/i18n/en.json" to "application/json"
+            else -> return null
+        }
+        return try {
+            WebResourceResponse(mime, "utf-8", 200, "OK", mapOf("Cache-Control" to "no-store"), ctx.assets.open(file))
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     // On WebView's own background thread: a blocking call is in order here.
     override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? {
         if (req.url.host != HOST || req.method != "GET") return null
         val path = req.url.encodedPath.orEmpty().ifEmpty { "/" } + (req.url.encodedQuery?.let { "?$it" } ?: "")
+        val page = path == "/" || path == "/i18n/en.json"
+        if (page && ownFw.isNotEmpty() && board.fw == ownFw) own(path)?.let { return it }
         return try {
             val r = runBlocking { board.request("GET", path) }
+            // No page on the board: the page's files are a 404, "/" the rescue page.
+            if (page && (r.code == 404 || r.headers["x-megaopen-page"] == "rescue")) own(path)?.let { return it }
             // A WebResourceResponse may not carry a 3xx.
             val code = if (r.code in 300..399 || r.code < 100) 502 else r.code
             val mime = r.type.substringBefore(';').trim()

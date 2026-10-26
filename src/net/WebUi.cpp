@@ -1,5 +1,6 @@
 #include "WebUi.h"
 #include "../link/UsbLink.h"
+#include "RescuePage.h"
 #include "lwip/sockets.h"
 #include "../cfg/SettingsJson.h"
 #include "../proto/canbox/Rav4Profile.h"
@@ -646,6 +647,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
 
 void WebUi::routes()
 {
+#if FEATURE_WEB_PAGE
     // The app (web/, tools/gen_pages.py). Its screens are hash routes.
     route("/", HTTP_GET, [](PsychicRequest* r) {
         return replyPage(r, PAGE_APP_GZ, PAGE_APP_GZ_LEN);
@@ -654,6 +656,19 @@ void WebUi::routes()
     route("/i18n/en.json", HTTP_GET, [](PsychicRequest* r) {
         return replyPage(r, PAGE_I18N_EN_GZ, PAGE_I18N_EN_GZ_LEN, "application/json");
     });
+#else
+    // No settings page on the board: MegaOpen Companion and the WebUSB page
+    // carry it (web/ bundled). "/" keeps a firmware update and the WiFi.
+    // The header tells an app with its own copy of the page to use that one.
+    route("/", HTTP_GET, [](PsychicRequest* r) {
+        PsychicResponse resp(r);
+        resp.setCode(200);
+        resp.setContentType("text/html");
+        resp.addHeader("X-MegaOpen-Page", "rescue");
+        resp.setContent(RESCUE_PAGE);
+        return resp.send();
+    });
+#endif
 
     // The page's lists (Catalog.h), ~11 kB: streamed (ChunkOut).
     route("/api/catalog", HTTP_GET, [](PsychicRequest* r) {

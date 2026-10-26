@@ -80,7 +80,7 @@ class BoardConnection(ctx: Context, private val scope: CoroutineScope,
             if (usb.up || (usb.device() != null && usb.connect())) {
                 val hello = (usb.state.value as? UsbLink.State.Up)?.hello
                 val name = hello?.optString("name").orEmpty().ifEmpty { "MegaOpen" }
-                if (_board.value !is UsbBoard) _board.value = UsbBoard(usb, name)
+                if (_board.value !is UsbBoard) _board.value = UsbBoard(usb, name, hello?.optString("fw").orEmpty())
                 _state.value = State.Usb(name, hello?.optString("fw").orEmpty())
                 since = -1         // back on WiFi later: from the board's mark then
                 delay(1_000)
@@ -103,6 +103,7 @@ class BoardConnection(ctx: Context, private val scope: CoroutineScope,
             val b = (_board.value as? WifiBoard)?.takeIf { it.host == host } ?: WifiBoard(host).also {
                 _board.value = it
                 fw = it.probe(3_000).orEmpty()
+                it.fw = fw
             }
             try {
                 var r = b.json("/api/alerts?since=${if (since < 0) 0 else since}")

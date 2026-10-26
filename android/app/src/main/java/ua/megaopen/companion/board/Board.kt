@@ -17,6 +17,8 @@ interface Board {
     val via: Via
     /** "MegaOpen-8428" on USB, the address on WiFi. */
     val label: String
+    /** The board's firmware version, "" until known. */
+    val fw: String
 
     suspend fun request(method: String, path: String, headers: Map<String, String> = emptyMap(),
                         body: ByteArray? = null, timeoutMs: Long = 20_000): HttpWire.Response
@@ -31,7 +33,7 @@ interface Board {
         request("POST", path, mapOf("Content-Type" to "application/json"), body.toString().toByteArray())
 }
 
-class UsbBoard(private val link: UsbLink, override val label: String) : Board {
+class UsbBoard(private val link: UsbLink, override val label: String, override val fw: String) : Board {
     override val via = Board.Via.Usb
     override suspend fun request(method: String, path: String, headers: Map<String, String>,
                                  body: ByteArray?, timeoutMs: Long) = link.request(method, path, headers, body, timeoutMs)
@@ -40,6 +42,7 @@ class UsbBoard(private val link: UsbLink, override val label: String) : Board {
 class WifiBoard(val host: String) : Board {
     override val via = Board.Via.Wifi
     override val label = host
+    @Volatile override var fw: String = ""
 
     override suspend fun request(method: String, path: String, headers: Map<String, String>,
                                  body: ByteArray?, timeoutMs: Long): HttpWire.Response = withContext(Dispatchers.IO) {

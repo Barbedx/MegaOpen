@@ -5,12 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
-Planned as 1.6.0: the USB link (docs/design/usb-link.md).
+## [1.6.0] - 2026-10-26
+
+The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companion-app.md).
 
 ### Added
 - **The USB link.** The board's USB-C port, plugged into the head unit, is a composite device: the console (CDC) and a vendor interface for MegaOpen Voice. Frames carry HTTP to the board's own web server (every route, the request gate and the settings lock as over WiFi), the panel alerts as events, and pings. `/api/status` `usb`; `tools/usb_link.py` talks to it from a PC (Windows needs no driver on `t2can`).
 - **MegaOpen Companion over USB.** Plugging the board in opens the app; the alerts come as events, with no WiFi and no address. «Відкрити сторінку плати» shows the board's own page inside the app, over USB or WiFi alike (the page's calls, downloads and the firmware upload go through `window.MOLink`).
 - **The app as the board's internet.** On the link, the board's update check and download and the log push go through the app's network (Android TLS, GitHub over https only, 16 kB credit), over WiFi otherwise. The board composes the requests as before, token and all. Bench: v1.5.4 installed through it, 1.67 MB in 24 s.
+- **The settings page in the apps.** MegaOpen Companion carries its own copy of the board's page (the same web/ files, `tools/export_page.py`), shown when the board runs the same firmware or has no page; the WebUSB page (`web/usb/`, Chrome on a PC, GitHub Pages) brings the board's page over USB.
+- `FEATURE_WEB_PAGE` (on by default): off, the board serves no settings page, 83 kB less flash; "/" is then a rescue page (`src/net/RescuePage.h`) with a firmware update from a file and the WiFi network, so nobody is locked out.
 - Settings › «Без WiFi, коли є USB» (`wifiAuto`, off by default): WiFi off once the app has been on USB for 10 s, back 30 s after it is gone. 27 kB more heap while off.
 
 ### Changed

@@ -107,6 +107,13 @@
 #error "FEATURE_USB_HID needs ARDUINO_USB_MODE=0 (TinyUSB); see env:t2can_usbhid"
 #endif
 
+// The settings page served at "/" (web/, tools/gen_pages.py). Off: the page
+// lives in MegaOpen Companion and on the WebUSB page, which bring their own
+// copy of web/; "/" is then src/net/RescuePage.h (a firmware update, the WiFi).
+#ifndef FEATURE_WEB_PAGE
+#define FEATURE_WEB_PAGE 1
+#endif
+
 // The USB link to the head unit's app (src/link/UsbLink.h): a TinyUSB vendor
 // interface, so ARDUINO_USB_MODE=0 like the keyboard.
 #ifndef FEATURE_USB_LINK

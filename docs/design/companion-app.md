@@ -32,6 +32,17 @@ releases come from (`RELEASES_REPO`), the hosts the app goes to for the board
 A fork changes them there, in one place. The version is `MEGAOPEN_VERSION`
 (`src/Version.h`): one release, one number.
 
+## The board's page
+
+The app carries the board's settings page: the same web/ files the board
+serves, exported at build time (`tools/export_page.py` over `tools/gen_pages.py`)
+into `assets/page/` with the version they were built for. `ui/BoardScreen.kt`
+shows the app's copy when the board runs that same firmware, or when the board
+has no page (`FEATURE_WEB_PAGE=0`: "/" is the rescue page, marked
+`X-MegaOpen-Page: rescue`, and `/i18n/en.json` a 404); else the
+board's own page, which knows the board's own API. The page's API calls always
+go to the board, through `Board`, over USB or WiFi alike.
+
 ## Threads
 
 Coroutines. The USB reader is one blocking loop on `Dispatchers.IO`; requests
