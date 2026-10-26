@@ -1,73 +1,100 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MegaOpen Companion</string>
-    <string name="channel">Voice alerts</string>
+    <string name="channel_name">Connection to the board</string>
+
+    <!-- The connection, in the notification, on Home and in Diagnostics -->
+    <string name="state_starting">Starting…</string>
+    <string name="state_searching">Looking for the board…</string>
+    <string name="state_not_found">No board found, looking again</string>
+    <string name="state_usb">On USB: %1$s</string>
+    <string name="state_wifi">On WiFi: %1$s</string>
+    <string name="state_lost">No answer from %1$s</string>
+
+    <string name="tab_home">Home</string>
+    <string name="tab_voice">Voice</string>
+    <string name="tab_board">Board</string>
+    <string name="tab_more">More</string>
+
+    <!-- Home -->
+    <string name="home_board">Board</string>
+    <string name="home_fw">Firmware %1$s</string>
+    <string name="home_how">Plug the board into this device\'s USB, or let the app find it on WiFi.</string>
+    <string name="home_open_page">Open the board\'s settings</string>
+    <string name="home_voice">Voice</string>
+    <string name="home_said_none">Nothing said yet</string>
+    <string name="home_said">Last said: %1$s</string>
+    <string name="home_test">Test</string>
+    <string name="home_test_note">The board raises the alert as if the car had (the panel does not show it); this app says it.</string>
+    <string name="home_test_sent">Sent to %1$s, listen</string>
+    <string name="error_board">The board did not take it: %1$s</string>
+
+    <!-- The factory alerts (src/vehicle/AlertRules.cpp) -->
+    <string name="alert_lights">Driving without headlights</string>
+    <string name="alert_handbrake">Driving with the handbrake on</string>
+    <string name="alert_fuel">Low fuel</string>
+
+    <!-- Voice -->
+    <string name="voice_title">Voice</string>
     <string name="voice_on">Say the board\'s alerts</string>
-
-    <string name="st_off">Off</string>
-    <string name="st_starting">Starting…</string>
-    <string name="st_searching">Looking for the board…</string>
-    <string name="st_not_found">Board not found, trying again</string>
-    <string name="st_connected">Listening to %1$s</string>
-    <string name="st_lost">No answer from %1$s</string>
-    <string name="st_last">Last said: %1$s</string>
-
-    <string name="h_board">Board</string>
-    <string name="host_hint">Address (empty: find it)</string>
-    <string name="find">Find</string>
-    <string name="host_note">Empty: the app finds the board on the network by itself (mDNS, then the hotspot\'s addresses). Type an IP only if that fails.</string>
-    <string name="searching">Looking for the board…</string>
-    <string name="found">Board at %1$s (firmware %2$s)</string>
-    <string name="not_found">No board found. Is it on the same network as this device?</string>
-
-    <string name="h_voice">Voice</string>
+    <string name="voice_lang">Language of the voice</string>
     <string name="lang_uk">Ukrainian</string>
     <string name="lang_en">English</string>
-    <string name="lang_sys">System</string>
-    <string name="volume">Volume (music ducks while it speaks)</string>
-    <string name="sample">Volume check</string>
-    <string name="tts_settings">Text-to-speech settings</string>
-    <string name="no_tts_settings">This device has no text-to-speech settings screen</string>
+    <string name="lang_system">System</string>
+    <string name="voice_volume">Volume %1$d%% (the music ducks while it speaks)</string>
+    <string name="voice_sample">Volume check</string>
+    <string name="voice_tts_settings">Text-to-speech settings</string>
+    <string name="voice_no_tts_settings">This device has no text-to-speech settings screen</string>
+    <string name="voice_engine_note">The voice is this device\'s text-to-speech engine. No Ukrainian voice: install it in the engine\'s settings (the Google engine has one), or pick English.</string>
+    <string name="voice_no_engine">This device has no text-to-speech engine: install one (Google Speech Services).</string>
+    <string name="voice_no_lang">The engine has no voice for this language: install it, or pick another.</string>
+    <string name="voice_what">What to say</string>
+    <string name="voice_play">Say it</string>
+    <string name="voice_others">Other alerts</string>
+    <string name="voice_others_note">Your own alert rules on the board, said with the board\'s text</string>
+    <string name="voice_phrase_note">An empty phrase says the default (grey). {v} is replaced by the value.</string>
 
-    <string name="h_alerts">What to say</string>
-    <string name="a_lights">Driving without headlights</string>
-    <string name="a_brake">Driving with the handbrake on</string>
-    <string name="a_fuel">Low fuel</string>
-    <string name="a_other">Other alerts (the board\'s text)</string>
-    <string name="phrase_note">Empty phrase: the default (grey). {v} is replaced by the value.</string>
+    <!-- The board's page -->
+    <string name="board_none">No board yet: plug it into USB, or let the app find it on WiFi (More › Connection).</string>
+    <string name="board_unreachable">The board did not answer: %1$s</string>
+    <string name="board_saved">Saved: %1$s</string>
+    <string name="board_not_saved">Not saved: %1$s</string>
 
-    <string name="h_test">Test</string>
-    <string name="test_board_one">From the board: %1$s</string>
-    <string name="test_note">The board adds that alert to its list as a test (the panel does not show it); this app should say it within two seconds.</string>
-    <string name="test_off">Switch the voice on first</string>
-    <string name="test_sent">Sent to %1$s, listen</string>
-    <string name="test_failed">The board refused: %1$s</string>
-
-    <string name="h_start">Start</string>
-    <string name="autostart">Start with the head unit</string>
-    <string name="start_note">If the head unit closes background apps, exempt MegaOpen Companion from battery optimisation or add it to the auto-start list.</string>
-    <string name="version">Version %1$s</string>
-
-    <string name="h_update">Updates</string>
+    <!-- Updates -->
+    <string name="upd_title">Updates</string>
+    <string name="upd_version">Version %1$s, installed from %2$s</string>
     <string name="upd_pre">Test versions (rc)</string>
+    <string name="upd_pre_note">Release candidates too, before they are final</string>
     <string name="upd_check">Check</string>
     <string name="upd_checking">Checking GitHub…</string>
     <string name="upd_available">New: %1$s</string>
     <string name="upd_none">This is the newest</string>
     <string name="upd_install">Update to %1$s</string>
-    <string name="upd_loading">Downloading… %1$d%%</string>
     <string name="upd_confirm">Confirm the install in the system window</string>
-    <string name="upd_error">Update failed: %1$s</string>
-    <string name="upd_failed">Not installed: %1$s</string>
-    <string name="upd_allow">Allow MegaOpen Companion to install apps, then press the button again</string>
+    <string name="upd_allow">Allow this app to install apps, then press Update again</string>
+    <string name="upd_error">Not updated: %1$s</string>
+    <string name="upd_not_installed">Not installed: %1$s</string>
 
-    <string name="st_usb">On USB: %1$s</string>
-    <string name="h_board_page">Board settings</string>
-    <string name="board_page">Open the board\'s page</string>
-    <string name="board_page_note">Over USB when the board is plugged into this device; otherwise in the browser over WiFi.</string>
-    <string name="board_page_none">No board: plug it into USB, or let the app find it over WiFi first</string>
-    <string name="link_opening">Connecting to the board over USB…</string>
-    <string name="link_none">No board on USB (%1$s). Plug the board into this device\'s USB and allow access.</string>
-    <string name="link_saved">Saved: %1$s</string>
-    <string name="link_failed">Not saved: %1$s</string>
+    <!-- Connection -->
+    <string name="conn_title">Connection</string>
+    <string name="conn_note">On USB the app needs nothing here. On WiFi it finds the board by itself (mDNS, then the hotspot\'s addresses); type an address only if it does not.</string>
+    <string name="conn_host">Board address</string>
+    <string name="conn_host_auto">empty: find it</string>
+    <string name="conn_find">Find</string>
+    <string name="conn_finding">Looking…</string>
+    <string name="conn_found">Board at %1$s</string>
+    <string name="conn_not_found">No board on this network</string>
+    <string name="conn_autostart">Start with the head unit</string>
+    <string name="conn_autostart_note">If the head unit closes background apps, exempt this one from battery optimisation or put it on its auto-start list.</string>
+
+    <!-- Diagnostics -->
+    <string name="diag_title">Diagnostics</string>
+    <string name="diag_usb_unplugged">USB: no board plugged in</string>
+    <string name="diag_usb_permission">USB: the board is plugged in, access not allowed</string>
+    <string name="diag_usb_connecting">USB: connecting…</string>
+    <string name="diag_usb_up">USB: firmware %1$s (%2$s)</string>
+    <string name="diag_usb_failed">USB: failed, %1$s</string>
+    <string name="diag_usb_stats">Frames in %1$d, out %2$d, bad bytes %3$d; requests %4$d, failed %5$d; the board\'s internet %6$d</string>
+    <string name="diag_last_error">Last error: %1$s</string>
+    <string name="diag_about">MegaOpen Companion %1$s · github.com/%2$s</string>
 </resources>

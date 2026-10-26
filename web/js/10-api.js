@@ -11,7 +11,7 @@ const formBody=params=>new URLSearchParams(Object.entries(params).map(([k,v])=>[
 const errMsg=(body,status)=>typeof body==='string'&&body.trim()?body.trim():body&&body.error?body.error:'HTTP '+status;
 /* кожен запит несе X-MegaOpen: інша сторінка не може його надіслати, тож не змінить плату (src/net/RequestGate.h) */
 const GATE={'X-MegaOpen':'1'};
-/* У застосунку MegaOpen Компаньйон (android/, BoardActivity) сторінка йде по USB:
+/* У застосунку MegaOpen Компаньйон (android/, ui/BoardScreen.kt) сторінка йде по USB:
    window.MOLink несе запит до плати, відповідь приходить у __moDone.
    docs/design/usb-link.md */
 const LINK=window.MOLink,LINKQ={};let LINKN=0;

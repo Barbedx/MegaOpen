@@ -195,8 +195,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: "8.9"
-      - name: assembleRelease
-        run: gradle -p android assembleRelease --no-daemon
+      # Unit tests (frames, HTTP, releases, phrases) and lint, which fails on an error.
+      - name: test, lint, assembleRelease
+        run: gradle -p android testDebugUnitTest lintRelease assembleRelease --no-daemon
       - uses: actions/upload-artifact@v7
         with:
           name: megaopen-companion-apk

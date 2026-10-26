@@ -1,4 +1,4 @@
-package ua.megaopen.voice
+package ua.megaopen.companion.voice
 
 import android.content.Context
 import android.media.AudioAttributes
@@ -13,9 +13,12 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Text to speech over the music: the music ducks while a phrase is said
- * (AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK) and comes back after.
+ * (AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK) and comes back after. The voice is the
+ * device's own engine; a missing language is reported, not guessed at.
  */
-class Speaker(ctx: Context, private val prefs: Prefs) : TextToSpeech.OnInitListener {
+class Speaker(ctx: Context) : TextToSpeech.OnInitListener {
+    enum class State { Starting, Ready, NoEngine }
+
     private val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     private val attrs = AudioAttributes.Builder()
         .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
@@ -23,25 +26,23 @@ class Speaker(ctx: Context, private val prefs: Prefs) : TextToSpeech.OnInitListe
         .build()
     private val focus: AudioFocusRequest? =
         if (Build.VERSION.SDK_INT >= 26)
-            AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-                .setAudioAttributes(attrs).build()
+            AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK).setAudioAttributes(attrs).build()
         else null
-    private val pending = ArrayList<String>()
     private val talking = AtomicInteger(0)
-    private var ready = false
+    private val pending = ArrayList<Triple<String, String, Int>>()
     private var applied: String? = null
     private var seq = 0
     private val tts = TextToSpeech(ctx.applicationContext, this)
 
-    /** null until the first phrase; false when the voice for the language is missing. */
-    @Volatile var langOk: Boolean? = null
+    @Volatile var state = State.Starting
         private set
-    @Volatile var failed = false
+    /** null until a phrase was said; false when the language has no voice on this device. */
+    @Volatile var langOk: Boolean? = null
         private set
 
     override fun onInit(status: Int) {
         if (status != TextToSpeech.SUCCESS) {
-            failed = true
+            state = State.NoEngine
             return
         }
         tts.setAudioAttributes(attrs)
@@ -52,27 +53,28 @@ class Speaker(ctx: Context, private val prefs: Prefs) : TextToSpeech.OnInitListe
             override fun onError(utteranceId: String?) = finished()
         })
         synchronized(pending) {
-            ready = true
-            for (t in pending) speakNow(t)
+            state = State.Ready
+            for ((t, l, v) in pending) speakNow(t, l, v)
             pending.clear()
         }
     }
 
-    fun say(text: String) {
+    /** lang: "uk", "en" or "" (the system's); volume 0..100. Any thread. */
+    fun say(text: String, lang: String, volume: Int) {
         if (text.isBlank()) return
         synchronized(pending) {
-            if (!ready) {
-                if (pending.size < 8) pending += text
-                return
+            when (state) {
+                State.Starting -> if (pending.size < 8) pending += Triple(text, lang, volume)
+                State.Ready -> speakNow(text, lang, volume)
+                State.NoEngine -> {}
             }
-            speakNow(text)
         }
     }
 
-    private fun speakNow(text: String) {
-        if (applied != prefs.lang) {
-            applied = prefs.lang
-            val loc = when (prefs.lang) {
+    private fun speakNow(text: String, lang: String, volume: Int) {
+        if (applied != lang) {
+            applied = lang
+            val loc = when (lang) {
                 "uk" -> Locale("uk", "UA")
                 "en" -> Locale.US
                 else -> Locale.getDefault()
@@ -81,7 +83,7 @@ class Speaker(ctx: Context, private val prefs: Prefs) : TextToSpeech.OnInitListe
             langOk = r != TextToSpeech.LANG_MISSING_DATA && r != TextToSpeech.LANG_NOT_SUPPORTED
         }
         val p = Bundle()
-        p.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, prefs.volume / 100f)
+        p.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume / 100f)
         if (talking.getAndIncrement() == 0) grab()
         if (tts.speak(text, TextToSpeech.QUEUE_ADD, p, "mo${seq++}") != TextToSpeech.SUCCESS) finished()
     }

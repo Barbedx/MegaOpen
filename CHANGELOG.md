@@ -9,12 +9,12 @@ Planned as 1.6.0: the USB link (docs/design/usb-link.md).
 
 ### Added
 - **The USB link.** The board's USB-C port, plugged into the head unit, is a composite device: the console (CDC) and a vendor interface for MegaOpen Voice. Frames carry HTTP to the board's own web server (every route, the request gate and the settings lock as over WiFi), the panel alerts as events, and pings. `/api/status` `usb`; `tools/usb_link.py` talks to it from a PC (Windows needs no driver on `t2can`).
-- **MegaOpen Companion over USB.** Plugging the board in opens the app; the alerts come as events, with no WiFi and no address. «Відкрити сторінку плати» shows the board's own page inside the app over USB (the page's calls, downloads and the firmware upload go through `window.MOLink`), or in the browser over WiFi.
+- **MegaOpen Companion over USB.** Plugging the board in opens the app; the alerts come as events, with no WiFi and no address. «Відкрити сторінку плати» shows the board's own page inside the app, over USB or WiFi alike (the page's calls, downloads and the firmware upload go through `window.MOLink`).
 - **The app as the board's internet.** On the link, the board's update check and download and the log push go through the app's network (Android TLS, GitHub over https only, 16 kB credit), over WiFi otherwise. The board composes the requests as before, token and all. Bench: v1.5.4 installed through it, 1.67 MB in 24 s.
 - Settings › «Без WiFi, коли є USB» (`wifiAuto`, off by default): WiFi off once the app has been on USB for 10 s, back 30 s after it is gone. 27 kB more heap while off.
 
 ### Changed
-- MegaOpen Voice is now **MegaOpen Companion** (MegaOpen Компаньйон): it does more than speak. Same package, so 1.5.4 updates to it; the release carries the APK as `megaopen-companion-X.Y.Z.apk` and, the same bytes, as `megaopen-voice-X.Y.Z.apk`.
+- MegaOpen Voice is now **MegaOpen Companion** (MegaOpen Компаньйон), rebuilt as a product (docs/design/companion-app.md): Kotlin coroutines, Jetpack Compose screens (Home, Voice, Board, More), settings in DataStore, a foreground service of type connectedDevice, USB and WiFi behind one `Board` interface (the board's page in the app works over either), the repo and allowed hosts in one place in the build, unit tests and lint in CI. New package `ua.megaopen.companion`: an installed MegaOpen Voice 1.5.4 is a different app, uninstall it once. The release APK is `megaopen-companion-X.Y.Z.apk`.
 - The T-2CAN builds use TinyUSB (`ARDUINO_USB_MODE=0`) with the board's own USB PID (`variants/t2can`, 303A:80C3) and a composite device descriptor. About 23 kB of DRAM at boot.
 - The web server's sockets have TCP_NODELAY: a small reply no longer waits for a delayed ACK (over the link 250 -> 7 ms).
 

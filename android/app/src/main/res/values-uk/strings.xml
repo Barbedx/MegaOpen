@@ -1,73 +1,92 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MegaOpen Компаньйон</string>
-    <string name="channel">Голосові попередження</string>
+    <string name="channel_name">Зв\'язок з платою</string>
+
+    <string name="state_starting">Запуск…</string>
+    <string name="state_searching">Шукаю плату…</string>
+    <string name="state_not_found">Плату не знайдено, шукаю знову</string>
+    <string name="state_usb">По USB: %1$s</string>
+    <string name="state_wifi">По WiFi: %1$s</string>
+    <string name="state_lost">%1$s не відповідає</string>
+
+    <string name="tab_home">Головна</string>
+    <string name="tab_voice">Голос</string>
+    <string name="tab_board">Плата</string>
+    <string name="tab_more">Ще</string>
+
+    <string name="home_board">Плата</string>
+    <string name="home_fw">Прошивка %1$s</string>
+    <string name="home_how">Підключіть плату до USB цього пристрою або дайте застосунку знайти її по WiFi.</string>
+    <string name="home_open_page">Відкрити налаштування плати</string>
+    <string name="home_voice">Голос</string>
+    <string name="home_said_none">Ще нічого не казав</string>
+    <string name="home_said">Останнє: %1$s</string>
+    <string name="home_test">Перевірка</string>
+    <string name="home_test_note">Плата піднімає попередження, ніби це зробила машина (панель його не показує), а застосунок його каже.</string>
+    <string name="home_test_sent">Надіслано на %1$s, слухайте</string>
+    <string name="error_board">Плата не прийняла: %1$s</string>
+
+    <string name="alert_lights">Їду без фар</string>
+    <string name="alert_handbrake">Їду на ручнику</string>
+    <string name="alert_fuel">Мало пального</string>
+
+    <string name="voice_title">Голос</string>
     <string name="voice_on">Озвучувати попередження плати</string>
-
-    <string name="st_off">Вимкнено</string>
-    <string name="st_starting">Запуск…</string>
-    <string name="st_searching">Шукаю плату…</string>
-    <string name="st_not_found">Плату не знайдено, шукаю знову</string>
-    <string name="st_connected">Слухаю %1$s</string>
-    <string name="st_lost">%1$s не відповідає</string>
-    <string name="st_last">Останнє: %1$s</string>
-
-    <string name="h_board">Плата</string>
-    <string name="host_hint">Адреса (порожньо: знайти)</string>
-    <string name="find">Знайти</string>
-    <string name="host_note">Порожньо: застосунок сам знайде плату в мережі (mDNS, потім адреси точки доступу). IP вписуйте лише якщо не знаходить.</string>
-    <string name="searching">Шукаю плату…</string>
-    <string name="found">Плата на %1$s (прошивка %2$s)</string>
-    <string name="not_found">Плату не знайдено. Вона в тій самій мережі, що й цей пристрій?</string>
-
-    <string name="h_voice">Голос</string>
+    <string name="voice_lang">Мова голосу</string>
     <string name="lang_uk">Українська</string>
     <string name="lang_en">English</string>
-    <string name="lang_sys">Системна</string>
-    <string name="volume">Гучність (музика стишується, поки говорить)</string>
-    <string name="sample">Перевірка гучності</string>
-    <string name="tts_settings">Налаштування синтезу мовлення</string>
-    <string name="no_tts_settings">На цьому пристрої немає екрана синтезу мовлення</string>
+    <string name="lang_system">Системна</string>
+    <string name="voice_volume">Гучність %1$d%% (музика стишується, поки говорить)</string>
+    <string name="voice_sample">Перевірка гучності</string>
+    <string name="voice_tts_settings">Налаштування синтезу мовлення</string>
+    <string name="voice_no_tts_settings">На цьому пристрої немає екрана синтезу мовлення</string>
+    <string name="voice_engine_note">Голос — це синтез мовлення цього пристрою. Немає українського голосу: поставте його в налаштуваннях рушія (у Google він є) або оберіть English.</string>
+    <string name="voice_no_engine">На пристрої немає синтезу мовлення: поставте його (Google Speech Services).</string>
+    <string name="voice_no_lang">У рушія немає голосу цією мовою: поставте його або оберіть іншу.</string>
+    <string name="voice_what">Що казати</string>
+    <string name="voice_play">Сказати</string>
+    <string name="voice_others">Інші попередження</string>
+    <string name="voice_others_note">Ваші власні правила на платі, текстом плати</string>
+    <string name="voice_phrase_note">Порожня фраза — стандартна (сіра). {v} замінюється значенням.</string>
 
-    <string name="h_alerts">Що казати</string>
-    <string name="a_lights">Їду без фар</string>
-    <string name="a_brake">Їду на ручнику</string>
-    <string name="a_fuel">Мало пального</string>
-    <string name="a_other">Інші попередження (текст плати)</string>
-    <string name="phrase_note">Порожня фраза: стандартна (сіра). {v} замінюється значенням.</string>
+    <string name="board_none">Плати поки нема: підключіть її по USB або дайте застосунку знайти її по WiFi (Ще › Зв\'язок).</string>
+    <string name="board_unreachable">Плата не відповіла: %1$s</string>
+    <string name="board_saved">Збережено: %1$s</string>
+    <string name="board_not_saved">Не збережено: %1$s</string>
 
-    <string name="h_test">Перевірка</string>
-    <string name="test_board_one">З плати: %1$s</string>
-    <string name="test_note">Плата додає це попередження до свого списку як тест (на панелі не показує); застосунок має сказати його за дві секунди.</string>
-    <string name="test_off">Спершу увімкніть озвучення</string>
-    <string name="test_sent">Надіслано на %1$s, слухайте</string>
-    <string name="test_failed">Плата відмовила: %1$s</string>
-
-    <string name="h_start">Запуск</string>
-    <string name="autostart">Запускати разом з магнітолою</string>
-    <string name="start_note">Якщо магнітола закриває фонові застосунки, вимкніть для MegaOpen Компаньйон оптимізацію батареї або додайте його в автозапуск.</string>
-    <string name="version">Версія %1$s</string>
-
-    <string name="h_update">Оновлення</string>
+    <string name="upd_title">Оновлення</string>
+    <string name="upd_version">Версія %1$s, встановлено з %2$s</string>
     <string name="upd_pre">Тестові версії (rc)</string>
+    <string name="upd_pre_note">Ще й кандидати в реліз, до фінальної версії</string>
     <string name="upd_check">Перевірити</string>
     <string name="upd_checking">Перевіряю GitHub…</string>
     <string name="upd_available">Нова: %1$s</string>
     <string name="upd_none">Це найновіша</string>
     <string name="upd_install">Оновити до %1$s</string>
-    <string name="upd_loading">Завантажую… %1$d%%</string>
     <string name="upd_confirm">Підтвердіть встановлення в системному вікні</string>
-    <string name="upd_error">Не вдалося оновити: %1$s</string>
-    <string name="upd_failed">Не встановлено: %1$s</string>
-    <string name="upd_allow">Дозвольте MegaOpen Компаньйон встановлювати застосунки й натисніть кнопку ще раз</string>
+    <string name="upd_allow">Дозвольте цьому застосунку встановлювати застосунки й натисніть «Оновити» ще раз</string>
+    <string name="upd_error">Не оновлено: %1$s</string>
+    <string name="upd_not_installed">Не встановлено: %1$s</string>
 
-    <string name="st_usb">По USB: %1$s</string>
-    <string name="h_board_page">Налаштування плати</string>
-    <string name="board_page">Відкрити сторінку плати</string>
-    <string name="board_page_note">По USB, коли плата підключена до цього пристрою; інакше в браузері по WiFi.</string>
-    <string name="board_page_none">Плати нема: підключіть її по USB або дайте застосунку знайти її по WiFi</string>
-    <string name="link_opening">З\'єднуюсь з платою по USB…</string>
-    <string name="link_none">Плати на USB нема (%1$s). Підключіть плату до USB цього пристрою й дозвольте доступ.</string>
-    <string name="link_saved">Збережено: %1$s</string>
-    <string name="link_failed">Не збережено: %1$s</string>
+    <string name="conn_title">Зв\'язок</string>
+    <string name="conn_note">По USB тут нічого не треба. По WiFi застосунок сам знайде плату (mDNS, потім адреси точки доступу); адресу вписуйте, лише якщо не знаходить.</string>
+    <string name="conn_host">Адреса плати</string>
+    <string name="conn_host_auto">порожньо: знайти</string>
+    <string name="conn_find">Знайти</string>
+    <string name="conn_finding">Шукаю…</string>
+    <string name="conn_found">Плата на %1$s</string>
+    <string name="conn_not_found">У цій мережі плати нема</string>
+    <string name="conn_autostart">Запускати разом з магнітолою</string>
+    <string name="conn_autostart_note">Якщо магнітола закриває фонові застосунки, вимкніть для цього оптимізацію батареї або додайте його в автозапуск.</string>
+
+    <string name="diag_title">Діагностика</string>
+    <string name="diag_usb_unplugged">USB: плату не підключено</string>
+    <string name="diag_usb_permission">USB: плата підключена, доступ не дозволено</string>
+    <string name="diag_usb_connecting">USB: з\'єднуюсь…</string>
+    <string name="diag_usb_up">USB: прошивка %1$s (%2$s)</string>
+    <string name="diag_usb_failed">USB: збій, %1$s</string>
+    <string name="diag_usb_stats">Кадрів прийнято %1$d, надіслано %2$d, битих байтів %3$d; запитів %4$d, невдалих %5$d; інтернет плати %6$d</string>
+    <string name="diag_last_error">Остання помилка: %1$s</string>
+    <string name="diag_about">MegaOpen Компаньйон %1$s · github.com/%2$s</string>
 </resources>

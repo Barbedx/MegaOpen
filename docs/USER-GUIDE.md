@@ -169,25 +169,27 @@ saved list of signal bindings, and signals added by the update do not show.
 Press **Заводські прив'язки** once. It replaces your own bindings with the
 new factory list.
 
-## Voice alerts on the head unit
+## The app on the head unit (MegaOpen Companion)
 
-The panel's alerts («Lights off!», «Handbrake on!», low fuel, your own rules)
-can also be said out loud by the head unit. Install **MegaOpen Companion**
-(`megaopen-companion-X.Y.Z.apk` from the release, Android 7 or newer, no root) on
-the tablet, open it and switch on «Озвучувати попередження плати».
+Install **MegaOpen Companion** (`megaopen-companion-X.Y.Z.apk` from the
+release, Android 7 or newer, no root) on the head unit. It says the panel's
+alerts out loud («Lights off!», «Handbrake on!», low fuel, your own rules),
+shows the board's settings page, and is the board's way to the internet.
 
-- The board must be on the tablet's network (its hotspot). Leave the address
-  empty and the app finds it; type the IP from the panel menu if it does not.
-- «Тестове попередження з плати» makes the board add a test «lights off»; the
-  app says it within two seconds. That checks the board, the network and the
-  voice in one go.
-- No Ukrainian voice: «Налаштування синтезу мовлення», install the Google
-  speech engine's Ukrainian voice, or pick English.
-- Updates: Оновлення › «Перевірити» in the app, from the same releases as the
-  board; Android asks to confirm the install. The first time it asks to allow
-  installing apps from MegaOpen Компаньйон.
+- **USB:** plug the board into the head unit's USB. Android offers to open the
+  app; tick «Always» and it never asks again. Nothing to type.
+- **WiFi:** the board on the head unit's hotspot. The app finds it (Ще › Зв'язок
+  › address empty); type the IP from the panel menu if it does not.
+- **Головна › Перевірка:** the board raises a test alert and the app says it:
+  the board, the connection and the voice in one go.
+- **Голос:** language (Ukrainian, English, the system's), volume, each alert on
+  or off with your own phrase (`{v}` is the value). No Ukrainian voice: install
+  it in «Налаштування синтезу мовлення» (the Google engine has one).
+- **Плата:** the board's own page, over USB or WiFi alike.
+- **Ще › Оновлення:** from the same releases as the board; Android asks to
+  confirm the install, and the first time to allow installs from this app.
 - The head unit closes it in the background: exempt it from battery
-  optimisation or put it on the auto-start list.
+  optimisation or put it on its auto-start list.
 
 ## Settings to a file
 

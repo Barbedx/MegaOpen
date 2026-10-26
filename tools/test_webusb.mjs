@@ -1,5 +1,5 @@
 // web/usb/link.js under Node: the frames against LinkFrame.cpp's rules, the
-// HTTP framing against Http.kt's, and the Board against a fake board on a fake
+// HTTP framing against HttpWire.kt's, and the Board against a fake board on a fake
 // USBDevice that speaks the link as src/link/UsbLink.cpp does (two channels,
 // FIN when the server closes, 91 on a failure, PONG echoes the PING).
 //
@@ -48,9 +48,9 @@ eq(crc16(te.encode('123456789')), 0x29B1, 'crc16 check value');
 
 // ---- HTTP framing --------------------------------------------------------------
 eq(td.decode(httpRequest('GET', '/api/status', { Host: 'x', Connection: 'close', Accept: '*/*' })),
-  'GET /api/status HTTP/1.1\r\nHost: 127.0.0.1\r\nX-MegaOpen: 1\r\nAccept: */*\r\n\r\n', 'GET as Http.kt');
+  'GET /api/status HTTP/1.1\r\nHost: 127.0.0.1\r\nX-MegaOpen: 1\r\nAccept: */*\r\n\r\n', 'GET as HttpWire.kt');
 eq(td.decode(httpRequest('POST', '/api/x', { 'Content-Type': 'a/b', 'Content-Length': '99' }, te.encode('{}'))),
-  'POST /api/x HTTP/1.1\r\nHost: 127.0.0.1\r\nX-MegaOpen: 1\r\nContent-Type: a/b\r\nContent-Length: 2\r\n\r\n{}', 'POST as Http.kt');
+  'POST /api/x HTTP/1.1\r\nHost: 127.0.0.1\r\nX-MegaOpen: 1\r\nContent-Type: a/b\r\nContent-Length: 2\r\n\r\n{}', 'POST as HttpWire.kt');
 eq(td.decode(httpRequest('POST', '/a', {})), 'POST /a HTTP/1.1\r\nHost: 127.0.0.1\r\nX-MegaOpen: 1\r\nContent-Length: 0\r\n\r\n', 'empty POST');
 ok(!td.decode(httpRequest('GET', '/a', { 'X-A': 'b\r\nEvil: 1' })).includes('\r\nEvil'), 'no header injection');
 {

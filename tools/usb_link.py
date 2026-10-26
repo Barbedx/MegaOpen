@@ -15,7 +15,7 @@ own GitHub requests (GhOta, LogPush) over this PC's network, GitHub hosts only.
 
 On Windows the t2can build's WinUSB descriptor (WebUSB on) binds the vendor
 interface with no driver install; t2can_usbhid has none (Zadig, or a phone).
-The same frames as the app (android/.../Link.kt, UsbBoard.kt). Under Git Bash
+The same frames as the app (android/.../link/Frames.kt, UsbLink.kt). Under Git Bash
 set MSYS_NO_PATHCONV=1, or /api/... arrives as a Windows path.
 """
 import json

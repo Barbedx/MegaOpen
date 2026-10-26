@@ -175,7 +175,7 @@ over USB, so it is always the firmware's.
 
 | file | what |
 | --- | --- |
-| `link.js` | the frames, the HTTP framing as `Http.kt`, a `Board` on a WebUSB device: the app's `UsbBoard.kt` |
+| `link.js` | the frames, the HTTP framing as `HttpWire.kt`, a `Board` on a WebUSB device: the app's `UsbLink.kt` |
 | `shell.js` | the chooser, the bar, `GET /` over the link drawn in a frame, `window.MOLink` in that frame |
 | `index.html` | the shell; its first script hands a reloaded frame back to the shell |
 | `sw.js` | the shell's four files kept, so it opens without internet after one visit |

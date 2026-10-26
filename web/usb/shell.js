@@ -1,7 +1,7 @@
 // The shell around the board's own page (docs/design/usb-link.md, "The WebUSB
 // page"): it holds the device and the link, fetches "/" over it, and draws that
 // page in a frame with window.MOLink, which web/js/10-api.js uses instead of
-// fetch, as in the app's WebView (android/.../BoardActivity.kt).
+// fetch, as in the app's WebView (android/.../ui/BoardScreen.kt).
 import { Board, LinkError, OTA_MS, REQ_MS, findVendor } from './link.js';
 
 const WORDS = {

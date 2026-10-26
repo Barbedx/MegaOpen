@@ -1,7 +1,7 @@
 // The USB link (docs/design/usb-link.md) from a browser: WebUSB on the board's
 // vendor interface, the frames of src/link/LinkFrame.*, and HTTP to the
 // board's own web server piped through them, as the app does
-// (android/.../UsbBoard.kt, Http.kt). No DOM here: tools/test_webusb.mjs runs
+// (android/.../link/UsbLink.kt, HttpWire.kt). No DOM here: tools/test_webusb.mjs runs
 // it under Node against a fake device.
 
 export const T = {
@@ -109,7 +109,7 @@ function wholeFrameAfter(b, from) {
   return -1;
 }
 
-// The request as Http.kt writes it: an IP literal passes the board's Host
+// The request as HttpWire.kt writes it: an IP literal passes the board's Host
 // check (src/net/RequestGate.h), X-MegaOpen lets a change through.
 export function httpRequest(method, path, headers = {}, body = null) {
   const clean = s => String(s).replace(/[\r\n]/g, '');
@@ -181,7 +181,7 @@ export class HttpReader {
       if (b.length - this.at < len) return null;
       body = b.slice(this.at, this.at + len);
     } else {
-      // Neither: Http.kt reads no body; only a close can say there was one.
+      // Neither: HttpWire.kt reads no body; only a close can say there was one.
       body = eof ? b.slice(this.at) : new Uint8Array(0);
     }
     return { status: this.status, headers: this.headers, body };
