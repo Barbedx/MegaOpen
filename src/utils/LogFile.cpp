@@ -22,6 +22,7 @@ namespace LogFile
         size_t   g_bufCap = 0;
         size_t   g_bufLen = 0;
         volatile bool g_flushReq = false;
+        volatile uint32_t g_rotations = 0;
 
         const char* nameOf(int n)
         {
@@ -43,6 +44,7 @@ namespace LogFile
             }
             g_cur = LittleFS.open("/log/0.log", "w");
             g_curSize = 0;
+            g_rotations = g_rotations + 1;
         }
 
         void writeOut(const uint8_t* p, size_t n)
@@ -185,6 +187,7 @@ namespace LogFile
     }
 
     size_t buffered()   { return g_bufLen; }
+    uint32_t rotations() { return g_rotations; }
     size_t totalBytes() { return g_mounted ? LittleFS.totalBytes() : 0; }
     size_t usedBytes()  { return g_mounted ? LittleFS.usedBytes() : 0; }
 }

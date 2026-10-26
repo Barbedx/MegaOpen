@@ -42,6 +42,10 @@
 #include "utils/Snapshot.h"
 #include <esp_heap_caps.h>
 #include <esp_core_dump.h>
+#include <esp_flash.h>
+#if FEATURE_LOGFS
+#include <LittleFS.h>
+#endif
 
 #if FEATURE_VEHICLE_CAN
 #include "vehicle/CanSniffer.h"
@@ -212,10 +216,46 @@ static void serialSink(const char* line, int len, uint32_t)
     Serial.write('\n');
 }
 #if FEATURE_LOG_PUSH
-// What the flash log keeps, for GitHub (src/net/LogPush.h).
+// The head unit's UART for GitHub: its frames ([hur] decoded, and the [hu]
+// echo T/V/R/J when it runs), each kind (direction, cmd) the first time and
+// then only when its bytes change. A frame repeated every 100 ms would fill
+// the push; a change is never left out. The LogBus task only.
+static bool huChanged(const char* line, int len)
+{
+    static uint32_t seen[5][256];
+    int slot, cmd = 0;
+    const char* rest;
+    if (!strncmp(line, HUR, sizeof(HUR) - 1)) {
+        const char* c = strstr(line, "cmd=");
+        if (!c) return true;
+        cmd = (int)strtol(c + 4, nullptr, 16) & 0xFF;
+        slot = 0;
+        rest = c + 6;
+    } else {
+        const char d = line[sizeof(HUE) - 1];
+        slot = d == 'T' ? 1 : d == 'V' ? 2 : d == 'R' ? 3 : 4;
+        rest = line + sizeof(HUE) + 1;
+        if (!strncmp(rest, "2E ", 3)) cmd = (int)strtol(rest + 3, nullptr, 16) & 0xFF;
+        else if (!strncmp(rest, "cmd=", 4)) cmd = (int)strtol(rest + 4, nullptr, 16) & 0xFF;
+    }
+    uint32_t h = 2166136261u;
+    for (const char* p = rest; p < line + len; ++p) h = (h ^ (uint8_t)*p) * 16777619u;
+    h += !h;
+    if (seen[slot][cmd] == h) return false;
+    seen[slot][cmd] = h;
+    return true;
+}
+
+// What the flash log keeps, for GitHub (src/net/LogPush.h), plus the head
+// unit's frames when they change.
 static void pushSink(const char* line, int len, uint32_t ms)
 {
-    if (!isWebOnly(line) && !isHuEcho(line)) LogPush::sink(line, len, ms);
+    const bool hur = !strncmp(line, HUR, sizeof(HUR) - 1);
+    if (hur || isHuEcho(line)) {
+        if (huChanged(line, len)) LogPush::sink(line, len, ms);
+        return;
+    }
+    if (!isWebOnly(line)) LogPush::sink(line, len, ms);
 }
 #endif
 #if FEATURE_LOGFS
@@ -1662,9 +1702,36 @@ static void hkBeatSlow(uint32_t)
 // the image is erased: the next crash writes a new one, and this line is never
 // repeated for an old one. Decode with the ELF of that build (`elf=`):
 //   xtensa-esp32s3-elf-addr2line -pfiaC -e firmware.elf <pc> <bt...>
-static void logCrash()
+// The whole image is kept too, as /crash/<boot>.cdmp on littlefs, for the log
+// push to send home (boot-<boot>/coredump.bin, the boot that crashed): every
+// task's stack, which the summary's corrupted backtrace cannot give.
+//   esp-coredump info_corefile -t raw -c coredump.bin firmware.elf
+static void keepCrash(uint32_t boot)
+{
+#if FEATURE_LOGFS
+    size_t addr = 0, size = 0;
+    if (!LogFile::fsMounted() || esp_core_dump_image_get(&addr, &size) != ESP_OK || !size || size > 64 * 1024) return;
+    auto* buf = (uint8_t*)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!buf) return;
+    if (esp_flash_read(esp_flash_default_chip, buf, addr, size) == ESP_OK) {
+        if (!LittleFS.exists("/crash")) LittleFS.mkdir("/crash");
+        char path[24];
+        snprintf(path, sizeof(path), "/crash/%05u.cdmp", (unsigned)boot);
+        File f = LittleFS.open(path, "w");
+        const size_t put = f ? f.write(buf, size) : 0;
+        if (f) f.close();
+        LOGI("crash", "coredump kept: %s, %u bytes%s", path, (unsigned)size, put == size ? "" : " (write failed)");
+    }
+    heap_caps_free(buf);
+#else
+    (void)boot;
+#endif
+}
+
+static void logCrash(uint32_t boot)
 {
     if (esp_core_dump_image_check() != ESP_OK) return;
+    keepCrash(boot);
     auto* s = (esp_core_dump_summary_t*)heap_caps_malloc(sizeof(esp_core_dump_summary_t),
                                                          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!s) return;
@@ -1723,7 +1790,7 @@ static void logBootReason()
     logf("[boot] build=%s fw=" MEGAOPEN_VERSION " board=%s reason=%s boots=%u crashes=%u psram=%u",
          MegaOpen::buildId(), Board::NAME, why, (unsigned)boots, (unsigned)crashes,
          (unsigned)ESP.getPsramSize());
-    logCrash();
+    logCrash(boots - 1);
 }
 
 void setup()

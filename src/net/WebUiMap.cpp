@@ -9,6 +9,7 @@
 #include "../vehicle/DecodeTable.h"
 #include "../vehicle/Derived.h"
 #include "../utils/LogBus.h"
+#include "../utils/WallClock.h"
 
 // ---------------------------------------------------------------------------
 // /api/map — the RAV4 map (docs/design/web-ui.md, slice 7)
@@ -568,6 +569,8 @@ void WebUi::routesAlerts()
 {
     route("/api/alerts", HTTP_GET, [](PsychicRequest* r) {
         const uint32_t since = r->hasParam("since") ? (uint32_t)strtoul(r->getParam("since")->value().c_str(), nullptr, 10) : 0;
+        // t: the app's clock (ms since 1970), the board's date (src/utils/WallClock.h).
+        if (r->hasParam("t")) WallClock::fromApp(strtoll(r->getParam("t")->value().c_str(), nullptr, 10), "wifi");
         static App::Car::AlertEntry list[App::Car::ALERT_LOG];   // httpd is one task
         uint32_t last = 0;
         const uint8_t n = App::Car::alertsSince(since, list, App::Car::ALERT_LOG, last);

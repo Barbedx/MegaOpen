@@ -17,6 +17,11 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 - `FEATURE_WEB_PAGE` (on by default): off, the board serves no settings page, 83 kB less flash; "/" is then a rescue page (`src/net/RescuePage.h`) with a firmware update from a file and the WiFi network, so nobody is locked out.
 - **Reminders that keep reminding.** In MegaOpen Companion each alert has a repeat (once, every 15, 30 or 60 s; lights and handbrake every 30 s by default): while its condition lasts the phrase is said again, and an Android notification (the alerts channel, no chime over the voice) stays until it is fixed. The app asks the board `GET /api/signal?name=…` every 2 s.
 - Settings › «Нагадування»: the speeds the lights and handbrake reminders start at (10 and 5 km/h by default, each off below half of it; 0 switches one off), live.
+- **The whole log reaches GitHub.** What a boot could not push (no internet, a power cut, a crash) is sent after the next boot from the flash log, from the line after the last one pushed, as `boot-N/flash-PP.log`; a boot that pushed nothing is sent whole. The first boot on this version sends the earlier boots still on flash once.
+- **The crash itself.** After a panic or a watchdog the whole coredump is kept on flash (`/crash/`) and pushed as `boot-N/coredump.bin` (N: the boot that crashed); `esp-coredump info_corefile -t raw -c coredump.bin firmware.elf` shows every task's stack.
+- The head unit's UART in the pushed log: each frame kind (direction, command) the first time and again whenever its bytes change.
+- **The car's CAN to GitHub** (Плата › Логи в GitHub › «Запис CAN авто», off by default): on, the board records the car bus (change-only) and sends each closed recording file in 512 kB parts as `cap/<session>/<file>-<part>.bin`, at most «МБ на день» (200 by default). `tools/cap_fetch.py` fetches and joins them for `tools/can_dump.py`.
+- The board's date: MegaOpen Companion sends its clock with every alerts poll (`t`) and in the USB link's HELLO; the board sets its clock when it has none or is 5 s off (`[time]` line). The head unit sends hours and minutes only.
 - Settings › «Без WiFi, коли є USB» (`wifiAuto`, off by default): WiFi off once the app has been on USB for 10 s, back 30 s after it is gone. 27 kB more heap while off.
 
 ### Changed

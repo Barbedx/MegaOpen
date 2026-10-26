@@ -134,6 +134,7 @@ class UsbLink(private val ctx: Context, private val scope: CoroutineScope) {
         jobs += scope.launch(Dispatchers.IO) { readLoop(c, i) }
         // "net": this app carries the board's own GitHub requests (updates, log push).
         val me = JSONObject().put("app", "companion " + BuildConfig.VERSION_NAME).put("net", 1)
+            .put("time", System.currentTimeMillis())
         if (!send(Frames.HELLO, Frames.FIN, 0, me.toString().toByteArray())) { closeNow("write"); return@withLock false }
         val j = withTimeoutOrNull(3000) { h.await() } ?: run { closeNow("no HELLO from the board"); return@withLock false }
         val n = j.optInt("chans", 1).coerceIn(1, 8)

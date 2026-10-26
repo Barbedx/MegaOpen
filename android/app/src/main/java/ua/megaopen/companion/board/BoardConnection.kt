@@ -106,7 +106,8 @@ class BoardConnection(ctx: Context, private val scope: CoroutineScope,
                 it.fw = fw
             }
             try {
-                var r = b.json("/api/alerts?since=${if (since < 0) 0 else since}")
+                // t: this device's clock, the board's only source of the date (its logs, its CAN files).
+                var r = b.json("/api/alerts?since=${if (since < 0) 0 else since}&t=${System.currentTimeMillis()}")
                 fails = 0
                 if (since < 0) {
                     since = r.optLong("last")

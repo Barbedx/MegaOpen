@@ -558,10 +558,11 @@ po('/api/fw/check',()=>{const v=ghView();if(S.wifi.mode!=='sta')return fail(409,
 po('/api/fw/reboot',()=>{const v=ghView();if(v.phase!=='written')return fail(409,'fw_nothing');S.gh.phase='reboot';return ok});
 po('/api/fw/install',()=>{const v=ghView();if(v.phase!=='available')return fail(409,'fw_no_newer');Object.assign(S.gh,{phase:'downloading',at:now(),got:0});return ok});
 /* LogPush (src/net/LogPush.cpp): на STA з токеном — файл на хвилину; токен назад не віддається */
-const lpView=()=>{const v=S.lp||(S.lp={on:true,tok:false,repo:'Barbedx/megaopen-logs',files:0,sent:0,at:now()});
+const lpView=()=>{const v=S.lp||(S.lp={on:true,tok:false,repo:'Barbedx/megaopen-logs',files:0,sent:0,at:now(),can:false,canMB:200,canToday:0});
  const live=v.on&&v.tok&&S.wifi.mode==='sta';if(live&&now()-v.at>60000){v.files++;v.sent+=Math.round(rnd(6000,14000));v.at=now()}
  return {state:!v.on||!v.tok?'off':'waiting',on:v.on,hasToken:v.tok,repo:v.repo,device:'mo-4580',status:v.files?201:0,files:v.files,sent:v.sent,lost:0,
-  queued:Math.round(Math.min(now()-v.at,600000)/60000*9000),spool:1048576,okAgoMs:v.files?now()-v.at:0,nextInMs:live?Math.max(0,60000-(now()-v.at)):0,heapMin:S.heap}};
+  queued:Math.round(Math.min(now()-v.at,600000)/60000*9000),spool:1048576,okAgoMs:v.files?now()-v.at:0,nextInMs:live?Math.max(0,60000-(now()-v.at)):0,heapMin:S.heap,
+  can:v.can,canMB:v.canMB,canToday:v.canToday,canFile:0,canBudget:v.canToday>=v.canMB*1048576}};
 g('/api/logpush',lpView);
 /* CarDiag (src/app/CarDiag.cpp): 21 C1 клімату; проба — одна відповідь, опитування — салон повільно гріється */
 const dgView=()=>{const v=S.dg||(S.dg={on:false,interval:5,ok:0,sent:0,last:'',at:0,cabin:9.5});
@@ -575,6 +576,8 @@ po('/api/diag',q=>{dgView();const v=S.dg;if(q.interval!==undefined&&!(q.interval
 po('/api/logpush',q=>{lpView();const v=S.lp;
  if(q.token&&!/^[A-Za-z0-9_]{20,255}$/.test(q.token))return fail(400,'push_token_bad');
  if(q.repo!==undefined&&!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(q.repo))return fail(400,'push_repo_bad');
+ const mb=q.canMB!==undefined?+q.canMB:undefined;if(mb!==undefined&&!(mb>=1&&mb<=5000))return fail(400,'push_can_mb');
+ if(typeof q.can==='boolean')v.can=q.can;if(mb!==undefined)v.canMB=mb;
  if(typeof q.on==='boolean')v.on=q.on;if(q.token)v.tok=true;if(q.repo!==undefined)v.repo=q.repo;if(q.now)v.at=now()-60001;return ok});
 po('/ota/upload',q=>{if(!q.size)return fail(400,'param file');S.build='ota '+new Date().toISOString().slice(0,16);setTimeout(doBoot,200);return 'OK'});
 function uart(dir,b){const p=b.split(' ');S.hu.count++;S.uartRing.push({dir,cmd:p[1]||'00',len:Math.max(0,p.length-4),total:p.length,at:now(),data:p.slice(3,-1).join(''),ascii:'',u16:false});if(S.uartRing.length>40)S.uartRing.shift()}

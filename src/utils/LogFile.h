@@ -60,6 +60,9 @@ namespace LogFile
     const char* path(int n);
     size_t      size(int n);
     size_t      buffered();      // bytes still in RAM, not yet in /log/0.log
+    // How many times the files have shifted up since boot: file n read at
+    // count c is file n + (rotations() - c) now (LogPush reads past boots).
+    uint32_t    rotations();
     size_t      totalBytes();
     size_t      usedBytes();
 }

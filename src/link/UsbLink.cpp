@@ -11,6 +11,7 @@
 #include "../app/CarTask.h"
 #include "../app/Rt.h"
 #include "../utils/LogBus.h"
+#include "../utils/WallClock.h"
 #include "../vehicle/Signals.h"
 
 namespace UsbLink
@@ -291,6 +292,7 @@ namespace UsbLink
             {
                 JsonDocument a;
                 s_appNet = !deserializeJson(a, f.payload, f.len) && (a["net"] | 0) != 0;
+                if (a["time"].is<int64_t>()) WallClock::fromApp(a["time"].as<int64_t>(), "usb");
             }
             if (s_netSt != NetSt::Idle) netFail("new_app");
             JsonDocument d;

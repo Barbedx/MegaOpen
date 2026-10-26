@@ -40,6 +40,8 @@ SCR.board={title:'nav.board',async render(m){
  (lp?card(t('bd.push'),row(t('bd.pushSt'),'<span id="pSt" class="chip off">…</span>','<span id="pW"></span>',t('bd.pushH'))+
   row(t('bd.pushOn'),sw('/api/logpush|on',lp.on))+row(t('bd.pushTok'),txt('/api/logpush|token','',lp.hasToken?t('bd.pushTokSet'):'github_pat_…','in','password'),'',t('bd.pushTokH'))+
   row(t('bd.pushRepo'),txt('/api/logpush|repo',lp.repo,'owner/name'),t('bd.pushDev',lp.device))+
+  (lp.canMB!==undefined?row(t('bd.pushCan'),sw('/api/logpush|can',lp.can),'',t('bd.pushCanH'))+
+   row(t('bd.pushCanMB'),txt('/api/logpush|canMB',lp.canMB,'200','in','number','min="1" max="5000" style="max-width:8em"'),'<span id="pCan"></span>'):'')+
   `<div class="fr"><button class="btn" type="button" id="pNow">${t('bd.pushNow')}</button></div>`,'cPush'):'')+
  (has('logfs')?card(t('bd.log'),row('','',t('bd.logH'))+`<div id="logs">${(lg.files||[]).map(f=>row(f.n?t('bd.bootN',f.n):t('bd.bootThis'),`<button class="btn sm" type="button" data-n="${f.n}">${t('bd.download')}</button>`,fmtB(f.size))).join('')}</div>`,'','custom'):'')+
  '<div id="allSlot"></div>'+
@@ -110,7 +112,8 @@ async gh(){const v=await API.get('/api/fw');if(!$('#ghSt'))return;this.ghTag=v.l
 async push(){const v=await API.get('/api/logpush');if(!$('#pSt'))return;
  const[st,tx]={off:['off',t('bd.push.off')],waiting:['ok',t('bd.push.waiting')],pushing:['warn',t('bd.push.pushing')],stopped:['bad',t('bd.push.stopped')]}[v.state]||['off',v.state];
  setChip('#pSt',v.err&&v.state!=='stopped'?'warn':st,tx);
- $('#pW').textContent=t('bd.push.stats',v.files,fmtB(v.sent),fmtB(v.queued))+(v.okAgoMs?' · '+t('bd.push.ago',Math.round(v.okAgoMs/1000)):'')+(v.lost?' · '+t('bd.push.lost',fmtB(v.lost)):'')+(v.err?' · '+errLine(v.err):'')},
+ $('#pW').textContent=t('bd.push.stats',v.files,fmtB(v.sent),fmtB(v.queued))+(v.okAgoMs?' · '+t('bd.push.ago',Math.round(v.okAgoMs/1000)):'')+(v.lost?' · '+t('bd.push.lost',fmtB(v.lost)):'')+(v.err?' · '+errLine(v.err):'')
+ if($('#pCan'))$('#pCan').textContent=v.can?t('bd.push.can',fmtB(v.canToday),v.canMB)+(v.canBudget?' · '+t('bd.push.canFull'):''):''},
 async tick(){const[st,ble]=await Promise.all([API.get('/api/status'),getIf(has('display')&&has('ble')&&!this.bleOff,'/api/ble')]);if(!$('#wNow'))return;
  if(has('ghota'))await this.gh();
  if(this.lp)await this.push();

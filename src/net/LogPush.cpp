@@ -13,6 +13,15 @@
 #include "../Version.h"
 #include "../app/TaskPlan.h"
 #include "../utils/LogBus.h"
+#if FEATURE_LOGFS
+#include <LittleFS.h>
+#include "../utils/LogFile.h"
+#endif
+#if FEATURE_CAPTURE
+#include <time.h>
+#include "../capture/CanRecorder.h"
+#include "../utils/WallClock.h"
+#endif
 
 namespace LogPush
 {
@@ -68,6 +77,15 @@ namespace LogPush
         bool     s_busy = false;        // a job task exists
         uint32_t s_part = 0;            // the next file's number this boot
         uint32_t s_boot = 0;            // sys/boots, read by the first job
+
+        // The CAN part (NVS "can", "canMB"; progress "cnum"/"coff": the file
+        // being sent and how far; "cday"/"cused": the day and its bytes).
+        bool     s_can = false;
+        uint32_t s_canMB = CAN_MB_DEFAULT;
+        uint32_t s_cnum = 0, s_coff = 0, s_cday = 0, s_cused = 0;
+        bool     s_canBudget = false;
+        bool     s_canStarted = false;  // the recorder was started for it this boot
+        uint32_t s_spoolAt = 0;         // millis() of the last spool push
 
         bool ready() { return s_buf && s_on && s_tok[0] && s_repo[0]; }
 
@@ -215,6 +233,360 @@ namespace LogPush
             return st;
         }
 
+        // A refusal that waiting will not fix stops the push until the page
+        // saves new settings; the rest retry with a growing wait. 422 (the path
+        // is taken) moves *part on and tries again soon.
+        void failed(int st, esp_err_t err, uint32_t ms, uint32_t* part)
+        {
+            const char* code;
+            bool stop = false;
+            switch (st) {
+                case 401: code = "push_token";  stop = true; break;   // bad or expired token
+                case 403: code = "push_denied"; break;                // no write right, or rate limit
+                case 404: code = "push_repo";   stop = true; break;   // no such repo, or not this token's
+                case 409: code = "push_conflict"; break;
+                case 422: code = "push_exists"; break;                // the path is taken: next number
+                case -1:  code = "push_net";    break;
+                default:  code = "push_http";   break;
+            }
+            portENTER_CRITICAL(&s_mux);
+            if (st == 422) ++*part;
+            s_backoff = s_backoff ? s_backoff * 2 : PERIOD_MS;
+            if (s_backoff > BACKOFF_MAX_MS) s_backoff = BACKOFF_MAX_MS;
+            s_nextAt = millis() + (st == 422 ? DRAIN_MS : s_backoff);
+            portEXIT_CRITICAL(&s_mux);
+            setErr(stop ? State::Stopped : State::Waiting, code, st);
+            if (st < 0)
+                LogBus::printf("[push] no answer (%s) after %u ms; retry in %u s", esp_err_to_name(err),
+                               (unsigned)ms, (unsigned)(s_backoff / 1000));
+            else
+                LogBus::printf("[push] GitHub said %d (%s)%s", st, code,
+                               stop ? ": stopped until the settings change" : "");
+        }
+
+        // One file to <repo>/<dev>/<rel>; the HTTP status (-1: none).
+        int putFile(const char* repo, const char* tok, const char* rel, const char* msg,
+                    const char* data, size_t n, uint32_t lost, esp_err_t& err, uint32_t& ms)
+        {
+            char url[220];
+            snprintf(url, sizeof(url), "https://api.github.com/repos/%s/contents/%s/%s", repo, s_dev, rel);
+            size_t len = 0;
+            char* body = buildBody(data, n, lost, msg, len);
+            if (!body) { err = ESP_ERR_NO_MEM; ms = 0; return -1; }
+            const uint32_t t0 = millis();
+            const int st = put(url, tok, body, len, err);
+            ms = millis() - t0;
+            heap_caps_free(body);
+            return st;
+        }
+
+        // A good PUT that was not the spool's: the next piece soon.
+        void sentPast(int st, size_t n)
+        {
+            portENTER_CRITICAL(&s_mux);
+            s_state = State::Waiting;
+            s_err[0] = 0;
+            s_status = st;
+            ++s_files;
+            s_sent += (uint32_t)n;
+            s_okAt = millis();
+            s_okAt += !s_okAt;
+            s_backoff = 0;
+            s_nextAt = millis() + DRAIN_MS;
+            portEXIT_CRITICAL(&s_mux);
+        }
+
+        // "12.345 [x] ..." -> 12345; false when the line has no stamp.
+        bool lineMs(const char* p, const char* end, uint32_t& ms)
+        {
+            uint32_t s = 0;
+            const char* q = p;
+            while (q < end && *q >= '0' && *q <= '9') s = s * 10 + (uint32_t)(*q++ - '0');
+            if (q == p || q + 4 > end || *q != '.') return false;
+            uint32_t f = 0;
+            for (int i = 1; i <= 3; ++i) {
+                if (q[i] < '0' || q[i] > '9') return false;
+                f = f * 10 + (uint32_t)(q[i] - '0');
+            }
+            ms = s * 1000 + f;
+            return true;
+        }
+
+#if FEATURE_LOGFS
+        // ---- what earlier boots left on flash -------------------------------
+        // A push that never came (no internet, a power cut, a crash) leaves the
+        // lines in the flash log only (src/utils/LogFile.h), and a crash in the
+        // coredump partition (main.cpp copies it to /crash/). Before the spool,
+        // each job sends one piece of that: a coredump, or a chunk of an earlier
+        // boot's log from the line after the last one pushed (NVS "pb"/"pms"; all
+        // of it for a boot that pushed nothing), as boot-N/flash-PP.log. NVS
+        // "rec" is the newest boot sent in full; nothing older is sent again.
+        struct Past { uint32_t boot, fromMs; int8_t first, last; };   // files first..last, oldest first
+        Past     s_past[LogFile::FILES];
+        int      s_pastN = -1;          // -1: not looked at yet this boot
+        int      s_pastI = 0;           // the boot being sent
+        int      s_pastFile = -1;       // its file being sent (number at the scan), -1: not started
+        size_t   s_pastOff = 0;
+        uint32_t s_pastPart = 0;
+        uint32_t s_rotAtScan = 0;
+        bool     s_crashDone = false;
+        char*    s_fbuf = nullptr;      // one flash log file, PSRAM
+        size_t   s_flen = 0;
+        int      s_fnum = -1;           // which file s_fbuf holds (its number at s_frot), -1 none
+        uint32_t s_frot = 0;
+
+        constexpr size_t FBUF = LogFile::FILE_MAX + 2 * LogFile::FLUSH_BYTES + 1;
+
+        bool loadFile(int n)
+        {
+            if (s_fnum == n && s_frot == LogFile::rotations()) return true;
+            s_fnum = -1;
+            s_frot = LogFile::rotations();
+            if (!s_fbuf) s_fbuf = (char*)heap_caps_malloc(FBUF, CAP_PS);
+            if (!s_fbuf) return false;
+            char path[16];
+            snprintf(path, sizeof(path), "/log/%d.log", n);
+            File f = LittleFS.open(path, "r");
+            if (!f) return false;
+            s_flen = f.read((uint8_t*)s_fbuf, FBUF - 1);
+            f.close();
+            s_fbuf[s_flen] = 0;
+            s_fnum = n;
+            return true;
+        }
+
+        // The boots= of a [boot] line in the loaded file, 0 none.
+        uint32_t bootIn()
+        {
+            const char* b = strstr(s_fbuf, "[boot] build=");
+            if (!b) return 0;
+            const char* e = strchr(b, '\n');
+            const char* k = strstr(b, " boots=");
+            if (!k || (e && k > e)) return 0;
+            return (uint32_t)strtoul(k + 7, nullptr, 10);
+        }
+
+        void scanPast()
+        {
+            Preferences p;
+            p.begin("logpush", true);
+            const uint32_t rec = p.getUInt("rec", 0), pb = p.getUInt("pb", 0), pms = p.getUInt("pms", 0);
+            p.end();
+            s_rotAtScan = LogFile::rotations();
+            s_pastN = 0;
+            int cur = -1;
+            for (int n = LogFile::FILES - 1; n >= 1; --n) {
+                if (!loadFile(n)) continue;
+                const uint32_t b = bootIn();
+                if (b) {
+                    cur = -1;
+                    if (b > rec && b < s_boot && s_pastN < (int)LogFile::FILES) {
+                        cur = s_pastN++;
+                        s_past[cur] = {b, b == pb ? pms + 1 : 0, (int8_t)n, (int8_t)n};
+                    }
+                } else if (cur >= 0) {
+                    s_past[cur].last = (int8_t)n;   // the same boot, shifted mid-run
+                }
+            }
+            s_fnum = -1;
+            for (int i = 0; i < s_pastN; ++i)
+                LogBus::printf("[push] boot %u: not all pushed, sending from flash (from %u ms, %d file(s))",
+                               (unsigned)s_past[i].boot, (unsigned)s_past[i].fromMs,
+                               s_past[i].first - s_past[i].last + 1);
+        }
+
+        void pastDone(uint32_t boot)
+        {
+            Preferences p;
+            p.begin("logpush", false);
+            p.putUInt("rec", boot);
+            p.end();
+            ++s_pastI;
+            s_pastFile = -1;
+            s_pastPart = 0;
+        }
+
+        // A coredump copied by main.cpp, if one is there: true when it was tried.
+        bool crashStep(const char* repo, const char* tok)
+        {
+            if (s_crashDone) return false;
+            if (!LittleFS.exists("/crash")) { s_crashDone = true; return false; }
+            File d = LittleFS.open("/crash");
+            File f = d ? d.openNextFile() : File();
+            if (!f) { s_crashDone = true; return false; }
+            char path[40], rel[48];
+            const char* nm = f.name();
+            const char* base = strrchr(nm, '/') ? strrchr(nm, '/') + 1 : nm;
+            snprintf(path, sizeof(path), "/crash/%s", base);
+            const uint32_t boot = (uint32_t)strtoul(base, nullptr, 10);
+            const size_t n = f.size();
+            char* data = n && n <= CHUNK_MAX ? (char*)psMalloc(n) : nullptr;
+            const size_t got = data ? f.read((uint8_t*)data, n) : 0;
+            f.close();
+            d.close();
+            if (got != n || !data) {
+                if (data) heap_caps_free(data);
+                LittleFS.remove(path);
+                LogBus::printf("[push] %s: unreadable, removed", path);
+                return false;
+            }
+            char msg[64];
+            snprintf(msg, sizeof(msg), "%s boot %u coredump (" MEGAOPEN_VERSION ")", s_dev, (unsigned)boot);
+            snprintf(rel, sizeof(rel), "boot-%05u/coredump.bin", (unsigned)boot);
+            esp_err_t err = ESP_OK;
+            uint32_t ms = 0, dummy = 0;
+            const int st = putFile(repo, tok, rel, msg, data, n, 0, err, ms);
+            heap_caps_free(data);
+            if (st == 201 || st == 200 || st == 422) {   // 422: sent before, the reply was lost
+                LittleFS.remove(path);
+                sentPast(st, n);
+                LogBus::printf("[push] %s/%s: %u bytes in %u ms", s_dev, rel, (unsigned)n, (unsigned)ms);
+            } else {
+                failed(st, err, ms, &dummy);
+            }
+            return true;
+        }
+
+        // The next chunk of an earlier boot's flash log: true when a PUT was tried.
+        bool pastStep(const char* repo, const char* tok)
+        {
+            if (s_pastN < 0) scanPast();
+            char* text = nullptr;
+            while (s_pastI < s_pastN) {
+                Past& g = s_past[s_pastI];
+                if (s_pastFile < 0) { s_pastFile = g.first; s_pastOff = 0; }
+                if (s_pastFile < g.last) { pastDone(g.boot); continue; }
+                const int now = s_pastFile + (int)(LogFile::rotations() - s_rotAtScan);
+                if (now >= LogFile::FILES || !loadFile(now)) {   // rotated away meanwhile
+                    LogBus::printf("[push] boot %u: /log file gone before it was sent", (unsigned)g.boot);
+                    pastDone(g.boot);
+                    continue;
+                }
+                if (!text) text = (char*)psMalloc(CHUNK_MAX);
+                if (!text) return false;
+                // Whole lines from s_pastOff, the ones after fromMs, up to CHUNK_MAX.
+                size_t n = 0, off = s_pastOff;
+                while (off < s_flen) {
+                    const char* ln = s_fbuf + off;
+                    const char* nl = (const char*)memchr(ln, '\n', s_flen - off);
+                    const size_t ll = nl ? (size_t)(nl - ln) + 1 : s_flen - off;
+                    if (n + ll > CHUNK_MAX) break;
+                    uint32_t ms = 0;
+                    if (!lineMs(ln, ln + ll, ms) || ms >= g.fromMs) { memcpy(text + n, ln, ll); n += ll; }
+                    off += ll;
+                }
+                const bool fileDone = off >= s_flen;
+                if (!n) {
+                    s_pastOff = off;
+                    if (fileDone) { --s_pastFile; s_pastOff = 0; }
+                    continue;
+                }
+                char msg[64], rel[48];
+                snprintf(msg, sizeof(msg), "%s boot %u from flash %u (" MEGAOPEN_VERSION ")", s_dev,
+                         (unsigned)g.boot, (unsigned)s_pastPart);
+                snprintf(rel, sizeof(rel), "boot-%05u/flash-%02u.log", (unsigned)g.boot, (unsigned)s_pastPart);
+                esp_err_t err = ESP_OK;
+                uint32_t ms = 0;
+                const int st = putFile(repo, tok, rel, msg, text, n, 0, err, ms);
+                heap_caps_free(text);
+                if (st == 201 || st == 200) {
+                    ++s_pastPart;
+                    s_pastOff = off;
+                    if (fileDone) { --s_pastFile; s_pastOff = 0; }
+                    sentPast(st, n);
+                    LogBus::printf("[push] %s/%s: %u bytes in %u ms", s_dev, rel, (unsigned)n, (unsigned)ms);
+                } else {
+                    failed(st, err, ms, &s_pastPart);
+                }
+                return true;
+            }
+            if (text) heap_caps_free(text);
+            if (s_fbuf) { heap_caps_free(s_fbuf); s_fbuf = nullptr; s_fnum = -1; }
+            return false;
+        }
+#endif
+
+#if FEATURE_CAPTURE
+        // ---- the CAN recording ------------------------------------------------
+        // The recording's files, oldest first, in PSRAM; how many (0: none or no memory).
+        constexpr size_t CAP_LIST = 64;
+        Capture::FileInfo* s_capList = nullptr;
+        size_t capFiles()
+        {
+            if (!s_capList) s_capList = (Capture::FileInfo*)psMalloc(CAP_LIST * sizeof(Capture::FileInfo));
+            if (!s_capList) return 0;
+            const size_t total = Capture::list(s_capList, CAP_LIST);
+            return total < CAP_LIST ? total : CAP_LIST;
+        }
+
+        uint32_t today()
+        {
+            return WallClock::known() ? (uint32_t)(time(nullptr) / 86400) : s_cday;
+        }
+
+        // The next part of the oldest closed recording file not sent yet: true
+        // when a PUT was tried.
+        bool canStep(const char* repo, const char* tok)
+        {
+            if (!s_can) return false;
+            const uint32_t day = today();
+            if (day != s_cday) { s_cday = day; s_cused = 0; }
+            s_canBudget = (uint64_t)s_cused >= (uint64_t)s_canMB * 1024 * 1024;
+            if (s_canBudget) return false;
+            const size_t n = capFiles();
+            const Capture::FileInfo* files = s_capList;
+            const Capture::FileInfo* f = nullptr;
+            for (size_t i = 0; i < n && !f; ++i) {
+                if (files[i].current) continue;
+                if (files[i].num > s_cnum || (files[i].num == s_cnum && s_coff < files[i].size)) f = &files[i];
+            }
+            if (!f) return false;
+            if (f->num != s_cnum) { s_cnum = f->num; s_coff = 0; }
+            char path[32];
+            if (Capture::beginRead(f->num, path, sizeof(path)) != Capture::Res::OK) return false;
+            const uint32_t want = f->size - s_coff < CAN_PART ? f->size - s_coff : CAN_PART;
+            char* data = (char*)psMalloc(want ? want : 1);
+            size_t got = 0;
+            if (data) {
+                File fl = LittleFS.open(path, "r");
+                if (fl && fl.seek(s_coff)) got = fl.read((uint8_t*)data, want);
+                if (fl) fl.close();
+            }
+            Capture::endRead(f->num);
+            if (!data || got != want) {
+                if (data) heap_caps_free(data);
+                LogBus::printf("[push] cap %04u: read failed at %u, skipped", (unsigned)f->num, (unsigned)s_coff);
+                s_coff = f->size;
+                return false;
+            }
+            const uint32_t part = s_coff / CAN_PART;
+            char msg[72], rel[64];
+            snprintf(msg, sizeof(msg), "%s cap %04u part %u (" MEGAOPEN_VERSION ")", s_dev, (unsigned)f->num, (unsigned)part);
+            snprintf(rel, sizeof(rel), "cap/%04u/%04u-%02u.bin", (unsigned)f->session, (unsigned)f->num, (unsigned)part);
+            esp_err_t err = ESP_OK;
+            uint32_t ms = 0, dummy = 0;
+            const int st = putFile(repo, tok, rel, msg, data, want, 0, err, ms);
+            heap_caps_free(data);
+            if (st == 201 || st == 200 || st == 422) {   // 422: sent before, the reply was lost
+                s_coff += want;
+                s_cused += want;
+                Preferences p;
+                p.begin("logpush", false);
+                p.putUInt("cnum", s_cnum);
+                p.putUInt("coff", s_coff);
+                p.putUInt("cday", s_cday);
+                p.putUInt("cused", s_cused);
+                p.end();
+                sentPast(st, want);
+                LogBus::printf("[push] %s/%s: %u bytes in %u ms; today %u kB of %u MB", s_dev, rel,
+                               (unsigned)want, (unsigned)ms, (unsigned)(s_cused / 1024), (unsigned)s_canMB);
+            } else {
+                failed(st, err, ms, &dummy);
+            }
+            return true;
+        }
+#endif
+
         void runPush()
         {
             char tok[TOKEN_MAX + 1], repo[REPO_MAX + 1], dev[16];
@@ -231,34 +603,66 @@ namespace LogPush
                 p.end();
             }
 
+#if FEATURE_LOGFS
+            // Earlier boots first: a coredump, then what their flash log kept.
+            if (LogFile::fsMounted() && (crashStep(repo, tok) || pastStep(repo, tok))) {
+                memset(tok, 0, sizeof(tok));
+                return;
+            }
+#endif
+#if FEATURE_CAPTURE
+            // The log every PERIOD_MS; the CAN recording in between.
+            if (s_can && s_spoolAt && millis() - s_spoolAt < PERIOD_MS) {
+                xSemaphoreTake(s_lock, portMAX_DELAY);
+                const bool backlog = s_w - (s_p > s_o ? s_p : s_o) >= BACKLOG_BYTES;
+                xSemaphoreGive(s_lock);
+                if (!backlog) {
+                    if (!canStep(repo, tok)) {   // nothing to send: the log at its time
+                        portENTER_CRITICAL(&s_mux);
+                        s_nextAt = s_spoolAt + PERIOD_MS;
+                        portEXIT_CRITICAL(&s_mux);
+                    }
+                    memset(tok, 0, sizeof(tok));
+                    return;
+                }
+            }
+#endif
             char* text = (char*)psMalloc(CHUNK_MAX);
             if (!text) { setErr(State::Waiting, "no_memory", 0); return; }
             uint64_t from = 0, to = 0;
             uint32_t lost = 0;
             const size_t n = takeChunk(text, from, to, lost);
             if (!n && !lost) { heap_caps_free(text); setErr(State::Waiting, "", 0); return; }
+            // The stamp of its last line: after a reboot, the flash log is sent from there on.
+            uint32_t lastMs = 0;
+            if (n) {
+                size_t i = n - 1;
+                while (i > 0 && text[i - 1] != '\n') --i;
+                lineMs(text + i, text + n, lastMs);
+            }
 
-            char msg[64], url[200];
+            char msg[64], rel[40];
             snprintf(msg, sizeof(msg), "%s boot %u part %u (" MEGAOPEN_VERSION ")", dev, (unsigned)s_boot, (unsigned)part);
-            snprintf(url, sizeof(url), "https://api.github.com/repos/%s/contents/%s/boot-%05u/%04u.log",
-                     repo, dev, (unsigned)s_boot, (unsigned)part);
-            size_t len = 0;
-            char* body = buildBody(text, n, lost, msg, len);
-            heap_caps_free(text);
-            if (!body) { setErr(State::Waiting, "no_memory", 0); return; }
-
-            const uint32_t t0 = millis();
+            snprintf(rel, sizeof(rel), "boot-%05u/%04u.log", (unsigned)s_boot, (unsigned)part);
             esp_err_t err = ESP_OK;
-            const int st = put(url, tok, body, len, err);
-            heap_caps_free(body);
+            uint32_t ms = 0;
+            const int st = putFile(repo, tok, rel, msg, text, n, lost, err, ms);
+            heap_caps_free(text);
             memset(tok, 0, sizeof(tok));
-            const uint32_t ms = millis() - t0;
 
             if (st == 201 || st == 200) {
                 xSemaphoreTake(s_lock, portMAX_DELAY);
                 if (to > s_p) s_p = to;
                 const uint32_t queued = (uint32_t)(s_w - (s_p > s_o ? s_p : s_o));
                 xSemaphoreGive(s_lock);
+                s_spoolAt = millis();
+                if (lastMs) {
+                    Preferences p;
+                    p.begin("logpush", false);
+                    p.putUInt("pb", s_boot);
+                    p.putUInt("pms", lastMs);
+                    p.end();
+                }
                 portENTER_CRITICAL(&s_mux);
                 s_state = State::Waiting;
                 s_err[0] = 0;
@@ -270,42 +674,17 @@ namespace LogPush
                 s_okAt = millis();
                 s_okAt += !s_okAt;
                 s_backoff = 0;
-                s_nextAt = millis() + (queued >= BACKLOG_BYTES ? DRAIN_MS : PERIOD_MS);
+                // With the CAN recording on, the jobs in between send it.
+                s_nextAt = millis() + (queued >= BACKLOG_BYTES || s_can ? DRAIN_MS : PERIOD_MS);
                 portEXIT_CRITICAL(&s_mux);
-                LogBus::printf("[push] %s/boot-%05u/%04u.log: %u bytes in %u ms%s; %u queued; "
+                LogBus::printf("[push] %s/%s: %u bytes in %u ms%s; %u queued; "
                                "internal heap %u, stack %u of %u unused",
-                               dev, (unsigned)s_boot, (unsigned)part, (unsigned)n, (unsigned)ms,
+                               dev, rel, (unsigned)n, (unsigned)ms,
                                lost ? " (after a lost stretch)" : "", (unsigned)queued, (unsigned)heapNow(),
                                (unsigned)uxTaskGetStackHighWaterMark(nullptr), (unsigned)App::Plan::LOGPUSH_STACK);
                 return;
             }
-
-            // A refusal that waiting will not fix stops the push until the page
-            // saves new settings; the rest retry with a growing wait.
-            const char* code;
-            bool stop = false;
-            switch (st) {
-                case 401: code = "push_token";  stop = true; break;   // bad or expired token
-                case 403: code = "push_denied"; break;                // no write right, or rate limit
-                case 404: code = "push_repo";   stop = true; break;   // no such repo, or not this token's
-                case 409: code = "push_conflict"; break;
-                case 422: code = "push_exists"; break;                // the path is taken: next number
-                case -1:  code = "push_net";    break;
-                default:  code = "push_http";   break;
-            }
-            portENTER_CRITICAL(&s_mux);
-            if (st == 422) ++s_part;
-            s_backoff = s_backoff ? s_backoff * 2 : PERIOD_MS;
-            if (s_backoff > BACKOFF_MAX_MS) s_backoff = BACKOFF_MAX_MS;
-            s_nextAt = millis() + (st == 422 ? DRAIN_MS : s_backoff);
-            portEXIT_CRITICAL(&s_mux);
-            setErr(stop ? State::Stopped : State::Waiting, code, st);
-            if (st < 0)
-                LogBus::printf("[push] no answer (%s) after %u ms; retry in %u s", esp_err_to_name(err),
-                               (unsigned)ms, (unsigned)(s_backoff / 1000));
-            else
-                LogBus::printf("[push] GitHub said %d (%s)%s", st, code,
-                               stop ? ": stopped until the settings change" : "");
+            failed(st, err, ms, &s_part);
         }
 
         void task(void*)
@@ -331,7 +710,14 @@ namespace LogPush
             const bool on = p.getBool("on", true);   // on by default: a token is the only step
             const String tok = p.getString("tok", "");
             String repo = p.getString("repo", "");
+            const bool can = p.getBool("can", false);
+            const uint32_t canMB = p.getUInt("canMB", CAN_MB_DEFAULT);
+            const uint32_t cnum = p.getUInt("cnum", 0), coff = p.getUInt("coff", 0);
+            const uint32_t cday = p.getUInt("cday", 0), cused = p.getUInt("cused", 0);
             p.end();
+            s_can = can;
+            s_canMB = canMB;
+            s_cnum = cnum; s_coff = coff; s_cday = cday; s_cused = cused;
             if (!repo.length()) repo = REPO_DEFAULT;
             portENTER_CRITICAL(&s_mux);
             s_on = on;
@@ -374,6 +760,19 @@ namespace LogPush
 
     void tick(uint32_t now, bool online)
     {
+#if FEATURE_CAPTURE
+        // Sending the recording means recording, offline too (the garage).
+        if (s_can && !s_canStarted) {
+            const Capture::Status cs = Capture::status();
+            if (cs.ready) {
+                s_canStarted = true;
+                if (!cs.recording) {
+                    Capture::start();
+                    LogBus::line("[push] CAN to GitHub is on: recording started");
+                }
+            }
+        }
+#endif
         portENTER_CRITICAL(&s_mux);
         const bool go = ready() && online && !s_busy && s_state != State::Stopped;
         if (!online || !ready()) s_nextSet = false;
@@ -454,6 +853,11 @@ namespace LogPush
         v.lastOkAgoMs = s_okAt ? now - s_okAt : 0;
         v.nextInMs = s_nextSet && (int32_t)(s_nextAt - now) > 0 ? s_nextAt - now : 0;
         v.heapMin = s_heapMin;
+        v.canOn = s_can;
+        v.canMB = s_canMB;
+        v.canToday = s_cused;
+        v.canFile = s_can ? s_cnum : 0;
+        v.canBudget = s_canBudget;
         portEXIT_CRITICAL(&s_mux);
     }
 
@@ -477,6 +881,31 @@ namespace LogPush
         portEXIT_CRITICAL(&s_mux);
         LogBus::printf("[push] settings saved: %s, repo %s, token %s", s_on ? "on" : "off", s_repo,
                        s_tok[0] ? "set" : "none");
+        return nullptr;
+    }
+
+    const char* setCan(const bool* on, const uint32_t* mb)
+    {
+        if (mb && (*mb < 1 || *mb > CAN_MB_MAX)) return "push_can_mb";
+        Preferences p;
+        if (!p.begin("logpush", false)) return "nvs";
+        if (on) p.putBool("can", *on);
+        if (mb) p.putUInt("canMB", *mb);
+        if (on && *on && !s_can) {
+            // From now on: what was recorded before is not sent.
+            uint32_t newest = 0;
+#if FEATURE_CAPTURE
+            const size_t n = capFiles();
+            for (size_t i = 0; i < n; ++i)
+                if (!s_capList[i].current && s_capList[i].num > newest) newest = s_capList[i].num;
+#endif
+            p.putUInt("cnum", newest);
+            p.putUInt("coff", 0xFFFFFFFFu);
+        }
+        p.end();
+        load();
+        s_canStarted = false;
+        LogBus::printf("[push] CAN to GitHub: %s, %u MB a day", s_can ? "on" : "off", (unsigned)s_canMB);
         return nullptr;
     }
 

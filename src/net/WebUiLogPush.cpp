@@ -30,6 +30,11 @@ void WebUi::routesLogPush()
         d["okAgoMs"]  = v.lastOkAgoMs;
         d["nextInMs"] = v.nextInMs;
         d["heapMin"]  = v.heapMin;
+        d["can"]      = v.canOn;
+        d["canMB"]    = v.canMB;
+        d["canToday"] = v.canToday;
+        d["canFile"]  = v.canFile;
+        d["canBudget"] = v.canBudget;
         String out;
         serializeJson(d, out);
         return replyJson(r, out);
@@ -45,6 +50,17 @@ void WebUi::routesLogPush()
         const char* repo = d["repo"].is<const char*>() ? d["repo"].as<const char*>() : nullptr;
         if (hasOn || tok || repo) {
             const char* why = LogPush::set(hasOn ? &on : nullptr, tok, repo);
+            if (why) return r->reply(400, "text/plain", why);
+        }
+        const bool hasCan = d["can"].is<bool>();
+        const bool can = hasCan && d["can"].as<bool>();
+        // From the page's field it may come as text.
+        const bool hasMB = d["canMB"].is<int>() || d["canMB"].is<const char*>();
+        uint32_t mb = 0;
+        if (d["canMB"].is<int>()) mb = d["canMB"].as<int>() > 0 ? (uint32_t)d["canMB"].as<int>() : 0;
+        else if (hasMB) mb = (uint32_t)strtoul(d["canMB"].as<const char*>(), nullptr, 10);
+        if (hasCan || hasMB) {
+            const char* why = LogPush::setCan(hasCan ? &can : nullptr, hasMB ? &mb : nullptr);
             if (why) return r->reply(400, "text/plain", why);
         }
         if (d["now"] | false) LogPush::pushSoon();
