@@ -1,5 +1,6 @@
 #include "../Features.h"
 #include "CarTask.h"
+#include <Preferences.h>
 #include "Rt.h"
 #include "CarDiag.h"
 #include "../vehicle/CanDecode.h"
@@ -114,6 +115,46 @@ namespace App
                                found ? out : " none yet", g[0], g[1], g[2], g[3], g[4]);
             }
 
+            // The odometers come rarely (0x5FD, 0x5C5: at ignition, then per km):
+            // a board that starts or reboots after that frame had none for the
+            // drive. The last ones are kept in NVS ("odo": km, kmC), saved on a
+            // change at most once a minute, and stand in after a boot until the
+            // car sends its own.
+            constexpr uint32_t ODO_SAVE_MS = 60000;
+            int32_t  s_odoSaved = -1, s_odoCSaved = -1;
+            uint32_t s_odoAt = 0;
+
+            void odoRestore(uint32_t now)
+            {
+                if (!s_s.state) return;
+                Preferences p;
+                p.begin("odo", true);
+                const int32_t km = (int32_t)p.getUInt("km", 0), kmC = (int32_t)p.getUInt("kmC", 0);
+                p.end();
+                s_odoSaved = km;
+                s_odoCSaved = kmC;
+                if (km && !s_s.state->has(Vehicle::SIG_ODOMETER)) s_s.state->set(Vehicle::SIG_ODOMETER, km, now);
+                if (kmC && !s_s.state->has(Vehicle::SIG_ODO_CLUSTER)) s_s.state->set(Vehicle::SIG_ODO_CLUSTER, kmC, now);
+                if (km || kmC)
+                    LogBus::printf("[car] odometer from NVS: %ld km (cluster %ld km), until the car sends it",
+                                   (long)km, (long)kmC);
+            }
+
+            void odoKeep(uint32_t now)
+            {
+                const Vehicle::State* st = s_s.state;
+                if (!st || (uint32_t)(now - s_odoAt) < ODO_SAVE_MS) return;
+                const int32_t km = st->has(Vehicle::SIG_ODOMETER) ? st->get(Vehicle::SIG_ODOMETER) : s_odoSaved;
+                const int32_t kmC = st->has(Vehicle::SIG_ODO_CLUSTER) ? st->get(Vehicle::SIG_ODO_CLUSTER) : s_odoCSaved;
+                if ((km == s_odoSaved || km <= 0) && (kmC == s_odoCSaved || kmC <= 0)) return;
+                s_odoAt = now;
+                Preferences p;
+                p.begin("odo", false);
+                if (km > 0 && km != s_odoSaved) { p.putUInt("km", (uint32_t)km); s_odoSaved = km; }
+                if (kmC > 0 && kmC != s_odoCSaved) { p.putUInt("kmC", (uint32_t)kmC); s_odoCSaved = kmC; }
+                p.end();
+            }
+
             // Every 10 s while the car moves or runs: what the gear and the
             // reminders are computed from, so a drive can be read afterwards.
             void driveLine()
@@ -125,11 +166,14 @@ namespace App
                 if (v == 0 && rpm == 0) return;
                 auto g = [&](uint8_t s) -> long { return st->has(s) ? (long)st->get(s) : -9; };
                 LogBus::printf("[drive] %ld.%02ld km/h %ld rpm ratio %ld gear %ld clutch %ld N %ld R %ld "
-                               "lights pos/dip/main %ld/%ld/%ld handbrake %ld; no_lights %ld handbrake_moving %ld",
+                               "lights pos/dip/main %ld/%ld/%ld handbrake %ld; no_lights %ld handbrake_moving %ld; "
+                               "odometer %ld (age %ld s), cluster %ld",
                                (long)(v / 100), (long)(v % 100), (long)rpm, g(SIG_GEAR_RATIO), g(SIG_GEAR),
                                g(SIG_CLUTCH), g(SIG_NEUTRAL), g(SIG_REVERSE), g(SIG_LIGHT_POS),
                                g(SIG_LIGHT_DIPPED), g(SIG_LIGHT_MAIN), g(SIG_HANDBRAKE),
-                               g(SIG_DRIVE_NO_LIGHTS), g(SIG_DRIVE_HANDBRAKE));
+                               g(SIG_DRIVE_NO_LIGHTS), g(SIG_DRIVE_HANDBRAKE), g(SIG_ODOMETER),
+                               st->has(SIG_ODOMETER) ? (long)(st->ageMs(SIG_ODOMETER, millis()) / 1000) : -1L,
+                               g(SIG_ODO_CLUSTER));
             }
             // The panel alert rules: httpd stages, this task applies and evaluates.
             Staged<Vehicle::AlertRules> s_alerts;
@@ -378,6 +422,7 @@ namespace App
                     }
                     s_derived.update(*s_s.state, now);
                     learn(*s_s.state, now);
+                    odoKeep(now);
                 }
 #if FEATURE_DIAG
                 CarDiag::frame(f, now);      // the climate's reply, and the bus is alive
@@ -447,6 +492,7 @@ namespace App
                     if (!s_s.src[i]->notifies()) polled = true;
                 }
                 const TickType_t idle = pdMS_TO_TICKS(polled ? 2 : 20);
+                odoRestore(millis());
                 uint32_t publishAt = millis(), logAt = publishAt, fpsAt = publishAt;
                 bool more = false;
 
