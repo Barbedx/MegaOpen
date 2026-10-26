@@ -43,14 +43,20 @@ namespace App
         const char* set(bool on, uint8_t intervalS);
         void probe();
         // The owner's one-shot check of every variant, each step logged with
-        // its reply and the bus around it ([diag] sweep): 21 C1 without a
-        // session; 10 C0; 21 C1 in it; 3E 01; 21 C1; 10 81 (always, last).
+        // its reply and the bus around it ([diag] sweep): the reads 21 80, C0,
+        // C1, C2, 90, A0 without a session; 10 C0; the same reads in it with
+        // 3E 01 between; 10 81 (always, last). About 20 s.
         // The bus line (frames and distinct ids a second) shows a cluster
         // that reboots: its ids go missing. Polling waits meanwhile.
         void sweep();
+        // diag.session (NVS "diag/ses", off by default): the polling read in a
+        // 10 C0 session kept with 3E 01 every 2 s, closed with 10 81 when the
+        // read is switched off. A refused session: polling goes on without.
+        const char* setSession(bool on);
 
         struct View {
             bool     on = false;
+            bool     session = false, inSession = false;
             uint8_t  intervalS = INTERVAL_DEFAULT_S;
             const char* state = "off";    // off | idle | waiting | quiet | backoff | stopped | fault | refused | sweep
             const char* last = "";        // Exchange::statusId of the last result

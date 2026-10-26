@@ -9,15 +9,19 @@
 //
 // THE ONLY TRANSMIT ON THE CAR BUS. CAN A is listen-only (CLAUDE.md) except
 // for what this file lets out, all of it to 0x744:
-//   * the read `21 C1` (allowed());
-//   * for the owner's one-shot sweep only (App::CarDiag::sweep(), 1.6.0-rc3):
-//     `10 C0` (open the extended session, as PyRen and DDT4all do first),
-//     `3E 01` (tester present) and `10 81` (back to the default session);
+//   * the read `21 C1` (allowed()), and for the owner's one-shot sweep
+//     (App::CarDiag::sweep()) the other reads DDT lists for this ECU:
+//     `21 80`, `21 C0`, `21 C2`, `21 90` (trame déportée, Clim_X84_SERIE),
+//     `21 A0` (trame étude);
+//   * `10 C0` (open the extended session, as PyRen and DDT4all do first,
+//     "ECU uses SDS 10C0"), `3E 01` (tester present), `10 81` (back to the
+//     default session): the sweep, and the polling read when diag.session
+//     is on (off by default);
 //   * flow control `30 00 00`, only in answer to a first frame from 0x764
 //     while a request waits.
-// The polling read never opens a session: opening one is what the owner saw
-// reboot the cluster once, and the sweep is how that is checked, by hand,
-// with the bus watched before and after each step. No functional (0x7DF)
+// A session is opened only when the owner asks (the sweep's button, or the
+// diag.session switch): opening one is what the owner saw reboot the cluster
+// once, and the sweep checks that by hand, the bus watched around each step. No functional (0x7DF)
 // address, no other ECU, no write, no clear. Frames are sent as PyRen's ELM
 // sends them with CAF0: the bytes given, no padding.
 //
@@ -31,7 +35,9 @@ namespace Diag
     constexpr uint8_t  REPLY_MAX = 64;
 
     // The allowlist, the one choke point: the request bytes (no ISO-TP PCI)
-    // this file may send: `21 C1`, `10 C0`, `3E 01`, `10 81`, nothing else.
+    // this file may send: the reads `21 80 / C0 / C1 / C2 / 90 / A0`, and
+    // `10 C0`, `3E 01`, `10 81`. Nothing else: no write (3B), no clear (14),
+    // no routine (31), no reset (11), no IO control (30).
     bool allowed(const uint8_t* req, uint8_t n);
 
     // false: not sent (the controller refused or is listen-only).
@@ -92,4 +98,16 @@ namespace Diag
         uint16_t battX100 = 0;      // V x100; 0 when the reply stops before byte 12
     };
     bool decode21C1(const uint8_t* r, uint8_t n, ClimValues& out);
+
+    // `61 90 ...`, "trame déportée LDB vers LDA" in Clim_X84_SERIE (other
+    // software versions than ours; a hypothesis until it answers): byte 3 bits
+    // 7-5 recirculation (0 auto, 1 recycle, 2 outside), bits 4-0 the driver's
+    // setpoint (x+30)/2 °C; byte 4 high nibble distribution (0 auto, 1 vent,
+    // 2 feet/vent, 3 tri, 4 feet/demist, 5 demist), low nibble blower (0 auto,
+    // 1 stop, 2..9 = 1..8); byte 5 low nibble A/C request (0 auto, 1 off, 2 on).
+    struct Clim2190 {
+        uint8_t  recirc = 0, dist = 0, blower = 0, ac = 0;
+        uint16_t setX10 = 0;        // °C x10
+    };
+    bool decode2190(const uint8_t* r, uint8_t n, Clim2190& out);
 }

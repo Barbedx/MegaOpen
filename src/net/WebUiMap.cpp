@@ -519,6 +519,8 @@ void WebUi::routesDiag()
             k += snprintf(hex + k, sizeof(hex) - k, "%s%02X", i ? " " : "", v.reply[i]);
         JsonDocument d;
         d["on"]        = v.on;
+        d["session"]   = v.session;
+        d["inSession"] = v.inSession;
         d["interval"]  = v.intervalS;
         d["state"]     = v.state;
         d["last"]      = v.last;
@@ -553,6 +555,9 @@ void WebUi::routesDiag()
             if (const char* why = App::CarDiag::set(hasOn ? d["on"].as<bool>() : v.on, (uint8_t)iv))
                 return r->reply(400, "text/plain", why);
         }
+        if (d["session"].is<bool>())
+            if (const char* why = App::CarDiag::setSession(d["session"].as<bool>()))
+                return r->reply(400, "text/plain", why);
         if (d["probe"] | false) App::CarDiag::probe();
         if (d["sweep"] | false) App::CarDiag::sweep();
         return r->reply(200, "application/json", "{\"ok\":true}");

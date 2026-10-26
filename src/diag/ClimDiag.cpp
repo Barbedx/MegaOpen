@@ -7,7 +7,13 @@ namespace Diag
     {
         if (!req || n != 2) return false;
         const uint16_t r = (uint16_t)(req[0] << 8 | req[1]);
-        return r == 0x21C1 || r == 0x10C0 || r == 0x3E01 || r == 0x1081;
+        switch (r) {
+            case 0x2180: case 0x21C0: case 0x21C1: case 0x21C2: case 0x2190: case 0x21A0:
+            case 0x10C0: case 0x3E01: case 0x1081:
+                return true;
+            default:
+                return false;
+        }
     }
 
     bool Exchange::start(const uint8_t* req, uint8_t n, uint32_t nowMs)
@@ -106,6 +112,17 @@ namespace Diag
         v.cabinX10 = (int16_t)(r[8] * 5 - 400);
         v.sunWm2   = (uint16_t)(r[9] * 3);
         v.battX100 = n >= 12 ? (uint16_t)((r[11] * 78 + 5) / 10) : 0;
+        return true;
+    }
+
+    bool decode2190(const uint8_t* r, uint8_t n, Clim2190& v)
+    {
+        if (!r || n < 5 || r[0] != 0x61 || r[1] != 0x90) return false;
+        v.recirc = (uint8_t)(r[2] >> 5);
+        v.setX10 = (uint16_t)(((r[2] & 0x1F) + 30) * 5);
+        v.dist   = (uint8_t)(r[3] >> 4);
+        v.blower = (uint8_t)(r[3] & 0x0F);
+        v.ac     = (uint8_t)(r[4] & 0x0F);
         return true;
     }
 }

@@ -13,10 +13,12 @@ map; this file is the "where do I look" index for a session in the car.
   stop unless the owner asks for a fix.
 - **CAN A (the car) is listen-only, except the climate read.** The owner's opt-in
   (2026-10-25, Авто › «Діагностика клімату», off by default): `src/app/CarDiag.*`
-  sends `21 C1` to the climate ECU (0x744) through `src/diag/ClimDiag.*`, whose
-  allowlist is that one request and its flow control. No session (`10 xx`), no
-  other ECU, no write. Never add another transmit path; `tools/check_rules.py`
-  fails on one.
+  sends `21 C1` to the climate ECU (0x744) through `src/diag/ClimDiag.*`. Its
+  allowlist (owner, 2026-10-26) also takes the reads `21 80/C0/C2/90/A0` and
+  `10 C0` / `3E 01` / `10 81`, for the one-shot sweep and the opt-in session
+  (`diag.session`, off by default). Flow control only in answer to a reply. No
+  other ECU, no functional 0x7DF, no write (3B), clear, routine, reset or IO
+  control. Never add another transmit path; `tools/check_rules.py` fails on one.
 - **Never force-push** `master`. Commits use the repo-local identity
   (`www.andruxa@gmail.com`); check `git log -1 --format='%ae %ce'` before a push.
 - **Opening the USB serial port can reset the board.** Prefer the web log

@@ -36,7 +36,7 @@ SCR.car={title:'nav.car',async render(m){
   `<div class="kv"><div><small>${t('ca.fps')}</small><b id="cFps"></b></div><div><small>${t('ca.total')}</small><b id="cFr"></b></div><div><small>rec / tec</small><b id="cErr"></b></div><div><small>${t('ca.overflows')}</small><b id="cOv"></b></div></div>`+
   row(t('ca.speed'),sel('/api/can2|bitrate',enumOpts('canRates'),c2.setting||0),'',t('ca.speedH'))):notBuilt('CAN A','CAN A'))+
  /* діагностика клімату (CarDiag): 21 C1 на CAN A, лише за вмикачем; проба — один запит */
- (dg?card(t('ca.diag'),row(t('ca.diagOn'),sw('/api/diag|on',dg.on),t('ca.diagOnSub'),t('ca.diagH'))+row(t('ca.diagIv'),num('/api/diag|interval',dg.interval,'min="2" max="60"'))+
+ (dg?card(t('ca.diag'),row(t('ca.diagOn'),sw('/api/diag|on',dg.on),t('ca.diagOnSub'),t('ca.diagH'))+row(t('ca.diagIv'),num('/api/diag|interval',dg.interval,'min="2" max="60"'))+(dg.session!==undefined?row(t('ca.diagSes'),sw('/api/diag|session',dg.session),'',t('ca.diagSesH')):'')+
   row(t('ca.diagSt'),'<span id="dSt" class="chip off">…</span>','<span id="dW"></span>')+`<div class="fr"><button class="btn" type="button" id="dProbe">${t('ca.diagProbe')}</button><button class="btn" type="button" id="dSweep">${t('ca.diagSweep')}</button></div>`+row('','',t('ca.diagSweepH')),'cDiag'):'')+
  (CP?card(t('ca.rec'),`<div class="fr"><button class="btn rec big" id="cRec" type="button" style="flex:1">…</button></div>`+
   `<div class="fr"><input class="in" id="mkT" placeholder="${esc(t('ca.markPh'))}" maxlength="40" data-nosave><button class="btn pri" type="button" id="mkGo">${t('ca.mark')}</button></div>`+

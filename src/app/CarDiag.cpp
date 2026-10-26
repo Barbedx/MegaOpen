@@ -34,16 +34,37 @@ namespace App
 
             // ---- the sweep (the car task's) ----
             struct Step { uint8_t req[2]; const char* what; };
+            // Every read DDT lists, without a session, then in 10 C0 with a
+            // tester present every two reads (the session would lapse), then
+            // back to the default session, always.
             const Step SWEEP[] = {
+                {{0x21, 0x80}, "21 80, no session"},
+                {{0x21, 0xC0}, "21 C0, no session"},
                 {{0x21, 0xC1}, "21 C1, no session"},
+                {{0x21, 0xC2}, "21 C2, no session"},
+                {{0x21, 0x90}, "21 90 (the driver's setpoint?), no session"},
+                {{0x21, 0xA0}, "21 A0, no session"},
                 {{0x10, 0xC0}, "10 C0, open the extended session"},
-                {{0x21, 0xC1}, "21 C1 in the session"},
+                {{0x21, 0x80}, "21 80 in the session"},
+                {{0x21, 0xC0}, "21 C0 in the session"},
                 {{0x3E, 0x01}, "3E 01, tester present"},
-                {{0x21, 0xC1}, "21 C1 after tester present"},
+                {{0x21, 0xC1}, "21 C1 in the session"},
+                {{0x21, 0xC2}, "21 C2 in the session"},
+                {{0x3E, 0x01}, "3E 01, tester present"},
+                {{0x21, 0x90}, "21 90 in the session"},
+                {{0x21, 0xA0}, "21 A0 in the session"},
                 {{0x10, 0x81}, "10 81, back to the default session"},
             };
             constexpr uint8_t  SWEEP_N = sizeof(SWEEP) / sizeof(SWEEP[0]);
-            constexpr uint32_t SWEEP_GAP_MS = 2000;   // between steps: the bus line in between
+            constexpr uint32_t SWEEP_GAP_MS = 1000;   // between steps: the session holds ~5 s
+
+            // ---- the session for the polling read (diag.session) ----
+            enum class Pend : uint8_t { Read, Session, Tester, End };
+            constexpr uint32_t TESTER_MS = 2000;
+            std::atomic<bool> s_session{false};
+            Pend     s_pend = Pend::Read;
+            bool     s_inSes = false, s_sesRefused = false;
+            uint32_t s_tpAt = 0;
             int8_t   s_sweep = -1;           // the step waiting or next; -1 none
             bool     s_sweepSent = false;     // that step's request is out
             uint32_t s_sweepAt = 0;
@@ -77,6 +98,34 @@ namespace App
             {
                 using S = Diag::Exchange::Status;
                 const S st = s_ex.status();
+                if (s_pend != Pend::Read) {
+                    const Pend what = s_pend;
+                    s_pend = Pend::Read;
+                    char why[24];
+                    if (st == S::Negative) snprintf(why, sizeof(why), "7F %02X %02X", s_ex.reply()[1], s_ex.nrc());
+                    else snprintf(why, sizeof(why), "%s", Diag::Exchange::statusId(st));
+                    if (what == Pend::Session) {
+                        if (st == S::Ok) {
+                            s_inSes = true;
+                            s_tpAt = now;
+                            LogBus::line("[diag] session 10 C0: open (50 C0); tester present every 2 s");
+                        } else {
+                            s_sesRefused = true;
+                            LogBus::printf("W [diag] session 10 C0: %s; polling goes on without it", why);
+                        }
+                    } else if (what == Pend::Tester) {
+                        if (st == S::Ok) s_tpAt = now;
+                        else {
+                            s_inSes = false;
+                            LogBus::printf("W [diag] tester present 3E 01: %s; the session is gone, opened again "
+                                           "before the next read", why);
+                        }
+                    } else {
+                        LogBus::printf("[diag] session closed (10 81): %s", why);
+                    }
+                    s_ex.clear();
+                    return;
+                }
                 Diag::ClimValues cv;
                 const bool good = st == S::Ok && Diag::decode21C1(s_ex.reply(), s_ex.replyLen(), cv);
                 char b[3 * 24 + 1];
@@ -140,6 +189,8 @@ namespace App
                 const bool tx = ::Mcp2518Source::instance().transmitting();
                 portENTER_CRITICAL(&s_mux);
                 s_v.on = s_on.load(std::memory_order_relaxed);
+                s_v.session = s_session.load(std::memory_order_relaxed);
+                s_v.inSession = s_inSes;
                 s_v.intervalS = s_interval.load(std::memory_order_relaxed);
                 s_v.state = state;
                 s_v.tx = tx;
@@ -164,6 +215,7 @@ namespace App
                         return false;
                     }
                     s_ex.clear();
+                    s_pend = Pend::Read;
                     s_sweep = 0;
                     s_sweepSent = false;
                     s_sweepAt = now + SWEEP_GAP_MS;
@@ -203,6 +255,12 @@ namespace App
                     LogBus::printf("%s[diag] sweep %d/%u: %02X %02X -> %s%s%s", r == S::Ok ? "" : "W ", s_sweep + 1,
                                    (unsigned)SWEEP_N, st.req[0], st.req[1], Diag::Exchange::statusId(r),
                                    s_ex.replyLen() ? ", reply " : "", s_ex.replyLen() ? b : "");
+                Diag::Clim2190 d90;
+                if (r == S::Ok && Diag::decode2190(s_ex.reply(), s_ex.replyLen(), d90))
+                    LogBus::printf("[diag] sweep: 2190 setpoint %u.%u C, blower %u, distribution %u, recirc %u, "
+                                   "A/C %u (raw codes, Clim_X84_SERIE)", (unsigned)(d90.setX10 / 10),
+                                   (unsigned)(d90.setX10 % 10), (unsigned)d90.blower, (unsigned)d90.dist,
+                                   (unsigned)d90.recirc, (unsigned)d90.ac);
                 Diag::ClimValues cv;
                 if (r == S::Ok && Diag::decode21C1(s_ex.reply(), s_ex.replyLen(), cv)) {
                     LogBus::printf("[diag] sweep: cabin %d.%d C, sun %u W/m2", cv.cabinX10 / 10, abs(cv.cabinX10 % 10),
@@ -228,6 +286,7 @@ namespace App
                                    (unsigned)s_busFps, (unsigned)s_busIds, (unsigned)s_sweepIds0,
                                    (unsigned)s_sweepIdsMin);
                     s_sweep = -1;
+                    s_inSes = false;            // the sweep ended with 10 81
                     s_nextAt = now + SWEEP_GAP_MS;
                 }
                 return true;
@@ -239,6 +298,7 @@ namespace App
                 p.begin("diag", true);
                 const bool on = p.getBool("on", false);
                 uint8_t iv = p.getUChar("iv", INTERVAL_DEFAULT_S);
+                s_session.store(p.getBool("ses", false));
                 p.end();
                 if (iv < INTERVAL_MIN_S || iv > INTERVAL_MAX_S) iv = INTERVAL_DEFAULT_S;
                 s_on.store(on);
@@ -250,8 +310,8 @@ namespace App
         {
             s_state = state;
             load();
-            LogBus::printf("[diag] climate read %s, every %u s", s_on.load() ? "ON" : "off",
-                           (unsigned)s_interval.load());
+            LogBus::printf("[diag] climate read %s, every %u s%s", s_on.load() ? "ON" : "off",
+                           (unsigned)s_interval.load(), s_session.load() ? ", in a 10 C0 session" : "");
         }
 
         void frame(const Frame& f, uint32_t nowMs)
@@ -285,6 +345,7 @@ namespace App
             if (gen != s_seenGen) {           // set(): a fresh start
                 s_seenGen = gen;
                 s_stopped = false;
+                s_sesRefused = false;
                 s_timeoutsInRow = 0;
                 s_backoff = false;
                 s_summaryAt = 0;
@@ -296,6 +357,14 @@ namespace App
             const bool waiting = s_ex.status() == S::Waiting;
 
             if (!on && !probe && !waiting) {
+                if (s_inSes && bus.transmitting() && s_anyFrame && (uint32_t)(now - s_lastFrameMs) < BUS_QUIET_MS) {
+                    static const uint8_t END[] = {0x10, 0x81};
+                    s_inSes = false;
+                    s_pend = Pend::End;
+                    s_ex.start(END, sizeof(END), now);
+                    return publish(now, "off");
+                }
+                s_inSes = false;
                 if (bus.transmitting()) bus.setTransmit(false, now);
                 return publish(now, "off");
             }
@@ -312,6 +381,20 @@ namespace App
             }
             if (waiting) return publish(now, "waiting");
 
+            // diag.session: open 10 C0 before the read, keep it with 3E 01.
+            if (on && !probe && !s_stopped && s_session.load(std::memory_order_relaxed) && !s_sesRefused &&
+                (!s_inSes ? (int32_t)(now - s_nextAt) >= 0 : (uint32_t)(now - s_tpAt) >= TESTER_MS)) {
+                if (!bus.transmitting() && !bus.setTransmit(true, now)) {
+                    s_nextAt = now + 5000;
+                    return publish(now, "refused");
+                }
+                static const uint8_t OPEN[] = {0x10, 0xC0}, TP[] = {0x3E, 0x01};
+                s_pend = s_inSes ? Pend::Tester : Pend::Session;
+                if (s_inSes) s_tpAt = now;
+                s_ex.start(s_inSes ? TP : OPEN, 2, now);
+                return publish(now, "waiting");
+            }
+            if (!s_session.load(std::memory_order_relaxed)) s_inSes = false;
             const bool due = probe || (on && !s_stopped && (int32_t)(now - s_nextAt) >= 0);
             if (!due) {
                 // A probe done with polling off: back to listen-only.
@@ -325,6 +408,7 @@ namespace App
             }
             s_probing = probe;
             s_probe.store(false);
+            s_pend = Pend::Read;
             if (s_ex.start(REQ, sizeof(REQ), now)) {
                 portENTER_CRITICAL(&s_mux);
                 ++s_v.sent;
@@ -347,6 +431,18 @@ namespace App
             s_on.store(on);
             s_gen.fetch_add(1, std::memory_order_release);
             LogBus::printf("[diag] climate read %s, every %u s", on ? "ON" : "off", (unsigned)intervalS);
+            return nullptr;
+        }
+
+        const char* setSession(bool on)
+        {
+            Preferences p;
+            if (!p.begin("diag", false)) return "nvs";
+            p.putBool("ses", on);
+            p.end();
+            s_session.store(on);
+            s_gen.fetch_add(1, std::memory_order_release);
+            LogBus::printf("[diag] polling in a 10 C0 session: %s", on ? "ON" : "off");
             return nullptr;
         }
 

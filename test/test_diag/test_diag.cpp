@@ -34,7 +34,7 @@ void tearDown() {}
 void test_only_the_sweeps_four_requests_are_allowed_and_nothing_else_leaves()
 {
     Exchange e(fakeSend, nullptr);
-    const uint8_t clear[] = {0x14, 0xFF, 0x00}, other[] = {0x21, 0xC2}, prog[] = {0x10, 0x85},
+    const uint8_t clear[] = {0x14, 0xFF, 0x00}, other[] = {0x21, 0xC3}, prog[] = {0x10, 0x85},
                   write[] = {0x3B, 0x01}, reset[] = {0x11, 0x01}, tp00[] = {0x3E, 0x00};
     TEST_ASSERT_FALSE(e.start(clear, 3, 0));
     TEST_ASSERT_TRUE(e.status() == Exchange::Status::Refused);
@@ -45,8 +45,26 @@ void test_only_the_sweeps_four_requests_are_allowed_and_nothing_else_leaves()
     TEST_ASSERT_FALSE(e.start(tp00, 2, 0));
     TEST_ASSERT_FALSE(e.start(nullptr, 0, 0));
     TEST_ASSERT_EQUAL(0, (int)g_sent.size());
-    const uint8_t ok[][2] = {{0x21, 0xC1}, {0x10, 0xC0}, {0x3E, 0x01}, {0x10, 0x81}};
+    const uint8_t ok[][2] = {{0x21, 0xC1}, {0x21, 0x80}, {0x21, 0xC0}, {0x21, 0xC2}, {0x21, 0x90},
+                             {0x21, 0xA0}, {0x10, 0xC0}, {0x3E, 0x01}, {0x10, 0x81}};
     for (const auto& r : ok) TEST_ASSERT_TRUE(Diag::allowed(r, 2));
+    const uint8_t no[][2] = {{0x3B, 0x90}, {0x30, 0x01}, {0x31, 0x01}, {0x21, 0x81}, {0x10, 0x00}};
+    for (const auto& r : no) TEST_ASSERT_FALSE(Diag::allowed(r, 2));
+}
+
+void test_decode_2190_setpoint_blower_distribution()
+{
+    // byte 3: recirc 1 (0b001), setpoint x=14 -> 22.0 C; byte 4: dist 5, blower 4 (= 3); byte 5: AC on.
+    const uint8_t r[] = {0x61, 0x90, (uint8_t)(1 << 5 | 14), 0x54, 0x02, 0, 0};
+    Clim2190 v;
+    TEST_ASSERT_TRUE(decode2190(r, sizeof(r), v));
+    TEST_ASSERT_EQUAL(1, v.recirc);
+    TEST_ASSERT_EQUAL(220, v.setX10);
+    TEST_ASSERT_EQUAL(5, v.dist);
+    TEST_ASSERT_EQUAL(4, v.blower);
+    TEST_ASSERT_EQUAL(2, v.ac);
+    const uint8_t c1[] = {0x61, 0xC1, 0, 0, 0};
+    TEST_ASSERT_FALSE(decode2190(c1, sizeof(c1), v));
 }
 
 void test_a_session_reply_50_c0_is_ok()
@@ -157,6 +175,7 @@ int main(int, char**)
     UNITY_BEGIN();
     RUN_TEST(test_only_the_sweeps_four_requests_are_allowed_and_nothing_else_leaves);
     RUN_TEST(test_a_session_reply_50_c0_is_ok);
+    RUN_TEST(test_decode_2190_setpoint_blower_distribution);
     RUN_TEST(test_the_request_is_02_21_c1_to_0x744_unpadded);
     RUN_TEST(test_a_multi_frame_reply_gets_one_flow_control_and_decodes);
     RUN_TEST(test_other_ids_and_frames_before_the_request_are_ignored);
