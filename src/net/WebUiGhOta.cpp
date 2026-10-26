@@ -103,7 +103,11 @@ void WebUi::gateLocalOta()
     // waits to reboot into its image (their filter, WebUi::gateOta()), and a
     // GitHub install asks whether a local session is alive.
     ElegantOTA.onStart([]() { GhOta::localStart(); });
-    ElegantOTA.onProgress([](size_t, size_t) { GhOta::localChunk(); });
+    // After every chunk (8 kB) a tick for IDLE on this core: httpd writes the
+    // upload as fast as it arrives, and each 64 kB erase stops the cache, so a
+    // fast link kept IDLE0 out for 5 s and the task watchdog rebooted the board
+    // mid-upload (coredump, boot 76 on the bench; the car's task_wdt on 1.6.0-rc1).
+    ElegantOTA.onProgress([](size_t, size_t) { GhOta::localChunk(); vTaskDelay(1); });
     ElegantOTA.onEnd([](bool) { GhOta::localEnd(); });
 }
 #endif
