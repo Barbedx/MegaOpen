@@ -18,6 +18,16 @@ object Link {
     const val HTTP_RESP = 0x90
     const val HTTP_FAIL = 0x91
     const val EVENT = 0xA0
+    // The app's internet for the board: the board asks (high bit set), the app answers.
+    const val NET_HEAD = 0x40
+    const val NET_DATA = 0x41
+    const val NET_FAIL = 0x42
+    const val NET_REQ = 0xC0
+    const val NET_BODY = 0xC1
+    const val NET_ACK = 0xC2
+    const val NET_CANCEL = 0xC3
+    /** Bytes the app may send ahead of the board's NET_ACK (UsbLink::NET_WINDOW). */
+    const val NET_WINDOW = 16384
 
     /** CRC-16/CCITT-FALSE, the board's crc16(). */
     fun crc16(d: ByteArray, from: Int, n: Int): Int {

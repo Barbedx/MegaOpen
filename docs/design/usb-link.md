@@ -70,6 +70,16 @@ A bad CRC or magic drops one byte and looks for the magic again
 | `90` HTTP | board → app | raw response bytes; FIN when the server closed |
 | `91` FAIL | board → app | `chan` failed: `busy`, `connect`, `timeout`, `send` |
 | `A0` EVENT | board → app | JSON, `{"t":"alert",seq,sig,value,text}` |
+| `C0` NET_REQ | board → app | JSON `{"m","url","h":{..},"len"}`; FIN when no body |
+| `C1` NET_BODY | board → app | the request body, FIN on the last |
+| `C2` NET_ACK | board → app | u32: body bytes the board has taken (the credit) |
+| `C3` NET_CANCEL | board → app | stop sending |
+| `40` NET_HEAD | app → board | JSON `{"status","len","url"}` (the URL after redirects) |
+| `41` NET_DATA | app → board | the response body; FIN at the end |
+| `42` NET_FAIL | app → board | why there is no answer |
+
+The high bit of the type is the direction. NET frames carry the transfer's
+number in `chan`; a frame of an earlier transfer is dropped.
 
 ## HTTP over the link
 
@@ -97,6 +107,26 @@ Measured on the bench (PC, `tools/usb_link.py bench`): the page (66 kB) at
 
 After a HELLO the board sends each new alert as an `A0` event, from the same
 ring as `/api/alerts`. What was raised before the HELLO is not sent.
+
+## Net: the app's internet
+
+The board's own GitHub requests, the update check and download (`GhOta`) and the
+log push (`LogPush`), go through the app when it is on the link and said
+`"net":1` in its HELLO; over WiFi otherwise. The board composes each request as
+it does for WiFi, Authorization header and all; the app makes it with Android's
+TLS and moves the bytes. It goes to GitHub over https only (the board's
+`GhRelease::trustedUrl` list, on the app's side too), follows the redirects
+itself and says where it ended up; the board checks that URL again.
+
+One transfer at a time (TlsJob already serialises GhOta and LogPush). The
+response body goes into a 16 kB stream buffer in PSRAM, and the app may send no
+more than 16 kB past the board's last NET_ACK: a 1.7 MB image cannot outrun the
+flash writes.
+
+Measured on the bench with `tools/usb_link.py gateway` playing the app: the
+update check through it (the release JSON, 20 kB, in 0.2 s), then the install:
+SHA256SUMS, the 302 to the CDN, 1 669 216 bytes in 24 s (64 kB/s), SHA-256
+checked, the image booted and passed its OTA trial.
 
 ## Host alive
 

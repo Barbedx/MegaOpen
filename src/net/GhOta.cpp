@@ -5,6 +5,7 @@
 #include <Preferences.h>
 #include <Update.h>
 #include <esp_http_client.h>
+#include "../link/UsbLink.h"
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
 #include <mbedtls/md.h>
@@ -158,7 +159,7 @@ namespace GhOta
         // with a ~1 kB Location: hence the buffers). Every URL, the first and
         // each redirect's, must be GitHub over https (GhRelease::trustedUrl).
         // The open client, headers read, status 200; nullptr after fail().
-        esp_http_client_handle_t get(const char* url, bool api, int64_t& len)
+        esp_http_client_handle_t getWifi(const char* url, bool api, int64_t& len)
         {
             if (!GhRelease::trustedUrl(url)) {
                 char h[48];
@@ -223,21 +224,83 @@ namespace GhOta
             return nullptr;
         }
 
-        void done(esp_http_client_handle_t c)
+        // Where a response comes from: the board's own TLS over WiFi, or the
+        // app on the USB link (src/link/UsbLink.h, "the app's internet"), which
+        // makes the same request on the head unit's network.
+        struct Src {
+            esp_http_client_handle_t h = nullptr;
+            bool link = false;
+            explicit operator bool() const { return h || link; }
+        };
+
+        // The same GET through the app. It follows the redirects itself and
+        // says where it ended up: that URL must be GitHub over https too.
+        Src getLink(const char* url, bool api, int64_t& len)
         {
-            esp_http_client_close(c);
-            esp_http_client_cleanup(c);
+            const char* hdr[] = {"Accept", api ? "application/vnd.github+json" : "application/octet-stream",
+                                 "User-Agent", "MegaOpen/" MEGAOPEN_VERSION, nullptr};
+            UsbLink::NetHead head;
+            const char* why = "";
+            if (!UsbLink::netOpen("GET", url, hdr, nullptr, 0, TIMEOUT_MS, head, why)) {
+                fail("gh_connect", "through the app on USB: %s", why);
+                return Src{};
+            }
+            char h[48];
+            hostOf(head.url, h, sizeof(h));
+            if (head.url[0] && !GhRelease::trustedUrl(head.url)) {
+                UsbLink::netClose();
+                fail("gh_host", "redirect to %s refused: not GitHub over https", h);
+                return Src{};
+            }
+            const int st = head.status;
+            if (st == 200) {
+                len = head.len;
+                LogBus::printf("[ota] github: through the app on USB (%s)", h[0] ? h : "?");
+                return Src{nullptr, true};
+            }
+            UsbLink::netClose();
+            if (st == 403 || st == 429)
+                fail("gh_rate", "GitHub said %d: 60 checks an hour per address", st);
+            else if (st == 404)
+                fail("gh_none", "GitHub said 404: no published release yet");
+            else
+                { char code[24]; snprintf(code, sizeof(code), "gh_http %d", st); fail(code); }
+            return Src{};
+        }
+
+        Src get(const char* url, bool api, int64_t& len)
+        {
+            if (!GhRelease::trustedUrl(url)) return Src{getWifi(url, api, len)};   // refuses and says why
+            if (UsbLink::netAvailable()) return getLink(url, api, len);
+            return Src{getWifi(url, api, len)};
+        }
+
+        int readSrc(Src& c, char* b, int n)
+        {
+            if (c.link) return UsbLink::netRead((uint8_t*)b, (size_t)n, TIMEOUT_MS);
+            return esp_http_client_read(c.h, b, n);
+        }
+
+        void done(Src& c)
+        {
+            if (c.link) {
+                UsbLink::netClose();
+            } else if (c.h) {
+                esp_http_client_close(c.h);
+                esp_http_client_cleanup(c.h);
+            }
+            c = Src{};
         }
 
         // ArduinoJson's custom reader over the open response.
         struct BodyReader {
-            esp_http_client_handle_t c;
+            Src& c;
             char buf[256];
             int  n = 0, i = 0;
             int read()
             {
                 if (i >= n) {
-                    n = esp_http_client_read(c, buf, sizeof(buf));
+                    n = readSrc(c, buf, sizeof(buf));
                     i = 0;
                     if (n <= 0) { n = 0; return -1; }
                 }
@@ -257,7 +320,7 @@ namespace GhOta
             // stable one reads the latest final alone.
             const bool pre = s_pre;
             int64_t len = 0;
-            esp_http_client_handle_t c = get(pre ? LIST_URL : LATEST_URL, true, len);
+            Src c = get(pre ? LIST_URL : LATEST_URL, true, len);
             if (!c) return;
             JsonDocument f(&s_json), doc(&s_json);
             if (pre) GhRelease::filterList(f);
@@ -291,12 +354,12 @@ namespace GhOta
         bool fetchSum(uint8_t want[32])
         {
             int64_t len = 0;
-            esp_http_client_handle_t c = get(s_rel.sumsUrl, false, len);
+            Src c = get(s_rel.sumsUrl, false, len);
             if (!c) return false;
             char* b = (char*)psMalloc(SUMS_MAX);
             if (!b) { done(c); fail("no_memory", "for SHA256SUMS"); return false; }
             size_t n = 0;
-            for (int k; n < SUMS_MAX && (k = esp_http_client_read(c, b + n, SUMS_MAX - n)) > 0;) n += k;
+            for (int k; n < SUMS_MAX && (k = readSrc(c, b + n, SUMS_MAX - n)) > 0;) n += k;
             done(c);
             const bool ok = GhRelease::sumFor(b, n, s_rel.asset, want);
             heap_caps_free(b);
@@ -310,7 +373,7 @@ namespace GhOta
             if (!fetchSum(want)) return;
 
             int64_t len = 0;
-            esp_http_client_handle_t c = get(s_rel.binUrl, false, len);
+            Src c = get(s_rel.binUrl, false, len);
             if (!c) return;
             if (len <= 0 || (s_rel.size && (uint64_t)len != s_rel.size)) {
                 done(c);
@@ -362,7 +425,7 @@ namespace GhOta
             memset(s_v.stepMs, 0, sizeof(s_v.stepMs));
             portEXIT_CRITICAL(&s_mux);
             while (got < (uint32_t)len) {
-                const int k = esp_http_client_read(c, (char*)buf, CHUNK);
+                const int k = readSrc(c, (char*)buf, CHUNK);
                 if (k <= 0) { broke = "the download broke off"; break; }
                 mbedtls_md_update(&md, buf, (size_t)k);
                 const esp_err_t we = esp_ota_write(ota, buf, (size_t)k);

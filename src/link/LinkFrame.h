@@ -13,16 +13,24 @@ namespace Link
     constexpr size_t   MAX_FRAME = HEAD + MAX_PAYLOAD + 2;
     constexpr uint8_t  FIN = 0x01;
 
+    // The high bit is the direction: set, board to app.
     enum Type : uint8_t {
         HELLO      = 0x01,
         PING       = 0x02,
         HTTP_REQ   = 0x10,
         HTTP_CLOSE = 0x11,
+        NET_HEAD   = 0x40,   // the app's internet: the answer's status, length, URL
+        NET_DATA   = 0x41,   //   its body, FIN at the end
+        NET_FAIL   = 0x42,   //   or why there is none
         HELLO_ACK  = 0x81,
         PONG       = 0x82,
         HTTP_RESP  = 0x90,
         HTTP_FAIL  = 0x91,
         EVENT      = 0xA0,
+        NET_REQ    = 0xC0,   // the board's request: JSON head, FIN when no body
+        NET_BODY   = 0xC1,   //   its body, FIN on the last frame
+        NET_ACK    = 0xC2,   //   bytes taken so far (u32): the app's credit
+        NET_CANCEL = 0xC3,   //   stop sending
     };
 
     // CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF), as Kotlin computes it.

@@ -4,6 +4,7 @@
 #include <Preferences.h>
 #include <esp_heap_caps.h>
 #include <esp_http_client.h>
+#include "../link/UsbLink.h"
 #include <mbedtls/base64.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -159,9 +160,36 @@ namespace LogPush
             return body;
         }
 
+        // The same PUT through the app on the USB link (src/link/UsbLink.h):
+        // the request is ours, token and all; the app only moves the bytes.
+        int putLink(const char* url, const char* tok, const char* body, size_t len, esp_err_t& err)
+        {
+            char auth[TOKEN_MAX + 16];
+            snprintf(auth, sizeof(auth), "Bearer %s", tok);
+            const char* hdr[] = {"Authorization", auth, "Accept", "application/vnd.github+json",
+                                 "X-GitHub-Api-Version", "2022-11-28", "Content-Type", "application/json",
+                                 "User-Agent", "MegaOpen/" MEGAOPEN_VERSION, nullptr};
+            UsbLink::NetHead head;
+            const char* why = "";
+            const bool ok = UsbLink::netOpen("PUT", url, hdr, (const uint8_t*)body, len, TIMEOUT_MS, head, why);
+            memset(auth, 0, sizeof(auth));
+            if (!ok) {
+                LogBus::printf("[push] through the app on USB: %s", why);
+                err = ESP_FAIL;
+                return -1;
+            }
+            // GitHub's answer (the new file's JSON) is not needed: drained.
+            uint8_t sink[256];
+            while (UsbLink::netRead(sink, sizeof(sink), TIMEOUT_MS) > 0) {}
+            UsbLink::netClose();
+            err = ESP_OK;
+            return head.status;
+        }
+
         // One PUT; the HTTP status, or -1 when it never got one (no internet, TLS).
         int put(const char* url, const char* tok, const char* body, size_t len, esp_err_t& err)
         {
+            if (UsbLink::netAvailable()) return putLink(url, tok, body, len, err);
             esp_http_client_config_t cfg = {};
             cfg.url            = url;
             cfg.cert_pem       = GH_ROOTS_PEM;

@@ -1,4 +1,5 @@
 #pragma once
+#include <stddef.h>
 #include <stdint.h>
 #include "../Features.h"
 
@@ -24,15 +25,43 @@ namespace UsbLink
         uint32_t lastRxAgoMs = 0;     // UINT32_MAX: never
     };
 
+    // ---- the app's internet ------------------------------------------------
+    // The board's own GitHub requests (GhOta, LogPush), carried out by the
+    // app on its network with Android's TLS: the board composes them as over
+    // WiFi, the app only moves the bytes (docs/design/usb-link.md, "Net").
+    // One at a time; TlsJob already serialises the callers. Any task but
+    // usblink. The body is the app's to stream; 16 kB of credit at a time.
+    constexpr size_t NET_WINDOW = 16384;
+    struct NetHead {
+        int     status = 0;
+        int64_t len = -1;          // -1: the app does not know
+        char    url[512] = {0};    // where it ended up, after the redirects
+    };
+
 #if FEATURE_USB_LINK
     // After the web server listens. `name` is the board's AP name, for HELLO.
     void begin(const char* name);
     // Any task. The WiFi policy asks this.
     bool alive();
     void stats(Stats& out);
+
+    // An app is on the link and offered its internet.
+    bool netAvailable();
+    // Sends the request (headers: name, value, ..., nullptr) and waits for the
+    // answer's head. False with `why` (a short code) when there is none.
+    bool netOpen(const char* method, const char* url, const char* const* headers,
+                 const uint8_t* body, size_t len, uint32_t timeoutMs, NetHead& head, const char*& why);
+    // Body bytes: >0, 0 at the end, -1 on a failure or timeout.
+    int  netRead(uint8_t* buf, size_t n, uint32_t timeoutMs);
+    void netClose();
 #else
     inline void begin(const char*) {}
     inline bool alive() { return false; }
     inline void stats(Stats& out) { out = Stats{}; }
+    inline bool netAvailable() { return false; }
+    inline bool netOpen(const char*, const char*, const char* const*, const uint8_t*, size_t, uint32_t,
+                        NetHead&, const char*& why) { why = "no_link"; return false; }
+    inline int  netRead(uint8_t*, size_t, uint32_t) { return -1; }
+    inline void netClose() {}
 #endif
 }

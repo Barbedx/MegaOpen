@@ -1525,7 +1525,9 @@ static void hkWifi(uint32_t now)
 {
     g_wifi.loop(now);
 #if FEATURE_LOG_PUSH
-    LogPush::tick(now, g_wifi.isSta() && !g_wifi.connecting() && WiFi.status() == WL_CONNECTED);
+    // Online: on WiFi with internet, or an app on the USB link that offers its own.
+    LogPush::tick(now, (g_wifi.isSta() && !g_wifi.connecting() && WiFi.status() == WL_CONNECTED)
+                       || UsbLink::netAvailable());
 #endif
 #if FEATURE_DISPLAY_CAN
     static IpNotice s_notice;

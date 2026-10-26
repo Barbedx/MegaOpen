@@ -123,7 +123,8 @@ object UsbBoard {
         val latch = java.util.concurrent.CountDownLatch(1)
         helloWait = latch
         reader = Thread({ readLoop(c, i) }, "usb-reader").also { it.start() }
-        send(Link.HELLO, Link.FIN, 0, JSONObject().put("app", BuildConfigVersion.app(ctx)).toString().toByteArray())
+        // "net": this app carries the board's own GitHub requests (log push, updates).
+        send(Link.HELLO, Link.FIN, 0, JSONObject().put("app", BuildConfigVersion.app(ctx)).put("net", 1).toString().toByteArray())
         if (!latch.await(3, TimeUnit.SECONDS)) {
             lastError = "no hello"
             close()
@@ -225,6 +226,113 @@ object UsbBoard {
                 val j = try { JSONObject(String(f.payload)) } catch (e: Exception) { return }
                 for (e in events) e(j)
             }
+            Link.NET_REQ -> {
+                val head = try { JSONObject(String(f.payload)) } catch (e: Exception) { return }
+                netBody.reset()
+                netHead = head
+                netId = f.chan
+                if (f.flags and Link.FIN != 0) netStart(f.chan, head, null)
+            }
+            Link.NET_BODY -> {
+                if (f.chan != netId || netHead == null) return
+                netBody.write(f.payload)
+                if (f.flags and Link.FIN != 0) netStart(f.chan, netHead!!, netBody.toByteArray())
+            }
+            Link.NET_ACK -> {
+                val j = netJob ?: return
+                if (j.id != f.chan || f.payload.size < 4) return
+                val v = (f.payload[0].toLong() and 0xFF) or ((f.payload[1].toLong() and 0xFF) shl 8) or
+                    ((f.payload[2].toLong() and 0xFF) shl 16) or ((f.payload[3].toLong() and 0xFF) shl 24)
+                synchronized(j.lock) { j.acked = v; j.lock.notifyAll() }
+            }
+            Link.NET_CANCEL -> {
+                val j = netJob ?: return
+                if (j.id != f.chan) return
+                synchronized(j.lock) { j.cancel = true; j.lock.notifyAll() }
+            }
+        }
+    }
+
+    // ---- the board's internet through this app ------------------------------
+    // The board composes its GitHub requests (src/net/GhOta.cpp, LogPush.cpp)
+    // as over WiFi; here they are carried out on the head unit's network. Only
+    // GitHub over https, the board's own list (GhRelease::trustedUrl).
+    private val NET_HOSTS = setOf("api.github.com", "github.com", "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com")
+    private class NetJob(val id: Int) {
+        val lock = Object()
+        @Volatile var acked = 0L
+        @Volatile var cancel = false
+    }
+    @Volatile private var netJob: NetJob? = null
+    private var netHead: JSONObject? = null
+    private var netId = -1
+    private val netBody = ByteArrayOutputStream()
+    private val netExec = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    private fun netStart(id: Int, head: JSONObject, body: ByteArray?) {
+        netHead = null
+        val job = NetJob(id)
+        netJob?.let { synchronized(it.lock) { it.cancel = true; it.lock.notifyAll() } }
+        netJob = job
+        netExec.execute { netRun(job, head, body) }
+    }
+
+    private fun netRun(job: NetJob, head: JSONObject, body: ByteArray?) {
+        var c: javax.net.ssl.HttpsURLConnection? = null
+        try {
+            val url = java.net.URL(head.getString("url"))
+            if (url.protocol != "https" || url.host !in NET_HOSTS) {
+                send(Link.NET_FAIL, Link.FIN, job.id, "host".toByteArray())
+                return
+            }
+            c = url.openConnection() as javax.net.ssl.HttpsURLConnection
+            c.requestMethod = head.optString("m", "GET")
+            c.connectTimeout = 15_000
+            c.readTimeout = 30_000
+            c.instanceFollowRedirects = true
+            // The length the board checks (an image against its release) is the one on the wire.
+            c.setRequestProperty("Accept-Encoding", "identity")
+            head.optJSONObject("h")?.let { h -> for (k in h.keys()) c.setRequestProperty(k, h.getString(k)) }
+            if (body != null && body.isNotEmpty()) {
+                c.doOutput = true
+                c.setFixedLengthStreamingMode(body.size)
+                c.outputStream.use { it.write(body) }
+            }
+            val code = c.responseCode
+            val final = c.url
+            if (final.host !in NET_HOSTS) {
+                send(Link.NET_FAIL, Link.FIN, job.id, "host".toByteArray())
+                return
+            }
+            val len = c.getHeaderField("Content-Length")?.toLongOrNull() ?: -1L
+            send(Link.NET_HEAD, Link.FIN, job.id,
+                JSONObject().put("status", code).put("len", len).put("url", final.toString()).toString().toByteArray())
+            val input = (if (code >= 400) c.errorStream else c.inputStream)
+            var sent = 0L
+            val buf = ByteArray(Link.MAX_PAYLOAD)
+            input?.use { inp ->
+                while (true) {
+                    val n = inp.read(buf)
+                    if (n < 0) break
+                    synchronized(job.lock) {
+                        val until = SystemClock.elapsedRealtime() + 30_000
+                        while (!job.cancel && sent + n - job.acked > Link.NET_WINDOW) {
+                            val left = until - SystemClock.elapsedRealtime()
+                            if (left <= 0) throw IOException("stalled")
+                            job.lock.wait(left)
+                        }
+                    }
+                    if (job.cancel) return
+                    if (!send(Link.NET_DATA, 0, job.id, buf, 0, n)) return
+                    sent += n
+                }
+            }
+            send(Link.NET_DATA, Link.FIN, job.id)
+        } catch (e: Exception) {
+            if (!job.cancel) send(Link.NET_FAIL, Link.FIN, job.id, (e.javaClass.simpleName + " " + (e.message ?: "")).take(36).toByteArray())
+        } finally {
+            c?.disconnect()
         }
     }
 

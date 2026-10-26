@@ -5,6 +5,7 @@
 #include <string.h>
 #include "esp32-hal-tinyusb.h"
 #include "lwip/sockets.h"
+#include "freertos/stream_buffer.h"
 #include "LinkFrame.h"
 #include "../Version.h"
 #include "../app/CarTask.h"
@@ -64,6 +65,30 @@ namespace UsbLink
         volatile uint32_t s_lastRx = 0;
         volatile bool     s_anyRx = false;
         Stats             s_st;
+
+        // ---- the app's internet: one transfer at a time -------------------
+        // The requester (GhOta's or LogPush's task) fills the request and sets
+        // Send; usblink sends it and moves the state on as the app answers;
+        // the body comes through a stream buffer, the requester's to read.
+        // Every transfer has its own number (the frames' chan), so a late frame
+        // of a cancelled one is dropped.
+        enum class NetSt : uint8_t { Idle, Send, Head, Body, Fail };
+        constexpr uint32_t NET_ACK_STEP = 4096;
+        volatile NetSt     s_netSt = NetSt::Idle;
+        uint16_t           s_netId = 0;
+        char               s_netReq[Link::MAX_PAYLOAD];
+        size_t             s_netReqLen = 0;
+        const uint8_t*     s_netBody = nullptr;
+        size_t             s_netBodyLen = 0;
+        NetHead            s_netHead;
+        char               s_netWhy[40] = {0};
+        StreamBufferHandle_t s_netSb = nullptr;
+        StaticStreamBuffer_t s_netSbStruct;
+        volatile uint32_t  s_netTaken = 0;     // bytes the requester read
+        uint32_t           s_netAcked = 0;     // what the app was last told
+        volatile bool      s_netEof = false;
+        volatile bool      s_netCancel = false;
+        bool               s_appNet = false;   // the app's HELLO offered it
 
         // ---- out ----------------------------------------------------------
         // The whole frame into the FIFO, waiting while the host reads. False:
@@ -181,9 +206,81 @@ namespace UsbLink
             }
         }
 
-        // ---- control ------------------------------------------------------
-        void hello()
+        // ---- the app's internet -------------------------------------------
+        void netFail(const char* why)
         {
+            snprintf(s_netWhy, sizeof(s_netWhy), "%s", why);
+            s_netSt = NetSt::Fail;
+        }
+
+        // usblink, every pass: the request out, the credit back, a cancel.
+        void netService()
+        {
+            if (s_netCancel) {
+                s_netCancel = false;
+                send(Link::NET_CANCEL, Link::FIN, s_netId, nullptr, 0);
+            }
+            if (s_netSt == NetSt::Send) {
+                bool ok = send(Link::NET_REQ, s_netBodyLen ? 0 : Link::FIN, s_netId,
+                               (const uint8_t*)s_netReq, s_netReqLen);
+                for (size_t at = 0; ok && at < s_netBodyLen;) {
+                    const size_t n = s_netBodyLen - at < Link::MAX_PAYLOAD ? s_netBodyLen - at : Link::MAX_PAYLOAD;
+                    ok = send(Link::NET_BODY, at + n >= s_netBodyLen ? Link::FIN : 0, s_netId, s_netBody + at, n);
+                    at += n;
+                }
+                if (ok) s_netSt = NetSt::Head;
+                else netFail("send");
+            }
+            if (s_netSt == NetSt::Body) {
+                const uint32_t taken = s_netTaken;
+                if (taken - s_netAcked >= NET_ACK_STEP) {
+                    const uint8_t p[4] = {(uint8_t)taken, (uint8_t)(taken >> 8), (uint8_t)(taken >> 16), (uint8_t)(taken >> 24)};
+                    if (send(Link::NET_ACK, Link::FIN, s_netId, p, 4)) s_netAcked = taken;
+                }
+            }
+        }
+
+        void onNet(const Link::Frame& f)
+        {
+            if (f.chan != s_netId) return;     // a transfer given up on
+            if (f.type == Link::NET_FAIL) {
+                if (s_netSt == NetSt::Head || s_netSt == NetSt::Body) {
+                    char w[sizeof(s_netWhy)];
+                    const size_t n = f.len < sizeof(w) - 1 ? f.len : sizeof(w) - 1;
+                    memcpy(w, f.payload, n);
+                    w[n] = 0;
+                    netFail(w);
+                }
+                return;
+            }
+            if (f.type == Link::NET_HEAD) {
+                if (s_netSt != NetSt::Head) return;
+                JsonDocument d;
+                if (deserializeJson(d, f.payload, f.len)) { netFail("head"); return; }
+                s_netHead.status = d["status"] | 0;
+                s_netHead.len = d["len"] | (int64_t)-1;
+                snprintf(s_netHead.url, sizeof(s_netHead.url), "%s", d["url"] | "");
+                s_netSt = NetSt::Body;
+                return;
+            }
+            if (f.type == Link::NET_DATA) {
+                if (s_netSt != NetSt::Body) return;
+                if (f.len && xStreamBufferSend(s_netSb, f.payload, f.len, 0) < f.len) {
+                    netFail("window");     // the app sent past its credit
+                    return;
+                }
+                if (f.flags & Link::FIN) s_netEof = true;
+            }
+        }
+
+        // ---- control ------------------------------------------------------
+        void hello(const Link::Frame& f)
+        {
+            {
+                JsonDocument a;
+                s_appNet = !deserializeJson(a, f.payload, f.len) && (a["net"] | 0) != 0;
+            }
+            if (s_netSt != NetSt::Idle) netFail("new_app");
             JsonDocument d;
             d["proto"] = 1;
             d["fw"] = MEGAOPEN_VERSION;
@@ -207,10 +304,13 @@ namespace UsbLink
             s_lastRx = millis();
             s_anyRx = true;
             switch (f.type) {
-                case Link::HELLO:      hello(); break;
+                case Link::HELLO:      hello(f); break;
                 case Link::PING:       send(Link::PONG, Link::FIN, f.chan, f.payload, f.len); break;
                 case Link::HTTP_REQ:   onRequest(f); break;
                 case Link::HTTP_CLOSE: closeChan(f.chan); break;
+                case Link::NET_HEAD:
+                case Link::NET_DATA:
+                case Link::NET_FAIL:   onNet(f); break;
                 default: break;        // an app newer than us: ignored
             }
         }
@@ -242,6 +342,8 @@ namespace UsbLink
             closeAll();
             s_parser.reset();
             s_hello = false;
+            s_appNet = false;
+            if (s_netSt != NetSt::Idle) netFail("unplugged");
         }
 
         void run(void*)
@@ -270,6 +372,7 @@ namespace UsbLink
                     }
                     pump(now);
                     events(now);
+                    netService();
                 }
                 uint8_t open = 0;
                 for (uint16_t c = 0; c < CHANS; ++c) open += s_ch[c].fd >= 0;
@@ -298,6 +401,91 @@ namespace UsbLink
     bool alive()
     {
         return s_anyRx && tud_vendor_n_mounted(ITF) && millis() - s_lastRx < ALIVE_MS;
+    }
+
+    // ---- the app's internet (any task but usblink) --------------------------
+    bool netAvailable()
+    {
+        return s_hello && s_appNet && alive();
+    }
+
+    bool netOpen(const char* method, const char* url, const char* const* headers,
+                 const uint8_t* body, size_t len, uint32_t timeoutMs, NetHead& head, const char*& why)
+    {
+        if (!netAvailable()) { why = "no_app"; return false; }
+        if (s_netSt != NetSt::Idle) { why = "busy"; return false; }
+        if (!s_netSb) {
+            // The body's buffer in PSRAM: as much as the app may send unasked.
+            uint8_t* store = (uint8_t*)heap_caps_malloc(NET_WINDOW + 1, MALLOC_CAP_SPIRAM);
+            if (!store) { why = "no_memory"; return false; }
+            s_netSb = xStreamBufferCreateStatic(NET_WINDOW, 1, store, &s_netSbStruct);
+        }
+        {
+            JsonDocument d;
+            d["m"] = method;
+            d["url"] = url;
+            JsonObject h = d["h"].to<JsonObject>();
+            for (const char* const* p = headers; p && p[0] && p[1]; p += 2) h[p[0]] = p[1];
+            d["len"] = len;
+            const size_t n = measureJson(d);
+            if (n >= sizeof(s_netReq)) { why = "too_long"; return false; }
+            s_netReqLen = serializeJson(d, s_netReq, sizeof(s_netReq));
+        }
+        // The new number first: a late frame of the last transfer is refused
+        // from here on, before its buffer is reused.
+        s_netId = (uint16_t)(s_netId + 1) ? (uint16_t)(s_netId + 1) : 1;
+        xStreamBufferReset(s_netSb);
+        s_netEof = false;
+        s_netTaken = 0;
+        s_netAcked = 0;
+        s_netWhy[0] = 0;
+        s_netBody = body;
+        s_netBodyLen = len;
+        s_netSt = NetSt::Send;
+        if (s_task) xTaskNotifyGive(s_task);
+        const uint32_t t0 = millis();
+        while (s_netSt == NetSt::Send || s_netSt == NetSt::Head) {
+            // Never back out while the body is being sent: it is the caller's.
+            if (s_netSt == NetSt::Head && millis() - t0 > timeoutMs) {
+                s_netCancel = true;
+                s_netSt = NetSt::Idle;
+                why = "timeout";
+                return false;
+            }
+            vTaskDelay(pdMS_TO_TICKS(5));
+        }
+        if (s_netSt == NetSt::Fail) {
+            static char w[sizeof(s_netWhy)];
+            memcpy(w, s_netWhy, sizeof(w));
+            why = w;
+            s_netSt = NetSt::Idle;
+            return false;
+        }
+        head = s_netHead;
+        return true;
+    }
+
+    int netRead(uint8_t* buf, size_t n, uint32_t timeoutMs)
+    {
+        const uint32_t t0 = millis();
+        for (;;) {
+            if (s_netSt != NetSt::Body) return -1;
+            const size_t r = xStreamBufferReceive(s_netSb, buf, n, pdMS_TO_TICKS(50));
+            if (r) {
+                s_netTaken += r;
+                if (s_task) xTaskNotifyGive(s_task);   // the credit goes back sooner
+                return (int)r;
+            }
+            if (s_netEof && xStreamBufferIsEmpty(s_netSb)) return 0;
+            if (millis() - t0 > timeoutMs) return -1;
+        }
+    }
+
+    void netClose()
+    {
+        if (s_netSt == NetSt::Body && !(s_netEof && xStreamBufferIsEmpty(s_netSb))) s_netCancel = true;
+        s_netSt = NetSt::Idle;
+        if (s_task) xTaskNotifyGive(s_task);
     }
 
     void stats(Stats& out)
