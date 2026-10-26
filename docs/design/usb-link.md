@@ -57,7 +57,12 @@ Both directions, little-endian:
 | +2 | CRC-16/CCITT-FALSE over type..payload |
 
 A bad CRC or magic drops one byte and looks for the magic again
-(`src/link/LinkFrame.*`, host-tested in `test/test_link`).
+(`src/link/LinkFrame.*`, host-tested in `test/test_link`). A frame still short
+of its length is dropped as soon as a whole CRC-good frame follows it: a frame
+cut by a writer that gave up would otherwise swallow the frames after it.
+
+The board gives up writing a frame only after 3 s with no room in the FIFO (a
+flash write stalls it half a second), and then says `91 send` for the channel.
 
 | type | way | payload |
 | --- | --- | --- |
@@ -99,6 +104,12 @@ loopback peer delays: 250 ms a small reply, 7 ms without.
 Two channels at a time (`UsbLink::CHANS`): the server keeps 4 sockets and each
 link request holds two (both ends of the loopback). A third request gets `91
 busy` and the app queues it. A channel quiet for 15 s is closed (`91 timeout`).
+
+A chunked reply is written one chunk per write (`ChunkOut`, 2 kB): httpd's
+own chunk call writes the size line, the data and the CRLF separately, three
+segments each, and with lwIP's small send queue and its delayed ACK on the
+loopback, /api/catalog (40 kB) took 3-11 s and was sometimes cut. Now 0.4 s, as
+over WiFi. Found by the WebUSB page's tests (megaopen-54).
 
 Measured on the bench (PC, `tools/usb_link.py bench`): the page (66 kB) at
 100 kB/s, a small request 7 ms round trip, a ping 1 ms.

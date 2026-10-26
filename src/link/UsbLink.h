@@ -23,6 +23,9 @@ namespace UsbLink
         uint32_t reqs = 0, fails = 0, events = 0;
         uint32_t rxBytes = 0, txBytes = 0;
         uint32_t lastRxAgoMs = 0;     // UINT32_MAX: never
+        // The longest single wait, ms: for room in the USB FIFO, connect(),
+        // a socket send(). And frames given up half-written.
+        uint32_t txWaitMax = 0, connectMax = 0, sockSendMax = 0, cut = 0;
     };
 
     // ---- the app's internet ------------------------------------------------

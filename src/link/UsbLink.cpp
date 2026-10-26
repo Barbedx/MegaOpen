@@ -39,7 +39,11 @@ namespace UsbLink
         } s_register;
 
         constexpr uint8_t ITF = 0;              // the one vendor interface
-        constexpr uint32_t TX_GIVE_UP_MS = 500; // a host that stops reading
+        // A host that stops reading. Not shorter: a flash write (the log on a
+        // warning) stalls the board itself for half a second, and a frame given
+        // up half-written costs the app its response. An unplug is seen at once
+        // (tud_vendor_n_mounted), so this only bounds a host that hangs.
+        constexpr uint32_t TX_GIVE_UP_MS = 3000;
         constexpr uint32_t EVENT_MS = 200;
 
         struct Chan {
@@ -105,7 +109,9 @@ namespace UsbLink
                 const uint32_t room = tud_vendor_n_write_available(ITF);
                 if (!room) {
                     tud_vendor_n_write_flush(ITF);
-                    if (millis() - since > TX_GIVE_UP_MS) return false;
+                    const uint32_t w = millis() - since;
+                    if (w > s_st.txWaitMax) s_st.txWaitMax = w;
+                    if (w > TX_GIVE_UP_MS) { if (at) ++s_st.cut; return false; }
                     vTaskDelay(1);
                     continue;
                 }
@@ -157,7 +163,10 @@ namespace UsbLink
             // at most this long a send, then the channel fails.
             struct timeval tv = {5, 0};
             setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-            if (::connect(fd, (struct sockaddr*)&a, sizeof(a)) != 0) {
+            const uint32_t c0 = millis();
+            const int cr = ::connect(fd, (struct sockaddr*)&a, sizeof(a));
+            if (millis() - c0 > s_st.connectMax) s_st.connectMax = millis() - c0;
+            if (cr != 0) {
                 ::close(fd);
                 return false;
             }
@@ -174,7 +183,9 @@ namespace UsbLink
             if (s_ch[c].fd < 0 && !openChan(c)) { fail(c, "connect"); return; }
             size_t at = 0;
             while (at < f.len) {
+                const uint32_t s0 = millis();
                 const int w = ::send(s_ch[c].fd, f.payload + at, f.len - at, 0);
+                if (millis() - s0 > s_st.sockSendMax) s_st.sockSendMax = millis() - s0;
                 if (w <= 0) { fail(c, "send"); return; }
                 at += (size_t)w;
             }
@@ -190,7 +201,8 @@ namespace UsbLink
                     const int r = ::recv(s_ch[c].fd, s_body, sizeof(s_body), MSG_DONTWAIT);
                     if (r > 0) {
                         s_ch[c].lastMs = now;
-                        if (!send(Link::HTTP_RESP, 0, c, s_body, (size_t)r)) { closeChan(c); break; }
+                        // Cut or not sent: the app hears 91 (if the link is back), never silence.
+                        if (!send(Link::HTTP_RESP, 0, c, s_body, (size_t)r)) { fail(c, "send"); break; }
                         continue;
                     }
                     if (r == 0) {

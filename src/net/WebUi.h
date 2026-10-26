@@ -36,7 +36,7 @@ static inline int replyPage(PsychicRequest* r, const uint8_t* gz, size_t len,
 class ChunkOut final : public Catalog::Out
 {
 public:
-    explicit ChunkOut(PsychicRequest* r) : _res(r)
+    explicit ChunkOut(PsychicRequest* r) : _req(r->request()), _res(r)
     {
         _res.setContentType("application/json");
         _res.sendHeaders();
@@ -44,9 +44,9 @@ public:
     void put(const char* s, size_t len) override
     {
         while (len) {
-            if (_n == sizeof(s_buf)) flush();
-            const size_t k = len < sizeof(s_buf) - _n ? len : sizeof(s_buf) - _n;
-            memcpy(s_buf + _n, s, k);
+            if (_n == DATA) flush();
+            const size_t k = len < DATA - _n ? len : DATA - _n;
+            memcpy(s_buf + HEAD + _n, s, k);
             _n += k; s += k; len -= k;
         }
     }
@@ -58,16 +58,46 @@ public:
         return _err == ESP_OK ? _res.finishChunking() : _err;
     }
 
+    // 2 kB a chunk, each after the first in ONE write: httpd's own chunk call
+    // writes the size line, the data and the CRLF separately, three TCP
+    // segments with TCP_NODELAY. Over the USB link the peer is lwIP itself
+    // (127.0.0.1), and 512 B chunks that way made /api/catalog 3-11 s
+    // (docs/design/usb-link.md). The first chunk goes through httpd, which
+    // writes the status line and the headers with it.
+    static constexpr size_t HEAD = 8;       // "7ff\r\n", right-aligned before the data
+    static constexpr size_t DATA = 2048;
+
 private:
     void flush()
     {
-        if (_n && _err == ESP_OK) _err = _res.sendChunk(s_buf, _n);
+        if (!_n || _err != ESP_OK) { _n = 0; return; }
+        if (!_started) {
+            _started = true;
+            _err = _res.sendChunk(s_buf + HEAD, _n);
+            _n = 0;
+            return;
+        }
+        char hex[8];
+        const int h = snprintf(hex, sizeof(hex), "%x\r\n", (unsigned)_n);
+        uint8_t* at = s_buf + HEAD - h;
+        memcpy(at, hex, (size_t)h);
+        s_buf[HEAD + _n] = '\r';
+        s_buf[HEAD + _n + 1] = '\n';
+        size_t left = (size_t)h + _n + 2;
+        while (left) {
+            const int w = httpd_send(_req, (const char*)at, left);
+            if (w <= 0) { _err = ESP_FAIL; break; }
+            at += w;
+            left -= (size_t)w;
+        }
         _n = 0;
     }
-    static uint8_t s_buf[512];
+    static uint8_t s_buf[HEAD + DATA + 2];
+    httpd_req_t* _req;
     PsychicResponse _res;
     esp_err_t _err = ESP_OK;
     size_t _n = 0;
+    bool _started = false;
 };
 #if FEATURE_DISPLAY_CAN
 #include "../display/AffaPort.h"

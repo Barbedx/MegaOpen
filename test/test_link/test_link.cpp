@@ -107,12 +107,31 @@ void test_cut_frame_then_new_one()
     const std::vector<uint8_t> b = frame(PONG, 0, 0, "ok");
     s.insert(s.end(), b.begin(), b.end());
     p.feed(s.data(), s.size(), onFrame, nullptr);
-    // The half frame's length (300) holds the parser until enough bytes come;
-    // the CRC then fails and the search finds the PONG inside.
-    const std::vector<uint8_t> pad(400, 0);
-    p.feed(pad.data(), pad.size(), onFrame, nullptr);
+    // At once: the half frame's length (300) does not hold the PONG behind it
+    // until 300 bytes have come (on a quiet link, a minute of pings).
     TEST_ASSERT_EQUAL(1, g_got.size());
     TEST_ASSERT_EQUAL_HEX8(PONG, g_got[0].type);
+    TEST_ASSERT_TRUE(p.bad() > 0);
+    // And the stream goes on normally after it.
+    const std::vector<uint8_t> c = frame(EVENT, 0, 0, "next");
+    p.feed(c.data(), c.size(), onFrame, nullptr);
+    TEST_ASSERT_EQUAL(2, g_got.size());
+    TEST_ASSERT_EQUAL_STRING("next", g_got[1].payload.c_str());
+}
+
+void test_long_frame_in_pieces_is_not_cut()
+{
+    // A whole frame's own payload arriving in pieces must not be mistaken for
+    // a cut one: nothing valid follows it yet.
+    Parser p;
+    const std::vector<uint8_t> a = frame(HTTP_RESP, 0, 1, std::string(1000, 'q'));
+    for (size_t i = 0; i < a.size(); i += 64) {
+        const size_t n = a.size() - i < 64 ? a.size() - i : 64;
+        p.feed(a.data() + i, n, onFrame, nullptr);
+    }
+    TEST_ASSERT_EQUAL(1, g_got.size());
+    TEST_ASSERT_EQUAL(1000, g_got[0].payload.size());
+    TEST_ASSERT_EQUAL(0, p.bad());
 }
 
 void test_oversize_length_is_garbage()
@@ -136,5 +155,6 @@ int main(int, char**)
     RUN_TEST(test_garbage_and_bad_crc_resync);
     RUN_TEST(test_cut_frame_then_new_one);
     RUN_TEST(test_oversize_length_is_garbage);
+    RUN_TEST(test_long_frame_in_pieces_is_not_cut);
     return UNITY_END();
 }

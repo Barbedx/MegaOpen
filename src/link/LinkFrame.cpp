@@ -42,6 +42,18 @@ namespace Link
         }
     }
 
+    size_t Parser::wholeAfter(size_t from) const
+    {
+        for (size_t i = from; i + HEAD + 2 <= _n; ++i) {
+            if (_buf[i] != MAGIC0 || _buf[i + 1] != MAGIC1) continue;
+            const size_t len = (size_t)_buf[i + 6] | ((size_t)_buf[i + 7] << 8);
+            if (len > MAX_PAYLOAD || i + HEAD + len + 2 > _n) continue;
+            const uint16_t want = (uint16_t)_buf[i + HEAD + len] | ((uint16_t)_buf[i + HEAD + len + 1] << 8);
+            if (crc16(_buf + i + 2, HEAD - 2 + len) == want) return i;
+        }
+        return 0;
+    }
+
     void Parser::drain(OnFrame cb, void* ctx)
     {
         size_t at = 0;
@@ -54,7 +66,15 @@ namespace Link
             const uint8_t* h = _buf + at;
             const size_t len = (size_t)h[6] | ((size_t)h[7] << 8);
             if (len > MAX_PAYLOAD) { ++at; ++_bad; continue; }
-            if (_n - at < HEAD + len + 2) break;
+            if (_n - at < HEAD + len + 2) {
+                // Not all here yet. A frame cut short (a replug, a writer that
+                // gave up) has a length that swallows the frames after it until
+                // that many bytes came: on a quiet link, minutes. A whole,
+                // CRC-good frame further on means this one never ends.
+                const size_t nx = wholeAfter(at + 1);
+                if (nx) { _bad += (uint32_t)(nx - at); at = nx; continue; }
+                break;
+            }
             const uint16_t want = (uint16_t)h[HEAD + len] | ((uint16_t)h[HEAD + len + 1] << 8);
             if (crc16(h + 2, HEAD - 2 + len) != want) { ++at; ++_bad; continue; }
             Frame f;

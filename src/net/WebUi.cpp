@@ -111,7 +111,7 @@ static esp_err_t replyAndRestart(PsychicRequest* r, const char* json)
 }
 
 
-uint8_t ChunkOut::s_buf[512];
+uint8_t ChunkOut::s_buf[ChunkOut::HEAD + ChunkOut::DATA + 2];
 
 // GET /api/logs?since=N: {lines:[{n,t,l,tag,msg}], next, lost, more, dropped,
 // boot}. The lines after N from the LogBus ring; `lost` lines were evicted
@@ -735,6 +735,10 @@ void WebUi::routes()
             o["rx"]      = u.rxFrames;
             o["tx"]      = u.txFrames;
             o["bad"]     = u.bad;
+            o["txWaitMax"]   = u.txWaitMax;
+            o["connectMax"]  = u.connectMax;
+            o["sockSendMax"] = u.sockSendMax;
+            o["cut"]         = u.cut;
         }
 #endif
         String out; serializeJson(d, out);

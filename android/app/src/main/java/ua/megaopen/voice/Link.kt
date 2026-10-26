@@ -73,7 +73,14 @@ object Link {
                 if (n - at < HEAD) break
                 val plen = (buf[at + 6].toInt() and 0xFF) or ((buf[at + 7].toInt() and 0xFF) shl 8)
                 if (plen > MAX_PAYLOAD) { at++; bad++; continue }
-                if (n - at < HEAD + plen + 2) break
+                if (n - at < HEAD + plen + 2) {
+                    // Not all here. A frame cut short (the board gave up on a
+                    // stall) would swallow what follows until its length came:
+                    // a whole CRC-good frame further on means it never ends.
+                    val nx = wholeAfter(at + 1)
+                    if (nx > 0) { bad += nx - at; at = nx; continue }
+                    break
+                }
                 val want = (buf[at + HEAD + plen].toInt() and 0xFF) or ((buf[at + HEAD + plen + 1].toInt() and 0xFF) shl 8)
                 if (crc16(buf, at + 2, HEAD - 2 + plen) != want) { at++; bad++; continue }
                 out(Frame(buf[at + 2].toInt() and 0xFF, buf[at + 3].toInt() and 0xFF,
@@ -85,6 +92,21 @@ object Link {
                 System.arraycopy(buf, at, buf, 0, n - at)
                 n -= at
             }
+        }
+
+        private fun wholeAfter(from: Int): Int {
+            var i = from
+            while (i + HEAD + 2 <= n) {
+                if (buf[i] == 0x4D.toByte() && buf[i + 1] == 0x4F.toByte()) {
+                    val plen = (buf[i + 6].toInt() and 0xFF) or ((buf[i + 7].toInt() and 0xFF) shl 8)
+                    if (plen <= MAX_PAYLOAD && i + HEAD + plen + 2 <= n) {
+                        val want = (buf[i + HEAD + plen].toInt() and 0xFF) or ((buf[i + HEAD + plen + 1].toInt() and 0xFF) shl 8)
+                        if (crc16(buf, i + 2, HEAD - 2 + plen) == want) return i
+                    }
+                }
+                i++
+            }
+            return 0
         }
 
         fun reset() { n = 0 }

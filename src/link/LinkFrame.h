@@ -63,6 +63,8 @@ namespace Link
         // Hand out every complete frame at the front of the buffer, drop
         // garbage; leave a partial one.
         void drain(OnFrame cb, void* ctx);
+        // Where a whole, CRC-good frame starts at or after `from`; 0 if none.
+        size_t wholeAfter(size_t from) const;
         uint8_t  _buf[MAX_FRAME];
         size_t   _n = 0;
         uint32_t _bad = 0;
