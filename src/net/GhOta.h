@@ -92,5 +92,7 @@ namespace GhOta
     void localStart();
     void localChunk();
     void localEnd();
+    // The loop: the idle watchdog back on after an upload that never ended.
+    void localTick();
 }
 #endif

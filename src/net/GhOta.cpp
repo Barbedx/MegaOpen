@@ -703,8 +703,36 @@ namespace GhOta
         return b;
     }
 
-    void localStart() { s_localAt = millis(); s_local = true; }
+    // A page upload saturates core 0 (WiFi, lwIP, httpd, and every 64 kB
+    // erase stops the cache): IDLE0 got no turn for 5 s and the task watchdog
+    // rebooted the board mid-upload, in httpd or in wifi (bench boots 76 and
+    // 84, the car on 1.6.0-rc1). Its IDLE0 check is off while an upload runs,
+    // back at the end, or by localTick() once the session goes stale.
+    namespace
+    {
+        volatile bool s_wdtOff = false;
+        void wdtOff()
+        {
+            if (s_wdtOff) return;
+            s_wdtOff = true;
+            disableCore0WDT();
+            LogBus::line("[ota] page upload: core 0 idle watchdog off until it ends");
+        }
+        void wdtOn()
+        {
+            if (!s_wdtOff) return;
+            s_wdtOff = false;
+            enableCore0WDT();
+            LogBus::line("[ota] page upload over: core 0 idle watchdog back on");
+        }
+    }
+
+    void localStart() { s_localAt = millis(); s_local = true; wdtOff(); }
     void localChunk() { s_localAt = millis(); }
-    void localEnd()   { s_local = false; }
+    void localEnd()   { s_local = false; wdtOn(); }
+    void localTick()
+    {
+        if (s_wdtOff && (!s_local || (uint32_t)(millis() - s_localAt) >= LOCAL_STALE_MS)) wdtOn();
+    }
 }
 #endif

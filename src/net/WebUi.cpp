@@ -353,6 +353,9 @@ esp_err_t WebUi::dispatch(PsychicRequest* r)
 void WebUi::loop()
 {
     ElegantOTA.loop();
+#if FEATURE_GH_OTA
+    GhOta::localTick();
+#endif
 }
 
 // Every destination the catalog lists (Keys::DEST_IDS), from the staged
