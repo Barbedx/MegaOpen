@@ -27,8 +27,16 @@ input{width:100%;margin:4px 0 10px}button{background:#1e88e5;border:0;color:#fff
 <p id="st"></p>
 <script>
 const G={'X-MegaOpen':'1'},st=t=>document.getElementById('st').textContent=t;
+// Inside an app or the WebUSB page (window.MOLink), the upload goes through it,
+// the same multipart as below, as web/js/10-api.js upload() does.
+const L=window.MOLink;
+async function linkUp(f){const d=new FormData();d.append('file',f,f.name);const q=new Request('/ota/upload',{method:'POST',body:d});
+ const u=new Uint8Array(await q.arrayBuffer());let s='';for(let i=0;i<u.length;i+=32768)s+=String.fromCharCode.apply(null,u.subarray(i,i+32768));
+ return new Promise((ok,no)=>{window.__moDone=(id,code,ct,b)=>code>=200&&code<300?ok():no('HTTP '+code);
+  L.request(1,'POST','/ota/upload',JSON.stringify({...G,'Content-Type':q.headers.get('content-type')}),btoa(s))})}
 document.getElementById('up').onclick=async()=>{const f=document.getElementById('f').files[0];if(!f)return st('.bin?');
  try{const r=await fetch('/ota/start?mode=fr',{headers:G});if(!r.ok)throw r.status;}catch(e){return st('start: '+e)}
+ if(L){st('…');try{await linkUp(f);st('OK — restarting…')}catch(e){st(''+e)}return}
  const x=new XMLHttpRequest();x.open('POST','/ota/upload');x.setRequestHeader('X-MegaOpen','1');
  x.upload.onprogress=e=>e.lengthComputable&&st(Math.round(e.loaded/e.total*100)+'%');
  x.onload=()=>st(x.status<300?'OK — restarting…':'HTTP '+x.status+' '+x.responseText);x.onerror=()=>st('no board');
