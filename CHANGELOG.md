@@ -34,6 +34,7 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 - The web server's sockets have TCP_NODELAY: a small reply no longer waits for a delayed ACK (over the link 250 -> 7 ms).
 
 ### Fixed
+- A firmware upload through the page (or the app's page over USB) could reboot the board on the task watchdog: httpd wrote the upload as fast as it came, each 64 kB erase stopping the cache, and IDLE on core 0 starved for 5 s. Found by the new coredump upload (bench boot 76: `httpd` → ElegantOTA → `Update.write` → `esp_partition_erase_range`), the same `task_wdt` in `httpd` as the car's on 1.6.0-rc1. A tick after every 8 kB chunk; the GitHub install was never affected.
 - With Bluetooth off, `/api/ble` (the page's Overview) asked NimBLE for its bonds and the board rebooted on an assert in the stack's lock (the car on 1.5.3, `httpd`, `getNumBonds`). It now answers «no bond» while the stack is down.
 
 ## [1.5.4] - 2026-10-25
