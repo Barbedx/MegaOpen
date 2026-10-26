@@ -95,7 +95,7 @@ jobs:
           [ -n "$KS_B64" ] || { echo "::error::secret ANDROID_KEYSTORE_B64 missing"; exit 1; }
           export MO_KEYSTORE="$RUNNER_TEMP/companion.p12"
           echo "$KS_B64" | base64 -d > "$MO_KEYSTORE"
-          gradle -p android testDebugUnitTest lintRelease assembleRelease --no-daemon
+          RELEASE_TAG="$GITHUB_REF_NAME" gradle -p android testDebugUnitTest lintRelease assembleRelease --no-daemon
           rm -f "$MO_KEYSTORE"
           signer=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           "$signer" verify --print-certs android/app/build/outputs/apk/release/app-release.apk | grep -i 'SHA-256'

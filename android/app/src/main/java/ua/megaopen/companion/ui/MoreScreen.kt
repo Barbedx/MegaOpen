@@ -52,7 +52,7 @@ private fun UpdatesSection(graph: AppGraph) {
     var pct by remember { mutableStateOf(-1) }
 
     Section(stringResource(R.string.upd_title)) {
-        Text(stringResource(R.string.upd_version, BuildConfig.VERSION_NAME, s.installedTag.ifEmpty { "—" }))
+        Text(stringResource(R.string.upd_version, BuildConfig.VERSION_NAME, s.installedTag.ifEmpty { BuildConfig.RELEASE_TAG }.ifEmpty { "—" }))
         SwitchRow(stringResource(R.string.upd_pre), s.pre, { v -> found = null; scope.launch { graph.settings.setPre(v) } },
             note = stringResource(R.string.upd_pre_note))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -62,7 +62,7 @@ private fun UpdatesSection(graph: AppGraph) {
                 scope.launch {
                     try {
                         val r = graph.updater.newest(s.pre)
-                        val newer = r != null && Releases.isNewer(r, Releases.mine(BuildConfig.VERSION_NAME, s.installedTag))
+                        val newer = r != null && Releases.isNewer(r, Releases.mine(BuildConfig.VERSION_NAME, s.installedTag, BuildConfig.RELEASE_TAG))
                         found = if (newer) r else null
                         status = if (newer) ctx.getString(R.string.upd_available, r!!.tag) else ctx.getString(R.string.upd_none)
                     } catch (e: Exception) {

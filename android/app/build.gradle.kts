@@ -9,6 +9,9 @@ val fwVersion: String = run {
     Regex("""#define MEGAOPEN_VERSION "([0-9.]+)"""").find(v)?.groupValues?.get(1) ?: "0.0.0"
 }
 val code: Int = fwVersion.split(".").map { it.toInt() }.let { (a, b, c) -> a * 10000 + b * 100 + c }
+// The release tag this APK is built for (release.yml sets RELEASE_TAG; "" for a
+// local build): an APK put on by hand still knows it is an rc and sees the next.
+val releaseTag: String = providers.environmentVariable("RELEASE_TAG").getOrElse("")
 
 // The few things a fork changes, in one place (docs/design/companion-app.md).
 val releasesRepo = "Barbedx/MegaOpen"
@@ -44,6 +47,7 @@ android {
         versionCode = code
         versionName = fwVersion
         buildConfigField("String", "RELEASES_REPO", "\"$releasesRepo\"")
+        buildConfigField("String", "RELEASE_TAG", "\"$releaseTag\"")
         buildConfigField("String[]", "NET_HOSTS", netHosts.joinToString(",", "{", "}") { "\"$it\"" })
         buildConfigField("int", "USB_VID", "$usbVid")
         buildConfigField("int", "USB_PID", "$usbPid")

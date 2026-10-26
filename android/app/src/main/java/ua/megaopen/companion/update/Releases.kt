@@ -8,7 +8,8 @@ import org.json.JSONObject
  * megaopen-companion-X.Y.Z.apk next to the firmware). Pure: unit-tested.
  *
  * An rc's APK carries its final's version, so the tag an install came from
- * is remembered (Settings.installedTag), as the board does (NVS fw/tag).
+ * is remembered (Settings.installedTag), as the board does (NVS fw/tag); an
+ * APK put on by hand falls back to the tag it was built for (BuildConfig.RELEASE_TAG).
  */
 object Releases {
     const val ASSET_PREFIX = "megaopen-companion-"
@@ -28,9 +29,10 @@ object Releases {
     }
 
     /** What this install is: the tag it came from when that is this version, else the version as a final. */
-    fun mine(versionName: String, installedTag: String): List<Int>? {
-        val own = order(versionName) ?: return order(installedTag)
-        val tagged = order(installedTag)
+    fun mine(versionName: String, installedTag: String, builtTag: String = ""): List<Int>? {
+        val tag = installedTag.ifEmpty { builtTag }
+        val own = order(versionName) ?: return order(tag)
+        val tagged = order(tag)
         return if (tagged != null && tagged.subList(0, 3) == own.subList(0, 3)) tagged else own
     }
 

@@ -42,6 +42,17 @@ class ReleasesTest {
         assertFalse(Releases.isNewer(Releases.parse(rel("v1.6.0-rc1", pre = true))!!, mine))
     }
 
+    @Test fun anApkPutOnByHandKnowsItsRcFromTheBuild() {
+        // No tag remembered (installed outside the app): the built-in one counts.
+        val mine = Releases.mine("1.6.0", "", "v1.6.0-rc5")
+        assertTrue(Releases.isNewer(Releases.parse(rel("v1.6.0-rc6", pre = true))!!, mine))
+        assertTrue(Releases.isNewer(Releases.parse(rel("v1.6.0"))!!, mine))
+        assertFalse(Releases.isNewer(Releases.parse(rel("v1.6.0-rc5", pre = true))!!, mine))
+        // A remembered tag wins over the built-in one.
+        val upd = Releases.mine("1.6.0", "v1.6.0", "v1.6.0-rc6")
+        assertFalse(Releases.isNewer(Releases.parse(rel("v1.6.0"))!!, upd))
+    }
+
     @Test fun aStaleTagIsIgnored() {
         // Put on by hand since: the tag is of another version, the version wins.
         val mine = Releases.mine("1.6.1", "v1.6.0-rc1")
