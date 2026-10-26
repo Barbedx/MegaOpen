@@ -29,7 +29,7 @@ namespace LogPush
     {
         constexpr int      TIMEOUT_MS = 20000;
         constexpr uint32_t FIRST_MS   = 20000;   // after the link comes up: let the boot settle
-        constexpr uint32_t DRAIN_MS   = 3000;    // a backlog waits: the next file soon
+        constexpr uint32_t DRAIN_MS   = 6000;    // a backlog waits: the next file soon, not back to back
         // What counts as a backlog: a spool that filled offline (the garage).
         // The lines logged during the push itself (a few kB in its seconds) wait
         // for the next minute; draining on those sent a file every ~8 s.
@@ -422,6 +422,40 @@ namespace LogPush
             s_pastPart = 0;
         }
 
+        // A coredump is the board's RAM: the token and the WiFi passwords are
+        // in it as text (the car's dumps carried "Bearer github_pat_..." to
+        // the log repository, 1.6.0-rc5). Each one is overwritten with '*'
+        // before the dump leaves, as is any other github_pat_ / ghp_ run.
+        void blank(char* d, size_t n, const char* secret)
+        {
+            const size_t k = secret ? strlen(secret) : 0;
+            if (k < 4 || k > n) return;
+            for (size_t i = 0; i + k <= n; ++i)
+                if (d[i] == secret[0] && !memcmp(d + i, secret, k)) { memset(d + i, '*', k); i += k - 1; }
+        }
+        void redact(char* d, size_t n, const char* tok)
+        {
+            blank(d, n, tok);
+            static const char* const PASS[][2] = {{"megaopen", "pass"}, {"megaopen", "apPass"}, {"net2", "pass"}};
+            for (const auto& kv : PASS) {
+                Preferences p;
+                if (!p.begin(kv[0], true)) continue;
+                const String s = p.getString(kv[1], "");
+                p.end();
+                blank(d, n, s.c_str());
+            }
+            static const char* const PREFIX[] = {"github_pat_", "ghp_"};
+            for (const char* pre : PREFIX) {
+                const size_t k = strlen(pre);
+                for (size_t i = 0; i + k <= n; ++i) {
+                    if (memcmp(d + i, pre, k)) continue;
+                    size_t j = i + k;
+                    while (j < n && (isalnum((unsigned char)d[j]) || d[j] == '_')) d[j++] = '*';
+                    i = j;
+                }
+            }
+        }
+
         // A coredump copied by main.cpp, if one is there: true when it was tried.
         bool crashStep(const char* repo, const char* tok)
         {
@@ -446,6 +480,7 @@ namespace LogPush
                 LogBus::printf("[push] %s: unreadable, removed", path);
                 return false;
             }
+            redact(data, n, tok);
             char msg[64];
             snprintf(msg, sizeof(msg), "%s boot %u coredump (" MEGAOPEN_VERSION ")", s_dev, (unsigned)boot);
             snprintf(rel, sizeof(rel), "boot-%05u/coredump.bin", (unsigned)boot);

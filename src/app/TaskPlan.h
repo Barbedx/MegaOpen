@@ -113,8 +113,12 @@ namespace App
         constexpr uint32_t    GHOTA_STACK = 8192;
 
         // Log push (src/net/LogPush.h): the same shape as GhOta's, one TLS
-        // job at a time with it (TlsJob.h). Created once a minute at most.
-        constexpr UBaseType_t LOGPUSH_PRIO  = 1;
+        // job at a time with it (TlsJob.h). IDLE's priority, so the two take
+        // turns: at 1 a run of TLS handshakes (a backlog sent every few
+        // seconds, ECDH in PSRAM, the car's 800 fps on the same core) kept
+        // IDLE0 out for 5 s and the task watchdog rebooted the board, and the
+        // next boot's backlog did it again (the car, 12 boots, 1.6.0-rc5).
+        constexpr UBaseType_t LOGPUSH_PRIO  = 0;
         constexpr int         LOGPUSH_CORE  = 0;
         constexpr uint32_t    LOGPUSH_STACK = 10240;   // GhOta's plus the token, URL and auth header
 
