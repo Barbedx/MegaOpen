@@ -137,5 +137,19 @@ means a frame within 3 s. The WiFi policy (later in 1.6) reads that.
 
 TinyUSB (its task, the CDC and vendor FIFOs) takes about 23 kB of DRAM before
 `setup()` runs: 220 kB free at boot against 244 kB with the USB-Serial-JTAG
-console. WiFi off while the app is on the link (later in 1.6) gives back about
-84 kB.
+console. WiFi off gives back 27 kB (bench: 55 -> 82 kB free); the rest of the
+84 kB WiFi took at boot (netif, lwIP, the event loop) stays. Bluetooth off
+(Плата › Bluetooth, a reboot) is the other big one.
+
+## WiFi on demand
+
+Settings › «Без WiFi, коли є USB» (`wifiAuto`, off by default, live): once the
+app has been on the link for 10 s, WiFi stops (`[wifi] off: the app is on USB`);
+30 s after the app is gone it starts again as at boot, home network first, then
+the AP (`[wifi] on again`). Never mid-join and never with a phone on the board's
+own AP. The OTA trial counts the app on the link as a way in, like WiFi
+(`hkWifiSeen`). `/api/status` `mode` is `off` then.
+
+Two things that turned WiFi straight back on: the core's auto-reconnect answers
+the disconnect that stopping causes (off before stopping, `start()` puts it
+back), and loop() going on into the AP's join retry in the same pass.

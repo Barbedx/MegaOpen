@@ -708,7 +708,7 @@ void WebUi::routes()
     route("/api/status", HTTP_GET, [this](PsychicRequest* r) {
         JsonDocument d;
         d["ip"]        = WiFi.isConnected() ? WiFi.localIP().toString() : WiFi.softAPIP().toString();
-        d["mode"]      = WiFi.isConnected() ? "sta" : "ap";
+        d["mode"]      = _wifi && _wifi->off() ? "off" : WiFi.isConnected() ? "sta" : "ap";
         d["ssid"]      = WiFi.isConnected() ? WiFi.SSID() : WiFi.softAPSSID();
         d["rssi"]      = WiFi.RSSI();
         d["uptimeMs"]  = millis();

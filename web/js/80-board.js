@@ -27,6 +27,7 @@ SCR.board={title:'nav.board',async render(m){
   `<div id="wForm">${row(t('bd.net'),txt('rb:/api/wifi|ssid',se.ssid,'SSID','in','text',rbA('rb:',se.ssid,'WiFi',true)))}${row(t('bd.pass'),txt('rb:/api/wifi|pass','',un,'in','password',rbA('rb:','',t('bd.passLbl'))))}
   ${row(t('bd.net2'),txt('rb:/api/wifi|ssid2',ssid2,t('bd.net2Ph'),'in','text',rbA('rb:',ssid2,t('bd.net2'),true)))}${row(t('bd.pass2'),txt('rb:/api/wifi|pass2','',un,'in','password',rbA('rb:','',t('bd.pass2Lbl'))))}</div>`+
   row(t('bd.noNet'),`<span class="mono">${esc(st.apName||'')}</span>`,t('bd.apAt'),t('bd.apH'))+
+  row(t('bd.wifiAuto'),sw('/api/settings|wifiAuto',se.wifiAuto),'',t('bd.wifiAutoH'))+
   row(t('bd.apPass'),txt('rb:/api/settings|apPass','',un,'in','password',rbA('rb:','',t('bd.apPassLbl'))+' minlength="8"'),t('bd.min8')),'cWifi')+
  (B?card('Bluetooth',row(t('bd.role'),sel('rb:/api/settings|bleMode',CAT.bleModes.map(b=>[b.id,b.name]),se.bleMode,'data-str'+rbA('rb:',se.bleMode,t('bd.roleLbl'))),`<span id="bHint">${esc(bleHint(se.bleMode))}</span>`)+
   `<div id="bLive"${se.bleMode==='off'?' hidden':''}>${row(t('bd.state'),'<span id="bSt" class="chip off">…</span>','<span id="bName"></span>')}<div class="fr"><button class="btn dng" type="button" id="bForget">${t('bd.forget')}</button></div></div>`):'')+

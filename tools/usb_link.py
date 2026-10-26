@@ -316,6 +316,15 @@ def main():
                 print(time.strftime("%H:%M:%S"), link.events.get(timeout=1).decode())
             except queue.Empty:
                 pass
+    elif cmd == "watch":
+        # The board's status over the link every 5 s, for N s (WiFi may be off).
+        end = time.time() + (int(sys.argv[2]) if len(sys.argv) > 2 else 60)
+        while time.time() < end:
+            st = link.get_json("/api/status")
+            print(time.strftime("%H:%M:%S"), "wifi", st.get("mode"), "heap", st.get("heap"), "up", st.get("uptimeMs"))
+            for _ in range(5):
+                link.send(PING, payload=b"")
+                time.sleep(1)
     elif cmd == "gateway":
         what = sys.argv[2] if len(sys.argv) > 2 else ""
         if what == "check":

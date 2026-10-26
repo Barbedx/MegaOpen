@@ -1489,11 +1489,14 @@ static void keysStart()
 // counts: the next OTA arrives through it just as well. Counting STA only
 // meant an image flashed in the car (AP, no known network) was rolled back
 // and rebooted 180 s after every OTA.
+// The OTA trial wants a way in for the next update: WiFi up once, or the app
+// on the USB link (it carries the page and the upload too).
 static bool hkWifiSeen()
 {
     static bool s_seen = false;
     s_seen = s_seen || WiFi.status() == WL_CONNECTED ||
-             (!g_wifi.connecting() && !g_wifi.isSta() && (WiFi.getMode() & WIFI_AP));
+             (!g_wifi.connecting() && !g_wifi.isSta() && (WiFi.getMode() & WIFI_AP)) ||
+             UsbLink::alive();
     return s_seen;
 }
 
@@ -2383,6 +2386,7 @@ void setup()
     memMark("web");
     // The app's link pipes to the web server: after it listens.
     UsbLink::begin(g_wifi.apSsid().c_str());
+    g_wifi.setLinkAlive(UsbLink::alive);
     memMark("usblink");
     // The OTA trial's verdict comes from net_svc (Housekeeping).
     App::OtaTrial::begin();

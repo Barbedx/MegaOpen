@@ -15,6 +15,12 @@ public:
     void loop(uint32_t nowMs);
 
     bool isSta() const { return _sta; }
+    // Settings › «WiFi off on USB» (wifiAuto): WiFi stops once the app has been
+    // on the USB link for OFF_AFTER_MS, and comes back ON_AFTER_MS after it is
+    // gone, so the board is never out of reach (docs/design/usb-link.md).
+    // `alive` is UsbLink::alive, asked on every pass.
+    void setLinkAlive(bool (*alive)()) { _linkAlive = alive; }
+    bool off() const { return _off; }
     // A boot join, scan or AP retry in progress; neither STA nor AP is settled.
     bool connecting() const { return _phase != Phase::Idle; }
     bool sleeping() const { return _sleepOn; }
@@ -46,7 +52,13 @@ private:
     // is reachable in the car again; the AP retry rejoins whichever net is near.
     static constexpr uint32_t STA_LOST_TO_AP_MS = 30000;
 
+    static constexpr uint32_t OFF_AFTER_MS = 10000;   // the app this long on USB: WiFi off
+    static constexpr uint32_t ON_AFTER_MS  = 30000;   // the app this long gone: WiFi back
+
     enum class Phase : uint8_t { Idle, Scanning, Joining };
+    void start(uint32_t nowMs);   // STA (or a scan of two) if there are networks, else AP
+    // The policy above; true while WiFi is off and loop() has nothing to do.
+    bool linkPolicy(uint32_t nowMs);
     void startJoin(uint32_t nowMs, uint32_t timeoutMs);
     void pickFromScan(int n);
 
@@ -84,4 +96,8 @@ private:
     Phase    _phase = Phase::Idle;
     uint32_t _deadline = 0;
     uint32_t _staDownAt = 0;     // 0 = STA up (or not in STA)
+    bool   (*_linkAlive)() = nullptr;
+    bool     _off = false;
+    uint32_t _linkSince = 0;     // the app on USB since; 0 = not
+    uint32_t _linkGoneAt = 0;    // the app gone since; 0 = there
 };

@@ -131,7 +131,7 @@ function fieldCtrl(f,k,v){
 }
 const fieldLabel=f=>esc(f.label)+(f.max&&!f.num&&!f.enum?' · '+f.max:'');
 /* спільні чипи: WiFi (Огляд, Плата), CAN A і кнопка запису (Огляд, Авто) */
-function wifiChip(chip,sub,st,lost){if(st.mode==='ap'){setChip(chip,'warn',t('c.ap'));sub.textContent=(st.apName||st.ssid)+' · '+st.ip+' · '+lost}else{setChip(chip,'ok',st.ssid);sub.textContent=st.ip+' · '+st.rssi+' dBm'}}
+function wifiChip(chip,sub,st,lost){if(st.mode==='off'){setChip(chip,'off',t('c.wifiOff'));sub.textContent=t('c.wifiOffW');return}if(st.mode==='ap'){setChip(chip,'warn',t('c.ap'));sub.textContent=(st.apName||st.ssid)+' · '+st.ip+' · '+lost}else{setChip(chip,'ok',st.ssid);sub.textContent=st.ip+' · '+st.rssi+' dBm'}}
 function canChip(chip,c2){if(c2.fps>0)setChip(chip,'ok',(c2.detected||c2.bitrate)/1000+'k · '+t('c.perS',fmtN(c2.fps)));else if(c2.autobaud==='searching')setChip(chip,'warn',t('c.canSearch'));else setChip(chip,'bad',t('c.canSilent'))}
 function recBtn(b,cp){b.classList.toggle('on',cp.recording);b.textContent=cp.recording?t('c.recStop'):t('c.recStart')}
 /* глобальні кліки: сегменти, мультивибір, підказки */

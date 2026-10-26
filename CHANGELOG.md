@@ -5,6 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+Planned as 1.6.0: the USB link (docs/design/usb-link.md).
+
+### Added
+- **The USB link.** The board's USB-C port, plugged into the head unit, is a composite device: the console (CDC) and a vendor interface for MegaOpen Voice. Frames carry HTTP to the board's own web server (every route, the request gate and the settings lock as over WiFi), the panel alerts as events, and pings. `/api/status` `usb`; `tools/usb_link.py` talks to it from a PC (Windows needs no driver on `t2can`).
+- **MegaOpen Voice over USB.** Plugging the board in opens the app; the alerts come as events, with no WiFi and no address. «Відкрити сторінку плати» shows the board's own page inside the app over USB (the page's calls, downloads and the firmware upload go through `window.MOLink`), or in the browser over WiFi.
+- **The app as the board's internet.** On the link, the board's update check and download and the log push go through the app's network (Android TLS, GitHub over https only, 16 kB credit), over WiFi otherwise. The board composes the requests as before, token and all. Bench: v1.5.4 installed through it, 1.67 MB in 24 s.
+- Settings › «Без WiFi, коли є USB» (`wifiAuto`, off by default): WiFi off once the app has been on USB for 10 s, back 30 s after it is gone. 27 kB more heap while off.
+
+### Changed
+- The T-2CAN builds use TinyUSB (`ARDUINO_USB_MODE=0`) with the board's own USB PID (`variants/t2can`, 303A:80C3) and a composite device descriptor. About 23 kB of DRAM at boot.
+- The web server's sockets have TCP_NODELAY: a small reply no longer waits for a delayed ACK (over the link 250 -> 7 ms).
+
 ## [1.5.4] - 2026-10-25
 
 ### Added

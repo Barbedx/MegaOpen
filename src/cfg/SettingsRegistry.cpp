@@ -485,6 +485,9 @@ namespace Cfg
              0, 1, 0, nullptr, nullptr, S_GET(s.funcReg), S_PUT(s.funcReg = v != 0)},
             {"mdnsOn", "mDNS", "system", SType::Bool, W, AP_REBOOT,
              0, 1, 0, nullptr, nullptr, S_GET(s.mdnsOn), S_PUT(s.mdnsOn = v != 0)},
+            // Live: WifiManager reads it every pass (net_svc).
+            {"wifiAuto", "No WiFi on USB", "system", SType::Bool, W, AP_NONE,
+             0, 1, 0, nullptr, nullptr, S_GET(s.wifiAuto), S_PUT(s.wifiAuto = v != 0)},
             {"can2Bitrate", "CAN A rate", "system", SType::Enum, W, AP_REBOOT,
              0, 0, 0, nullptr, &kRates, S_GET(rateIndex(s.can2Bitrate)),
              S_PUT(s.can2Bitrate = rateRow((uint8_t)v))},

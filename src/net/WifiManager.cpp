@@ -47,6 +47,12 @@ void WifiManager::begin(Cfg::Config& cfg)
         LogBus::printf("[wifi] STA got IP heap=%u\n", (unsigned)ESP.getFreeHeap());
     }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
 
+    start(millis());
+    _bootMs = millis();
+}
+
+void WifiManager::start(uint32_t nowMs)
+{
     if (_ssid1.length() || _ssid2.length()) {
         // mode() re-initialises the interface, so setSleep() must come after it.
         WiFi.mode(WIFI_STA);
@@ -60,18 +66,56 @@ void WifiManager::begin(Cfg::Config& cfg)
             // Two known: scan in the background, home first. loop() picks.
             WiFi.scanNetworks(true, false, false, 120);
             _phase = Phase::Scanning;
-            _deadline = millis() + SCAN_TIMEOUT_MS;
+            _deadline = nowMs + SCAN_TIMEOUT_MS;
         } else {
             useNet(has1 ? 0 : 1);
-            startJoin(millis(), CONNECT_TIMEOUT_MS);
+            startJoin(nowMs, CONNECT_TIMEOUT_MS);
         }
-        LogBus::printf("[wifi] boot: %s, AP if nothing joins in %u s\n",
+        LogBus::printf("[wifi] %s: %s, AP if nothing joins in %u s\n", _bootMs ? "start" : "boot",
                       _phase == Phase::Scanning ? "scanning" : "joining",
                       (unsigned)(CONNECT_TIMEOUT_MS / 1000));
     } else {
         startAp();
     }
-    _bootMs = millis();
+}
+
+bool WifiManager::linkPolicy(uint32_t nowMs)
+{
+    const bool link = _linkAlive && _linkAlive();
+    if (link) { _linkGoneAt = 0; if (!_linkSince) _linkSince = nowMs ? nowMs : 1; }
+    else      { _linkSince = 0;  if (!_linkGoneAt) _linkGoneAt = nowMs ? nowMs : 1; }
+    // A plain bool, read without the settings lock (only Strings need it).
+    const bool want = _cfg->s().wifiAuto;
+    if (!_off) {
+        // Not mid-join, and never with someone on our own AP.
+        if (want && link && (uint32_t)(nowMs - _linkSince) >= OFF_AFTER_MS && _phase == Phase::Idle &&
+            (_sta || WiFi.softAPgetStationNum() == 0)) {
+            const uint32_t before = ESP.getFreeHeap();
+            if (_mdnsUp) { MDNS.end(); _mdnsUp = false; _mdns = String(); }
+            // Else the core's own reconnect answers the disconnect this causes
+            // (reason 8) with WiFi.begin(), and WiFi is back in 3 s. start()
+            // turns it on again.
+            WiFi.setAutoReconnect(false);
+            WiFi.mode(WIFI_OFF);
+            _off = true;
+            _sta = false;
+            _staDownAt = 0;
+            LogBus::printf("[wifi] off: the app is on USB (heap %u -> %u)", (unsigned)before,
+                           (unsigned)ESP.getFreeHeap());
+            // Not on into the rest of loop(): with _sta false it is the AP's
+            // retry, which would join again at once.
+            return true;
+        }
+        return false;
+    }
+    if (!want || (!link && (uint32_t)(nowMs - _linkGoneAt) >= ON_AFTER_MS)) {
+        _off = false;
+        LogBus::printf("[wifi] on again: %s", want ? "no app on USB" : "«WiFi off on USB» was switched off");
+        _lastRetry = nowMs;
+        start(nowMs);
+        return false;
+    }
+    return true;
 }
 
 void WifiManager::startJoin(uint32_t nowMs, uint32_t timeoutMs)
@@ -171,6 +215,8 @@ void WifiManager::loop(uint32_t nowMs)
         _pass2 = pw;
     }
 
+    if (linkPolicy(nowMs)) return;
+
     if (_phase == Phase::Scanning) {
         const int n = WiFi.scanComplete();   // -1 running, -2 failed, else a count
         if (n == -1 && (int32_t)(nowMs - _deadline) < 0) return;
@@ -240,11 +286,13 @@ void WifiManager::loop(uint32_t nowMs)
 // Not during our own scan or join: those own the mode until loop() settles them.
 void WifiManager::scanBegin()
 {
+    if (_off) return;      // off for the USB link: the scan just fails
     if (!_sta && _phase == Phase::Idle) { WiFi.mode(WIFI_AP_STA); applySleep(); }
 }
 
 void WifiManager::scanEnd()
 {
+    if (_off) return;
     if (!_sta && _phase == Phase::Idle) { WiFi.mode(WIFI_AP); applySleep(); }
 }
 
