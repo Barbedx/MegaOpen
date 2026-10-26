@@ -80,6 +80,10 @@ namespace App
         // The loop, when no task was created: commands, staging, test expiry.
         void service(uint32_t nowMs);
 
+        // ---- any task: the reminders' speeds (Settings › Reminders), km/h ------
+        // Two bytes the car task reads on its next frame; 0 = that one off.
+        void setReminderSpeeds(uint8_t lightsKmh, uint8_t brakeKmh);
+
         // ---- any task: State's pins, applied by the car task ------------------
         // Zero wait; a full queue drops the edit and counts it.
         void pin(uint8_t sig, int32_t value);

@@ -590,6 +590,20 @@ void WebUi::routesAlerts()
         return replyJson(r, out);
     });
 
+    // GET ?name=drive_no_lights: one signal now, {"name","has","value"}, for
+    // an app that repeats a reminder while its condition lasts.
+    route("/api/signal", HTTP_GET, [this](PsychicRequest* r) {
+        if (!r->hasParam("name")) return r->reply(400, "text/plain", "param name");
+        const String name = r->getParam("name")->value();
+        const uint8_t sig = Vehicle::sigByName(name.c_str());
+        if (sig >= Vehicle::SIG_COUNT) return r->reply(404, "text/plain", "param name");
+        const bool has = _state && _state->has(sig);
+        char out[96];
+        snprintf(out, sizeof(out), "{\"name\":\"%s\",\"has\":%s,\"value\":%ld}", Vehicle::meta(sig).name,
+                 has ? "true" : "false", has ? (long)_state->get(sig) : 0L);
+        return replyJson(r, String(out));
+    });
+
     route("/api/alerts/test", HTTP_POST, [](PsychicRequest* r) {
         JsonDocument d;
         deserializeJson(d, r->body());

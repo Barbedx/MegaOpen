@@ -81,10 +81,27 @@ fun VoiceScreen(graph: AppGraph) {
                         Icon(Icons.Filled.PlayArrow, stringResource(R.string.voice_play))
                     }
                 }
+                // While it lasts: once, or again every N seconds until it is fixed.
+                val rep = s.repeatOf(k.sig, k.repeatS)
+                val choices = listOf(0, 15, 30, 60)
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    choices.forEachIndexed { i, sec ->
+                        SegmentedButton(selected = rep == sec, onClick = { scope.launch { graph.settings.setRepeat(k.sig, sec) } },
+                            shape = SegmentedButtonDefaults.itemShape(i, choices.size)) {
+                            Text(if (sec == 0) stringResource(R.string.repeat_once) else stringResource(R.string.repeat_every, sec))
+                        }
+                    }
+                }
             }
             SwitchRow(stringResource(R.string.voice_others), s.others, { v -> scope.launch { graph.settings.setOthers(v) } },
                 note = stringResource(R.string.voice_others_note))
             Note(stringResource(R.string.voice_phrase_note))
+            Note(stringResource(R.string.voice_speeds_note))
+        }
+
+        Section(stringResource(R.string.notify_title)) {
+            SwitchRow(stringResource(R.string.notify_on), s.notify, { v -> scope.launch { graph.settings.setNotify(v) } },
+                note = stringResource(R.string.notify_note))
         }
     }
 }

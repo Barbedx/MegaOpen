@@ -1,4 +1,5 @@
 #include "HuMediaSource.h"
+#include <strings.h>
 #include <string.h>
 
 bool HuMediaSource::looksLikeText(const uint8_t* payload, uint8_t len)
@@ -145,8 +146,19 @@ void HuMediaSource::forgetLocked()
     _info.album.clear();
 }
 
+// The head unit's own placeholder for a Bluetooth source with no name (seen as
+// "Unknown ContactE" on a DUDU, 2026-10-26): not a song, never on the glass.
+// The owner's call: this one only. Any tail after it (that E) goes with it.
+static bool placeholder(const char* t)
+{
+    static const char P[] = "Unknown Contact";
+    return t && strncasecmp(t, P, sizeof(P) - 1) == 0;
+}
+
 void HuMediaSource::publish(const char* artist, const char* title, uint32_t nowMs, const char* album)
 {
+    if (placeholder(title)) title = nullptr;
+    if (placeholder(artist)) artist = nullptr;
     bool changed = false;
     if (title  && _info.title  != title)  { _info.title  = title;  changed = true; }
     if (artist && _info.artist != artist) { _info.artist = artist; changed = true; }

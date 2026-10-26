@@ -47,6 +47,7 @@ namespace App
             Setup              s_s;
             Vehicle::CanDecode s_decode;
             Vehicle::Derived   s_derived;
+            volatile uint8_t   s_rmLights = Vehicle::Derived::LIGHTS_KMH, s_rmBrake = Vehicle::Derived::BRAKE_KMH;
             // The panel alert rules: httpd stages, this task applies and evaluates.
             Staged<Vehicle::AlertRules> s_alerts;
             Vehicle::AlertEval s_eval;
@@ -282,7 +283,10 @@ namespace App
 
             void frame(const Frame& f, uint32_t now)
             {
-                if (s_s.state && s_decode.apply(f, *s_s.state, now)) s_derived.update(*s_s.state, now);
+                if (s_s.state && s_decode.apply(f, *s_s.state, now)) {
+                    s_derived.setReminderSpeeds(s_rmLights, s_rmBrake);
+                    s_derived.update(*s_s.state, now);
+                }
 #if FEATURE_DIAG
                 CarDiag::frame(f, now);      // the climate's reply, and the bus is alive
 #endif
@@ -443,6 +447,12 @@ namespace App
 
         bool         running() { return s_task != nullptr; }
         TaskHandle_t task()    { return s_task; }
+
+        void setReminderSpeeds(uint8_t lightsKmh, uint8_t brakeKmh)
+        {
+            s_rmLights = lightsKmh;
+            s_rmBrake = brakeKmh;
+        }
 
         void pin(uint8_t sig, int32_t value)
         {

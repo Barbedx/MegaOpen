@@ -440,6 +440,23 @@ static void test_the_album_field_lands_in_the_album()
     TEST_ASSERT_EQUAL_STRING("Lost Control", hu.current().title.c_str());
 }
 
+// The head unit's "Unknown Contact" (a nameless Bluetooth source) is not a
+// title: the last real one stays, in either form of the frame.
+static void test_unknown_contact_is_ignored()
+{
+    HuMediaSource hu;
+    hu.onFrame(0x99, kTitleFrame, 34, 1000);
+    uint8_t f[34] = { 0x83, 0x02 };
+    const char* t = "Unknown ContactE";
+    for (uint8_t i = 0; t[i]; ++i) f[2 + 2 * i] = (uint8_t)t[i];
+    hu.onFrame(0x99, f, 34, 1010);
+    TEST_ASSERT_EQUAL_STRING("Lost Control", hu.current().title.c_str());
+    HuMediaSource plain;
+    feedText(plain, 0xC0, "Bohemian Rhapsody", 1000);
+    feedText(plain, 0xC0, "unknown contact", 1010);
+    TEST_ASSERT_EQUAL_STRING("Bohemian Rhapsody", plain.current().title.c_str());
+}
+
 // Field 01 is the track number and total, binary (k0.a3.c3): it must never
 // land in a text row, nor blank one. Track 65 of 66 would read "A", "B".
 static void test_the_track_number_field_is_not_text()
@@ -678,6 +695,7 @@ int main(int, char**)
     RUN_TEST(test_a_short_buffer_never_splits_a_character);
     RUN_TEST(test_the_album_field_lands_in_the_album);
     RUN_TEST(test_the_track_number_field_is_not_text);
+    RUN_TEST(test_unknown_contact_is_ignored);
     RUN_TEST(test_a_payload_that_is_not_whole_code_units_is_refused);
     RUN_TEST(test_a_pinned_channel_still_filters_the_structured_form);
     return UNITY_END();

@@ -13,7 +13,9 @@ data class Alert(val seq: Long, val sig: String, val value: Long, val text: Stri
  * and what to say for each. Pure but for the label resource: unit-tested.
  */
 object Phrases {
-    class Kind(val sig: String, @StringRes val label: Int, private val uk: String, private val en: String) {
+    /** [repeatS]: the default seconds between repeats while it lasts; 0 = once. */
+    class Kind(val sig: String, @StringRes val label: Int, private val uk: String, private val en: String,
+               val repeatS: Int = 0) {
         fun default(lang: String): String = when (lang.ifEmpty { Locale.getDefault().language }) {
             "uk", "ru" -> uk
             else -> en
@@ -21,8 +23,8 @@ object Phrases {
     }
 
     val KNOWN = listOf(
-        Kind("drive_no_lights", R.string.alert_lights, "Увімкніть фари", "Turn the headlights on"),
-        Kind("drive_handbrake", R.string.alert_handbrake, "Зніміть з ручника", "Release the handbrake"),
+        Kind("drive_no_lights", R.string.alert_lights, "Увімкніть фари", "Turn the headlights on", repeatS = 30),
+        Kind("drive_handbrake", R.string.alert_handbrake, "Зніміть з ручника", "Release the handbrake", repeatS = 30),
         Kind("fuel_low", R.string.alert_fuel, "Мало пального", "Fuel is low"),
     )
 

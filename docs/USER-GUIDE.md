@@ -185,6 +185,10 @@ shows the board's settings page, and is the board's way to the internet.
 - **Голос:** language (Ukrainian, English, the system's), volume, each alert on
   or off with your own phrase (`{v}` is the value). No Ukrainian voice: install
   it in «Налаштування синтезу мовлення» (the Google engine has one).
+- **Repeat and notification:** each alert can be said once or again every 15,
+  30 or 60 s while it lasts (lights and handbrake: 30 s); a notification stays
+  until it is fixed. The speeds the reminders start at: the board's settings ›
+  Нагадування (10 and 5 km/h; 0 switches one off).
 - **Плата:** the board's own page, over USB or WiFi alike.
 - **Ще › Оновлення:** from the same releases as the board; Android asks to
   confirm the install, and the first time to allow installs from this app.

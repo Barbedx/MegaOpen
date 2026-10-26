@@ -97,4 +97,12 @@
     <string name="diag_usb_stats">Frames in %1$d, out %2$d, bad bytes %3$d; requests %4$d, failed %5$d; the board\'s internet %6$d</string>
     <string name="diag_last_error">Last error: %1$s</string>
     <string name="diag_about">MegaOpen Companion %1$s · github.com/%2$s</string>
+
+    <string name="channel_alerts">Alerts</string>
+    <string name="repeat_once">Once</string>
+    <string name="repeat_every">every %1$d s</string>
+    <string name="voice_speeds_note">From which speed the lights and handbrake reminders start: the board\'s settings › Reminders.</string>
+    <string name="notify_title">Notifications</string>
+    <string name="notify_on">Show the alerts as notifications</string>
+    <string name="notify_note">On the screen while the alert lasts (lights still off), gone when it is fixed.</string>
 </resources>

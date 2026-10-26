@@ -894,6 +894,28 @@ void test_alert_factory_is_low_fuel_lights_and_handbrake()
 }
 
 
+// Settings › Reminders: the speeds move, and 0 switches one off.
+void test_reminder_speeds_are_settable()
+{
+    Derived d;
+    State s;
+    uint32_t t = 100;
+    d.setReminderSpeeds(20, 0);
+    auto at = [&](int32_t kmh100) { t += 50; s.set(SIG_SPEED, kmh100, t); s.set(SIG_RPM, 2000, t); d.update(s, t); };
+    s.set(SIG_LIGHT_DIPPED, 0, t); s.set(SIG_LIGHT_MAIN, 0, t); s.set(SIG_HANDBRAKE, 1, t);
+    at(1200);                                                   // 12 km/h: under 20
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_DRIVE_NO_LIGHTS));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_DRIVE_HANDBRAKE));     // off at any speed
+    at(2100);
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_DRIVE_NO_LIGHTS));
+    at(1100);                                                   // above half (10): still on
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_DRIVE_NO_LIGHTS));
+    at(900);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_DRIVE_NO_LIGHTS));
+    at(6000);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_DRIVE_HANDBRAKE));
+}
+
 // The safety pair (Derived::safety): moving with no beam on, or with the
 // handbrake up, each with its own speed band; and the text the panel shows.
 void test_driving_without_lights_or_with_the_handbrake()
@@ -1217,6 +1239,7 @@ int main(int, char**)
     UNITY_BEGIN();
     RUN_TEST(test_alert_factory_is_low_fuel_lights_and_handbrake);
     RUN_TEST(test_driving_without_lights_or_with_the_handbrake);
+    RUN_TEST(test_reminder_speeds_are_settable);
     RUN_TEST(test_alert_cells_check_their_ranges_and_round_trip);
     RUN_TEST(test_alert_low_fuel_edge_fires_once_and_waits_for_the_glass);
     RUN_TEST(test_alert_already_on_at_first_sight_counts_as_rising);

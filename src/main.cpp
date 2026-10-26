@@ -1556,6 +1556,8 @@ static void hkWifi(uint32_t now)
 static void hkBeat(uint32_t now)
 {
     const uint32_t s = now / 1000;
+    // Settings › Reminders, live: two bytes, read without the settings lock.
+    App::Car::setReminderSpeeds(g_cfg.s().remindLightsKmh, g_cfg.s().remindBrakeKmh);
     // [stk] is a subset of [task] now. Kept until Step 6 retires it, so old
     // logs and new ones still compare line for line.
     const TaskHandle_t net = App::Housekeeping::task();
@@ -2318,6 +2320,7 @@ void setup()
         App::CarDiag::begin(&g_state);   // the switches, before the car task runs
 #endif
         App::Car::begin(cs);
+        App::Car::setReminderSpeeds(g_cfg.s().remindLightsKmh, g_cfg.s().remindBrakeKmh);
         free(blob);
         logf("[cfg] NVS: %d entries of 32 B free", g_cfg.nvsFreeEntries());
         App::Car::start();

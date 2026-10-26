@@ -36,6 +36,9 @@ namespace Cfg
         // WiFi off while MegaOpen Companion is on the USB link (src/net/WifiManager.h):
         // the app carries the page, the alerts and the internet then.
         bool     wifiAuto = false;
+        // The driving reminders' speeds, km/h (src/vehicle/Derived.h); 0 = off.
+        uint8_t  remindLightsKmh = 10;
+        uint8_t  remindBrakeKmh  = 5;
         Str      apName = "MegaOpen";
         Str      apPass = MO_AP_PASS;      // >= 8 chars or the AP comes up open
 

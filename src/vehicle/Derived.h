@@ -28,9 +28,10 @@ namespace Vehicle
         static constexpr int32_t  MIN_RPM    = 400;
         static constexpr uint32_t AVG_MIN_KM = 50;      // km x10 = 5 km
         static constexpr uint64_t AVG_SPEED_MIN_MM = 1000000;   // 1 km before an average speed
-        // km/h x100: the speed bands of drive_no_lights and drive_handbrake.
-        static constexpr int32_t  LIGHTS_ON_SPEED = 1000, LIGHTS_OFF_SPEED = 500;
-        static constexpr int32_t  BRAKE_ON_SPEED  = 500,  BRAKE_OFF_SPEED  = 300;
+        // km/h: where drive_no_lights and drive_handbrake start, by default
+        // (Settings › Reminders). Each stops below half its speed, so a car
+        // crawling round the threshold does not flicker.
+        static constexpr uint8_t  LIGHTS_KMH = 10, BRAKE_KMH = 5;
         static constexpr uint8_t  BAND_PCT   = 12;      // a gear matches within ±12 %
 
         // km/h per 1000 rpm x10, 1st..6th; 0 = no such gear. The defaults are a
@@ -54,12 +55,20 @@ namespace Vehicle
         // The gear for a ratio (km/h per 1000 rpm x10), 0 when none is close.
         static int8_t gearFor(const Gears& g, int32_t ratio);
 
+        // The reminders' speeds, km/h; 0 switches that reminder off.
+        void setReminderSpeeds(uint8_t lightsKmh, uint8_t brakeKmh)
+        {
+            _lightsOn = lightsKmh ? (int32_t)lightsKmh * 100 : INT32_MAX;
+            _brakeOn  = brakeKmh ? (int32_t)brakeKmh * 100 : INT32_MAX;
+        }
+
     private:
         void gear(State& s, uint32_t now);
         void fuel(State& s, uint32_t now);
         void safety(State& s, uint32_t now);
 
         Gears    _g;
+        int32_t  _lightsOn = LIGHTS_KMH * 100, _brakeOn = BRAKE_KMH * 100;   // km/h x100
         uint32_t _speedTs = 0, _rpmTs = 0, _cntTs = 0;
         uint8_t  _cnt = 0;
         bool     _haveCnt = false;

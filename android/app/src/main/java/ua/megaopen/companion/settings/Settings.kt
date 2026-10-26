@@ -38,7 +38,13 @@ class Settings(ctx: Context, scope: CoroutineScope) {
         val pendingTag: String = "",
         val off: Set<String> = emptySet(),
         val phrases: Map<String, String> = emptyMap(),
-    )
+        /** Seconds between repeats while an alert's condition lasts; 0 = said once. Unset: the alert's default. */
+        val repeat: Map<String, Int> = emptyMap(),
+        /** An Android notification with each alert, there while it lasts. */
+        val notify: Boolean = true,
+    ) {
+        fun repeatOf(sig: String, default: Int) = repeat[sig] ?: default
+    }
 
     private val store = ctx.applicationContext.store
 
@@ -47,7 +53,9 @@ class Settings(ctx: Context, scope: CoroutineScope) {
     private fun read(p: Preferences): Values {
         val off = HashSet<String>()
         val say = HashMap<String, String>()
+        val rep = HashMap<String, Int>()
         for ((k, v) in p.asMap()) {
+            if (k.name.startsWith(REP) && v is Int) rep[k.name.removePrefix(REP)] = v
             if (k.name.startsWith(OFF) && v == true) off += k.name.removePrefix(OFF)
             if (k.name.startsWith(SAY) && v is String && v.isNotBlank()) say[k.name.removePrefix(SAY)] = v
         }
@@ -64,6 +72,8 @@ class Settings(ctx: Context, scope: CoroutineScope) {
             pendingTag = p[PENDING] ?: "",
             off = off,
             phrases = say,
+            repeat = rep,
+            notify = p[NOTIFY] ?: true,
         )
     }
 
@@ -79,6 +89,8 @@ class Settings(ctx: Context, scope: CoroutineScope) {
     suspend fun setAlertOn(sig: String, on: Boolean) = edit { it[booleanPreferencesKey(OFF + sig)] = !on }
     suspend fun setPhrase(sig: String, v: String) = edit { it[stringPreferencesKey(SAY + sig)] = v.trim() }
     suspend fun setPendingTag(v: String) = edit { it[PENDING] = v }
+    suspend fun setRepeat(sig: String, seconds: Int) = edit { it[intPreferencesKey(REP + sig)] = seconds.coerceIn(0, 600) }
+    suspend fun setNotify(v: Boolean) = edit { it[NOTIFY] = v }
 
     /** The install went through: the pending tag is this install's now. */
     suspend fun settleTag() = edit {
@@ -99,7 +111,9 @@ class Settings(ctx: Context, scope: CoroutineScope) {
         val PRE = booleanPreferencesKey("pre")
         val TAG = stringPreferencesKey("installedTag")
         val PENDING = stringPreferencesKey("pendingTag")
+        val NOTIFY = booleanPreferencesKey("notify")
         const val OFF = "off_"
         const val SAY = "say_"
+        const val REP = "rep_"
     }
 }

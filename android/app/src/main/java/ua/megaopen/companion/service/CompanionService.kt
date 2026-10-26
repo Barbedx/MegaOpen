@@ -52,13 +52,12 @@ class CompanionService : LifecycleService() {
             ContextCompat.RECEIVER_EXPORTED)
 
         graph.connection.start()
+        reminders = Reminders(this, lifecycleScope, graph.settings, graph.connection) { text -> speak(text) }
         lifecycleScope.launch {
             graph.connection.alerts.collect { a ->
-                val s = graph.settings.values.value
-                if (!s.voiceOn) return@collect
-                val text = Phrases.say(a, s) ?: return@collect
-                graph.said(text)
-                graph.speaker.say(text, s.voiceLang, s.volume)
+                val text = Phrases.say(a, graph.settings.values.value) ?: return@collect
+                speak(text)
+                reminders?.onAlert(a, text)
             }
         }
         lifecycleScope.launch {
@@ -68,7 +67,18 @@ class CompanionService : LifecycleService() {
         }
     }
 
+    private var reminders: Reminders? = null
+
+    // Said only with the voice on; the notification goes either way.
+    private fun speak(text: String) {
+        val s = graph.settings.values.value
+        if (!s.voiceOn) return
+        graph.said(text)
+        graph.speaker.say(text, s.voiceLang, s.volume)
+    }
+
     override fun onDestroy() {
+        reminders?.stop()
         try { unregisterReceiver(detach) } catch (_: Exception) {}
         graph.connection.stop()
         super.onDestroy()

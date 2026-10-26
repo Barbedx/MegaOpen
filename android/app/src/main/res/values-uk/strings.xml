@@ -89,4 +89,12 @@
     <string name="diag_usb_stats">Кадрів прийнято %1$d, надіслано %2$d, битих байтів %3$d; запитів %4$d, невдалих %5$d; інтернет плати %6$d</string>
     <string name="diag_last_error">Остання помилка: %1$s</string>
     <string name="diag_about">MegaOpen Компаньйон %1$s · github.com/%2$s</string>
+
+    <string name="channel_alerts">Попередження</string>
+    <string name="repeat_once">Раз</string>
+    <string name="repeat_every">кожні %1$d с</string>
+    <string name="voice_speeds_note">З якої швидкості нагадувати про фари й ручник — у налаштуваннях плати › Нагадування.</string>
+    <string name="notify_title">Сповіщення</string>
+    <string name="notify_on">Показувати попередження сповіщеннями</string>
+    <string name="notify_note">На екрані, поки попередження триває (фари досі вимкнені), і зникає, коли виправлено.</string>
 </resources>

@@ -140,8 +140,8 @@ namespace Vehicle
     void Derived::safety(State& s, uint32_t now)
     {
         const int32_t v = s.has(SIG_SPEED) ? s.get(SIG_SPEED) : 0;   // km/h x100
-        _movingLights = v >= (_movingLights ? LIGHTS_OFF_SPEED : LIGHTS_ON_SPEED);
-        _movingBrake  = v >= (_movingBrake ? BRAKE_OFF_SPEED : BRAKE_ON_SPEED);
+        _movingLights = _lightsOn != INT32_MAX && v >= (_movingLights ? _lightsOn / 2 : _lightsOn);
+        _movingBrake  = _brakeOn != INT32_MAX && v >= (_movingBrake ? _brakeOn / 2 : _brakeOn);
         const bool beams = (s.has(SIG_LIGHT_DIPPED) && s.get(SIG_LIGHT_DIPPED)) ||
                            (s.has(SIG_LIGHT_MAIN) && s.get(SIG_LIGHT_MAIN));
         const bool knownLights = s.has(SIG_LIGHT_DIPPED) || s.has(SIG_LIGHT_MAIN);

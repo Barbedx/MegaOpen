@@ -499,6 +499,13 @@ namespace Cfg
             // ---- service: RAM only ------------------------------------------
             // TRC costs the CAN path real time, so the level is never saved:
             // every boot starts at INF.
+            // The driving reminders (src/vehicle/Derived.h): live, the car task
+            // takes them within a heartbeat (hkBeat). 0 switches one off.
+            G("remind", "Reminders", nullptr, W),
+            {"remindLightsKmh", "No lights km/h", "remind", SType::Int, W, AP_NONE,
+             0, 60, 1, "km/h", nullptr, S_GET(s.remindLightsKmh), S_PUT(s.remindLightsKmh = (uint8_t)v)},
+            {"remindBrakeKmh", "Handbrake km/h", "remind", SType::Int, W, AP_NONE,
+             0, 60, 1, "km/h", nullptr, S_GET(s.remindBrakeKmh), S_PUT(s.remindBrakeKmh = (uint8_t)v)},
             G("service", "Service", nullptr, WM),
             {"logLevel", "Log level", "service", SType::Enum, WM | F_VOLATILE, AP_NONE,
              0, 0, 0, nullptr, &kLogLevels, [](const Model&) -> int32_t { return (int32_t)Log::level(); },
