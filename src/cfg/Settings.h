@@ -33,7 +33,7 @@ namespace Cfg
         Str      mdnsName = "megaopen";     // -> http://megaopen.local
         // Off = no .local name; see WifiManager::startMdns().
         bool     mdnsOn   = true;
-        // WiFi off while MegaOpen Voice is on the USB link (src/net/WifiManager.h):
+        // WiFi off while MegaOpen Companion is on the USB link (src/net/WifiManager.h):
         // the app carries the page, the alerts and the internet then.
         bool     wifiAuto = false;
         Str      apName = "MegaOpen";

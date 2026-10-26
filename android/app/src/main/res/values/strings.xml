@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">MegaOpen Voice</string>
+    <string name="app_name">MegaOpen Companion</string>
     <string name="channel">Voice alerts</string>
     <string name="voice_on">Say the board\'s alerts</string>
 
@@ -45,7 +45,7 @@
 
     <string name="h_start">Start</string>
     <string name="autostart">Start with the head unit</string>
-    <string name="start_note">If the head unit closes background apps, exempt MegaOpen Voice from battery optimisation or add it to the auto-start list.</string>
+    <string name="start_note">If the head unit closes background apps, exempt MegaOpen Companion from battery optimisation or add it to the auto-start list.</string>
     <string name="version">Version %1$s</string>
 
     <string name="h_update">Updates</string>
@@ -59,7 +59,7 @@
     <string name="upd_confirm">Confirm the install in the system window</string>
     <string name="upd_error">Update failed: %1$s</string>
     <string name="upd_failed">Not installed: %1$s</string>
-    <string name="upd_allow">Allow MegaOpen Voice to install apps, then press the button again</string>
+    <string name="upd_allow">Allow MegaOpen Companion to install apps, then press the button again</string>
 
     <string name="st_usb">On USB: %1$s</string>
     <string name="h_board_page">Board settings</string>

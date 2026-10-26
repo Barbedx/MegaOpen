@@ -172,8 +172,8 @@ new factory list.
 ## Voice alerts on the head unit
 
 The panel's alerts («Lights off!», «Handbrake on!», low fuel, your own rules)
-can also be said out loud by the head unit. Install **MegaOpen Voice**
-(`megaopen-voice-X.Y.Z.apk` from the release, Android 7 or newer, no root) on
+can also be said out loud by the head unit. Install **MegaOpen Companion**
+(`megaopen-companion-X.Y.Z.apk` from the release, Android 7 or newer, no root) on
 the tablet, open it and switch on «Озвучувати попередження плати».
 
 - The board must be on the tablet's network (its hotspot). Leave the address
@@ -185,7 +185,7 @@ the tablet, open it and switch on «Озвучувати попередженн�
   speech engine's Ukrainian voice, or pick English.
 - Updates: Оновлення › «Перевірити» in the app, from the same releases as the
   board; Android asks to confirm the install. The first time it asks to allow
-  installing apps from MegaOpen Голос.
+  installing apps from MegaOpen Компаньйон.
 - The head unit closes it in the background: exempt it from battery
   optimisation or put it on the auto-start list.
 

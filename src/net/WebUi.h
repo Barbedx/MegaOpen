@@ -350,7 +350,7 @@ private:
 #endif
     void routesCanbox();
     void routesMap();            // WebUiMap.cpp
-    void routesAlerts();         // WebUiMap.cpp, /api/alerts (the voice apps)
+    void routesAlerts();         // WebUiMap.cpp, /api/alerts (MegaOpen Companion)
 #if FEATURE_DIAG
     void routesDiag();           // WebUiMap.cpp, /api/diag
 #endif

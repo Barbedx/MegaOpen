@@ -18,7 +18,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
-/** The board's HTTP API, as the voice app uses it. Blocking: call off the main thread. */
+/** The board's HTTP API, as MegaOpen Companion uses it. Blocking: call off the main thread. */
 object Board {
     class Alert(val seq: Long, val agoMs: Long, val sig: String, val value: Long, val text: String)
     class Alerts(val last: Long, val upMs: Long, val list: List<Alert>)

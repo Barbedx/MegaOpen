@@ -10,7 +10,7 @@
     python tools/usb_link.py gateway          # be the app's internet for the board, until ^C
     python tools/usb_link.py gateway check    # ... and ask the board to check GitHub for an update
 
-`gateway` does what MegaOpen Voice does for the board: it carries the board's
+`gateway` does what MegaOpen Companion does for the board: it carries the board's
 own GitHub requests (GhOta, LogPush) over this PC's network, GitHub hosts only.
 
 On Windows the t2can build's WinUSB descriptor (WebUSB on) binds the vendor

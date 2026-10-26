@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "MegaOpenVoice"
+rootProject.name = "MegaOpenCompanion"
 include(":app")

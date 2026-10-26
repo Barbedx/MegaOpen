@@ -180,10 +180,10 @@ jobs:
           for i in $(seq 1 60); do curl -s -m 2 http://127.0.0.1:8077/api/status > /dev/null && break; sleep 1; done
           bash tools/rc_smoke.sh --sim http://127.0.0.1:8077
 
-  # android/: the voice app (MegaOpen Voice). No wrapper jar in the repo: the
+  # android/: the head unit's app (MegaOpen Companion). No wrapper jar in the repo: the
   # Gradle version is pinned here and in release.yml, the SDK is the runner's.
   android:
-    name: voice app (APK)
+    name: companion app (APK)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -199,7 +199,7 @@ jobs:
         run: gradle -p android assembleRelease --no-daemon
       - uses: actions/upload-artifact@v7
         with:
-          name: megaopen-voice-apk
+          name: megaopen-companion-apk
           path: android/app/build/outputs/apk/release/*.apk
           retention-days: 14
           if-no-files-found: error

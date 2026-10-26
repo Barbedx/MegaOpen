@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">MegaOpen Голос</string>
+    <string name="app_name">MegaOpen Компаньйон</string>
     <string name="channel">Голосові попередження</string>
     <string name="voice_on">Озвучувати попередження плати</string>
 
@@ -45,7 +45,7 @@
 
     <string name="h_start">Запуск</string>
     <string name="autostart">Запускати разом з магнітолою</string>
-    <string name="start_note">Якщо магнітола закриває фонові застосунки, вимкніть для MegaOpen Голос оптимізацію батареї або додайте його в автозапуск.</string>
+    <string name="start_note">Якщо магнітола закриває фонові застосунки, вимкніть для MegaOpen Компаньйон оптимізацію батареї або додайте його в автозапуск.</string>
     <string name="version">Версія %1$s</string>
 
     <string name="h_update">Оновлення</string>
@@ -59,7 +59,7 @@
     <string name="upd_confirm">Підтвердіть встановлення в системному вікні</string>
     <string name="upd_error">Не вдалося оновити: %1$s</string>
     <string name="upd_failed">Не встановлено: %1$s</string>
-    <string name="upd_allow">Дозвольте MegaOpen Голос встановлювати застосунки й натисніть кнопку ще раз</string>
+    <string name="upd_allow">Дозвольте MegaOpen Компаньйон встановлювати застосунки й натисніть кнопку ще раз</string>
 
     <string name="st_usb">По USB: %1$s</string>
     <string name="h_board_page">Налаштування плати</string>

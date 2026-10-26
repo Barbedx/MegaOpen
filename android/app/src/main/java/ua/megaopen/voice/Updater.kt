@@ -15,7 +15,8 @@ import java.security.MessageDigest
 
 /**
  * The app updates itself from the same GitHub releases as the board
- * (release.yml puts megaopen-voice-X.Y.Z.apk next to the firmware). Off the
+ * (release.yml puts megaopen-companion-X.Y.Z.apk next to the firmware, and
+ * the same file as megaopen-voice-X.Y.Z.apk, the name 1.5.4 looks for). Off the
  * rc channel: the latest release; on it: the newest of the last ten, an rc
  * included. An rc's APK carries its final's version, so the tag installed
  * last is remembered (Prefs.installedTag), as the board does (NVS fw/tag).
@@ -55,7 +56,7 @@ object Updater {
         val c = URL(url).openConnection() as HttpURLConnection
         c.connectTimeout = 10_000
         c.readTimeout = 20_000
-        c.setRequestProperty("User-Agent", "MegaOpen-Voice")
+        c.setRequestProperty("User-Agent", "MegaOpen-Companion")
         c.setRequestProperty("Accept", accept)
         c.instanceFollowRedirects = true
         if (c.responseCode !in 200..299) throw IOException("HTTP ${c.responseCode}")
@@ -80,7 +81,9 @@ object Updater {
         for (i in 0 until assets.length()) {
             val a = assets.getJSONObject(i)
             val n = a.optString("name")
-            if (n.startsWith("megaopen-voice-") && n.endsWith(".apk")) apk = a
+            // The new name first; a release with only the old one still updates.
+            if (n.startsWith("megaopen-companion-") && n.endsWith(".apk")) apk = a
+            else if (apk == null && n.startsWith("megaopen-voice-") && n.endsWith(".apk")) apk = a
             if (n == "SHA256SUMS") sums = a.optString("browser_download_url")
         }
         apk ?: return null

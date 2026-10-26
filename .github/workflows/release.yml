@@ -4,7 +4,8 @@
 #                 megaopen-<env>-X.Y.Z.bin           the app, for OTA (/update)
 #                 megaopen-<env>-X.Y.Z-factory.bin   bootloader + partitions +
 #                                                    boot_app0 + app, USB at 0x0
-#                 megaopen-voice-X.Y.Z.apk           the voice app (android/)
+#                 megaopen-companion-X.Y.Z.apk       the head unit's app (android/),
+#                 megaopen-voice-X.Y.Z.apk           the same bytes, the name 1.5.4 updates from
 #                 SHA256SUMS
 #   vX.Y.Z      on the SAME commit does not rebuild: it takes the assets of the
 #               newest vX.Y.Z-rc* release on that commit, checks SHA256SUMS and
@@ -74,7 +75,7 @@ jobs:
             ~/.platformio
             .pio/libdeps
           key: pio-release-${{ hashFiles('platformio.ini') }}
-      # The voice app goes out with the firmware it talks to (android/).
+      # The app goes out with the firmware it talks to (android/).
       - uses: actions/setup-java@v5
         if: env.RC == '1'
         with:
@@ -84,7 +85,7 @@ jobs:
         if: env.RC == '1'
         with:
           gradle-version: "8.9"
-      - name: Voice app
+      - name: Companion app
         if: env.RC == '1'
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
@@ -101,6 +102,8 @@ jobs:
           "$signer" verify --print-certs android/app/build/outputs/apk/release/app-release.apk | grep -i 'SHA-256'
           "$signer" verify --print-certs android/app/build/outputs/apk/release/app-release.apk | grep -qi 'c6dd740be3026a422b0a17efd43fdf9b8868e732c72901017913b1b9b4f8c6ae' || { echo "::error::APK not signed with the MegaOpen Voice key"; exit 1; }
           mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/megaopen-companion-$VER.apk"
+          # The old name too, same bytes: MegaOpen Voice 1.5.4 updates from that one.
           cp android/app/build/outputs/apk/release/app-release.apk "dist/megaopen-voice-$VER.apk"
       - name: Build
         if: env.RC == '1'
@@ -145,7 +148,7 @@ jobs:
             echo
             echo "First flash over USB: \`esptool.py write_flash 0x0 megaopen-<env>-$VER-factory.bin\`."
             echo "Later updates: \`megaopen-<env>-$VER.bin\` from the board's /update page."
-            echo "Voice alerts on the head unit: install \`megaopen-voice-$VER.apk\` (Android 7+, no root)."
+            echo "The head unit's app: install \`megaopen-companion-$VER.apk\` (Android 7+, no root; \`megaopen-voice-$VER.apk\` is the same file)."
           } > release.md
           cat release.md
           gh release create "$GITHUB_REF_NAME" --title "MegaOpen $GITHUB_REF_NAME" \

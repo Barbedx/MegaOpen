@@ -1,7 +1,7 @@
 # The USB link (1.6)
 
 The board's USB-C port, plugged into the head unit, carries what WiFi carries
-today: the settings page, the alerts for the voice app, later the board's way to
+today: the settings page, the alerts for the app (MegaOpen Companion), later the board's way to
 the internet (log push, updates). WiFi then becomes the fallback, on only when
 no app is on the other end. The canbox UART stays: DUDU's own car screens read it
 (com.syu.ms), and nothing else can feed them.
@@ -15,7 +15,7 @@ Owner's call, 2026-10-25: all of it ships as 1.6, in one release.
 | interface | what | who |
 | --- | --- | --- |
 | CDC | the serial console, esptool's reset | a PC |
-| vendor (class 0xFF, two bulk endpoints, 64 B) | the link | MegaOpen Voice |
+| vendor (class 0xFF, two bulk endpoints, 64 B) | the link | MegaOpen Companion |
 | HID (t2can_usbhid only) | media keys | the head unit |
 
 Vendor, not a second CDC: Android hands a vendor interface to the app that asks

@@ -1,4 +1,6 @@
-# MegaOpen Voice
+# MegaOpen Companion
+
+The board's app on the head unit: the alerts out loud, the board's page over USB, the board's internet. Package id `ua.megaopen.voice` (its first name), kept so every install updates.
 
 The head unit's voice for the board's panel alerts. A foreground service polls
 `GET /api/alerts?since=N` (src/net/WebUiMap.cpp) and says each new alert with
