@@ -217,13 +217,20 @@ static void serialSink(const char* line, int len, uint32_t)
 }
 #if FEATURE_LOG_PUSH
 // The head unit's UART for GitHub: its frames ([hur] decoded, and the [hu]
-// echo T/V/R/J when it runs), each kind (direction, cmd) the first time and
-// then only when its bytes change. A frame repeated every 100 ms would fill
-// the push; a change is never left out. The LogBus task only.
-static bool huChanged(const char* line, int len)
+// echo T/V/R/J when it runs), each kind (direction, command, sub-command: the
+// 7D family is one command) the first time and then only when its bytes
+// change; V, the telemetry the board sends (its values are in [drive]), at
+// most once in V_GAP_MS per kind. Keying on the command alone let every 7D
+// line through (7D 02, 03, 05 alternate): 90 % of the car's pushed log was
+// [hu], 2.3 MB in 39 minutes (1.6.0-rc5). The LogBus task only; the table in
+// PSRAM.
+static bool huChanged(const char* line, int len, uint32_t ms)
 {
-    static uint32_t seen[5][256];
-    int slot, cmd = 0;
+    struct Seen { uint32_t h, at; };
+    constexpr uint32_t SLOTS = 1024, V_GAP_MS = 10000;
+    static Seen* seen = (Seen*)heap_caps_calloc(SLOTS, sizeof(Seen), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!seen) return false;   // no table: the frames stay out of the push
+    int slot = 4, cmd = 0, sub = 0;
     const char* rest;
     if (!strncmp(line, HUR, sizeof(HUR) - 1)) {
         const char* c = strstr(line, "cmd=");
@@ -231,18 +238,32 @@ static bool huChanged(const char* line, int len)
         cmd = (int)strtol(c + 4, nullptr, 16) & 0xFF;
         slot = 0;
         rest = c + 6;
+        const char* l = strstr(c, " len=");
+        const char* d = l ? strchr(l + 5, ' ') : nullptr;
+        if (d && d[1] == '(') d = strchr(d + 1, ')') ? strchr(d + 1, ')') + 1 : nullptr;
+        if (d) sub = (int)strtol(d, nullptr, 16) & 0xFF;
     } else {
-        const char d = line[sizeof(HUE) - 1];
-        slot = d == 'T' ? 1 : d == 'V' ? 2 : d == 'R' ? 3 : 4;
+        const char dir = line[sizeof(HUE) - 1];
+        slot = dir == 'T' ? 1 : dir == 'V' ? 2 : dir == 'R' ? 3 : 4;
         rest = line + sizeof(HUE) + 1;
-        if (!strncmp(rest, "2E ", 3)) cmd = (int)strtol(rest + 3, nullptr, 16) & 0xFF;
-        else if (!strncmp(rest, "cmd=", 4)) cmd = (int)strtol(rest + 4, nullptr, 16) & 0xFF;
+        if (!strncmp(rest, "2E ", 3)) {             // 2E CMD LEN D0 ...
+            char* e = nullptr;
+            cmd = (int)strtol(rest + 3, &e, 16) & 0xFF;
+            if (e) strtol(e, &e, 16);                // the length
+            if (e && *e == ' ' && e[1] != '|') sub = (int)strtol(e, nullptr, 16) & 0xFF;
+        } else if (!strncmp(rest, "cmd=", 4)) {
+            cmd = (int)strtol(rest + 4, nullptr, 16) & 0xFF;
+        }
     }
     uint32_t h = 2166136261u;
     for (const char* p = rest; p < line + len; ++p) h = (h ^ (uint8_t)*p) * 16777619u;
     h += !h;
-    if (seen[slot][cmd] == h) return false;
-    seen[slot][cmd] = h;
+    const uint32_t key = ((uint32_t)slot << 16) | ((uint32_t)cmd << 8) | (uint32_t)sub;
+    Seen& s = seen[(key * 2654435761u) >> 22];
+    if (s.h == h) return false;
+    if (slot == 2 && s.h && (uint32_t)(ms - s.at) < V_GAP_MS) return false;
+    s.h = h;
+    s.at = ms;
     return true;
 }
 
@@ -252,7 +273,7 @@ static void pushSink(const char* line, int len, uint32_t ms)
 {
     const bool hur = !strncmp(line, HUR, sizeof(HUR) - 1);
     if (hur || isHuEcho(line)) {
-        if (huChanged(line, len)) LogPush::sink(line, len, ms);
+        if (huChanged(line, len, ms)) LogPush::sink(line, len, ms);
         return;
     }
     if (!isWebOnly(line)) LogPush::sink(line, len, ms);
