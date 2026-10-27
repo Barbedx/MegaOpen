@@ -8,9 +8,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [1.6.2] - 2026-10-27
 
 ### Added
+- `[drive]` also carries the fuel: litres (0x5C5, and the cluster's 0x715 copy) and the low-fuel bit, after a low-fuel alert with a full enough tank (2026-10-27).
 - Авто › «Передачі»: live once a second, how the board takes the gear: speed, rpm, the ratio, the gear it reads, clutch and neutral; the table (editable) next to what the learner collected near each value, and «Це N-та» to put the current ratio into the table while driving steadily in that gear. `GET /api/gears`.
 
 ### Changed
+- Six gears: the owner's car is a six-speed, and the computed five-speed table read its 6th (431) as N and its 2nd and 3rd at the edge. The defaults are now the ratios the 1.6.1 learner measured on a drive, 147 207 275 359 431 for 2nd..6th (1st, 80, from their progression), and Settings › «Передачі» has a 6th. The table moves to new keys, so a 1.6.1 board takes these defaults once.
 - The head-unit map names a field the board fills itself «плата → ГУ» (it is sent over the UART like the rest), not an empty binding, and it can be bound like any other: a CAN ID or a constant feeds it and the computation stands down; «плата → ГУ» in the editor brings it back.
 - Everything that goes to GitHub is one card, Плата › Логи в GitHub (the log, the CAN recording, the daily limit); the car page's recording card links to it. The live page's recording is «CSV сигналів у браузер», not a second «Запис».
 

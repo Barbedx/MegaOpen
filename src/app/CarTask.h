@@ -83,9 +83,9 @@ namespace App
         // ---- any task: the reminders' speeds (Settings › Reminders), km/h ------
         // Two bytes the car task reads on its next frame; 0 = that one off.
         void setReminderSpeeds(uint8_t lightsKmh, uint8_t brakeKmh);
-        // Settings › Gears: km/h per 1000 rpm x10, 1st..5th; applied at the
+        // Settings › Gears: km/h per 1000 rpm x10, 1st..6th; applied at the
         // next frame. Any task.
-        void setGears(const uint16_t ratio[5]);
+        void setGears(const uint16_t ratio[6]);
         // The gear learner's peaks so far this boot (ratio, seconds steady),
         // lowest first; how many. Any task.
         uint8_t gearPeaks(uint16_t* ratio, uint32_t* secs, uint8_t max);

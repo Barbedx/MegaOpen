@@ -39,9 +39,9 @@ namespace Cfg
         // The driving reminders' speeds, km/h (src/vehicle/Derived.h); 0 = off.
         uint8_t  remindLightsKmh = 10;
         uint8_t  remindBrakeKmh  = 5;
-        // The gears, km/h per 1000 rpm x10, 1st..5th (src/vehicle/Derived.h);
+        // The gears, km/h per 1000 rpm x10, 1st..6th (src/vehicle/Derived.h);
         // 0 = no such gear. Copy what [gear] learns, or the live gear_ratio.
-        uint16_t gearRatio[5] = {75, 136, 200, 270, 352};
+        uint16_t gearRatio[6] = {80, 147, 207, 275, 359, 431};
         Str      apName = "MegaOpen";
         Str      apPass = MO_AP_PASS;      // >= 8 chars or the AP comes up open
 

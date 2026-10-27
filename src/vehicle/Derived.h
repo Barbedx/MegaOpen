@@ -34,11 +34,12 @@ namespace Vehicle
         static constexpr uint8_t  LIGHTS_KMH = 10, BRAKE_KMH = 5;
         static constexpr uint8_t  BAND_PCT   = 12;      // a gear matches within ±12 %
 
-        // km/h per 1000 rpm x10, 1st..6th; 0 = no such gear. The defaults are a
-        // Mégane II 1.6 16V five-speed on 205/55 R16, computed, not measured:
-        // the live gear_ratio on the page is what to copy here.
+        // km/h per 1000 rpm x10, 1st..6th; 0 = no such gear. The defaults are
+        // the owner's Mégane II CC, a six-speed: 2nd..6th learned on a drive
+        // (1.6.1 [gear], 2026-10-27: 147 207 275 359 431); 1st (80) not yet
+        // seen, from the ratios' progression.
         struct Gears {
-            uint16_t ratio[GEARS] = {75, 136, 200, 270, 352, 0};
+            uint16_t ratio[GEARS] = {80, 147, 207, 275, 359, 431};
         };
 
         void setGears(const Gears& g) { _g = g; }

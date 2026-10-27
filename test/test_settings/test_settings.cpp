@@ -628,8 +628,8 @@ void test_settings_struct_unchanged()
         const SEntry& e = Registry::at(i);
         if (scalar(e) && !(e.flags & F_VOLATILE) && !(e.apply & (AP_KNOBS | AP_CAR | AP_CAP | AP_HU))) ++n;
     }
-    // 49 scalar/enum fields in Settings (carSig counts three, gearRatio five), all in the registry.
-    TEST_ASSERT_EQUAL(49, n);
+    // 50 scalar/enum fields in Settings (carSig counts three, gearRatio six), all in the registry.
+    TEST_ASSERT_EQUAL(50, n);
     (void)kNotInRegistry;
 }
 

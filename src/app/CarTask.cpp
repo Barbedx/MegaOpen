@@ -51,7 +51,7 @@ namespace App
             volatile uint8_t   s_rmLights = Vehicle::Derived::LIGHTS_KMH, s_rmBrake = Vehicle::Derived::BRAKE_KMH;
             // Settings › Gears: written by any task, applied by this one.
             portMUX_TYPE       s_gearMux = portMUX_INITIALIZER_UNLOCKED;
-            uint16_t           s_gearSet[5] = {75, 136, 200, 270, 352};
+            uint16_t           s_gearSet[6] = {80, 147, 207, 275, 359, 431};
             volatile bool      s_gearDirty = false;
 
             // The gear learner: steady ratios with the clutch up, binned (2 units
@@ -120,12 +120,12 @@ namespace App
                 const uint8_t found = peaks(pr, ps, 6);
                 for (uint8_t i = 0; i < found; ++i)
                     n += snprintf(out + n, sizeof(out) - n, " %u (%lu s)", (unsigned)pr[i], (unsigned long)ps[i]);
-                uint16_t g[5];
+                uint16_t g[6];
                 portENTER_CRITICAL(&s_gearMux);
                 memcpy(g, s_gearSet, sizeof(g));
                 portEXIT_CRITICAL(&s_gearMux);
-                LogBus::printf("[gear] steady ratios seen (km/h per 1000 rpm x10, clutch up):%s; table %u %u %u %u %u",
-                               found ? out : " none yet", g[0], g[1], g[2], g[3], g[4]);
+                LogBus::printf("[gear] steady ratios seen (km/h per 1000 rpm x10, clutch up):%s; table %u %u %u %u %u %u",
+                               found ? out : " none yet", g[0], g[1], g[2], g[3], g[4], g[5]);
             }
 
             // The odometers come rarely (0x5FD, 0x5C5: at ignition, then per km):
@@ -180,13 +180,13 @@ namespace App
                 auto g = [&](uint8_t s) -> long { return st->has(s) ? (long)st->get(s) : -9; };
                 LogBus::printf("[drive] %ld.%02ld km/h %ld rpm ratio %ld gear %ld clutch %ld N %ld R %ld "
                                "lights pos/dip/main %ld/%ld/%ld handbrake %ld; no_lights %ld handbrake_moving %ld; "
-                               "odometer %ld (age %ld s), cluster %ld",
+                               "odometer %ld (age %ld s), cluster %ld; fuel %ld L (apv %ld) low %ld",
                                (long)(v / 100), (long)(v % 100), (long)rpm, g(SIG_GEAR_RATIO), g(SIG_GEAR),
                                g(SIG_CLUTCH), g(SIG_NEUTRAL), g(SIG_REVERSE), g(SIG_LIGHT_POS),
                                g(SIG_LIGHT_DIPPED), g(SIG_LIGHT_MAIN), g(SIG_HANDBRAKE),
                                g(SIG_DRIVE_NO_LIGHTS), g(SIG_DRIVE_HANDBRAKE), g(SIG_ODOMETER),
                                st->has(SIG_ODOMETER) ? (long)(st->ageMs(SIG_ODOMETER, millis()) / 1000) : -1L,
-                               g(SIG_ODO_CLUSTER));
+                               g(SIG_ODO_CLUSTER), g(SIG_FUEL_LEVEL), g(SIG_FUEL_LEVEL_APV), g(SIG_FUEL_LOW));
             }
             // The panel alert rules: httpd stages, this task applies and evaluates.
             Staged<Vehicle::AlertRules> s_alerts;
@@ -432,7 +432,7 @@ namespace App
                     if (s_gearDirty) {
                         Vehicle::Derived::Gears gs;
                         portENTER_CRITICAL(&s_gearMux);
-                        for (int i = 0; i < 5; ++i) gs.ratio[i] = s_gearSet[i];
+                        for (int i = 0; i < 6; ++i) gs.ratio[i] = s_gearSet[i];
                         s_gearDirty = false;
                         portEXIT_CRITICAL(&s_gearMux);
                         s_derived.setGears(gs);
@@ -607,7 +607,7 @@ namespace App
 
         uint8_t gearPeaks(uint16_t* ratio, uint32_t* secs, uint8_t max) { return peaks(ratio, secs, max); }
 
-        void setGears(const uint16_t ratio[5])
+        void setGears(const uint16_t ratio[6])
         {
             portENTER_CRITICAL(&s_gearMux);
             const bool same = !memcmp(s_gearSet, ratio, sizeof(s_gearSet));

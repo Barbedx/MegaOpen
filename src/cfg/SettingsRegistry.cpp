@@ -520,6 +520,8 @@ namespace Cfg
              0, 999, 1, nullptr, nullptr, S_GET(s.gearRatio[3]), S_PUT(s.gearRatio[3] = (uint16_t)v)},
             {"gear5", "5th", "gears", SType::Int, W, AP_NONE,
              0, 999, 1, nullptr, nullptr, S_GET(s.gearRatio[4]), S_PUT(s.gearRatio[4] = (uint16_t)v)},
+            {"gear6", "6th", "gears", SType::Int, W, AP_NONE,
+             0, 999, 1, nullptr, nullptr, S_GET(s.gearRatio[5]), S_PUT(s.gearRatio[5] = (uint16_t)v)},
             G("service", "Service", nullptr, WM),
             {"logLevel", "Log level", "service", SType::Enum, WM | F_VOLATILE, AP_NONE,
              0, 0, 0, nullptr, &kLogLevels, [](const Model&) -> int32_t { return (int32_t)Log::level(); },

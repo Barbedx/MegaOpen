@@ -596,7 +596,7 @@ void WebUi::routesAlerts()
         sig("clutch", Vehicle::SIG_CLUTCH);
         sig("neutral", Vehicle::SIG_NEUTRAL);
         JsonArray t = d["table"].to<JsonArray>();
-        for (int i = 0; i < 5; ++i) t.add(_cfg->s().gearRatio[i]);
+        for (int i = 0; i < 6; ++i) t.add(_cfg->s().gearRatio[i]);
         uint16_t pr[6];
         uint32_t ps[6];
         const uint8_t n = App::Car::gearPeaks(pr, ps, 6);

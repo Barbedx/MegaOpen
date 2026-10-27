@@ -566,7 +566,7 @@ const lpView=()=>{const v=S.lp||(S.lp={on:true,tok:false,repo:'Barbedx/megaopen-
 g('/api/logpush',lpView);
 /* /api/gears (src/net/WebUiMap.cpp): живі значення передачі, таблиця, піки навчання */
 g('/api/gears',()=>{const v=S.car&&S.car.speed!==undefined?S.car.speed:4250,r=2100,k=Math.round(v/r*100);
- return {speed:v,rpm:r,ratio:k,gear:k>230?4:3,clutch:0,neutral:0,table:[75,136,200,270,352],peaks:[[137,40],[203,95]]}});
+ return {speed:v,rpm:r,ratio:k,gear:k>230?4:3,clutch:0,neutral:0,table:[80,147,207,275,359,431],peaks:[[147,40],[207,95]]}});
 /* CarDiag (src/app/CarDiag.cpp): 21 C1 клімату; проба — одна відповідь, опитування — салон повільно гріється */
 const dgView=()=>{const v=S.dg||(S.dg={on:false,session:false,interval:5,ok:0,sent:0,last:'',at:0,cabin:9.5});
  if(v.on&&now()-v.at>v.interval*1000){v.at=now();v.sent++;v.ok++;v.last='ok';v.cabin=Math.min(24,v.cabin+0.5)}
