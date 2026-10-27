@@ -1019,7 +1019,9 @@ void test_experiments_are_off_by_default_and_each_switches_one_thing()
     run(0);                                         // nothing new reaches the head unit
     TEST_ASSERT_EQUAL_INT(0, g_sub09);
     TEST_ASSERT_EQUAL_INT(0, g_cmd21 + g_cmd22 + g_cmd23);
-    TEST_ASSERT_EQUAL_UINT8(0, g_odo[1]);           // no 0x5FD odometer: no 7D 04
+    // No 0x5FD: the cluster's odometer (0x5C5) still goes in 7D 04, with no fuel in D4-D5.
+    const uint8_t plain[] = {0x2E, 0x7D, 0x0C, 0x04, 0x40, 0xE2, 0x01};
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(plain, g_odo, sizeof(plain));
     run(E::EXP_COOLANT);
     TEST_ASSERT_TRUE(g_sub09 > 0);
     TEST_ASSERT_EQUAL_INT(0, g_cmd22);

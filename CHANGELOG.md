@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Fixed
+- The head unit's odometer was empty for a drive: 0x5FD did not come once (1.6.1 `[drive]`, two drives), so the field now takes the cluster's odometer (0x5C5, always on the bus) whenever 0x5FD is silent, not only under the 7D 04 experiments.
+
 ### Removed
 - The live page's «CSV сигналів у браузер» recorder: the board's own CAN recording, `[drive]` in the log and the log push cover it, and it only ran while the tab was open.
 

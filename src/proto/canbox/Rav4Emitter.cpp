@@ -353,12 +353,13 @@ namespace Canbox
                 return true;
             }
             case M_ODO: {
-                // EXP_FUEL_7D04 also takes the cluster's odometer (0x5C5) when
-                // 0x5FD is silent: the X84 matrix has no 0x5FD.
+                // 0x5FD when it speaks, else the cluster's odometer (0x5C5, in the
+                // X84 matrix and on the bus all the time): the car's 0x5FD did not
+                // come once in a whole drive (1.6.1 [drive], 2026-10-27).
                 const bool fuelExp = (_exp & EXP_FUEL_7D04) != 0;
                 const bool battExp = (_exp & EXP_BATT) && battAt(_exp) == BattAt::Odo7D04;
                 const uint8_t odo = s.has(SIG_ODOMETER) ? SIG_ODOMETER
-                                  : (fuelExp || battExp) && s.has(SIG_ODO_CLUSTER) ? SIG_ODO_CLUSTER : SIG_COUNT;
+                                  : s.has(SIG_ODO_CLUSTER) ? SIG_ODO_CLUSTER : SIG_COUNT;
                 if (odo == SIG_COUNT) return false;
                 uint32_t km = (uint32_t)s.get(odo);
                 cmd = 0x7D; len = 12;
