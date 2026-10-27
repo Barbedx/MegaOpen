@@ -2479,7 +2479,10 @@ void setup()
     memMark("web");
     // The app's link pipes to the web server: after it listens.
     UsbLink::begin(g_wifi.apSsid().c_str());
-    g_wifi.setLinkAlive(UsbLink::alive);
+    // wifiAuto: WiFi off only for a client that carries the board's internet
+    // (MegaOpen Companion's "net"). The WebUSB page has none: with WiFi off
+    // under it the board had neither, no log push, no update check.
+    g_wifi.setLinkAlive(UsbLink::netAvailable);
     memMark("usblink");
     // The OTA trial's verdict comes from net_svc (Housekeeping).
     App::OtaTrial::begin();

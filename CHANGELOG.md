@@ -5,11 +5,17 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Removed
+- The live page's «CSV сигналів у браузер» recorder: the board's own CAN recording, `[drive]` in the log and the log push cover it, and it only ran while the tab was open.
+
 ## [1.6.2] - 2026-10-27
 
 ### Added
 - `[drive]` also carries the fuel: litres (0x5C5, and the cluster's 0x715 copy) and the low-fuel bit, after a low-fuel alert with a full enough tank (2026-10-27).
 - Авто › «Передачі»: live once a second, how the board takes the gear: speed, rpm, the ratio, the gear it reads, clutch and neutral; the table (editable) next to what the learner collected near each value, and «Це N-та» to put the current ratio into the table while driving steadily in that gear. `GET /api/gears`.
+
+### Fixed
+- «Без WiFi, коли є USB» turned WiFi off for any client on the USB link, the WebUSB page too, which carries no internet: the board then had neither. It now goes off only for a client that carries the board's internet (MegaOpen Companion).
 
 ### Changed
 - Six gears: the owner's car is a six-speed, and the computed five-speed table read its 6th (431) as N and its 2nd and 3rd at the edge. The defaults are now the ratios the 1.6.1 learner measured on a drive, 147 207 275 359 431 for 2nd..6th (1st, 80, from their progression), and Settings › «Передачі» has a 6th. The table moves to new keys, so a 1.6.1 board takes these defaults once.
