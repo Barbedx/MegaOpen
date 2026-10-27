@@ -26,12 +26,16 @@ const mapEd=r=>{const c=r.can||{id:'',byte:0,len:1,shift:0,mask:'FF',mul:1,div:1
 SCR.car={title:'nav.car',async render(m){
  const C2=has('can2'),CP=has('capture'),V=has('vehicle');
  const DG=has('diag');
- const[c2,cp,mp,cb,dg]=await Promise.all([getIf(C2,'/api/can2'),getIf(CP,'/api/cap'),API.get('/api/map'),getIf(V,'/api/can'),getIf(DG,'/api/diag')]);
+ const[c2,cp,mp,cb,dg,lp]=await Promise.all([getIf(C2,'/api/can2'),getIf(CP,'/api/cap'),API.get('/api/map'),getIf(V,'/api/can'),getIf(DG,'/api/diag'),getIf(has('logpush'),'/api/logpush')]);
  this.n=0;this.filesSig='';this.grp='all';this.learn={};this.mp=mp;
  /* фільтр за групою: значення — 'all' або назва групи, як у data-g рядка */
  const groups=[['all',t('ca.all')],...[...new Set(CAT.raise.map(x=>x.group))].map(g=>[g,g])];
  m.innerHTML=
  card(t('ca.live'),row(t('ca.liveRow'),`<a class="btn" href="#live">${t('ca.open')}</a>`,t('ca.liveSub')))+
+ /* передачі (src/vehicle/Derived.h): наживо, як плата рахує; «Це N-та» пише поточне ratio в таблицю */
+ (C2?card(t('ca.gears'),`<div class="kv"><div><small>${t('ca.gSpeed')}</small><b id="gV"></b></div><div><small>${t('ca.gRpm')}</small><b id="gR"></b></div><div><small>ratio</small><b id="gK"></b></div><div><small>${t('ca.gGear')}</small><b id="gG"></b></div><div><small>${t('ca.gClutch')}</small><b id="gC"></b></div></div>`+
+  `<div class="tw"><table><thead><tr><th>#</th><th>${t('ca.gTable')}</th><th>${t('ca.gLearned')}</th><th></th></tr></thead><tbody id="gT">${[1,2,3,4,5].map(i=>`<tr data-g="${i}"><td>${i}</td><td>${num('/api/settings|gear'+i,'','min="0" max="999" style="max-width:6em"')}</td><td data-l class="mono"></td><td><button class="btn sm" type="button" data-set="${i}">${t('ca.gThis',i)}</button></td></tr>`).join('')}</tbody></table></div>`+
+  row('','',t('ca.gearsH'))+`<div class="mono" id="gP"></div>`,'cGears'):'')+
  (C2?card('CAN A',row(t('ca.bus'),'<span id="cSt" class="chip off">…</span>','<span id="cStW"></span>')+
   `<div class="kv"><div><small>${t('ca.fps')}</small><b id="cFps"></b></div><div><small>${t('ca.total')}</small><b id="cFr"></b></div><div><small>rec / tec</small><b id="cErr"></b></div><div><small>${t('ca.overflows')}</small><b id="cOv"></b></div></div>`+
   row(t('ca.speed'),sel('/api/can2|bitrate',enumOpts('canRates'),c2.setting||0),'',t('ca.speedH'))):notBuilt('CAN A','CAN A'))+
@@ -44,6 +48,7 @@ SCR.car={title:'nav.car',async render(m){
   `<div class="kv"><div><small>${t('ca.recorded')}</small><b id="pFr"></b></div><div><small>${t('ca.lost')}</small><b id="pDr"></b></div><div><small>${t('ca.marks')}</small><b id="pMk"></b></div><div><small>ID</small><b id="pId"></b></div><div><small>${t('ca.file')}</small><b id="pFile"></b></div><div><small>${t('ca.storage')}</small><b id="pSt"></b></div></div>`+
   '<div class="pad"><div class="bar big"><i id="pBar"></i></div></div>'+
   row(t('k.set.cap.autostart'),sw('/api/settings|cap.autostart',cp.settings.autostart),'',t('ca.autostartH'))+
+  (lp?row(t('bd.push'),`<a class="btn" href="#board">${t('ca.pushWhere')}</a>`,'',t('ca.pushMoved')):'')+
   row(t('k.set.cap.mode'),seg('/api/settings|cap.mode',enumOpts('capModes'),cp.settings.mode)))+
  card(t('ca.files'),row('','',t('ca.filesH'))+`<div id="files"></div><div class="fr"><button class="btn dng" type="button" id="fUnp">${t('ca.delUnp')}</button></div>`,'cFiles','custom'):C2?notBuilt(t('ca.rec'),t('ca.noRec')):'')+
  card(t('ca.rav4'),
@@ -58,6 +63,9 @@ SCR.car={title:'nav.car',async render(m){
  fold(t('ca.hu'),row(t('ca.show'),seg('#huIn',[['1',t('ca.fromHu')],['0',t('ca.everything')]],'1'),'',t('ca.huH'))+`<div class="tw"><table><thead><tr><th>${t('ca.ago')}</th><th>${t('ca.who')}</th><th>${t('ca.cmd')}</th><th>${t('ca.data')}</th></tr></thead><tbody id="huLog"></tbody></table></div>`,'cHu')+
  (V?fold(t('ca.ids'),row(t('ca.idTable'),sw('/api/can/sniff|on',!!cb.sniff),'',t('ca.idTableH'))+`<div class="fr"><button class="btn" type="button" id="idBase">${t('ca.baseline')}</button><button class="btn" type="button" id="idClr">${t('ca.clear')}</button></div><div class="tw"><table><thead><tr><th>ID</th><th>${t('ca.count')}</th><th>${t('ca.bytes')}</th></tr></thead><tbody id="ids"></tbody></table></div>`,'cIds'):'');
  $$('.card:not(.custom)',m).forEach(c=>saver(c,genericSave,'[data-k]'));
+ const gt=$('#gT');if(gt)gt.onclick=e=>{const b=e.target.closest('[data-set]');if(!b)return;const i=+b.dataset.set;
+  if(!this.gK){sv(svOf(b),'bad',t('ca.gNoRatio'));return}
+  run(b,()=>API.post('/api/settings',{['gear'+i]:this.gK}),t('ca.gSaved',i,this.gK)).then(()=>this.gears())};
  if(dg)$('#dSweep').onclick=e=>ask(e.target,t('ca.diagSweepAsk'),()=>run(e.target,async()=>{await API.post('/api/diag',{sweep:true});setTimeout(()=>this.diag(),2000)},t('ca.diagSent')));
  if(dg)$('#dProbe').onclick=e=>run(e.target,async()=>{await API.post('/api/diag',{probe:true});setTimeout(()=>this.diag(),1500)},t('ca.diagSent'));
  if(CP){$('#cRec').onclick=e=>run(e.target,()=>API.post(e.target.classList.contains('on')?'/api/cap/stop':'/api/cap/start')).then(()=>this.tick(true));
@@ -123,7 +131,16 @@ async diag(){if(!has('diag')||!$('#dSt'))return;const v=await API.get('/api/diag
  const ok=v.last==='ok',bad=v.state==='fault'||v.state==='stopped'||v.last==='negative';
  setChip('#dSt',bad?'bad':ok?'ok':v.state==='off'?'off':'warn',t('ca.diag.'+v.state));
  $('#dW').textContent=(v.cabin!==undefined?t('ca.diagCabin',v.cabin.toFixed(1),v.sun):'')+(v.last?' · '+v.last+(v.nrc?' 7F 21 '+v.nrc.toString(16).toUpperCase().padStart(2,'0'):''):'')+(v.reply?' · '+v.reply:'')},
-async tick(force){this.n++;const[c2,cp]=await Promise.all([getIf(has('can2'),'/api/can2'),getIf(has('capture'),'/api/cap')]);if(!$('#cMap'))return;
+/* картка передач: значення наживо, таблиця з налаштувань, піки навчання */
+async gears(){if(!$('#gT'))return;const g=await API.get('/api/gears');const nv=v=>v===null||v===undefined?DASH:v;
+ $('#gV').textContent=g.speed===null?DASH:(g.speed/100).toFixed(1);$('#gR').textContent=nv(g.rpm);$('#gK').textContent=nv(g.ratio);
+ $('#gG').textContent=g.gear===null?DASH:g.gear<0?'R':g.gear===0?'N':g.gear;$('#gC').textContent=(g.clutch?t('ca.gPressed'):'—')+(g.neutral?' · N':'');
+ this.gK=g.ratio;
+ $$('#gT tr').forEach((tr,i)=>{const inp=$('input',tr);if(inp&&document.activeElement!==inp&&inp.value!==String(g.table[i]))inp.value=g.table[i];
+  const p=(g.peaks||[]).map(x=>x[0]).reduce((b,x)=>b===null||Math.abs(x-g.table[i])<Math.abs(b-g.table[i])?x:b,null);
+  $('[data-l]',tr).textContent=p!==null&&g.table[i]&&Math.abs(p-g.table[i])*100<=g.table[i]*20?p:DASH});
+ $('#gP').textContent=(g.peaks||[]).length?t('ca.gPeaks',g.peaks.map(x=>x[0]+' ('+x[1]+' s)').join(', ')):t('ca.gNoPeaks')},
+async tick(force){this.n++;await this.gears();const[c2,cp]=await Promise.all([getIf(has('can2'),'/api/can2'),getIf(has('capture'),'/api/cap')]);if(!$('#cMap'))return;
  if(c2){canChip($('#cSt'),c2);
  $('#cStW').textContent=c2.autobaud!=='manual'?t('ca.autobaud'):t('ca.manual',c2.setting/1000)+(c2.fps?'':t('ca.checkRate'));
  $('#cFps').textContent=fmtN(c2.fps);$('#cFr').textContent=fmtN(c2.frames);$('#cErr').textContent=c2.rec+' / '+c2.tec;$('#cOv').textContent=c2.hwOverflows;

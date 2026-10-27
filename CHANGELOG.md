@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Added
+- Авто › «Передачі»: live once a second, how the board takes the gear: speed, rpm, the ratio, the gear it reads, clutch and neutral; the table (editable) next to what the learner collected near each value, and «Це N-та» to put the current ratio into the table while driving steadily in that gear. `GET /api/gears`.
+
+### Changed
+- The head-unit map names a field the board fills itself «плата → ГУ» (it is sent over the UART like the rest), not an empty binding.
+- Everything that goes to GitHub is one card, Плата › Логи в GitHub (the log, the CAN recording, the daily limit); the car page's recording card links to it. The live page's recording is «CSV сигналів у браузер», not a second «Запис».
+
 ## [1.6.1] - 2026-10-26
 
 1.6.0 and everything after its rcs, as one version both the board and MegaOpen Companion see as newer than any 1.6.0 (an rc1 put on by hand took itself for the final).

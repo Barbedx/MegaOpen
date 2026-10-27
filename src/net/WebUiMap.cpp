@@ -579,6 +579,38 @@ void WebUi::routesDiag()
 // numbers start again from 1). POST /api/alerts/test {sig?}: a test entry.
 void WebUi::routesAlerts()
 {
+    // GET /api/gears: the gear card on the car page, polled once a second.
+    // Live: speed (km/h x100), rpm, ratio (km/h per 1000 rpm x10), gear,
+    // clutch, neutral (null when the signal has no value); the table in use;
+    // the learner's peaks [ratio, seconds] this boot.
+    route("/api/gears", HTTP_GET, [this](PsychicRequest* r) {
+        JsonDocument d;
+        auto sig = [&](const char* key, uint8_t s) {
+            if (_state && _state->has(s)) d[key] = _state->get(s);
+            else d[key] = nullptr;
+        };
+        sig("speed", Vehicle::SIG_SPEED);
+        sig("rpm", Vehicle::SIG_RPM);
+        sig("ratio", Vehicle::SIG_GEAR_RATIO);
+        sig("gear", Vehicle::SIG_GEAR);
+        sig("clutch", Vehicle::SIG_CLUTCH);
+        sig("neutral", Vehicle::SIG_NEUTRAL);
+        JsonArray t = d["table"].to<JsonArray>();
+        for (int i = 0; i < 5; ++i) t.add(_cfg->s().gearRatio[i]);
+        uint16_t pr[6];
+        uint32_t ps[6];
+        const uint8_t n = App::Car::gearPeaks(pr, ps, 6);
+        JsonArray pk = d["peaks"].to<JsonArray>();
+        for (uint8_t i = 0; i < n; ++i) {
+            JsonArray e = pk.add<JsonArray>();
+            e.add(pr[i]);
+            e.add(ps[i]);
+        }
+        String out;
+        serializeJson(d, out);
+        return replyJson(r, out);
+    });
+
     route("/api/alerts", HTTP_GET, [](PsychicRequest* r) {
         const uint32_t since = r->hasParam("since") ? (uint32_t)strtoul(r->getParam("since")->value().c_str(), nullptr, 10) : 0;
         // t: the app's clock (ms since 1970), the board's date (src/utils/WallClock.h).

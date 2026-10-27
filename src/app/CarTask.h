@@ -86,6 +86,9 @@ namespace App
         // Settings › Gears: km/h per 1000 rpm x10, 1st..5th; applied at the
         // next frame. Any task.
         void setGears(const uint16_t ratio[5]);
+        // The gear learner's peaks so far this boot (ratio, seconds steady),
+        // lowest first; how many. Any task.
+        uint8_t gearPeaks(uint16_t* ratio, uint32_t* secs, uint8_t max);
 
         // ---- any task: State's pins, applied by the car task ------------------
         // Zero wait; a full queue drops the edit and counts it.

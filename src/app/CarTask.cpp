@@ -85,14 +85,13 @@ namespace App
 
             // The peaks: bins (smoothed over 3) above their neighbours within
             // ±8 %, each with at least 25 samples (5 s steady), up to 6.
-            void learnLog(uint32_t now)
+            // The peaks: bins (smoothed over 3) above their neighbours within
+            // ±8 %, each with at least 25 samples (5 s steady), up to max. Any
+            // task: the bins are read without a lock (a count off by one at worst).
+            uint8_t peaks(uint16_t* ratio, uint32_t* secs, uint8_t max)
             {
-                if ((uint32_t)(now - s_learnLogAt) < LEARN_LOG_MS || s_learnN < 25) return;
-                s_learnLogAt = now;
-                char out[160];
-                int n = 0;
                 uint8_t found = 0;
-                for (uint16_t b = 1; b + 1 < LEARN_BINS && found < 6; ++b) {
+                for (uint16_t b = 1; b + 1 < LEARN_BINS && found < max; ++b) {
                     const uint32_t c = (uint32_t)s_hist[b - 1] + s_hist[b] + s_hist[b + 1];
                     if (c < 25) continue;
                     const uint16_t w = (uint16_t)(b * 8 / 100 + 1);
@@ -103,10 +102,24 @@ namespace App
                         if (ck > c || (ck == c && k < b)) top = false;
                     }
                     if (!top) continue;
-                    n += snprintf(out + n, sizeof(out) - n, " %u (%lu s)", (unsigned)(b * 2 + 1),
-                                  (unsigned long)(c * LEARN_SAMPLE_MS / 1000));
+                    ratio[found] = (uint16_t)(b * 2 + 1);
+                    secs[found] = c * LEARN_SAMPLE_MS / 1000;
                     ++found;
                 }
+                return found;
+            }
+
+            void learnLog(uint32_t now)
+            {
+                if ((uint32_t)(now - s_learnLogAt) < LEARN_LOG_MS || s_learnN < 25) return;
+                s_learnLogAt = now;
+                char out[160];
+                int n = 0;
+                uint16_t pr[6];
+                uint32_t ps[6];
+                const uint8_t found = peaks(pr, ps, 6);
+                for (uint8_t i = 0; i < found; ++i)
+                    n += snprintf(out + n, sizeof(out) - n, " %u (%lu s)", (unsigned)pr[i], (unsigned long)ps[i]);
                 uint16_t g[5];
                 portENTER_CRITICAL(&s_gearMux);
                 memcpy(g, s_gearSet, sizeof(g));
@@ -587,6 +600,8 @@ namespace App
 
         bool         running() { return s_task != nullptr; }
         TaskHandle_t task()    { return s_task; }
+
+        uint8_t gearPeaks(uint16_t* ratio, uint32_t* secs, uint8_t max) { return peaks(ratio, secs, max); }
 
         void setGears(const uint16_t ratio[5])
         {
