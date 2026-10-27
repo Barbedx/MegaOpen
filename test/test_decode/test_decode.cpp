@@ -916,6 +916,26 @@ void test_reminder_speeds_are_settable()
     TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_DRIVE_HANDBRAKE));
 }
 
+// A computed field the owner bound on the head-unit map: the computation
+// stands down, the binding's value stays.
+void test_a_bound_derived_signal_is_left_to_its_binding()
+{
+    Derived d;
+    State s;
+    uint32_t t = 100;
+    auto at = [&](int32_t kmh100) { t += 50; s.set(SIG_SPEED, kmh100, t); s.set(SIG_RPM, 2000, t); d.update(s, t); };
+    s.set(SIG_LIGHT_DIPPED, 0, t); s.set(SIG_LIGHT_MAIN, 0, t);
+    at(3000);
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_DRIVE_NO_LIGHTS));
+    d.setBound(SIG_DRIVE_NO_LIGHTS, true);
+    s.set(SIG_DRIVE_NO_LIGHTS, 0, t);           // what the binding says
+    at(3000);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_DRIVE_NO_LIGHTS));
+    d.clearBound();
+    at(3000);
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_DRIVE_NO_LIGHTS));
+}
+
 // The safety pair (Derived::safety): moving with no beam on, or with the
 // handbrake up, each with its own speed band; and the text the panel shows.
 void test_driving_without_lights_or_with_the_handbrake()
@@ -1240,6 +1260,7 @@ int main(int, char**)
     RUN_TEST(test_alert_factory_is_low_fuel_lights_and_handbrake);
     RUN_TEST(test_driving_without_lights_or_with_the_handbrake);
     RUN_TEST(test_reminder_speeds_are_settable);
+    RUN_TEST(test_a_bound_derived_signal_is_left_to_its_binding);
     RUN_TEST(test_alert_cells_check_their_ranges_and_round_trip);
     RUN_TEST(test_alert_low_fuel_edge_fires_once_and_waits_for_the_glass);
     RUN_TEST(test_alert_already_on_at_first_sight_counts_as_rising);

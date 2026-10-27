@@ -16,7 +16,7 @@ namespace Vehicle
         template <size_t N>
         uint8_t give(const uint8_t (&a)[N], const uint8_t*& list) { list = a; return (uint8_t)N; }
 
-        void put(State& s, uint8_t sig, int64_t v, uint32_t now)
+        void store(State& s, uint8_t sig, int64_t v, uint32_t now)
         {
             if (v > INT32_MAX) v = INT32_MAX;
             s.set(sig, State::clamp(sig, (int32_t)v), now);
@@ -40,6 +40,19 @@ namespace Vehicle
             case SIG_DRIVE_HANDBRAKE: return give(kHandbrake, list);
             default:             list = nullptr; return 0;
         }
+    }
+
+    void Derived::put(State& s, uint8_t sig, int64_t v, uint32_t now)
+    {
+        if (bound(sig)) return;   // a CAN row or a constant feeds it instead
+        store(s, sig, v, now);
+    }
+
+    void Derived::setBound(uint8_t sig, bool on)
+    {
+        if (sig >= SIG_COUNT) return;
+        if (on) _bound[sig >> 3] = (uint8_t)(_bound[sig >> 3] | (1u << (sig & 7)));
+        else    _bound[sig >> 3] = (uint8_t)(_bound[sig >> 3] & ~(1u << (sig & 7)));
     }
 
     int8_t Derived::gearFor(const Gears& g, int32_t ratio)

@@ -1163,7 +1163,7 @@
  "ca.const": "fixed {0}",
  "ca.bind": "+ bind",
  "ca.calc": "board → HU",
- "ca.calcT": "The board fills this HU field itself: it computes the value (from speed, rpm, fuel use) and sends it over the UART with the rest. No CAN binding needed; the value in «now» is what goes to the HU.",
+ "ca.calcT": "The board fills this HU field itself: it computes the value (from speed, rpm, fuel use) and sends it over the UART with the rest. Tap to take the value from a car CAN ID or a constant instead; «board → HU» in the list brings the computation back.",
  "ca.testLeft": " · test {0} s",
  "ca.expT": "Workaround: show the value in another head unit field",
  "ca.exp": "experiment ↓",

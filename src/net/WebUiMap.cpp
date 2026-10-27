@@ -166,9 +166,9 @@ void WebUi::routesMap()
                                 RT::fmt(k, sizeof(k), kv, t.dec),
                                 has ? RT::fmt(v, sizeof(v), _state->get(t.sig), t.dec) : "null", how), sizeof(b)));
             if (left) out.put(b, fit(snprintf(b, sizeof(b), ",\"left\":%lu", (unsigned long)((left + 999) / 1000)), sizeof(b)));
-            // Unbound but computed by the board (avg speed, trip time, gear...):
-            // the page says so instead of offering a binding it does not need.
-            if (src == Vehicle::SRC_OFF && t.sig < Vehicle::SIG_COUNT) {
+            // Computed by the board (avg speed, trip time, gear...): unbound, the
+            // page says "board -> HU"; bound, its editor offers that to go back.
+            if (t.sig < Vehicle::SIG_COUNT) {
                 const uint8_t* in = nullptr;
                 if (Vehicle::Derived::inputs(t.sig, in)) out.put(",\"calc\":true");
             }

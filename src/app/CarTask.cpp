@@ -323,6 +323,10 @@ namespace App
                     s_decode.load(nullptr, 0);
                     LogBus::line("[car] decode map REFUSED by CanDecode: no signals decoded");
                 }
+                // A derived signal with a row or a constant: the binding wins.
+                s_derived.clearBound();
+                for (uint8_t i = 0; i < t.nRows; ++i) s_derived.setBound(t.row[i].sig, true);
+                for (uint8_t i = 0; i < t.nK; ++i)    s_derived.setBound(t.k[i].sig, true);
                 if (!s_s.state) { refreshVerified(); return; }
                 for (uint8_t i = 0; i < s_nConst; ++i)
                     if (t.constOf(s_constSig[i]) < 0 && !testing(s_constSig[i]))

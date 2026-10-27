@@ -62,7 +62,17 @@ namespace Vehicle
             _brakeOn  = brakeKmh ? (int32_t)brakeKmh * 100 : INT32_MAX;
         }
 
+        // A derived signal the owner bound to a CAN row or a constant on the
+        // head-unit map: the binding feeds it, the computation stands down
+        // (or both would write it in turn). The car task sets these from the
+        // decode table.
+        void setBound(uint8_t sig, bool on);
+        void clearBound() { for (uint8_t& b : _bound) b = 0; }
+        bool bound(uint8_t sig) const { return sig < SIG_COUNT && (_bound[sig >> 3] >> (sig & 7) & 1); }
+
     private:
+        void put(State& s, uint8_t sig, int64_t v, uint32_t now);
+        uint8_t  _bound[(SIG_COUNT + 7) / 8] = {};
         void gear(State& s, uint32_t now);
         void fuel(State& s, uint32_t now);
         void safety(State& s, uint32_t now);
