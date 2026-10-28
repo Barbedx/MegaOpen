@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-10-28
+
+### Added
+- `[drive]` also carries the fuel: litres (0x5C5, and the cluster's 0x715 copy) and the low-fuel bit, after a low-fuel alert with a full enough tank (2026-10-27).
+- Авто › «Передачі»: live once a second, how the board takes the gear: speed, rpm, the ratio, the gear it reads, clutch and neutral; the table (editable) next to what the learner collected near each value, and «Це N-та» to put the current ratio into the table while driving steadily in that gear. `GET /api/gears`.
+
 ### Changed
 - The log, step 1 of docs/design/logging.md: the level (`logLevel`) is saved and survives a reboot; per-tag levels (`logTags`, e.g. `hu=TRC knobs=DBG`, tags register themselves on first use); and per sink, the lowest level each takes (`logWeb`, `logFlash` at most DBG, `logPush`, `logSerial`). The LOGx macros look a tag up once per call site and format nothing for a line that will not be written.
 - The log, step 2: every line the firmware writes goes through LOGE..LOGT with a level and a tag (212 calls converted, the rest by hand; the text after the tag is unchanged, so `[ota] CONFIRMED` still reads the same, now as `I [ota] CONFIRMED`). `tools/check_rules.py` refuses a `LogBus::printf` outside the logger; `LogBus::line` remains only in the three line builders steps 3 and 4 replace.
@@ -13,26 +19,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - The log, steps 5 and 6: Плата › «Журнал», one card: the level, the status interval, each sink's level, and single tags at their own level (rows of tag ▾ level ▾, the tags the board has written since it started, `GET /api/logs/tags`). `tools/logscan.py` reads a pushed boot from GitHub (`--gh mo-4580 --last`) or files, by tag (`--tag hu,key`), level (`--level D`), text (`--grep`), or counts lines per tag (`--tags`).
 - The head-unit mapping, step 2 of docs/design/hu-mapping.md: a field the head unit gets can come from another signal (× ÷ +), a constant, or be off, without touching the signal itself. On Авто › мапа ГУ the editor starts with «Звідки» (свій сигнал / інший сигнал / константа / вимкнено); the button shows the rule (`← fuel_level`, `= 90`) and the value column what is sent. `GET/POST /api/hu/fields`, saved in NVS (`huFmap`, up to 32 rules); with no rules the bytes on the wire are unchanged.
 - WiFi that is "connected" and carries nothing (the head unit's hotspot after its own uplink dropped) is left and joined again: after 3 log pushes in a row with no answer at all (DNS, TCP, TLS; an HTTP refusal counts as an answer), `W [wifi] ... leaving and rejoining`. The next try waits 5 min, then twice as long each time up to an hour, so a hotspot with no internet (the garage) costs a few seconds an hour. Pushes through the app on USB do not count.
-
-### Fixed
-- The head unit's odometer was empty for a drive: 0x5FD did not come once (1.6.1 `[drive]`, two drives), so the field now takes the cluster's odometer (0x5C5, always on the bus) whenever 0x5FD is silent, not only under the 7D 04 experiments.
-
-### Removed
-- The live page's «CSV сигналів у браузер» recorder: the board's own CAN recording, `[drive]` in the log and the log push cover it, and it only ran while the tab was open.
-
-## [1.6.2] - 2026-10-27
-
-### Added
-- `[drive]` also carries the fuel: litres (0x5C5, and the cluster's 0x715 copy) and the low-fuel bit, after a low-fuel alert with a full enough tank (2026-10-27).
-- Авто › «Передачі»: live once a second, how the board takes the gear: speed, rpm, the ratio, the gear it reads, clutch and neutral; the table (editable) next to what the learner collected near each value, and «Це N-та» to put the current ratio into the table while driving steadily in that gear. `GET /api/gears`.
-
-### Fixed
-- «Без WiFi, коли є USB» turned WiFi off for any client on the USB link, the WebUSB page too, which carries no internet: the board then had neither. It now goes off only for a client that carries the board's internet (MegaOpen Companion).
-
-### Changed
 - Six gears: the owner's car is a six-speed, and the computed five-speed table read its 6th (431) as N and its 2nd and 3rd at the edge. The defaults are now the ratios the 1.6.1 learner measured on a drive, 147 207 275 359 431 for 2nd..6th (1st, 80, from their progression), and Settings › «Передачі» has a 6th. The table moves to new keys, so a 1.6.1 board takes these defaults once.
 - The head-unit map names a field the board fills itself «плата → ГУ» (it is sent over the UART like the rest), not an empty binding, and it can be bound like any other: a CAN ID or a constant feeds it and the computation stands down; «плата → ГУ» in the editor brings it back.
 - Everything that goes to GitHub is one card, Плата › Логи в GitHub (the log, the CAN recording, the daily limit); the car page's recording card links to it. The live page's recording is «CSV сигналів у браузер», not a second «Запис».
+
+### Fixed
+- The head unit's odometer was empty for a drive: 0x5FD did not come once (1.6.1 `[drive]`, two drives), so the field now takes the cluster's odometer (0x5C5, always on the bus) whenever 0x5FD is silent, not only under the 7D 04 experiments.
+- «Без WiFi, коли є USB» turned WiFi off for any client on the USB link, the WebUSB page too, which carries no internet: the board then had neither. It now goes off only for a client that carries the board's internet (MegaOpen Companion).
+
+### Removed
+- The live page's «CSV сигналів у браузер» recorder: the board's own CAN recording, `[drive]` in the log and the log push cover it, and it only ran while the tab was open.
 
 ## [1.6.1] - 2026-10-26
 
