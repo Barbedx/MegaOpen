@@ -42,7 +42,9 @@
 // gives the same text to anyone else who wants it.
 namespace Capture
 {
-    enum Bus : uint8_t { CAR = 0, PANEL = 1 };
+    // HU: the head unit's UART, a frame in records of 8 bytes (src/main.cpp
+    // huRecord, tools/can_dump.py hu).
+    enum Bus : uint8_t { CAR = 0, PANEL = 1, HU = 2 };
 
     // The recorder's settings. Outside the feature gate: the settings
     // registry describes them on every build (native tests included).

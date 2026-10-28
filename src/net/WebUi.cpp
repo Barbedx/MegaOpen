@@ -132,7 +132,6 @@ static esp_err_t logLines(PsychicRequest* r, uint32_t since)
     char h[112];
     out.put("{\"lines\":[");
     while (lines < 200 && bytes < 8192 && (len = LogBus::read(c, s_line, ms, lost)) >= 0) {
-        if (LogBus::serialOnly(s_line)) continue;   // its [hur] line is the same frame
         const LogLine p = LogLine::parse(s_line, (uint32_t)len);
         if (p.level > (uint8_t)Log::sinkLevel(Log::SINK_WEB)) continue;
         out.put(h, snprintf(h, sizeof(h), "%s{\"n\":%lu,\"t\":%lu,\"l\":\"%s\",\"tag\":\"%s\",\"msg\":\"",

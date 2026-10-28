@@ -10,6 +10,7 @@ checked against the same layout by `selftest`. Python stdlib only.
     can_dump.py between  A B FILE... [--bus N]
     can_dump.py slow     FILE... [--bus N] [--min-span S]
     can_dump.py track    ID BYTE FILE... [--bus N] [-o OUT.csv]
+    can_dump.py hu       FILE...            the head unit's UART (bus 2), frame by frame
     can_dump.py selftest
 
 FILE... are the files of one session in order (a session that crossed the
@@ -369,6 +370,39 @@ def track(recs, cid, byte, bus=None):
     return out
 
 
+# Bus 2 is the head unit's UART (src/main.cpp huRecord): a frame of up to 64
+# bytes in records of 8, id = cmd | dir << 8 | piece << 11 | len << 15, dir 0 T
+# (to the head unit), 1 V (car data to it), 2 R (from it), 3 J (bytes outside
+# a frame). Change-only works per piece, so a frame is the newest of its pieces.
+HU_DIR = "TVRJ"
+
+
+def hu_frames(recs):
+    pieces, seen = {}, {}
+    for r in recs:
+        if r.kind not in (FRAME, KEYFRAME) or r.bus != 2:
+            continue
+        cmd, d, k, n = r.id & 0xFF, (r.id >> 8) & 3, (r.id >> 11) & 0xF, (r.id >> 15) & 0x7F
+        key = (d, cmd, n)
+        cur = pieces.setdefault(key, bytearray(n))
+        cur[k * 8:k * 8 + r.len] = r.payload()
+        got = seen.setdefault(key, set())
+        got.add(k)
+        # Once every piece has been seen, any piece that changes is a new frame.
+        if len(got) >= max(1, (n + 7) // 8):
+            yield r.t, HU_DIR[d], cmd, bytes(cur)
+
+
+def cmd_hu(a):
+    _, recs, _ = read_files(a.files)
+    for t, d, cmd, data in hu_frames(recs):
+        if d == "J":
+            print("%10.3f J  %s" % (t / 1000.0, data.hex(" ").upper()))
+        else:
+            print("%10.3f %s  %02X %s" % (t / 1000.0, d, cmd, data.hex(" ").upper()))
+    return 0
+
+
 def cmd_track(a):
     _, recs, markers = read_files(a.files)
     cid = int(a.ID, 16)
@@ -619,6 +653,10 @@ def main(argv=None):
     s.add_argument("--bus", type=int)
     s.add_argument("-o", help="output CSV (default stdout)")
     s.set_defaults(fn=cmd_track)
+
+    s = sub.add_parser("hu", help="the head unit's UART frames (bus 2)")
+    s.add_argument("files", nargs="+")
+    s.set_defaults(fn=cmd_hu)
 
     s = sub.add_parser("selftest", help="write a synthetic capture and run every command on it")
     s.set_defaults(fn=cmd_selftest)

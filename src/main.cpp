@@ -166,44 +166,20 @@ static OneShot<App::KeysTask::ResLearn> g_resLearnReq;
 // The LogBus sinks. They run on the LogBus task, so blocking here is allowed.
 //
 // Every line also stays in the LogBus ring, which is the web log
-// (GET /api/logs?since=); these sinks decide Serial and the flash log.
-//
-// "[kev] " lines are the per-event key lines from onKeyEvent. Web log only: on
-// Serial they would cost UART time per detent, and in the flash log a knob spin
-// would turn into flash erases (which freeze both cores) at exactly the moment
-// keys are being sent.
-// "[hur] " lines are the head unit's frames, decoded (`R cmd=...`), web only
-// for the same reason: the [hu] ring echo already puts every frame on Serial
-// and in the flash log once.
-//
-// "[hu] <D> " lines (one capital letter, then a space) are that ring echo,
-// one per frame: T to the head unit, V vehicle telemetry, R from it, J junk
-// (huDrainSerial). On Serial, never in the flash log. The R echo is Serial only
-// (LogBus::serialOnly): the web log has that frame decoded, as its [hur]
-// line. No other [hu] line has that shape.
-static constexpr char KEV[] = "[kev] ";
-static constexpr char HUR[] = "[hur] ";
-static constexpr char HUE[] = "[hu] ";
-static bool isWebOnly(const char* line)
-{
-    return !strncmp(line, KEV, sizeof(KEV) - 1) || !strncmp(line, HUR, sizeof(HUR) - 1);
-}
-static bool isHuEcho(const char* line)
-{
-    constexpr size_t n = sizeof(HUE) - 1;
-    return !strncmp(line, HUE, n) && line[n] >= 'A' && line[n] <= 'Z' && line[n + 1] == ' ';
-}
-
+// (GET /api/logs?since=); these sinks are Serial, the flash log and the push.
+// Each takes a line by its level alone (Log::sinkTakes, the settings logSerial /
+// logFlash / logPush): no sink looks at what a line says (docs/design/logging.md).
+// The head unit's frames are in the capture (bus 2), not text, below TRC.
 // IDF/library lines from the esp_log tap (logTapVprintf). Where the IDF
 // console is Serial itself (UART0: the DevKit) they are already on it, so the
 // serial sink skips them; on a USB-CDC build the console is not Serial, and
 // this is the only way they reach the USB port.
-static constexpr char IDF[] = "[idf] ";
-static bool isIdfLine(const char* line) { return !strncmp(line, IDF, sizeof(IDF) - 1); }
+static constexpr char IDF[] = "I [idf] ";   // the first byte becomes the line's level
+static bool isIdfLine(const char* line) { return !strncmp(line + 1, IDF + 1, sizeof(IDF) - 2); }
 
 static void serialSink(const char* line, int len, uint32_t)
 {
-    if (isWebOnly(line) || !Log::sinkTakes(Log::SINK_SERIAL, line, len)) return;
+    if (!Log::sinkTakes(Log::SINK_SERIAL, line, len)) return;
 #if !ARDUINO_USB_CDC_ON_BOOT
     if (isIdfLine(line)) return;
 #endif
@@ -216,79 +192,17 @@ static void serialSink(const char* line, int len, uint32_t)
     Serial.write('\n');
 }
 #if FEATURE_LOG_PUSH
-// The head unit's UART for GitHub: its frames ([hur] decoded, and the [hu]
-// echo T/V/R/J when it runs), each kind (direction, command, sub-command: the
-// 7D family is one command) the first time and then only when its bytes
-// change; V, the telemetry the board sends (its values are in [drive]), at
-// most once in V_GAP_MS per kind. Keying on the command alone let every 7D
-// line through (7D 02, 03, 05 alternate): 90 % of the car's pushed log was
-// [hu], 2.3 MB in 39 minutes (1.6.0-rc5). The LogBus task only; the table in
-// PSRAM.
-static bool huChanged(const char* line, int len, uint32_t ms)
-{
-    struct Seen { uint32_t h, at; };
-    constexpr uint32_t SLOTS = 1024, V_GAP_MS = 10000;
-    static Seen* seen = (Seen*)heap_caps_calloc(SLOTS, sizeof(Seen), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!seen) return false;   // no table: the frames stay out of the push
-    int slot = 4, cmd = 0, sub = 0;
-    const char* rest;
-    if (!strncmp(line, HUR, sizeof(HUR) - 1)) {
-        const char* c = strstr(line, "cmd=");
-        if (!c) return true;
-        cmd = (int)strtol(c + 4, nullptr, 16) & 0xFF;
-        slot = 0;
-        rest = c + 6;
-        const char* l = strstr(c, " len=");
-        const char* d = l ? strchr(l + 5, ' ') : nullptr;
-        if (d && d[1] == '(') d = strchr(d + 1, ')') ? strchr(d + 1, ')') + 1 : nullptr;
-        if (d) sub = (int)strtol(d, nullptr, 16) & 0xFF;
-    } else {
-        const char dir = line[sizeof(HUE) - 1];
-        slot = dir == 'T' ? 1 : dir == 'V' ? 2 : dir == 'R' ? 3 : 4;
-        rest = line + sizeof(HUE) + 1;
-        if (!strncmp(rest, "2E ", 3)) {             // 2E CMD LEN D0 ...
-            char* e = nullptr;
-            cmd = (int)strtol(rest + 3, &e, 16) & 0xFF;
-            if (e) strtol(e, &e, 16);                // the length
-            if (e && *e == ' ' && e[1] != '|') sub = (int)strtol(e, nullptr, 16) & 0xFF;
-        } else if (!strncmp(rest, "cmd=", 4)) {
-            cmd = (int)strtol(rest + 4, nullptr, 16) & 0xFF;
-        }
-    }
-    uint32_t h = 2166136261u;
-    for (const char* p = rest; p < line + len; ++p) h = (h ^ (uint8_t)*p) * 16777619u;
-    h += !h;
-    const uint32_t key = ((uint32_t)slot << 16) | ((uint32_t)cmd << 8) | (uint32_t)sub;
-    Seen& s = seen[(key * 2654435761u) >> 22];
-    if (s.h == h) return false;
-    if (slot == 2 && s.h && (uint32_t)(ms - s.at) < V_GAP_MS) return false;
-    s.h = h;
-    s.at = ms;
-    return true;
-}
-
-// What the flash log keeps, for GitHub (src/net/LogPush.h), plus the head
-// unit's frames when they change.
 static void pushSink(const char* line, int len, uint32_t ms)
 {
-    if (!Log::sinkTakes(Log::SINK_PUSH, line, len)) return;
-    const bool hur = !strncmp(line, HUR, sizeof(HUR) - 1);
-    if (hur || isHuEcho(line)) {
-        if (huChanged(line, len, ms)) LogPush::sink(line, len, ms);
-        return;
-    }
-    if (!isWebOnly(line)) LogPush::sink(line, len, ms);
+    if (Log::sinkTakes(Log::SINK_PUSH, line, len)) LogPush::sink(line, len, ms);
 }
 #endif
 #if FEATURE_LOGFS
-// The [hu] ring echo never goes to flash, whatever the serial switch says: it
-// is one line per head-unit frame, the volume that made the flash log erase
-// sectors (both cores stopped) while driving. The web log and USB serial still
-// show it, and /api/canbox/last keeps the recent frames. [panelkey] stays: one
-// line per press, held in RAM with the rest (LogFile.h).
+// The flash log never takes TRC (Log::setSinkLevel caps it at DBG): a line per
+// frame would erase sectors with both cores stopped.
 static void fileSink(const char* line, int len, uint32_t ms)
 {
-    if (!isWebOnly(line) && !isHuEcho(line) && Log::sinkTakes(Log::SINK_FLASH, line, len)) LogFile::sink(line, len, ms);
+    if (Log::sinkTakes(Log::SINK_FLASH, line, len)) LogFile::sink(line, len, ms);
 }
 
 // Every software reboot (ESP.restart, esp_restart, the OTA and rollback
@@ -663,7 +577,13 @@ static int logTapVprintf(const char* fmt, va_list ap)
         if (n > (int)sizeof(b) - P - 1) n = (int)sizeof(b) - P - 1;
         // Strip the IDF's trailing newline.
         while (n > 0 && (b[P + n - 1] == '\n' || b[P + n - 1] == '\r')) b[P + --n] = '\0';
-        if (n > 0) LogBus::line(b);
+        // The IDF's own level letter (E W I D V) is the line's ("idf").
+        const char c = n > 0 ? b[P] : 'I';
+        const LogLevel lvl = c == 'E' ? LogLevel::ERR : c == 'W' ? LogLevel::WRN : c == 'D' ? LogLevel::DBG
+                           : c == 'V' ? LogLevel::TRC : LogLevel::INF;
+        static int8_t s_idfTag = -1;
+        b[0] = "EWIDT"[(uint8_t)lvl];
+        if (n > 0 && Log::on(lvl, "idf", s_idfTag)) LogBus::line(b);
     }
     return s_idfVprintf ? s_idfVprintf(fmt, ap) : vprintf(fmt, ap);
 }
@@ -784,6 +704,20 @@ namespace {
             g_huInHead = (uint8_t)((g_huInHead + 1) % kHuInLen);
         }
         portEXIT_CRITICAL(&g_huMux);
+#if FEATURE_CAPTURE
+        // Every frame both ways into the capture, bus 2 (docs/design/logging.md):
+        // records of 8 bytes, id = cmd | dir << 8 | piece << 11 | len << 15
+        // (dir 0 T, 1 V, 2 R, 3 J). Capture::push never waits.
+        const uint8_t d = dir == 'T' ? 0 : dir == 'V' ? 1 : dir == 'R' ? 2 : 3;
+        for (uint8_t k = 0; k == 0 || k * 8 < n; ++k) {
+            Frame f;
+            const uint8_t at = (uint8_t)(k * 8);
+            f.id = (uint32_t)cmd | ((uint32_t)d << 8) | ((uint32_t)k << 11) | ((uint32_t)n << 15);
+            f.len = (uint8_t)(n - at < 8 ? n - at : 8);
+            if (f.len) memcpy(f.data, p + at, f.len);
+            Capture::push(f, Capture::HU, now);
+        }
+#endif
     }
 
     // One entry, copied whole: a writer on the other task cannot tear it.
@@ -836,8 +770,9 @@ static bool huTextColumn(const uint8_t* d, uint8_t len, char* out, size_t cap)
     return false;
 }
 
-// Print what was recorded since the last pass. The hu task only. Each line is
-// `[hu] <dir> ...` (see isHuEcho): the sinks route it by that shape. Prints the
+// Print what was recorded since the last pass, at TRC ("hu": every frame; the
+// capture keeps them all anyway, bus 2). The hu task only. Each line is
+// `T [hu] <dir> ...`; R is left to onHuFrame's decoded line (DBG). Prints the
 // canonical frame `2E <cmd> <len> ... <cs>` (checksum recomputed) to match the
 // head unit's CANBUS Info screen; a truncated entry prints its payload and says
 // so. At most HU_ECHO_PER_PASS lines a pass: a burst of head-unit traffic is
@@ -847,6 +782,8 @@ static constexpr uint8_t HU_ECHO_PER_PASS = 4;
 static void huDrainSerial()
 {
     const uint32_t count = g_huCount;
+    static int8_t s_huTag = -1;
+    if (!Log::on(LogLevel::TRC, "hu", s_huTag)) { g_huPrinted = count; return; }
     // Report frames lost when the console falls behind the ring.
     if (count - g_huPrinted > kHuRingLen) {
         LOGI("hu", "... %u frames lost (console behind the ring)",
@@ -858,11 +795,11 @@ static void huDrainSerial()
         static HuEntry e;
         huEntryAt((uint8_t)(g_huPrinted % kHuRingLen), e);
         ++g_huPrinted;
-        if (!e.dir) continue;
+        if (!e.dir || e.dir == 'R') continue;
 
         // Sized for 64 payload bytes (192 hex chars) plus the text column.
         static char b[400];
-        int n = snprintf(b, sizeof(b), "[hu] %c ", e.dir);
+        int n = snprintf(b, sizeof(b), "T [hu] %c ", e.dir);
         if (e.dir == 'J') {
             // Junk: bytes outside any framing, printed raw.
             n += snprintf(b + n, sizeof(b) - n, "junk  ");
@@ -1027,6 +964,9 @@ static void onKeyEvent(const Keys::Event& e, void*)
     App::KeysTask::observe(e);
     const bool enc = Keys::isEncoder(e.action);
     if (enc) ++g_encSteps;
+    // One line per key event at DBG ("key").
+    static int8_t s_keyTag = -1;
+    if (!Log::on(LogLevel::DBG, "key", s_keyTag)) return;
     // Encoders: at most one line per 50 ms, carrying the steps folded into it
     // (g_encSteps has the exact count). A fast spin is hundreds of events a
     // second, and a full LogBus ring drops the [stall]/[task]/[hu] lines
@@ -1042,11 +982,11 @@ static void onKeyEvent(const Keys::Event& e, void*)
     // A small buffer, not a 320-byte log line: the keys task's stack is 3 kB.
     char b[48];
     if (enc && s_encFolded) {
-        snprintf(b, sizeof(b), "%s%s %u +%u", KEV, Keys::name(e.action), (unsigned)e.state,
+        snprintf(b, sizeof(b), "D [key] %s %u +%u", Keys::name(e.action), (unsigned)e.state,
                  (unsigned)s_encFolded);
         s_encFolded = 0;
     } else {
-        snprintf(b, sizeof(b), "%s%s %u", KEV, Keys::name(e.action), (unsigned)e.state);
+        snprintf(b, sizeof(b), "D [key] %s %u", Keys::name(e.action), (unsigned)e.state);
     }
     LogBus::line(b);
 }
@@ -1265,32 +1205,36 @@ static void onHuFrame(uint8_t cmd, const uint8_t* payload, uint8_t len, void*)
 {
     g_huDialect.onFrame(cmd);
     if (cmd == 0x9D) onHuClock(payload, len);
-    // Static: the hu task is the only caller, and its stack is 3 kB. Web only
-    // (the [hur] tag): the [hu] echo already logs every frame once.
+    // Decoded, at DBG ("hu"); the frame itself is in the capture (bus 2).
+    // Static: the hu task is the only caller, and its stack is 3 kB.
+    static int8_t s_hurTag = -1;
+    const bool say = Log::on(LogLevel::DBG, "hu", s_hurTag);
     static char b[LogBus::MAX_LINE];
     const uint16_t total = g_huRx.lastTotalLen();
-    int n = snprintf(b, sizeof(b), "%sR cmd=%02X len=%u", HUR, cmd, (unsigned)total);
-    if (total > len) n += snprintf(b + n, sizeof(b) - n, " (+%u trunc)", (unsigned)(total - len));
+    int n = say ? snprintf(b, sizeof(b), "D [hu] R cmd=%02X len=%u", cmd, (unsigned)total) : 0;
+    if (say) {
+        if (total > len) n += snprintf(b + n, sizeof(b) - n, " (+%u trunc)", (unsigned)(total - len));
 
-    for (uint8_t i = 0; i < len && n < (int)sizeof(b) - 8; ++i)
-        n += snprintf(b + n, sizeof(b) - n, " %02X", payload[i]);
+        for (uint8_t i = 0; i < len && n < (int)sizeof(b) - 8; ++i)
+            n += snprintf(b + n, sizeof(b) - n, " %02X", payload[i]);
 
-    uint8_t printable = 0;
-    for (uint8_t i = 0; i < len; ++i)
-        if (payload[i] >= 0x20 && payload[i] < 0x7F) ++printable;
+        uint8_t printable = 0;
+        for (uint8_t i = 0; i < len; ++i)
+            if (payload[i] >= 0x20 && payload[i] < 0x7F) ++printable;
 
-    // Text if at least half the payload is printable.
-    const bool looksLikeText = (len >= 4 && printable * 2 >= len);
-    if (looksLikeText && n < (int)sizeof(b) - (int)len - 8) {
-        n += snprintf(b + n, sizeof(b) - n, "  |");
-        for (uint8_t i = 0; i < len && n < (int)sizeof(b) - 4; ++i) {
-            const uint8_t c = payload[i];
-            b[n++] = (c >= 0x20 && c < 0x7F) ? (char)c : '.';
+        // Text if at least half the payload is printable.
+        const bool looksLikeText = (len >= 4 && printable * 2 >= len);
+        if (looksLikeText && n < (int)sizeof(b) - (int)len - 8) {
+            n += snprintf(b + n, sizeof(b) - n, "  |");
+            for (uint8_t i = 0; i < len && n < (int)sizeof(b) - 4; ++i) {
+                const uint8_t c = payload[i];
+                b[n++] = (c >= 0x20 && c < 0x7F) ? (char)c : '.';
+            }
+            b[n++] = '|';
+            b[n] = '\0';
         }
-        b[n++] = '|';
-        b[n] = '\0';
+        LogBus::line(b);
     }
-    LogBus::line(b);
     huRecord('R', cmd, payload, len, total);
 
 #if FEATURE_DISPLAY_CAN || FEATURE_BLE
@@ -1320,6 +1264,9 @@ static uint32_t g_junkAtMs = 0;
 static void onHuJunk(uint8_t b, void*)
 {
     g_huDialect.onJunk(b);
+    // 0xFF outside a frame is the head unit's ACK of one of ours (Raise: every
+    // frame is answered with 0xFF): counted, not junk.
+    if (b == 0xFF) { App::Hu::noteAckIn(); return; }
     g_junk[g_junkLen++] = b;
     g_junkAtMs = millis();
     if (g_junkLen >= sizeof(g_junk)) {

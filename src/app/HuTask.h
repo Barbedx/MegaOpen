@@ -50,6 +50,8 @@ namespace App
         // seeded with `cfg`. start() creates the task.
         void begin(const Setup& s, const EmitterCfg& cfg);
         void start();
+        // The head unit's ACK (0xFF) of one of our frames; any task.
+        void noteAckIn();
 
         // Any task, zero wait. A frame up to Canbox::MAX_FRAME bytes, written
         // through the vehicle lane in order. False = queue full, counted.

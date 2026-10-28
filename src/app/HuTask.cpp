@@ -12,6 +12,10 @@ namespace App
 {
     namespace Hu
     {
+        // ACKs (0xFF) from the head unit, counted by the parser's junk hook.
+        static std::atomic<uint32_t> s_acksIn{0};
+        void noteAckIn() { s_acksIn.fetch_add(1, std::memory_order_relaxed); }
+
         namespace
         {
             // 38400 baud is 3.8 bytes a millisecond; 512 is two passes of a
@@ -208,10 +212,10 @@ namespace App
                 // stale = a frame that found no gap in PENDING_MAX_MS and was
                 // dropped; msgDrops = macro Messages the queue had no room for.
                 // desync = frames abandoned after RX_GAP_MS of silence mid-frame.
-                LOGS("hu", "acks=%u ackLateMax=%uus keys=%u veh=%u replies=%u keyDropped=%u "
+                LOGS("hu", "acks=%u acksIn=%u ackLateMax=%uus keys=%u veh=%u replies=%u keyDropped=%u "
                                "ackDropped=%u vehDropped=%u vehDeferred=%u outDrops(veh/raw)=%u/%u "
                                "replyRetries=%u replyLost=%u stale=%u msgDrops=%u Lmax=%u rx=%u desync=%u",
-                               (unsigned)tx.acks(), (unsigned)s_ackLateMaxUs, (unsigned)tx.keyFrames(),
+                               (unsigned)tx.acks(), (unsigned)s_acksIn.load(), (unsigned)s_ackLateMaxUs, (unsigned)tx.keyFrames(),
                                (unsigned)tx.vehicleFrames(), (unsigned)tx.replyFrames(),
                                (unsigned)tx.keyDropped(), (unsigned)tx.ackDropped(),
                                (unsigned)tx.vehDropped(), (unsigned)tx.vehicleDeferred(),
