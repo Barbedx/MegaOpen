@@ -3,11 +3,11 @@
 // The single firmware version string (not the NVS config schema number).
 // Semver against the head unit: the major moves when the Raise/canbox protocol
 // changes in a way a head unit would have to follow.
-#define MEGAOPEN_VERSION "1.6.5"
+#define MEGAOPEN_VERSION "1.6.6"
 
 // Wire field: Rav4Emitter's MSG_VERSION is exactly 16 bytes, space-padded.
 // Written out literally so it cannot overrun the field.
-#define MEGAOPEN_VERSION_WIRE "MegaOpen 1.6.5  "
+#define MEGAOPEN_VERSION_WIRE "MegaOpen 1.6.6  "
 static_assert(sizeof(MEGAOPEN_VERSION_WIRE) == 17,
               "MSG_VERSION is a fixed 16-byte field plus its NUL");
 
