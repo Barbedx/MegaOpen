@@ -522,9 +522,44 @@ namespace GhOta
             for (;;) vTaskDelay(pdMS_TO_TICKS(1000));   // restart() does not return
         }
 
+        // The longest a pressed check/install waits for the log push's part
+        // (its PUT times out at 20 s; a connect on top).
+        constexpr uint32_t QUEUE_MS = 60000;
+
+        // Queued: the turn after the push's part. false: it never came.
+        bool waitTurn()
+        {
+            portENTER_CRITICAL(&s_mux);
+            const bool queued = s_v.queued;
+            portEXIT_CRITICAL(&s_mux);
+            if (!queued) return true;
+            const uint32_t t0 = millis();
+            while (!TlsJob::claim("ghota")) {
+                if ((uint32_t)(millis() - t0) >= QUEUE_MS) {
+                    TlsJob::unreserve("ghota");
+                    return false;
+                }
+                vTaskDelay(pdMS_TO_TICKS(100));
+            }
+            LOGI("ota", "github: TLS free after %u ms in the queue", (unsigned)(millis() - t0));
+            portENTER_CRITICAL(&s_mux);
+            s_v.queued = false;
+            portEXIT_CRITICAL(&s_mux);
+            return true;
+        }
+
         void task(void* arg)
         {
             const Job job = (Job)(uintptr_t)arg;
+            if (!waitTurn()) {
+                fail("tls_busy", "%s still held after %u s", TlsJob::holder() ? TlsJob::holder() : "TLS",
+                     (unsigned)(QUEUE_MS / 1000));
+                portENTER_CRITICAL(&s_mux);
+                s_v.queued = false;
+                s_busy = false;
+                portEXIT_CRITICAL(&s_mux);
+                vTaskDelete(nullptr);
+            }
             stage(&View::heapTask);
             {
                 TlsJob::InPsram tls;
@@ -566,11 +601,11 @@ namespace GhOta
                 portEXIT_CRITICAL(&s_mux);
                 return "fw_no_newer";   // check first
             }
-            // The log push may be mid-upload: a few seconds at most.
-            if (!TlsJob::claim("ghota")) {
-                portEXIT_CRITICAL(&s_mux);
-                return "tls_busy";
-            }
+            // The log push may be mid-upload (one part, seconds): the job
+            // queues, goes next, and its task waits for the turn.
+            const bool now = TlsJob::claim("ghota");
+            if (!now) TlsJob::reserve("ghota");
+            s_v.queued   = !now;
             s_busy       = true;
             s_v.phase    = job == Job::Check ? Phase::Checking : Phase::Downloading;
             s_v.err[0]   = 0;
@@ -582,8 +617,10 @@ namespace GhOta
             if (xTaskCreatePinnedToCore(task, "ghota", App::Plan::GHOTA_STACK, (void*)(uintptr_t)job,
                                         App::Plan::GHOTA_PRIO, nullptr,
                                         App::core(App::Plan::GHOTA_CORE)) != pdPASS) {
-                TlsJob::release();
+                if (now) TlsJob::release();
+                else     TlsJob::unreserve("ghota");
                 portENTER_CRITICAL(&s_mux);
+                s_v.queued = false;
                 s_busy    = false;
                 s_v.phase = Phase::Failed;
                 snprintf(s_v.err, sizeof(s_v.err), "no_memory");

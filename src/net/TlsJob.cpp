@@ -1,6 +1,7 @@
 #include "TlsJob.h"
 #if FEATURE_GH_OTA || FEATURE_LOG_PUSH
 #include <Arduino.h>
+#include <string.h>
 #include <esp_heap_caps.h>
 #include <mbedtls/platform.h>
 
@@ -10,6 +11,7 @@ namespace TlsJob
     {
         portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
         const char*  s_who = nullptr;   // under s_mux
+        const char*  s_next = nullptr;  // under s_mux: the job whose turn is next
 
         // mbedTLS into PSRAM for the job: the prebuilt sdkconfig pins it to
         // internal RAM (MBEDTLS_INTERNAL_MEM_ALLOC), and a handshake's ~40 kB
@@ -30,10 +32,25 @@ namespace TlsJob
     bool claim(const char* who)
     {
         portENTER_CRITICAL(&s_mux);
-        const bool ok = !s_who;
-        if (ok) s_who = who;
+        const bool mine = s_next && !strcmp(s_next, who);
+        const bool ok = !s_who && (!s_next || mine);
+        if (ok) { s_who = who; if (mine) s_next = nullptr; }
         portEXIT_CRITICAL(&s_mux);
         return ok;
+    }
+
+    void reserve(const char* who)
+    {
+        portENTER_CRITICAL(&s_mux);
+        s_next = who;
+        portEXIT_CRITICAL(&s_mux);
+    }
+
+    void unreserve(const char* who)
+    {
+        portENTER_CRITICAL(&s_mux);
+        if (s_next && !strcmp(s_next, who)) s_next = nullptr;
+        portEXIT_CRITICAL(&s_mux);
     }
 
     void release()

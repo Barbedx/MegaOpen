@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+- «Оновити з GitHub» (check or install) pressed while the log push is uploading a part no longer answers «інше завантаження ще триває, спробуй за хвилину»: it queues («у черзі»), goes next (the push cannot take TLS again before it) and starts by itself, at most a minute later (`TlsJob::reserve`).
+
 ## [1.6.6] - 2026-10-28
 
 ### Added

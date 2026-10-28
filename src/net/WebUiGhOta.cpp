@@ -34,6 +34,7 @@ void WebUi::routesGhOta()
         d["asset"]  = v.asset;
         d["size"]   = v.size;
         d["got"]    = v.got;
+        if (v.queued) d["queued"] = true;   // waiting for the log push's part to finish
         if (v.err[0]) d["err"] = v.err;
         d["heapStart"]  = v.heapStart;
         d["heapMin"]    = v.heapMin;

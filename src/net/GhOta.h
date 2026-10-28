@@ -66,6 +66,9 @@ namespace GhOta
         uint32_t stepMin[10] = {}, stepMs[10] = {};
         bool     tlsInPsram = false;
         bool     pre = false;          // the test channel (pre())
+        // The job waits its turn: the log push holds TLS (one part, seconds),
+        // and the job goes next (TlsJob::reserve), at most QUEUE_MS.
+        bool     queued = false;
     };
     void view(View& out);
 

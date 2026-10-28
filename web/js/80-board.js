@@ -107,17 +107,18 @@ cfgBind(){
    if(part.length)prev.innerHTML=row(t('bd.partial'),chipH('warn',String(part.length)),part.map(errLine).map(esc).join('<br>'));
    if(r&&r.pendingReboot){prev.innerHTML+=row(t('bd.applied'),`<button class="btn" type="button" id="cfgRb">${t('bd.restart')}</button>`,t('bd.appliedH'));$('#cfgRb').onclick=x=>reboot().catch(err=>sv(svOf(x.target),'bad',errT(err)))}
    return {note:part.length?t('bd.notePartial'):t('bd.noteApplied')}})}},
-/* GhOta: стан з /api/fw; phase -> чип, підпис, кнопка, смуга. rebooting -> та сама заставка, що й після файлу */
+/* GhOta: стан з /api/fw; phase -> чип, підпис, кнопка, смуга. rebooting -> та сама заставка, що й після файлу.
+   queued: натиснуте чекає, поки журнал на GitHub допише свою частину, і йде наступним, саме */
 async gh(){const v=await API.get('/api/fw');if(!$('#ghSt'))return;this.ghTag=v.latest;
  const busy=v.phase==='checking'||v.phase==='downloading',pct=v.size?Math.floor(v.got/v.size*100):0;
- const[st,tx,w]={idle:['off',t('bd.gh.idle'),t('bd.gh.this',v.fw)],checking:['warn',t('bd.gh.checking'),''],current:['ok',t('bd.gh.current'),t('bd.gh.latestThis',v.latest,v.fw)],
+ const[st,tx,w]=v.queued?['warn',t('bd.gh.queued'),t('bd.gh.queuedW')]:{idle:['off',t('bd.gh.idle'),t('bd.gh.this',v.fw)],checking:['warn',t('bd.gh.checking'),''],current:['ok',t('bd.gh.current'),t('bd.gh.latestThis',v.latest,v.fw)],
   available:['warn',t('bd.gh.available',v.latest),t('bd.gh.this',v.fw)+' · '+fmtB(v.size)],downloading:['warn',t('bd.gh.dl',pct),t('bd.gh.of',fmtB(v.got),fmtB(v.size))],
   written:['warn',t('bd.gh.written',v.latest),t('bd.gh.writtenW')],
   rebooting:['ok',t('bd.gh.rebooting'),t('bd.gh.rebootingW',v.latest)],failed:['bad',t('bd.gh.failed'),v.err?errLine(v.err):'']}[v.phase]||['off',v.phase,''];
  setChip('#ghSt',st,tx);$('#ghW').textContent=w;$('#ghChk').disabled=busy||v.phase==='written'||v.phase==='rebooting';
  $('#ghBoot').hidden=v.phase!=='written';
  const go=$('#ghGo');go.hidden=v.phase!=='available';go.textContent=t('bd.gh.updateTo',v.latest);
- $('#ghP').hidden=v.phase!=='downloading';$('#ghBar').style.width=pct+'%';
+ $('#ghP').hidden=v.phase!=='downloading'||!!v.queued;$('#ghBar').style.width=pct+'%';
  if(v.phase==='rebooting'&&!REBOOTING)reboot(async()=>{},undefined,t('bd.gh.from',v.latest))},
 /* рівні окремих тегів: рядок "tag=LVL tag=LVL" (logTags) рядками; теги — ті, що плата бачила (/api/logs/tags) */
 async logTags(spec){const box=$('#ltRows');if(!box)return;
