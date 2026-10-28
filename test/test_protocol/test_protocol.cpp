@@ -1,5 +1,6 @@
 #include <unity.h>
 #include <string.h>
+#include <stdio.h>
 #include <new>
 #include <initializer_list>
 #include "proto/canbox/Protocol.h"
@@ -57,6 +58,9 @@ namespace
         HuInbound in;
         uint32_t n = 0;
         void begin(const HuInbound& i) override { in = i; }
+        void configure(const HuConfig&) override {}
+        void forgetText() override {}
+        TextChannels textChannels() const override { return {}; }
         void feed(uint8_t b) override { ++n; if (in.frame) in.frame(b, nullptr, 0, 0, in.ctx); }
         bool midFrame() const override { return false; }
         void reset() override {}
@@ -322,6 +326,15 @@ void test_raise_112_through_the_interface_sends_the_same_bytes()
     TEST_ASSERT_TRUE(p.tuningFromBlob(d.tuning, blob, p.tuningBlobSize()));
     TEST_ASSERT_EQUAL_UINT8(1, d.tuningAs<Tuning>().cmd28);
     TEST_ASSERT_EQUAL_UINT8(3, d.tuningAs<Tuning>().histLen);
+    // A layout-1 blob (before the text channels) still reads, channels 0.
+    uint8_t v1[Tuning::BLOB_SIZE_V1];
+    memcpy(v1, blob, sizeof(v1));
+    v1[0] = 1;
+    d.tuningAs<Tuning>().titleCmd = 7;
+    TEST_ASSERT_TRUE(p.tuningFromBlob(d.tuning, v1, sizeof(v1)));
+    TEST_ASSERT_EQUAL_UINT8(3, d.tuningAs<Tuning>().histLen);
+    TEST_ASSERT_EQUAL_UINT8(0, d.tuningAs<Tuning>().titleCmd);
+    TEST_ASSERT_FALSE(p.tuningFromBlob(d.tuning, blob, sizeof(v1)));   // version 2 with layout 1's length
     // 0x28 carries one form: the other one's fields are blocked, with why.
     TEST_ASSERT_EQUAL_STRING("form_ac", p.messageBlocked(Rav4Emitter::MSG_TEMP, c));
     TEST_ASSERT_NULL(p.messageBlocked(Rav4Emitter::MSG_AC, c));
@@ -407,6 +420,41 @@ void test_raise_112_hears_the_head_unit_through_the_interface()
     for (int i = 0; i < 3; ++i) say(*vw.d, 0xC1, {1});
     TEST_ASSERT_EQUAL_STRING("vw", vw.d->dialect());
     TEST_ASSERT_TRUE(vw.d->wrongDialect());
+    // Track text: DUDU's structured 0x99 field becomes a Title, and the ring
+    // can show it.
+    {
+        static char got[32];
+        got[0] = 0;
+        HuInbound in = heard();
+        in.text = [](HuText f, const char* t, void*) { if (f == HuText::Title) snprintf(got, sizeof(got), "%s", t); };
+        MadeDecoder td(p);
+        td.d->begin(in);
+        uint8_t pl[12] = {0x83, 0x02};
+        const char* s = "Song";
+        for (uint8_t i = 0; s[i]; ++i) pl[2 + 2 * i] = (uint8_t)s[i];
+        uint8_t fr[24];
+        const uint8_t fl = buildFrame(0x99, pl, sizeof(pl), fr);
+        for (uint8_t i = 0; i < fl; ++i) td.d->feed(fr[i]);
+        TEST_ASSERT_EQUAL_STRING("Song", got);
+        TEST_ASSERT_EQUAL_UINT32(1, td.d->stats().textFrames);
+        char t[16];
+        uint8_t field = 0;
+        TEST_ASSERT_TRUE(p.frameText(pl, sizeof(pl), t, sizeof(t), field));
+        TEST_ASSERT_EQUAL_UINT8(2, field);
+        TEST_ASSERT_EQUAL_STRING("Song", t);
+        // Pinning a channel clears what was shown, at once.
+        static int clears = 0;
+        in.text = [](HuText f, const char*, void*) { clears += f == HuText::Clear; };
+        td.d->begin(in);
+        HuConfig c;
+        p.initConfig(c);
+        c.tuningAs<Tuning>().titleCmd = 0xC0;
+        td.d->configure(c);
+        TEST_ASSERT_EQUAL_INT(1, clears);
+        TEST_ASSERT_EQUAL_UINT8(0xC0, td.d->textChannels().titleCmd);
+        td.d->configure(c);                               // unchanged: no clear
+        TEST_ASSERT_EQUAL_INT(1, clears);
+    }
     // A frame of ours, unwrapped for the ring.
     uint8_t f[16], cmd = 0, plen = 0;
     const uint8_t pl[] = {0x07, 0x01};

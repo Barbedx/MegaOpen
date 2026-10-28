@@ -119,15 +119,12 @@ namespace Cfg
         // this long (the screen beside the pane is only 8 columns). 0 = off.
         uint16_t trackSplashMs = 4000;
 
-        // Now-playing source: "ams" (iPhone), "hu" (Raise UART text) or "auto"
+        // Now-playing source: "ams" (iPhone), "hu" (the head unit's text) or "auto"
         // (head unit while live, else phone). "ams" by default: the head unit's
         // text frame is undocumented and learned at runtime.
         Str      mediaSource = "ams";
 
-        // Raise command bytes carrying title and artist. 0 = learn it (see
-        // HuMediaSource). Persisted: found once, in a car.
-        uint8_t  huTitleCmd  = 0;
-        uint8_t  huArtistCmd = 0;
+        // Which commands carry the text is the protocol's (raise.titleCmd).
         // "Title - Artist" order when one command carries both.
         bool     huTitleFirst = false;
 

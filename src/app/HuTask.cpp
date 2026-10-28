@@ -91,7 +91,11 @@ namespace App
             int16_t  s_ack = -1;          // the protocol's ack byte, -1 none
             uint32_t s_pendingStale = 0;
 
-            void applyCfg(const Canbox::HuConfig& c) { if (s_s.emitter) s_s.emitter->configure(c); }
+            void applyCfg(const Canbox::HuConfig& c)
+            {
+                if (s_s.emitter) s_s.emitter->configure(c);
+                if (s_s.rx) s_s.rx->configure(c);
+            }
 
             // The emitter's write: into the reply queue while answering a 0x90,
             // otherwise onto the vehicle lane behind whatever is queued.

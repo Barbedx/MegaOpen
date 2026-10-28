@@ -306,7 +306,7 @@ static void test_settings_list()
     }
     // The keys the pages already post to /api/settings are registry ids.
     for (const char* k : {"uartEnabled", "pulseMs", "keyPopupMs", "mediaSource", "ancsPopup",
-                          "bleMode", "huTitleCmd", "huTitleFirst"})
+                          "bleMode", "raise.titleCmd", "huTitleFirst", "huProtocol"})
         TEST_ASSERT_TRUE_MESSAGE(ids.count(k), k);
 }
 

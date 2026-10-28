@@ -163,7 +163,7 @@ public:
     // console sends 0x20 key frames and reports what the head unit sent back.
     // `emitter`: the head-unit protocol's live one, null when none was made.
     void attachVehicle(Vehicle::State& state, const Canbox::Emitter* emitter, UartTx& tx,
-                       Sinks::CanboxUartSink& keySink, const Canbox::Decoder* huRx) {
+                       Sinks::CanboxUartSink& keySink, Canbox::Decoder* huRx) {
         _state = &state; _emitter = emitter; _tx = &tx;
         _keySink = &keySink; _huRx = huRx;
     }
@@ -476,6 +476,6 @@ private:
     const Canbox::Emitter* _emitter = nullptr;
     UartTx*                _tx = nullptr;
     Sinks::CanboxUartSink* _keySink = nullptr;
-    const Canbox::Decoder* _huRx = nullptr;   // the protocol's, inbound
+    Canbox::Decoder*       _huRx = nullptr;   // the protocol's, inbound (forgetText from here)
     const MegaOpen::PanelBusWatch* _panelWatch = nullptr;
 };

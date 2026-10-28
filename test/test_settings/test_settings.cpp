@@ -632,7 +632,7 @@ void test_settings_struct_unchanged()
         if (scalar(e) && !(e.flags & F_VOLATILE) && !(e.apply & (AP_KNOBS | AP_CAR | AP_CAP | AP_HU))) ++n;
     }
     // 55 scalar/enum fields in Settings (carSig counts three, gearRatio six, the log six), all in the registry.
-    TEST_ASSERT_EQUAL(57, n);   // + huProtocol
+    TEST_ASSERT_EQUAL(55, n);   // + huProtocol, - huTitleCmd/huArtistCmd (now raise.*)
     (void)kNotInRegistry;
 }
 

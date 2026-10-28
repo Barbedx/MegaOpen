@@ -3,6 +3,7 @@
 #include <string.h>
 #include "HuDialect.h"
 #include "RaiseFramer.h"
+#include "RaiseText.h"
 #include "RaiseTargets.h"
 #include "Rav4Catalog.h"
 #include "Rav4Emitter.h"
@@ -117,6 +118,11 @@ namespace Canbox
              0, 1, 0, nullptr, nullptr, T_GET(t.radarInvert != 0), T_PUT(t.radarInvert = v ? 1 : 0)},
             {"raise.version", "Version", "raise", SType::Str, W, HU,
              0, 0, 0, nullptr, nullptr, nullptr, nullptr, nullptr, &kVersion},
+            // The track text's commands (RaiseText): 0 = learn them.
+            {"raise.titleCmd", "Title cmd", "raise", SType::Int, W, HU,
+             0, 255, 1, nullptr, nullptr, T_GET(t.titleCmd), T_PUT(t.titleCmd = (uint8_t)v)},
+            {"raise.artistCmd", "Artist cmd", "raise", SType::Int, W, HU,
+             0, 255, 1, nullptr, nullptr, T_GET(t.artistCmd), T_PUT(t.artistCmd = (uint8_t)v)},
         };
 #undef T_GET
 #undef T_PUT
@@ -134,7 +140,23 @@ namespace Canbox
                 _rx.onFrame(onFrame, this);
                 _rx.onJunk(onJunk, this);
             }
+            void configure(const HuConfig& c) override
+            {
+                const Tuning& t = c.tuningAs<Tuning>();
+                // New channels: what is shown came from the old ones.
+                if (_text.setChannels(t.titleCmd, t.artistCmd) && _in.text) _in.text(HuText::Clear, nullptr, _in.ctx);
+            }
             void feed(uint8_t b) override { _rx.feed(b); }
+            void forgetText() override { _text.forget(); }
+            TextChannels textChannels() const override
+            {
+                TextChannels c;
+                c.titleCmd = _text.titleCmd();
+                c.artistCmd = _text.artistCmd();
+                c.learnedTitle = _text.learnedTitleCmd();
+                c.learnedArtist = _text.learnedArtistCmd();
+                return c;
+            }
             bool midFrame() const override { return _rx.midFrame(); }
             void reset() override { _rx.reset(); }
             DecoderStats stats() const override
@@ -146,6 +168,7 @@ namespace Canbox
                 s.junkBytes = _rx.junkBytes();
                 s.desyncs = _rx.desyncs();
                 s.notSupported = _dialect.notSupported();
+                s.textFrames = _text.textFrames();
                 return s;
             }
             const char* dialect() const override { return HuDialect::name(_dialect.kind()); }
@@ -173,6 +196,13 @@ namespace Canbox
                 // 0x90: the unit names a command it wants (spec len-2 form and
                 // DUDU len-1 form alike).
                 if (cmd == 0x90 && len >= 1 && in.request) in.request(p[0], in.ctx);
+                // Now-playing text, whatever command carries it (RaiseText).
+                d._text.onFrame(cmd, p, len, onText, &d);
+            }
+            static void onText(HuText f, const char* t, void* c)
+            {
+                const HuInbound& in = static_cast<RaiseDecoder*>(c)->_in;
+                if (in.text) in.text(f, t, in.ctx);
             }
             static void onJunk(uint8_t b, void* c)
             {
@@ -187,6 +217,7 @@ namespace Canbox
 
             RxParser  _rx;
             HuDialect _dialect;
+            RaiseText _text;
             HuInbound _in;
         };
 
@@ -240,6 +271,12 @@ namespace Canbox
             uint8_t frame(uint8_t cmd, const uint8_t* payload, uint8_t len, uint8_t* out) const override
             {
                 return buildFrame(cmd, payload, len, out);
+            }
+            bool frameText(const uint8_t* p, uint8_t len, char* out, uint8_t cap, uint8_t& field) const override
+            {
+                if (len < 4 || p[0] != RaiseText::MARKER_TEXT || p[1] == RaiseText::FIELD_TRACK) return false;
+                field = p[1];
+                return RaiseText::decodeWide(p + 2, (uint8_t)(len - 2), out, cap);
             }
             // `2E <cmd> <len> <payload...> <checksum>`.
             bool unframe(const uint8_t* f, uint8_t len, uint8_t& cmd, const uint8_t*& payload,

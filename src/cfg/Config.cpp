@@ -82,8 +82,6 @@ namespace Cfg
         _s.trackSplashMs = _p.isKey("splashMs") ? _p.getUShort("splashMs", 4000) : 4000;
         _s.paneCycleS    = _p.isKey("paneCyc")  ? _p.getUShort("paneCyc", 30)    : 30;
         _s.mediaSource  = _p.getString("medSrc", "ams");
-        _s.huTitleCmd   = _p.getUChar ("huTtlCmd", 0);
-        _s.huArtistCmd  = _p.getUChar ("huArtCmd", 0);
         _s.huTitleFirst = _p.getBool  ("huTtlFst", false);
 
         _s.keyPopup    = _p.getBool  ("keyPop",   true);
@@ -206,8 +204,6 @@ namespace Cfg
         _p.putUShort("splashMs", _s.trackSplashMs);
         _p.putUShort("paneCyc",  _s.paneCycleS);
         _p.putString("medSrc",   _s.mediaSource);
-        _p.putUChar ("huTtlCmd", _s.huTitleCmd);
-        _p.putUChar ("huArtCmd", _s.huArtistCmd);
         _p.putBool  ("huTtlFst", _s.huTitleFirst);
 
         _p.putBool  ("keyPop",   _s.keyPopup);
@@ -298,11 +294,13 @@ namespace Cfg
     void Config::loadTuning(const Canbox::Protocol& p, void* t)
     {
         uint8_t blob[64];
-        const uint8_t n = p.tuningBlobSize();
         // isKey first: getBytes on an absent key prints an IDF error per boot.
-        if (n > sizeof(blob) || !_p.isKey(p.tuningKey())) return;
-        // Short read or unknown layout: the defaults stay.
-        if (_p.getBytes(p.tuningKey(), blob, n) == n) p.tuningFromBlob(t, blob, n);
+        if (!_p.isKey(p.tuningKey())) return;
+        // As long as it was written: an older layout may be shorter, and
+        // the protocol decides what it reads. Unknown layout: the defaults stay.
+        const size_t n = _p.getBytesLength(p.tuningKey());
+        if (n && n <= sizeof(blob) && _p.getBytes(p.tuningKey(), blob, n) == n)
+            p.tuningFromBlob(t, blob, (uint8_t)n);
     }
 
     bool Config::saveDecode(const uint8_t* b, size_t n)

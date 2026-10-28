@@ -10,6 +10,7 @@
 #include <stdio.h>
 
 #include "media/HuMediaSource.h"
+#include "proto/canbox/RaiseText.h"
 #include "proto/canbox/HuDialect.h"
 #include "sinks/CanboxUartSink.h"
 #include "proto/canbox/Rav4Profile.h"
@@ -18,7 +19,51 @@
 void setUp() {}
 void tearDown() {}
 
-static void feedText(HuMediaSource& s, uint8_t cmd, const char* text, uint32_t now)
+using Canbox::HuText;
+using Canbox::RaiseText;
+
+// The head unit's text the way the firmware gets it: Raise's text decoder
+// (RaiseText, in the protocol's decoder) feeding the media source.
+struct Rig {
+    RaiseText     text;
+    HuMediaSource media;
+    uint32_t      now = 0;
+
+    void onFrame(uint8_t cmd, const uint8_t* p, uint8_t len, uint32_t nowMs)
+    {
+        now = nowMs;
+        media.onHeard(nowMs);
+        text.onFrame(cmd, p, len, put, this);
+    }
+    static void put(HuText f, const char* t, void* c) { Rig& r = *static_cast<Rig*>(c); r.media.onText(f, t, r.now); }
+    // The hu task's configure(): new channels clear what is shown.
+    void setChannels(uint8_t t, uint8_t a) { if (text.setChannels(t, a)) media.onText(HuText::Clear, nullptr, now); }
+    // The web's button: both forget.
+    void forget() { text.forget(); media.forget(); }
+    uint8_t  learnedTitleCmd() const  { return text.learnedTitleCmd(); }
+    uint8_t  learnedArtistCmd() const { return text.learnedArtistCmd(); }
+    uint32_t textFrames() const       { return text.textFrames(); }
+
+    const MediaInfo& current() const { return media.current(); }
+    MediaInfo snapshot() const { return media.snapshot(); }
+    bool trySnapshot(MediaInfo& m, uint32_t w) const { return media.trySnapshot(m, w); }
+    bool active() const { return media.active(); }
+    const char* statusText() const { return media.statusText(); }
+    void setNow(uint32_t n) { media.setNow(n); }
+    bool heard(uint32_t n) const { return media.heard(n); }
+    uint32_t frames() const { return media.frames(); }
+    uint32_t lockMisses() const { return media.lockMisses(); }
+    uint32_t stashDropped() const { return media.stashDropped(); }
+    bool testHold() { return media.testHold(); }
+    void testRelease() { media.testRelease(); }
+    void service() { media.service(); }
+    void setTitleFirst(bool on) { media.setTitleFirst(on); }
+    bool titleFirst() const { return media.titleFirst(); }
+    void setChangeCallback(IMediaSource::ChangeCb cb, void* c) { media.setChangeCallback(cb, c); }
+    void setLinkTimeoutMs(uint32_t ms) { media.setLinkTimeoutMs(ms); }
+};
+
+static void feedText(Rig& s, uint8_t cmd, const char* text, uint32_t now)
 {
     s.onFrame(cmd, reinterpret_cast<const uint8_t*>(text), (uint8_t)strlen(text), now);
 }
@@ -29,7 +74,7 @@ static void test_a_status_frame_is_not_text()
 {
     // Two flags and a counter. Nothing about this should reach a screen.
     const uint8_t status[] = {0x01, 0x00, 0x07, 0x00};
-    TEST_ASSERT_FALSE(HuMediaSource::looksLikeText(status, sizeof(status)));
+    TEST_ASSERT_FALSE(RaiseText::looksLikeText(status, sizeof(status)));
 }
 
 static void test_a_title_with_a_binary_prefix_is_still_text()
@@ -38,20 +83,20 @@ static void test_a_title_with_a_binary_prefix_is_still_text()
     // codepage marker often enough that demanding 100% would reject the thing
     // we are looking for.
     const uint8_t framed[] = {0x02, 0x0A, 'B', 'o', 'h', 'e', 'm', 'i', 'a', 'n'};
-    TEST_ASSERT_TRUE(HuMediaSource::looksLikeText(framed, sizeof(framed)));
+    TEST_ASSERT_TRUE(RaiseText::looksLikeText(framed, sizeof(framed)));
 }
 
 static void test_too_short_is_never_text()
 {
     const uint8_t two[] = {'O', 'K'};
-    TEST_ASSERT_FALSE(HuMediaSource::looksLikeText(two, sizeof(two)));
+    TEST_ASSERT_FALSE(RaiseText::looksLikeText(two, sizeof(two)));
 }
 
 // ---- learning which command carries what -----------------------------------
 
 static void test_the_first_text_command_becomes_the_title()
 {
-    HuMediaSource s;
+    Rig s;
     feedText(s, 0xC0, "Bohemian Rhapsody", 1000);
     TEST_ASSERT_EQUAL_UINT8(0xC0, s.learnedTitleCmd());
     TEST_ASSERT_EQUAL_STRING("Bohemian Rhapsody", s.current().title.c_str());
@@ -59,7 +104,7 @@ static void test_the_first_text_command_becomes_the_title()
 
 static void test_the_next_different_command_becomes_the_artist()
 {
-    HuMediaSource s;
+    Rig s;
     feedText(s, 0xC0, "Bohemian Rhapsody", 1000);
     feedText(s, 0xC1, "Queen", 1010);
     TEST_ASSERT_EQUAL_UINT8(0xC1, s.learnedArtistCmd());
@@ -71,7 +116,7 @@ static void test_the_next_different_command_becomes_the_artist()
 // the two rows every time the unit sent a status message that looked like text.
 static void test_a_learned_channel_is_sticky()
 {
-    HuMediaSource s;
+    Rig s;
     feedText(s, 0xC0, "First Song", 1000);
     feedText(s, 0xC1, "First Artist", 1010);
     feedText(s, 0xC0, "Second Song", 2000);
@@ -82,7 +127,7 @@ static void test_a_learned_channel_is_sticky()
 
 static void test_a_third_command_is_ignored_once_both_are_learned()
 {
-    HuMediaSource s;
+    Rig s;
     feedText(s, 0xC0, "Song", 1000);
     feedText(s, 0xC1, "Artist", 1010);
     feedText(s, 0xC2, "SOME OTHER TEXT", 1020);
@@ -94,7 +139,7 @@ static void test_a_third_command_is_ignored_once_both_are_learned()
 
 static void test_a_pinned_title_command_filters_everything_else()
 {
-    HuMediaSource s;
+    Rig s;
     s.setChannels(0xC3, 0xC4);
     feedText(s, 0xC0, "NOT THE TITLE", 1000);
     TEST_ASSERT_EQUAL_STRING("", s.current().title.c_str());
@@ -108,7 +153,7 @@ static void test_a_pinned_title_command_filters_everything_else()
 // under one assignment is not evidence about another.
 static void test_changing_the_pin_forgets_what_was_learned()
 {
-    HuMediaSource s;
+    Rig s;
     feedText(s, 0xC0, "Guessed Title", 1000);
     TEST_ASSERT_EQUAL_STRING("Guessed Title", s.current().title.c_str());
     s.setChannels(0xC3, 0);
@@ -120,7 +165,7 @@ static void test_changing_the_pin_forgets_what_was_learned()
 
 static void test_a_single_channel_splits_artist_and_title()
 {
-    HuMediaSource s;
+    Rig s;
     feedText(s, 0xC0, "Queen - Bohemian Rhapsody", 1000);
     TEST_ASSERT_EQUAL_STRING("Queen", s.current().artist.c_str());
     TEST_ASSERT_EQUAL_STRING("Bohemian Rhapsody", s.current().title.c_str());
@@ -128,7 +173,7 @@ static void test_a_single_channel_splits_artist_and_title()
 
 static void test_the_split_order_is_switchable()
 {
-    HuMediaSource s;
+    Rig s;
     s.setTitleFirst(true);
     feedText(s, 0xC0, "Bohemian Rhapsody - Queen", 1000);
     TEST_ASSERT_EQUAL_STRING("Bohemian Rhapsody", s.current().title.c_str());
@@ -138,7 +183,7 @@ static void test_the_split_order_is_switchable()
 // Once there IS an artist channel, a hyphen in a title is a hyphen in a title.
 static void test_a_hyphen_is_not_split_when_two_channels_exist()
 {
-    HuMediaSource s;
+    Rig s;
     feedText(s, 0xC0, "Song One", 1000);
     feedText(s, 0xC1, "Artist", 1010);
     feedText(s, 0xC0, "Sun - Moon", 2000);
@@ -150,7 +195,7 @@ static void test_a_hyphen_is_not_split_when_two_channels_exist()
 
 static void test_non_printable_bytes_are_stripped_and_padding_trimmed()
 {
-    HuMediaSource s;
+    Rig s;
     const uint8_t framed[] = {0x02, ' ', ' ', 'Q', 'u', 'e', 'e', 'n', ' ', ' ', 0x00};
     s.onFrame(0xC0, framed, sizeof(framed), 1000);
     TEST_ASSERT_EQUAL_STRING("Queen", s.current().title.c_str());
@@ -160,7 +205,7 @@ static void test_non_printable_bytes_are_stripped_and_padding_trimmed()
 
 static void test_a_source_that_never_spoke_is_not_active()
 {
-    HuMediaSource s;
+    Rig s;
     TEST_ASSERT_FALSE(s.active());
     TEST_ASSERT_EQUAL_STRING("NO HEAD UNIT", s.statusText());
 }
@@ -169,7 +214,7 @@ static void test_a_source_that_never_spoke_is_not_active()
 // wire, and the screen should say so rather than claim there is no head unit.
 static void test_frames_without_text_report_a_live_link_with_nothing_to_say()
 {
-    HuMediaSource s;
+    Rig s;
     const uint8_t status[] = {0x01, 0x00, 0x07, 0x00};
     s.onFrame(0x84, status, sizeof(status), 1000);
     TEST_ASSERT_FALSE(s.active());
@@ -180,7 +225,7 @@ static void test_frames_without_text_report_a_live_link_with_nothing_to_say()
 // one long track sends no text for five minutes and is perfectly alive.
 static void test_status_frames_keep_the_link_alive_between_tracks()
 {
-    HuMediaSource s;
+    Rig s;
     feedText(s, 0xC0, "A Long Track", 1000);
     TEST_ASSERT_TRUE(s.active());
 
@@ -195,7 +240,7 @@ static void test_status_frames_keep_the_link_alive_between_tracks()
 
 static void test_silence_expires_the_link()
 {
-    HuMediaSource s;
+    Rig s;
     TEST_ASSERT_FALSE(s.heard(5));   // nothing yet: the keys' UART dest is not live
     feedText(s, 0xC0, "Track", 1000);
     TEST_ASSERT_TRUE(s.active());
@@ -367,14 +412,14 @@ static const uint8_t kArtistFrame[34] = {
 static void test_the_title_field_decodes_from_utf16()
 {
     char out[HuMediaSource::TEXT_MAX];
-    TEST_ASSERT_TRUE(HuMediaSource::decodeWide(kTitleFrame + 2, 32, out, sizeof(out)));
+    TEST_ASSERT_TRUE(RaiseText::decodeWide(kTitleFrame + 2, 32, out, sizeof(out)));
     TEST_ASSERT_EQUAL_STRING("Lost Control", out);
 }
 
 static void test_the_fixed_width_padding_is_trimmed()
 {
     char out[HuMediaSource::TEXT_MAX];
-    TEST_ASSERT_TRUE(HuMediaSource::decodeWide(kArtistFrame + 2, 32, out, sizeof(out)));
+    TEST_ASSERT_TRUE(RaiseText::decodeWide(kArtistFrame + 2, 32, out, sizeof(out)));
     // Six characters out of a 32-byte field: everything after is padding, and
     // none of it may reach the glass.
     TEST_ASSERT_EQUAL_STRING("BALZAM", out);
@@ -385,12 +430,12 @@ static void test_the_fixed_width_padding_is_trimmed()
 // them, because UTF-16 is half NUL by construction.
 static void test_the_structured_frame_would_fail_the_ascii_heuristic()
 {
-    TEST_ASSERT_FALSE(HuMediaSource::looksLikeText(kTitleFrame, 34));
+    TEST_ASSERT_FALSE(RaiseText::looksLikeText(kTitleFrame, 34));
 }
 
 static void test_both_fields_land_in_the_right_rows()
 {
-    HuMediaSource hu;
+    Rig hu;
     hu.onFrame(0x99, kTitleFrame,  34, 1000);
     hu.onFrame(0x99, kArtistFrame, 34, 1010);
     TEST_ASSERT_EQUAL_STRING("Lost Control", hu.current().title.c_str());
@@ -406,7 +451,7 @@ static void test_latin_extended_folds_to_its_base_letter()
     const uint8_t p[] = { 'W',0,'i',0,'e',0, 0x7C,0x01, 'e',0,' ',0,
                           'F',0,'a',0,'b',0,'r',0,'y',0,'k',0 };
     char out[HuMediaSource::TEXT_MAX];
-    TEST_ASSERT_TRUE(HuMediaSource::decodeWide(p, (uint8_t)sizeof(p), out, sizeof(out)));
+    TEST_ASSERT_TRUE(RaiseText::decodeWide(p, (uint8_t)sizeof(p), out, sizeof(out)));
     TEST_ASSERT_EQUAL_STRING("Wieze Fabryk", out);
 }
 
@@ -416,7 +461,7 @@ static void test_cyrillic_decodes_to_utf8()
 {
     const uint8_t p[] = { 0x1F,0x04, 0x40,0x04, 0x38,0x04, ' ',0, '1',0 };   // "При 1"
     char out[HuMediaSource::TEXT_MAX];
-    TEST_ASSERT_TRUE(HuMediaSource::decodeWide(p, (uint8_t)sizeof(p), out, sizeof(out)));
+    TEST_ASSERT_TRUE(RaiseText::decodeWide(p, (uint8_t)sizeof(p), out, sizeof(out)));
     TEST_ASSERT_EQUAL_STRING("\xD0\x9F\xD1\x80\xD0\xB8 1", out);
 }
 
@@ -426,13 +471,13 @@ static void test_a_short_buffer_never_splits_a_character()
 {
     const uint8_t p[] = { 0x1F,0x04, 0x40,0x04, 0x38,0x04 };
     char out[6];                      // room for two 2-byte characters + NUL
-    TEST_ASSERT_TRUE(HuMediaSource::decodeWide(p, (uint8_t)sizeof(p), out, sizeof(out)));
+    TEST_ASSERT_TRUE(RaiseText::decodeWide(p, (uint8_t)sizeof(p), out, sizeof(out)));
     TEST_ASSERT_EQUAL_STRING("\xD0\x9F\xD1\x80", out);
 }
 
 static void test_the_album_field_lands_in_the_album()
 {
-    HuMediaSource hu;
+    Rig hu;
     uint8_t f[34] = { 0x83, 0x04, 'L',0,'P',0 };
     hu.onFrame(0x99, kTitleFrame, 34, 1000);
     hu.onFrame(0x99, f, 34, 1010);
@@ -444,14 +489,14 @@ static void test_the_album_field_lands_in_the_album()
 // title: the last real one stays, in either form of the frame.
 static void test_unknown_contact_is_ignored()
 {
-    HuMediaSource hu;
+    Rig hu;
     hu.onFrame(0x99, kTitleFrame, 34, 1000);
     uint8_t f[34] = { 0x83, 0x02 };
     const char* t = "Unknown ContactE";
     for (uint8_t i = 0; t[i]; ++i) f[2 + 2 * i] = (uint8_t)t[i];
     hu.onFrame(0x99, f, 34, 1010);
     TEST_ASSERT_EQUAL_STRING("Lost Control", hu.current().title.c_str());
-    HuMediaSource plain;
+    Rig plain;
     feedText(plain, 0xC0, "Bohemian Rhapsody", 1000);
     feedText(plain, 0xC0, "unknown contact", 1010);
     TEST_ASSERT_EQUAL_STRING("Bohemian Rhapsody", plain.current().title.c_str());
@@ -461,7 +506,7 @@ static void test_unknown_contact_is_ignored()
 // land in a text row, nor blank one. Track 65 of 66 would read "A", "B".
 static void test_the_track_number_field_is_not_text()
 {
-    HuMediaSource hu;
+    Rig hu;
     hu.onFrame(0x99, kTitleFrame,  34, 1000);
     uint8_t f[34] = { 0x83, 0x01, 0x41, 0x00, 0x42, 0x00 };
     hu.onFrame(0x99, f, 34, 1020);
@@ -473,7 +518,7 @@ static void test_the_track_number_field_is_not_text()
 // frames. It carries no text and must not blank a row.
 static void test_the_bare_marker_frame_changes_nothing()
 {
-    HuMediaSource hu;
+    Rig hu;
     hu.onFrame(0x99, kTitleFrame, 34, 1000);
     uint8_t empty[34] = { 0x20 };
     hu.onFrame(0x99, empty, 34, 1100);
@@ -484,15 +529,15 @@ static void test_a_payload_that_is_not_whole_code_units_is_refused()
 {
     const uint8_t odd[] = { 'A', 0, 'B' };
     char out[HuMediaSource::TEXT_MAX];
-    TEST_ASSERT_FALSE(HuMediaSource::decodeWide(odd, (uint8_t)sizeof(odd), out, sizeof(out)));
+    TEST_ASSERT_FALSE(RaiseText::decodeWide(odd, (uint8_t)sizeof(odd), out, sizeof(out)));
     // An all-padding field is "no text", not an empty title that would blank the row.
     const uint8_t pad[8] = {0};
-    TEST_ASSERT_FALSE(HuMediaSource::decodeWide(pad, (uint8_t)sizeof(pad), out, sizeof(out)));
+    TEST_ASSERT_FALSE(RaiseText::decodeWide(pad, (uint8_t)sizeof(pad), out, sizeof(out)));
 }
 
 static void test_a_pinned_channel_still_filters_the_structured_form()
 {
-    HuMediaSource hu;
+    Rig hu;
     hu.setChannels(0x99, 0);
     hu.onFrame(0x77, kTitleFrame, 34, 1000);   // wrong command, must be ignored
     TEST_ASSERT_EQUAL_STRING("", hu.current().title.c_str());
@@ -506,7 +551,7 @@ static void test_a_pinned_channel_still_filters_the_structured_form()
 
 static void test_a_snapshot_is_a_copy_of_what_was_parsed()
 {
-    HuMediaSource s;
+    Rig s;
     feedText(s, 0xC0, "Bohemian Rhapsody", 1000);
     feedText(s, 0xC1, "Queen", 1010);
     const MediaInfo m = s.snapshot();
@@ -521,11 +566,11 @@ static void test_a_snapshot_is_a_copy_of_what_was_parsed()
 
 // The change callback runs after the mutex is released, so a reader that takes
 // a snapshot from inside it gets the new title, not an empty copy.
-static HuMediaSource* g_src = nullptr;
+static Rig* g_src = nullptr;
 static char g_seen[32];
 static void test_the_change_callback_may_take_a_snapshot()
 {
-    HuMediaSource s;
+    Rig s;
     g_src = &s;
     g_seen[0] = 0;
     s.setChangeCallback([](IMediaSource&, void*) {
@@ -537,7 +582,7 @@ static void test_the_change_callback_may_take_a_snapshot()
 
 static void test_the_web_setters_still_apply()
 {
-    HuMediaSource s;
+    Rig s;
     feedText(s, 0xC0, "Guessed Title", 1000);
     s.setChannels(0xD0, 0);
     TEST_ASSERT_EQUAL_STRING("", s.snapshot().title.c_str());
@@ -552,7 +597,7 @@ static void test_the_web_setters_still_apply()
 // kept, and applied in order by the next frame or service() that gets it.
 static void test_a_frame_that_finds_the_mutex_held_is_applied_later_in_order()
 {
-    HuMediaSource s;
+    Rig s;
     TEST_ASSERT_TRUE(s.testHold());                  // a reader mid-copy
     feedText(s, 0xC0, "Bohemian Rhapsody", 1000);
     feedText(s, 0xC1, "Queen", 1010);
@@ -575,7 +620,7 @@ static void test_a_frame_that_finds_the_mutex_held_is_applied_later_in_order()
 // that changes nothing, so the refill simply happens on a later pass.
 static void test_a_held_mutex_makes_try_snapshot_say_not_now()
 {
-    HuMediaSource s;
+    Rig s;
     feedText(s, 0xC0, "Bohemian Rhapsody", 1000);
     MediaInfo m;
     m.title = "untouched";
@@ -589,7 +634,7 @@ static void test_a_held_mutex_makes_try_snapshot_say_not_now()
 
 static void test_a_full_stash_keeps_the_newest_and_counts_the_rest()
 {
-    HuMediaSource s;
+    Rig s;
     s.setChannels(0xC0, 0);
     TEST_ASSERT_TRUE(s.testHold());
     feedText(s, 0xC0, "Track One", 1000);
@@ -600,7 +645,7 @@ static void test_a_full_stash_keeps_the_newest_and_counts_the_rest()
     feedText(s, 0xC0, "Track Four", 1030);
     TEST_ASSERT_EQUAL_STRING("Track Four", s.current().title.c_str());
     TEST_ASSERT_EQUAL(1u, s.stashDropped());
-    TEST_ASSERT_EQUAL(4u, s.textFrames() + s.stashDropped());
+    TEST_ASSERT_EQUAL(4u, s.textFrames());          // all decoded; one lost in the stash
 }
 
 // ---- which canbox profile the head unit speaks (proto/canbox/HuDialect.h) ----

@@ -538,8 +538,6 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
             LOGI("alert", "rules saved: %u on%s", (unsigned)on, alSaved ? "" : ", NOT in NVS");
         }
 
-        // What the head-unit text learner had, so only a real change resets it.
-        const uint8_t huT = s.huTitleCmd, huA = s.huArtistCmd;
         const bool huFirst = s.huTitleFirst;
         const Cfg::Str src = s.mediaSource;
 
@@ -599,16 +597,18 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
             LOGW("cfg", "settings: the screen's were busy, applied at the next change");
 
         // Where the now-playing text comes from: live, so sources can be
-        // compared with the panel in view. Setting a command byte forgets
-        // what was learned, so it is set only when it changed.
+        // compared with the panel in view. Which commands carry it is the
+        // protocol's (raise.titleCmd, applied by the hu task).
         if (ap & Cfg::AP_MEDIA) {
             if (_router && s.mediaSource != src) _router->setMode(MediaRouter::modeFromStr(s.mediaSource.c_str()));
-            if (_hu && (s.huTitleCmd != huT || s.huArtistCmd != huA)) _hu->setChannels(s.huTitleCmd, s.huArtistCmd);
             if (_hu && s.huTitleFirst != huFirst) _hu->setTitleFirst(s.huTitleFirst);
         }
         // "Throw away what you learned and watch again", for when the learner
         // latched onto a status frame that happened to look like text.
-        if (!file && _hu && (d["huForget"] | false)) _hu->forget();
+        if (!file && (d["huForget"] | false)) {
+            if (_huRx) _huRx->forgetText();
+            if (_hu) _hu->forget();
+        }
 #endif
 
 #if FEATURE_KNOBS
@@ -1595,12 +1595,13 @@ void WebUi::routesMedia()
             // huFrames climbing with huTextFrames at 0: the unit talks but sends
             // no text. Both 0: dead UART. huLearned* is what the learner chose,
             // hu*Cmd is what was pinned.
+            const Canbox::TextChannels tc = _huRx ? _huRx->textChannels() : Canbox::TextChannels{};
             d["huFrames"]        = _hu->frames();
-            d["huTextFrames"]    = _hu->textFrames();
-            d["huLearnedTitle"]  = _hu->learnedTitleCmd();
-            d["huLearnedArtist"] = _hu->learnedArtistCmd();
-            d["huTitleCmd"]      = _hu->titleCmd();
-            d["huArtistCmd"]     = _hu->artistCmd();
+            d["huTextFrames"]    = _huRx ? _huRx->stats().textFrames : 0;
+            d["huLearnedTitle"]  = tc.learnedTitle;
+            d["huLearnedArtist"] = tc.learnedArtist;
+            d["huTitleCmd"]      = tc.titleCmd;
+            d["huArtistCmd"]     = tc.artistCmd;
             d["huTitleFirst"]    = _hu->titleFirst();
             // A copy under the source's mutex: the hu task writes these strings.
             const MediaInfo hm = _hu->snapshot();

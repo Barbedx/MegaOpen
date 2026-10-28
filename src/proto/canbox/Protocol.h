@@ -119,6 +119,11 @@ namespace Canbox
         virtual EmitterStat stat(uint8_t) const { return {"", 0}; }
     };
 
+    // A piece of now-playing text from the head unit. Line: one channel with
+    // both, "Artist - Title" (the media source splits it). Clear: what was
+    // shown is stale (the channels changed); text is null.
+    enum class HuText : uint8_t { Title, Artist, Album, Line, Clear };
+
     // What the head unit says, as the protocol's decoder hears it. Set once,
     // before the hu task runs; every call is on the hu task, from feed().
     // Any callback may be null.
@@ -138,6 +143,8 @@ namespace Canbox
         void (*clock)(uint8_t h, uint8_t m, void* ctx) = nullptr;
         // The head unit asked for one of our messages by its wire command.
         void (*request)(uint8_t cmd, void* ctx) = nullptr;
+        // Now-playing text, UTF-8, NUL-terminated (null for Clear).
+        void (*text)(HuText field, const char* utf8, void* ctx) = nullptr;
     };
 
     // The decoder's counters. Any task (plain reads).
@@ -145,7 +152,12 @@ namespace Canbox
         uint32_t frames = 0, badChecksums = 0, truncated = 0, junkBytes = 0, desyncs = 0;
         // Frames of ours the unit says it does not support (Raise: 0xF3).
         uint32_t notSupported = 0;
+        uint32_t textFrames = 0;     // frames that carried now-playing text
     };
+
+    // Where the protocol finds the track text: the command bytes, pinned
+    // (the protocol's settings) or learned (0: none yet). Any task.
+    struct TextChannels { uint8_t titleCmd = 0, artistCmd = 0, learnedTitle = 0, learnedArtist = 0; };
 
     // The protocol's receiver: bytes from the head unit in, HuInbound out.
     // The hu task's own.
@@ -153,6 +165,8 @@ namespace Canbox
     public:
         virtual ~Decoder() = default;
         virtual void begin(const HuInbound& in) = 0;
+        // The protocol's settings, at begin and at every edit. The hu task.
+        virtual void configure(const HuConfig& c) = 0;
         virtual void feed(uint8_t b) = 0;
         // Inside a frame: its ack will be owed when it ends, so the lanes
         // hold off (sinks/UartLanes.h).
@@ -160,6 +174,9 @@ namespace Canbox
         // Abandon a frame in progress (the line went quiet mid-frame).
         virtual void reset() = 0;
         virtual DecoderStats stats() const = 0;
+        // Any task: forget what the text decoding learned (the web's button).
+        virtual void         forgetText() = 0;
+        virtual TextChannels textChannels() const = 0;
         // What the unit's own frames say about the profile it is set to:
         // a word for /api/health ("toyota", "vw", "unknown"), and whether it
         // is one this protocol does not speak (wired right, set wrong).
@@ -222,6 +239,14 @@ namespace Canbox
         // command and payload. False: not a frame (shown raw).
         virtual bool unframe(const uint8_t* f, uint8_t len, uint8_t& cmd, const uint8_t*& payload,
                              uint8_t& plen, uint16_t& total) const = 0;
+        // For the frame ring: the track text a head-unit payload carries in a
+        // form the protocol names itself (Raise: DUDU's 0x83 field), UTF-8,
+        // and that field's id. False: none.
+        virtual bool frameText(const uint8_t* p, uint8_t len, char* out, uint8_t cap, uint8_t& field) const
+        {
+            (void)p; (void)len; (void)out; (void)cap; (void)field;
+            return false;
+        }
 
         // ---- its settings (HuConfig::tuning) ----------------------------------
         // The defaults, into HuConfig::TUNING_MAX bytes at `t`.

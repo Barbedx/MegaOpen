@@ -66,7 +66,15 @@ namespace Canbox
         // what it stored.
         char    version[17]  = MEGAOPEN_VERSION_WIRE;
 
-        static constexpr uint8_t BLOB_SIZE = 32;
+        // The head unit's track text (RaiseText): the commands carrying the
+        // title and the artist. 0 = learn them.
+        uint8_t titleCmd     = 0;
+        uint8_t artistCmd    = 0;
+
+        // Layout 2: 34 bytes. A layout-1 blob (32 bytes, before the text
+        // channels) still reads, with both channels 0.
+        static constexpr uint8_t BLOB_SIZE = 34;
+        static constexpr uint8_t BLOB_SIZE_V1 = 32;
         void toBlob(uint8_t* out) const;
         bool fromBlob(const uint8_t* in, uint8_t len);
     };

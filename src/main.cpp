@@ -868,15 +868,15 @@ static String huLastFramesJson(bool inOnly)
             snprintf(b + n, sizeof(b) - n, "\",\"u16\":%s", wide ? "true" : "false");
         }
         out += b;
-        // The track text as the media source reads it, UTF-8 (Cyrillic and all).
-        if (e.dir == 'R' && e.len >= 4 && e.data[0] == HuMediaSource::MARKER_TEXT &&
-            e.data[1] != HuMediaSource::FIELD_TRACK) {
+        // The track text as the protocol reads it, UTF-8 (Cyrillic and all).
+        if (e.dir == 'R') {
             char t[HuMediaSource::TEXT_MAX];
-            if (HuMediaSource::decodeWide(e.data + 2, (uint8_t)(e.len - 2), t, sizeof(t))) {
+            uint8_t field = 0;
+            if (Canbox::activeProtocol().frameText(e.data, e.len, t, sizeof(t), field)) {
                 JsonDocument j;
                 j.set(t);
                 out += ",\"field\":";
-                out += (unsigned)e.data[1];
+                out += (unsigned)field;
                 out += ",\"text\":";
                 serializeJson(j, out);
             }
@@ -1208,6 +1208,16 @@ static void onHuRequest(uint8_t cmd, void*)
 
 static void onHuAckIn(void*) { App::Hu::noteAckIn(); }
 
+// Now-playing text, as the protocol found it in the head unit's frames.
+static void onHuText(Canbox::HuText f, const char* t, void*)
+{
+#if FEATURE_DISPLAY_CAN || FEATURE_BLE
+    g_hu.onText(f, t, millis());
+#else
+    (void)f; (void)t;
+#endif
+}
+
 // Every head-unit frame, on the hu task, after its ack went out.
 static void onHuFrame(uint8_t cmd, const uint8_t* payload, uint8_t len, uint16_t total, void*)
 {
@@ -1245,7 +1255,7 @@ static void onHuFrame(uint8_t cmd, const uint8_t* payload, uint8_t len, uint16_t
 #if FEATURE_DISPLAY_CAN || FEATURE_BLE
     // Every frame: it is also the head unit's liveness. HuMediaSource decides
     // what is text; `looksLikeText` is only for the log column.
-    g_hu.onFrame(cmd, payload, len, millis());
+    g_hu.onHeard(millis());
 #endif
 }
 
@@ -1639,7 +1649,7 @@ static void hkBeat(uint32_t now)
     // lockMiss = head-unit frames that found a reader holding the media
     // mutex and were applied a pass later; lost = of those, stash overflow.
     LOGS("media", "hu frames=%u text=%u lockMiss=%u lost=%u",
-         (unsigned)g_hu.frames(), (unsigned)g_hu.textFrames(),
+         (unsigned)g_hu.frames(), (unsigned)(g_huRx ? g_huRx->stats().textFrames : 0),
          (unsigned)g_hu.lockMisses(), (unsigned)g_hu.stashDropped());
 #endif
     LOGS("hb", "up=%02u:%02u:%02u heap=%u min=%u big=%u canrx=%u keys=%u tx=%u/%u",
@@ -2005,6 +2015,7 @@ void setup()
         in.ackIn   = onHuAckIn;
         in.clock   = onHuClock;
         in.request = onHuRequest;
+        in.text    = onHuText;
         App::Hu::begin(hs, ec, in);
     }
 
@@ -2095,7 +2106,6 @@ void setup()
 #if FEATURE_DISPLAY_CAN || FEATURE_BLE
     // The head unit as a media source, always registered; `mediaSource` selects.
     // Command bytes from NVS; 0 = learn which carries the title (HuMediaSource).
-    g_hu.setChannels(g_cfg.s().huTitleCmd, g_cfg.s().huArtistCmd);
     g_hu.setTitleFirst(g_cfg.s().huTitleFirst);
     g_hu.setChangeCallback(onMediaChange, nullptr);
     // The AMS slot is filled by the BLE block below, if it starts.

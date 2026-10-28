@@ -117,12 +117,12 @@ namespace Canbox
     // OLD layout (rpmMul = 7|8<<8, rpmDiv = 9|10<<8) they are 840 / 210 = x4,
     // so an OTA rollback to an older build still sends the right rpm.
     static constexpr uint8_t DOORS_MIGRATED[4] = {0x48, 0x03, 0xD2, 0x00};
-    // A fixed 32-byte blob, byte 0 = layout version (1). Any other version is
-    // rejected, never reinterpreted.
+    // A fixed blob, byte 0 = layout version: 1 (32 bytes) or 2 (34, + the text
+    // channels at 32..33). Any other version is rejected, never reinterpreted.
     void Tuning::toBlob(uint8_t* out) const
     {
         for (uint8_t i = 0; i < BLOB_SIZE; ++i) out[i] = 0;
-        out[0]  = 1;                       // layout version
+        out[0]  = 2;                       // layout version
         out[1]  = cmd28;
         out[2]  = doorsLen;
         out[3]  = steerInvert;
@@ -138,11 +138,15 @@ namespace Canbox
         out[14] = histLen;
         out[15] = radarInvert;
         for (uint8_t i = 0; i < 16; ++i) out[16 + i] = (uint8_t)version[i];
+        out[32] = titleCmd;
+        out[33] = artistCmd;
     }
 
     bool Tuning::fromBlob(const uint8_t* in, uint8_t len)
     {
-        if (!in || len != BLOB_SIZE || in[0] != 1) return false;
+        const bool v1 = in && len == BLOB_SIZE_V1 && in[0] == 1;
+        const bool v2 = in && len == BLOB_SIZE && in[0] == 2;
+        if (!v1 && !v2) return false;
         cmd28       = in[1];
         doorsLen    = (in[2] == 2) ? 2 : 1;
         // ONE-TIME MIGRATION. len 1 was the default until 2026-10-17 and is known
@@ -165,6 +169,8 @@ namespace Canbox
         radarInvert = in[15];
         for (uint8_t i = 0; i < 16; ++i) version[i] = (char)in[16 + i];
         version[16] = '\0';
+        titleCmd    = v2 ? in[32] : 0;
+        artistCmd   = v2 ? in[33] : 0;
         return true;
     }
 

@@ -68,9 +68,9 @@ const defKnobs=()=>({enc:encDef(true,['EncCw','EncCcw','Ok','SrcNext']),enc2:enc
  led:{enabled:false,order:'grb',brightness:128,holdMs:1500,levelSteps:30,animPeriod:60,rightFirst:false,ringReverse:false,zoneLeds:8,zones:[zone('level'),zone('flash')],
   feet:{count:0,max:144,anim:'static',brightness:96,color:'#ffffff'},maxMilliamps:400}});
 const defSet=()=>({pulseMs:120,uartEnabled:true,uartBaud:'38400',ssid:'HomeWiFi',bleMode:'ams',autoTime:true,ancsPopup:true,mdnsOn:true,wifiAuto:false,remindLightsKmh:10,remindBrakeKmh:5,logTags:'',logWeb:'TRC',logFlash:'DBG',logPush:'TRC',logSerial:'INF',mediaLayout:'info',mediaSource:'auto',
- huTitleCmd:0,huArtistCmd:0,huTitleFirst:true,keyPopup:true,keyPopupMs:1200});
+ huTitleFirst:true,keyPopup:true,keyPopupMs:1200});
 /* Canbox::Tuning */
-const defTun=()=>({cmd28:0,doorsLen:2,steerInvert:0,steerDiv:10,steerClamp:540,fuelUnit:2,tripUnit:2,tripFields:1,histLen:13,radarInvert:0,version:'raise-rav4-1.2   '});
+const defTun=()=>({cmd28:0,doorsLen:2,steerInvert:0,steerDiv:10,steerClamp:540,fuelUnit:2,tripUnit:2,tripFields:1,histLen:13,radarInvert:0,version:'raise-rav4-1.2   ',titleCmd:0,artistCmd:0});
 /* DecodeTable::factory у формі /api/map: рядок за id поля (= ім'я сигналу) */
 const pow10=d=>Math.pow(10,d);
 /* RaiseTargets::toInt: lround (половина — від нуля), не Math.round */
@@ -229,7 +229,7 @@ const mRouteId=d=>'route'+d[0].toUpperCase()+d.slice(1);
 const FUELID={2:'l100km',1:'kml',0:'mpg'},TRIPID={2:'km',1:'miles',0:'hide'},byVal=(o,v)=>+Object.keys(o).find(k=>o[k]===v);
 const RAISE={doorsLen:[x=>x,x=>x],cmd28:[x=>x?'ac':'temp',x=>x==='ac'?1:0],steerInvert:[x=>!!x,x=>x?1:0],steerDiv:[x=>x,x=>x],steerClamp:[x=>x,x=>x],
  fuelUnit:[x=>FUELID[x],x=>byVal(FUELID,x)],tripUnit:[x=>TRIPID[x],x=>byVal(TRIPID,x)],tripFields:[x=>!!x,x=>x?1:0],histLen:[x=>x,x=>x],radarInvert:[x=>!!x,x=>x?1:0],
- version:[x=>String(x).trimEnd(),x=>String(x).padEnd(16,' ').slice(0,16)]};
+ version:[x=>String(x).trimEnd(),x=>String(x).padEnd(16,' ').slice(0,16)],titleCmd:[x=>x,x=>x],artistCmd:[x=>x,x=>x]};
 g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type!=='table'&&!(f.id in S.set))S.set[f.id]=regDef(f);
  const st=S.staged,o={...S.set,alerts:S.alerts.map(a=>a.slice()),fw:S.fw,build:S.build,cfgVer:S.cfgVer,cfgVerWas:0,wifiSleep:false,ssid2:S.wifi2.ssid};   /* ssid2 — НОВЕ */
  for(const k of CAPK)o['cap.'+k]=S.cap.settings[k];
@@ -257,7 +257,7 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
  /* реєстр (catalog.settings): невідоме значення enum -> 400, число в межі, як прошивка; кожна відмова
     окремим рядком "ключ: код" (SettingsJson::read), і нічого не записано */
  const errs=[],put=[];
- for(const f of C.settings||[]){if(f.type==='group'||f.type==='table'||q[f.id]===undefined||['bleMode','mediaSource','huTitleCmd','huArtistCmd'].includes(f.id))continue;
+ for(const f of C.settings||[]){if(f.type==='group'||f.type==='table'||q[f.id]===undefined||['bleMode','mediaSource'].includes(f.id))continue;
   const v=q[f.id],why=f.ro?'ro':f.type==='bool'&&typeof v!=='boolean'?'bool':f.type==='int'&&typeof v!=='number'?'number':
    f.type==='enum'&&!f.enum.some(o=>o.v===v)?'enum':f.type==='str'&&!(typeof v==='string'&&v.length<=f.max&&/^[ -~]*$/.test(v))?'text':'';
   if(why){errs.push(f.id+': '+why);continue}put.push(f)}
@@ -269,7 +269,6 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
  for(const d of DESTS){const k=mRouteId(d);if(q[k]!==undefined){S.routing[d]=s[k]&0x0F;delete s[k]}}
  for(const k of CAPK)if(q['cap.'+k]!==undefined){S.cap.settings[k]=s['cap.'+k];delete s['cap.'+k];if(k==='mode')S.cap.mode=S.cap.settings.mode}
  if(typeof q.mediaSource==='string'&&['ams','hu','auto'].includes(q.mediaSource))s.mediaSource=q.mediaSource;
- if(typeof q.huTitleCmd==='number'||typeof q.huArtistCmd==='number'){if(typeof q.huTitleCmd==='number')s.huTitleCmd=q.huTitleCmd;if(typeof q.huArtistCmd==='number')s.huArtistCmd=q.huArtistCmd}
  if(q.huForget){S.hu.learnedTitle=0;S.hu.learnedArtist=0}
  if(q.uartEnabled===false)S.emitter=false;
  if(typeof q.bleMode==='string'&&C.bleModes.some(b=>b.id===q.bleMode)){rb=rb||q.bleMode!==s.bleMode;S.staged.bleMode=q.bleMode}
@@ -329,7 +328,7 @@ g('/api/media',()=>{const m=S.med,tr=curTrack(),l=lay(S.set.mediaLayout),sc=live
  return {auto:m.auto,title:tr.title,artist:tr.artist,clock:clockStrOrEmpty(),clockSrc:S.clk.src,clockAt:S.clk.at,state:tr.state,elapsed:tr.elapsed,duration:tr.duration,cols:l.cols,bar:10,scrollMs:m.scrollMsTitle,scrollMsTitle:m.scrollMsTitle,scrollMsArtist:m.scrollMsArtist,
   layout:S.set.mediaLayout,splashMs:m.splashMs,style:m.style,scroll:m.scroll,hasTransport:tr.transport,
   source:S.set.mediaSource,sourceActive:mediaSrc(),sourceLive:mediaSrc()!=='none',sourceStatus:'',
-  huFrames:S.hu.rx,huTextFrames:Math.floor(S.hu.rx/3),huLearnedTitle:S.hu.learnedTitle,huLearnedArtist:S.hu.learnedArtist,huTitleCmd:S.set.huTitleCmd||S.hu.learnedTitle,huArtistCmd:S.set.huArtistCmd||S.hu.learnedArtist,huTitleFirst:S.set.huTitleFirst,
+  huFrames:S.hu.rx,huTextFrames:Math.floor(S.hu.rx/3),huLearnedTitle:S.hu.learnedTitle,huLearnedArtist:S.hu.learnedArtist,huTitleCmd:S.tun.titleCmd||0,huArtistCmd:S.tun.artistCmd||0,huTitleFirst:S.set.huTitleFirst,
   huTitle:S.huTrack[0],huArtist:S.huTrack[1],phone:phone(),autoTime:S.set.autoTime,bleMode:S.set.bleMode,preview:preview(),
   pane:{scene:sc,on:sc!=='off',auto:m.paneAuto,speed:m.paneSpeed,cycleS:m.paneCycleS,visible:l.pane,...(l.pane||sc==='off'?{}:{hiddenBy:l.id}),bits:px2hex(sceneBits(sc,now()))}}});
 po('/api/media',q=>{const m=S.med;

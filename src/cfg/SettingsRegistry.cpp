@@ -438,11 +438,6 @@ namespace Cfg
              S_PUT(s.uartBaud = kBauds[v < BAUDS ? v : BAUD_DEFAULT_ROW])},
             {"resEnabled", "KEY1/KEY2", "link", SType::Bool, W, AP_KEYS,
              0, 1, 0, nullptr, nullptr, S_GET(s.resEnabled), S_PUT(s.resEnabled = v != 0)},
-            // 0 = learn it (HuMediaSource).
-            {"huTitleCmd", "HU title cmd", "link", SType::Int, W, AP_MEDIA,
-             0, 255, 1, nullptr, nullptr, S_GET(s.huTitleCmd), S_PUT(s.huTitleCmd = (uint8_t)v)},
-            {"huArtistCmd", "HU artist cmd", "link", SType::Int, W, AP_MEDIA,
-             0, 255, 1, nullptr, nullptr, S_GET(s.huArtistCmd), S_PUT(s.huArtistCmd = (uint8_t)v)},
             {"huTitleFirst", "Title first", "link", SType::Bool, W, AP_MEDIA,
              0, 1, 0, nullptr, nullptr, S_GET(s.huTitleFirst), S_PUT(s.huTitleFirst = v != 0)},
 
