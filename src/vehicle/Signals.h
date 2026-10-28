@@ -244,6 +244,9 @@ namespace Vehicle
         // The tank in per cent x10 (Vehicle::Derived): fuel_level over
         // Derived::TANK_L. Last, so the saved map's indices hold.
         SIG_FUEL_PCT,
+        // km to the service to the km (Vehicle::Derived): service_km is 0x715's
+        // step of 150 km; this one counts the km down from the step's edge.
+        SIG_SERVICE_CALC,
 
         SIG_COUNT
     };

@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- «До ТО, км» (`service_calc`) to the km: the car's frame (0x715) says the km to the service only in steps of 150 km, cut down (27578 on the cluster reads 27450). When the step goes down the board knows the cluster is at its edge and counts the km the cluster's odometer adds from there; the edge is kept in NVS, so a reboot keeps it. Until the first step after a service: the step. The step itself stays as «До ТО, крок 150 км» (`service_km`).
+
 ## [1.6.7] - 2026-10-28
 
 ### Changed

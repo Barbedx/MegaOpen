@@ -13,6 +13,7 @@ namespace Vehicle
         const uint8_t kNoLights[]  = {SIG_SPEED, SIG_LIGHT_DIPPED, SIG_LIGHT_MAIN};
         const uint8_t kHandbrake[] = {SIG_SPEED, SIG_HANDBRAKE};
         const uint8_t kTank[]  = {SIG_FUEL_LEVEL};
+        const uint8_t kService[] = {SIG_SERVICE_KM, SIG_ODO_CLUSTER};
 
         template <size_t N>
         uint8_t give(const uint8_t (&a)[N], const uint8_t*& list) { list = a; return (uint8_t)N; }
@@ -40,6 +41,7 @@ namespace Vehicle
             case SIG_DRIVE_NO_LIGHTS: return give(kNoLights, list);
             case SIG_DRIVE_HANDBRAKE: return give(kHandbrake, list);
             case SIG_FUEL_PCT:   return give(kTank, list);
+            case SIG_SERVICE_CALC: return give(kService, list);
             default:             list = nullptr; return 0;
         }
     }
@@ -87,6 +89,37 @@ namespace Vehicle
             _levelTs = s.stamp(SIG_FUEL_LEVEL);
             tank(s, now);
         }
+        if (s.stamp(SIG_SERVICE_KM) != _svcTs || s.stamp(SIG_ODO_CLUSTER) != _odoTs) {
+            _svcTs = s.stamp(SIG_SERVICE_KM);
+            _odoTs = s.stamp(SIG_ODO_CLUSTER);
+            svc(s, now);
+        }
+    }
+
+    // 0x715's byte is the km to the service x150, cut down: 27578 on the
+    // cluster reads 183 = 27450. Going down a step (183 -> 182) is the cluster
+    // crossing 27450: from there each km odo_cluster counts comes off. Never
+    // outside the step the frame says (a stale odometer after a boot, a missed
+    // frame). Up (a service done, a reset) or a jump of more than a step: from
+    // the next edge again.
+    void Derived::svc(State& s, uint32_t now)
+    {
+        if (!s.has(SIG_SERVICE_KM)) return;
+        const int32_t step = s.get(SIG_SERVICE_KM);
+        const bool hasOdo = s.has(SIG_ODO_CLUSTER);
+        const int32_t odo = hasOdo ? s.get(SIG_ODO_CLUSTER) : 0;
+        if (_svcPrev != INT32_MIN && step != _svcPrev) {
+            if (step < _svcPrev && _svcPrev - step <= SERVICE_STEP && hasOdo) _svc = {_svcPrev, odo, step, true};
+            else                                                             _svc.known = false;
+        }
+        _svcPrev = step;
+        int64_t v = step;
+        if (_svc.known && _svc.step == step && hasOdo && odo >= _svc.odo) {
+            v = (int64_t)_svc.base - (odo - _svc.odo);
+            if (v < step) v = step;
+            if (v > step + SERVICE_STEP - 1) v = step + SERVICE_STEP - 1;
+        }
+        put(s, SIG_SERVICE_CALC, v, now);
     }
 
     // Litres over the tank, per cent x10, cut down (31 L of 60: 516 = 51.6 %).

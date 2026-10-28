@@ -936,6 +936,38 @@ void test_a_bound_derived_signal_is_left_to_its_binding()
     TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_DRIVE_NO_LIGHTS));
 }
 
+// km to the service (Derived::svc): the 150-km step until it goes down, then
+// the edge minus the km the cluster counts; the edge back from NVS after a boot.
+void test_service_counts_down_from_the_step_edge()
+{
+    Derived d;
+    State s;
+    uint32_t t = 100;
+    auto at = [&](int32_t step, int32_t odo) { t += 100; s.set(SIG_SERVICE_KM, step, t); s.set(SIG_ODO_CLUSTER, odo, t); d.update(s, t); };
+    at(27600, 1000);                                            // cluster 27654: 184 x 150
+    TEST_ASSERT_EQUAL_INT32(27600, s.get(SIG_SERVICE_CALC));    // no edge yet: the step
+    TEST_ASSERT_FALSE(d.service().known);
+    at(27600, 1050);
+    at(27450, 1054);                                            // down a step: the cluster is at 27600
+    TEST_ASSERT_TRUE(d.service().known);
+    TEST_ASSERT_EQUAL_INT32(27599, s.get(SIG_SERVICE_CALC));    // never above the step it says
+    at(27450, 1076);
+    TEST_ASSERT_EQUAL_INT32(27578, s.get(SIG_SERVICE_CALC));    // the owner's cluster, 2026-10-28
+    at(27450, 1300);                                            // missed the next step: stays in this one
+    TEST_ASSERT_EQUAL_INT32(27450, s.get(SIG_SERVICE_CALC));
+
+    // A reboot: the edge from NVS, the step the same, the odometer moved on.
+    Derived b;
+    State s2;
+    b.setService(d.service());
+    t += 100; s2.set(SIG_SERVICE_KM, 27450, t); s2.set(SIG_ODO_CLUSTER, 1080, t); b.update(s2, t);
+    TEST_ASSERT_EQUAL_INT32(27574, s2.get(SIG_SERVICE_CALC));
+    // A service done: the step goes up, the edge is gone.
+    t += 100; s2.set(SIG_SERVICE_KM, 30000, t); b.update(s2, t);
+    TEST_ASSERT_FALSE(b.service().known);
+    TEST_ASSERT_EQUAL_INT32(30000, s2.get(SIG_SERVICE_CALC));
+}
+
 // The safety pair (Derived::safety): moving with no beam on, or with the
 // handbrake up, each with its own speed band; and the text the panel shows.
 void test_driving_without_lights_or_with_the_handbrake()
@@ -1293,6 +1325,7 @@ int main(int, char**)
     RUN_TEST(test_driving_without_lights_or_with_the_handbrake);
     RUN_TEST(test_reminder_speeds_are_settable);
     RUN_TEST(test_a_bound_derived_signal_is_left_to_its_binding);
+    RUN_TEST(test_service_counts_down_from_the_step_edge);
     RUN_TEST(test_alert_cells_check_their_ranges_and_round_trip);
     RUN_TEST(test_alert_empty_rows_survive_a_new_signal);
     RUN_TEST(test_alert_low_fuel_edge_fires_once_and_waits_for_the_glass);

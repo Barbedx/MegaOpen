@@ -191,6 +191,7 @@ namespace Vehicle
         {"drive_no_lights", "",       0,       1, 0, true,  GRP_SAFETY},
         {"drive_handbrake", "",       0,       1, 0, true,  GRP_SAFETY},
         {"fuel_pct",        "%",      0,    1000, 1, false, GRP_TRIP},
+        {"service_calc",    "km",     0,   63750, 0, false, GRP_ENGINE},
     };
 
     static_assert(sizeof(kMeta) / sizeof(kMeta[0]) == SIG_COUNT,

@@ -137,6 +137,8 @@ namespace App
             int32_t  s_odoSaved = -1, s_odoCSaved = -1;
             uint32_t s_odoAt = 0;
 
+            void svcRestore();
+
             void odoRestore(uint32_t now)
             {
                 if (!s_s.state) return;
@@ -151,6 +153,44 @@ namespace App
                 if (km || kmC)
                     LOGI("car", "odometer from NVS: %ld km (cluster %ld km), until the car sends it",
                                    (long)km, (long)kmC);
+                svcRestore();
+            }
+
+            // service_calc's edge (Derived::Service): saved when it moves, once
+            // in 150 km; "odo" svB/svO/svS, svK = known.
+            Vehicle::Derived::Service s_svcSaved;
+
+            void svcRestore()
+            {
+                Preferences p;
+                p.begin("odo", true);
+                Vehicle::Derived::Service v;
+                v.known = p.getBool("svK", false);
+                v.base = p.getInt("svB", 0);
+                v.odo = p.getInt("svO", 0);
+                v.step = p.getInt("svS", 0);
+                p.end();
+                s_svcSaved = v;
+                s_derived.setService(v);
+                if (v.known)
+                    LOGI("car", "service: edge %ld km at cluster %ld km (step %ld), from NVS",
+                                   (long)v.base, (long)v.odo, (long)v.step);
+            }
+
+            void svcKeep()
+            {
+                const Vehicle::Derived::Service& v = s_derived.service();
+                if (v == s_svcSaved) return;
+                s_svcSaved = v;
+                Preferences p;
+                p.begin("odo", false);
+                p.putBool("svK", v.known);
+                p.putInt("svB", v.base);
+                p.putInt("svO", v.odo);
+                p.putInt("svS", v.step);
+                p.end();
+                LOGI("car", "service: %s %ld km at cluster %ld km (step %ld)", v.known ? "edge" : "edge lost,",
+                               (long)v.base, (long)v.odo, (long)v.step);
             }
 
             void odoKeep(uint32_t now)
@@ -440,6 +480,7 @@ namespace App
                     s_derived.update(*s_s.state, now);
                     learn(*s_s.state, now);
                     odoKeep(now);
+                    svcKeep();
                 }
 #if FEATURE_DIAG
                 CarDiag::frame(f, now);      // the climate's reply, and the bus is alive
