@@ -208,7 +208,7 @@ namespace App
                 // stale = a frame that found no gap in PENDING_MAX_MS and was
                 // dropped; msgDrops = macro Messages the queue had no room for.
                 // desync = frames abandoned after RX_GAP_MS of silence mid-frame.
-                LOGI("hu", "acks=%u ackLateMax=%uus keys=%u veh=%u replies=%u keyDropped=%u "
+                LOGS("hu", "acks=%u ackLateMax=%uus keys=%u veh=%u replies=%u keyDropped=%u "
                                "ackDropped=%u vehDropped=%u vehDeferred=%u outDrops(veh/raw)=%u/%u "
                                "replyRetries=%u replyLost=%u stale=%u msgDrops=%u Lmax=%u rx=%u desync=%u",
                                (unsigned)tx.acks(), (unsigned)s_ackLateMaxUs, (unsigned)tx.keyFrames(),

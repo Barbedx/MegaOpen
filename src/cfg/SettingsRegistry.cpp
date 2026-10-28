@@ -206,6 +206,13 @@ namespace Cfg
             [](uint8_t i) { return Log::LEVEL_NAMES[i < Log::LEVELS ? i : 0]; },
             [](uint8_t i) { return Log::LEVEL_NAMES[i < Log::LEVELS ? i : 0]; },
         };
+        // The status lines' interval at INF (Log::setStatusInterval).
+        const UiName kLogStatusNames[] = {{"10", "10 s"}, {"60", "60 s"}, {"300", "300 s"}};
+        const SEnum kLogStatus = {
+            [] { return (uint8_t)3; },
+            [](uint8_t i) { return kLogStatusNames[i < 3 ? i : 1].id; },
+            [](uint8_t i) { return kLogStatusNames[i < 3 ? i : 1].name; },
+        };
         // logTags: kept only when it reads (LogTags::setSpec), applied at once.
         const SStr kLogTags = {
             (uint8_t)LogTags::SPEC_MAX,
@@ -552,6 +559,13 @@ namespace Cfg
             {"logPush", "Log to GitHub", "service", SType::Enum, W, AP_NONE,
              0, 0, 0, nullptr, &kLogLevels, S_GET(s.logPush),
              [](Model& m, int32_t v) { m.s->logPush = (uint8_t)v; Log::setSinkLevel(Log::SINK_PUSH, (LogLevel)v); }},
+            {"logStatus", "Status every", "service", SType::Enum, W, AP_NONE,
+             0, 0, 0, nullptr, &kLogStatus, S_GET(s.logStatus),
+             [](Model& m, int32_t v) {
+                 static const uint32_t MS[3] = {10000, 60000, 300000};
+                 m.s->logStatus = (uint8_t)(v < 3 ? v : 1);
+                 Log::setStatusInterval(MS[m.s->logStatus]);
+             }},
             {"logSerial", "Log to serial", "service", SType::Enum, W, AP_NONE,
              0, 0, 0, nullptr, &kLogLevels, S_GET(s.logSerial),
              [](Model& m, int32_t v) { m.s->logSerial = (uint8_t)v; Log::setSinkLevel(Log::SINK_SERIAL, (LogLevel)v); }},

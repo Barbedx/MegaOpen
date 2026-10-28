@@ -1138,7 +1138,7 @@ namespace App
             // waits for it now); waits = requests still owed a verdict.
             void logWindow()
             {
-                LOGI("ui", "busyMax=%uus mediaBusy=%u completions=%u stray=%u timeouts=%u "
+                LOGS("ui", "busyMax=%uus mediaBusy=%u completions=%u stray=%u timeouts=%u "
                                "uiqDrops=%u waits=%u panes=%u/%u",
                                (unsigned)s_busyWinUs, (unsigned)s_mediaLockMisses,
                                (unsigned)s_completions, (unsigned)s_stray,

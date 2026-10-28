@@ -516,9 +516,12 @@ namespace Capture
 
         void logLine()
         {
+            static int8_t s_capTag = -1;
+            if (!Log::statusOn("cap", s_capTag, millis())) return;
             char b[200];
             statusLine(b, sizeof(b));
-            LogBus::line(b);
+            // statusLine() writes "[cap] ...": the tag comes from the logger.
+            Log::write(LogLevel::INF, "cap", "%s", strncmp(b, "[cap] ", 6) ? b : b + 6);
         }
 
         void run(void*)

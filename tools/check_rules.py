@@ -204,7 +204,7 @@ for rel in ['src/net/WebUi.cpp', 'src/net/WebUiMacro.cpp', 'src/net/WebUiRes.cpp
 # formatted. LogBus is the bus under it. LogBus::line stays only where a line is
 # built in pieces, until the status providers (step 3) and the head-unit UART in
 # the capture (step 4) replace those builders.
-RAW_LINE_ALLOWED = {'src/main.cpp', 'src/app/Housekeeping.cpp', 'src/capture/CanRecorder.cpp'}
+RAW_LINE_ALLOWED = {'src/main.cpp'}
 for dirpath, _, files in os.walk(os.path.join(ROOT, 'src')):
     for fn in files:
         if not fn.endswith(('.cpp', '.h')):

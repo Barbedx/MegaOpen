@@ -30,6 +30,7 @@ namespace Cfg
         _s.logFlash  = _p.getUChar("logFlash", 3);
         _s.logPush   = _p.getUChar("logPush", 4);
         _s.logSerial = _p.getUChar("logSer", 2);
+        _s.logStatus = _p.getUChar("logStat", 1);
         {
             // Keys g1..g6 (1.6.2): the gr1..gr5 of 1.6.1 held the computed
             // five-speed table, wrong for this car; they are left unread.
@@ -165,6 +166,7 @@ namespace Cfg
         _p.putUChar ("logFlash", _s.logFlash);
         _p.putUChar ("logPush",  _s.logPush);
         _p.putUChar ("logSer",   _s.logSerial);
+        _p.putUChar ("logStat",  _s.logStatus);
         {
             static const char* const key[6] = {"g1", "g2", "g3", "g4", "g5", "g6"};
             for (int i = 0; i < 6; ++i) _p.putUShort(key[i], _s.gearRatio[i]);

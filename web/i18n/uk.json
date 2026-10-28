@@ -488,6 +488,7 @@
  "k.set.gear5": "5-та",
  "k.set.gear6": "6-та",
  "k.set.logLevel": "Рівень логу",
+ "k.set.logStatus": "Рядки стану кожні",
  "k.set.logTags": "Рівні окремих тегів",
  "k.set.logWeb": "Журнал на сторінці від",
  "k.set.logFlash": "Журнал у flash від",

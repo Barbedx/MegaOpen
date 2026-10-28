@@ -38,6 +38,8 @@ namespace App
             void logTasks(uint32_t now)
             {
                 static uint32_t s_wakesWas[Tasks::MAX] = {};
+                static int8_t s_taskTag = -1;
+                const bool say = Log::statusOn("task", s_taskTag, now);
                 char b[LogBus::MAX_LINE];
                 int n = 0;
                 const int count = Tasks::count();
@@ -55,11 +57,10 @@ namespace App
                     const int m = snprintf(one, sizeof(one), " %s%s:stk=%u,w=%u,busy=%uus,age=%ums",
                                            e->name, e->critical ? "*" : "", stk, (unsigned)dw,
                                            (unsigned)e->busyMaxUs, (unsigned)(age < 0 ? 0 : age));
-                    if (n && n + m >= (int)sizeof(b)) { LogBus::line(b); n = 0; }
-                    if (!n) n = snprintf(b, sizeof(b), "[task]");
+                    if (n && n + m >= (int)sizeof(b)) { if (say) Log::write(LogLevel::INF, "task", "%s", b + 1); n = 0; }
                     n += snprintf(b + n, sizeof(b) - n, "%s", one);
                 }
-                if (n) LogBus::line(b);
+                if (n && say) Log::write(LogLevel::INF, "task", "%s", b + 1);
                 Tasks::newWindow();
             }
 
@@ -100,7 +101,7 @@ namespace App
                     if ((uint32_t)(now - beatAt) >= BEAT_MS) {
                         beatAt = now;
                         // `big` = largest free block (fragmentation).
-                        LOGI("win", "min=%u dma=%u big=%u  (10 s window, %u ms samples)",
+                        LOGS("win", "min=%u dma=%u big=%u  (10 s window, %u ms samples)",
                                        (unsigned)s_heapWinMin, (unsigned)s_dmaWinMin,
                                        (unsigned)s_bigWinMin, (unsigned)PASS_MS);
                         s_heapWinMin = s_dmaWinMin = s_bigWinMin = 0xFFFFFFFFu;

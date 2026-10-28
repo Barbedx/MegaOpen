@@ -50,6 +50,7 @@ namespace Cfg
         uint8_t  logFlash  = 3;
         uint8_t  logPush   = 4;
         uint8_t  logSerial = 2;
+        uint8_t  logStatus = 1;           // the status lines at INF: 0 = 10 s, 1 = 60 s, 2 = 300 s
         uint16_t gearRatio[6] = {80, 147, 207, 275, 359, 431};
         Str      apName = "MegaOpen";
         Str      apPass = MO_AP_PASS;      // >= 8 chars or the AP comes up open

@@ -19,6 +19,9 @@ namespace Log
         portMUX_TYPE      g_tagMux = portMUX_INITIALIZER_UNLOCKED;
         // web TRC, flash DBG, push TRC, serial INF (the settings' defaults)
         volatile uint8_t  g_sink[SINK_COUNT] = {4, 3, 4, 2};
+        // Status lines: when each tag last wrote one, and how often at INF.
+        uint32_t          g_statusAt[LogTags::MAX] = {};
+        volatile uint32_t g_statusMs = 60000;
 
         // Strip trailing CR/LF so each record is exactly one line (many legacy call
         // sites pass a trailing newline).
@@ -49,6 +52,19 @@ namespace Log
         }
         return (uint8_t)lvl <= g_tags.threshold(slot, (uint8_t)g_level);
     }
+
+    bool statusOn(const char* tag, int8_t& slot, uint32_t now)
+    {
+        if (!on(LogLevel::INF, tag, slot)) return false;
+        if (on(LogLevel::DBG, tag, slot)) return true;          // DBG: every window
+        if (slot < 0) return true;                               // table full: as before
+        uint32_t& at = g_statusAt[slot];
+        if (at && (uint32_t)(now - at) < g_statusMs) return false;
+        at = now ? now : 1;
+        return true;
+    }
+    void     setStatusInterval(uint32_t ms) { g_statusMs = ms < 1000 ? 1000 : ms; }
+    uint32_t statusInterval()               { return g_statusMs; }
 
     bool setTagSpec(const char* spec)
     {

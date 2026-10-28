@@ -42,6 +42,8 @@ namespace Log {
     inline bool        setTagSpec(const char*) { return true; }
     inline void        setSinkLevel(Sink, LogLevel) {}
     inline bool        on(LogLevel, const char*, int8_t&) { return false; }
+    inline bool        statusOn(const char*, int8_t&, uint32_t) { return false; }
+    inline void        setStatusInterval(uint32_t) {}
     inline bool        enabled(LogLevel) { return false; }
     inline const char *levelName(LogLevel) { return ""; }
     inline void        emit(LogLevel, const char *, const char *, ...) {}
@@ -52,6 +54,7 @@ namespace Log {
 #define LOGI(cat, ...) ((void)0)
 #define LOGD(cat, ...) ((void)0)
 #define LOGT(cat, ...) ((void)0)
+#define LOGS(cat, ...) ((void)0)
 #else // ---- firmware build ------------------------------------------------------
 #include <Arduino.h>
 
@@ -99,6 +102,14 @@ namespace Log {
     // Would a line of this level and tag be written? `slot` caches the tag's
     // index (start it at -1): the macros keep one per call site.
     bool on(LogLevel lvl, const char* tag, int8_t& slot);
+    // A status line (counters a task writes every window, ~10 s): due when the
+    // tag is at DBG or more, else once per status interval (the setting
+    // logStatusS, 60 s by default). Ask once per window, then write every line
+    // of it with write(INF, ...): the LOGS macro does both for one line.
+    bool statusOn(const char* tag, int8_t& slot, uint32_t nowMs);
+    void setStatusInterval(uint32_t ms);
+    uint32_t statusInterval();
+
     // Formats and writes, no threshold check (the macros checked).
     void write(LogLevel lvl, const char* tag, const char* fmt, ...)
         __attribute__((format(printf, 3, 4)));
@@ -125,4 +136,10 @@ namespace Log {
 #define LOGI(cat, ...) LOG_AT(LogLevel::INF, cat, __VA_ARGS__)
 #define LOGD(cat, ...) LOG_AT(LogLevel::DBG, cat, __VA_ARGS__)
 #define LOGT(cat, ...) LOG_AT(LogLevel::TRC, cat, __VA_ARGS__)
+// A status line: INF, once per status interval (every window at DBG).
+#define LOGS(cat, ...)                                                               \
+    do {                                                                             \
+        static int8_t s_logTag_ = -1;                                                \
+        if (Log::statusOn(cat, s_logTag_, millis())) Log::write(LogLevel::INF, cat, __VA_ARGS__); \
+    } while (0)
 #endif // NATIVE

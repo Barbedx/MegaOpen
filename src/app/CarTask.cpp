@@ -178,7 +178,7 @@ namespace App
                 const int32_t v = st->get(SIG_SPEED), rpm = st->has(SIG_RPM) ? st->get(SIG_RPM) : 0;
                 if (v == 0 && rpm == 0) return;
                 auto g = [&](uint8_t s) -> long { return st->has(s) ? (long)st->get(s) : -9; };
-                LOGI("drive", "%ld.%02ld km/h %ld rpm ratio %ld gear %ld clutch %ld N %ld R %ld "
+                LOGS("drive", "%ld.%02ld km/h %ld rpm ratio %ld gear %ld clutch %ld N %ld R %ld "
                                "lights pos/dip/main %ld/%ld/%ld handbrake %ld; no_lights %ld handbrake_moving %ld; "
                                "odometer %ld (age %ld s), cluster %ld; fuel %ld L (apv %ld) low %ld",
                                (long)(v / 100), (long)(v % 100), (long)rpm, g(SIG_GEAR_RATIO), g(SIG_GEAR),
@@ -487,7 +487,7 @@ namespace App
                                   s_s.src[i]->name(), (unsigned long)st.frames,
                                   (unsigned long)st.dropped);
                 }
-                LOGI("car", "fps=%lu frames=%lu drainMax=%lu decode=%lu/%lu short=%lu "
+                LOGS("car", "fps=%lu frames=%lu drainMax=%lu decode=%lu/%lu short=%lu "
                                "busyMax=%luus cmdDrops=%lu src %s",
                                (unsigned long)s_fps, (unsigned long)s_frames,
                                (unsigned long)s_drainMax, (unsigned long)s_decode.hits(),

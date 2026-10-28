@@ -8,6 +8,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ### Changed
 - The log, step 1 of docs/design/logging.md: the level (`logLevel`) is saved and survives a reboot; per-tag levels (`logTags`, e.g. `hu=TRC knobs=DBG`, tags register themselves on first use); and per sink, the lowest level each takes (`logWeb`, `logFlash` at most DBG, `logPush`, `logSerial`). The LOGx macros look a tag up once per call site and format nothing for a line that will not be written.
 - The log, step 2: every line the firmware writes goes through LOGE..LOGT with a level and a tag (212 calls converted, the rest by hand; the text after the tag is unchanged, so `[ota] CONFIRMED` still reads the same, now as `I [ota] CONFIRMED`). `tools/check_rules.py` refuses a `LogBus::printf` outside the logger; `LogBus::line` remains only in the three line builders steps 3 and 4 replace.
+- The log, step 3: the counters each task writes every 10 s (`[hb] [win] [task] [stk] [can] [panel] [stall] [loop] [hu] [key] [car] [can2] [cap] [ble] [media] [ui] [drive] [net]`) are status lines (`LOGS`): at INF once per «Рядки стану кожні» (`logStatus`, 10 / 60 / 300 s, 60 by default), every window when the tag is at DBG. About six times less text in a pushed log.
 
 ### Fixed
 - The head unit's odometer was empty for a drive: 0x5FD did not come once (1.6.1 `[drive]`, two drives), so the field now takes the cluster's odometer (0x5C5, always on the bus) whenever 0x5FD is silent, not only under the 7D 04 experiments.

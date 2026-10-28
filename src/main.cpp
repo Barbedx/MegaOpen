@@ -1614,7 +1614,7 @@ static void hkBeat(uint32_t now)
     // [stk] is a subset of [task] now. Kept until Step 6 retires it, so old
     // logs and new ones still compare line for line.
     const TaskHandle_t net = App::Housekeeping::task();
-    LOGI("stk", "loop=%u net=%u ble=%u knobs=%u",
+    LOGS("stk", "loop=%u net=%u ble=%u knobs=%u",
          g_loopTask ? (unsigned)uxTaskGetStackHighWaterMark(g_loopTask) : 0u,
          net ? (unsigned)uxTaskGetStackHighWaterMark(net) : 0u,
          g_bleTask ? (unsigned)uxTaskGetStackHighWaterMark(g_bleTask) : 0u,
@@ -1633,7 +1633,7 @@ static void hkBeat(uint32_t now)
     {
         const Mcp2518Source::Status c = Mcp2518Source::instance().status().read();
         static const char* const kAb[] = {"searching", "locked", "manual"};
-        LOGI("can2", "live=%u ab=%s bps=%lu fps=%lu frames=%lu hwOvf=%lu ringPeak=%lu/256 "
+        LOGS("can2", "live=%u ab=%s bps=%lu fps=%lu frames=%lu hwOvf=%lu ringPeak=%lu/256 "
              "fd=%lu rtr=%lu intKicks=%lu maskMaxUs=%lu rec=%lu tec=%lu flags=0x%02lX "
              "bdiag1=0x%08lX restarts=%lu rounds=%lu rejected=%lu err=0x%lX",
              (unsigned)c.live, kAb[c.state <= 2 ? c.state : 0], (unsigned long)c.bps,
@@ -1658,7 +1658,7 @@ static void hkBeat(uint32_t now)
     // stale = waited over 300 ms; coal = volume presses folded into one
     // pending count; nolink = owed with no phone connected; vol = AMS
     // commands a volume press sends (measured, sinks/AmsVolumeStep.h).
-    LOGI("ble", "keys q=%u ams=%u fail=%u hid=%u stale=%u coal=%u nolink=%u vol=%u",
+    LOGS("ble", "keys q=%u ams=%u fail=%u hid=%u stale=%u coal=%u nolink=%u vol=%u",
          (unsigned)Sinks::BleKeyQueue::dropped(), (unsigned)g_bleKeys.amsWrites(),
          (unsigned)g_bleKeys.amsFailed(),
          (unsigned)g_bleKeys.hidPresses(), (unsigned)g_bleKeys.stale(),
@@ -1668,11 +1668,11 @@ static void hkBeat(uint32_t now)
 #if FEATURE_DISPLAY_CAN || FEATURE_BLE
     // lockMiss = head-unit frames that found a reader holding the media
     // mutex and were applied a pass later; lost = of those, stash overflow.
-    LOGI("media", "hu frames=%u text=%u lockMiss=%u lost=%u",
+    LOGS("media", "hu frames=%u text=%u lockMiss=%u lost=%u",
          (unsigned)g_hu.frames(), (unsigned)g_hu.textFrames(),
          (unsigned)g_hu.lockMisses(), (unsigned)g_hu.stashDropped());
 #endif
-    LOGI("hb", "up=%02u:%02u:%02u heap=%u min=%u big=%u canrx=%u keys=%u tx=%u/%u",
+    LOGS("hb", "up=%02u:%02u:%02u heap=%u min=%u big=%u canrx=%u keys=%u tx=%u/%u",
          (unsigned)(s / 3600), (unsigned)((s / 60) % 60), (unsigned)(s % 60),
          (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(),
          (unsigned)ESP.getMaxAllocHeap(),
@@ -1696,7 +1696,7 @@ static void hkBeatSlow(uint32_t)
         // A String whose allocation failed has a NULL buffer; strlen(NULL)
         // in vsnprintf reboots. Print "?" instead.
         auto nn = [](const char* s) { return s ? s : "?"; };
-        LOGI("net", "STA ssid=\"%s\" rssi=%d bssid=%s ip=%s gw=%s mask=%s %s",
+        LOGS("net", "STA ssid=\"%s\" rssi=%d bssid=%s ip=%s gw=%s mask=%s %s",
              nn(WiFi.SSID().c_str()), (int)WiFi.RSSI(), nn(WiFi.BSSIDstr().c_str()),
              nn(WiFi.localIP().toString().c_str()),
              nn(WiFi.gatewayIP().toString().c_str()),
@@ -1890,6 +1890,8 @@ void setup()
         Log::setSinkLevel(Log::SINK_FLASH, (LogLevel)s.logFlash);
         Log::setSinkLevel(Log::SINK_PUSH, (LogLevel)s.logPush);
         Log::setSinkLevel(Log::SINK_SERIAL, (LogLevel)s.logSerial);
+        static const uint32_t STATUS_MS[3] = {10000, 60000, 300000};
+        Log::setStatusInterval(STATUS_MS[s.logStatus < 3 ? s.logStatus : 1]);
         if (s.logLevel != 2 || s.logTags.length())
             LOGI("log", "level %s%s%s", Log::levelName(Log::level()), s.logTags.length() ? ", per tag: " : "",
                  s.logTags.c_str());
@@ -2607,7 +2609,7 @@ static void logLoopWindow(uint32_t now)
     const Diag::CanStatus st = Diag::CanBench::status();
     if (st.installed) {
         static const char* const kState[] = {"stopped", "running", "bus-off", "recovering"};
-        LOGI("can", "state=%s txerr=%u rxerr=%u txfail=%u rxmiss=%u buserr=%u "
+        LOGS("can", "state=%s txerr=%u rxerr=%u txfail=%u rxmiss=%u buserr=%u "
              "arblost=%u txq=%u rxq=%u",
              kState[st.state <= 3 ? st.state : 0],
              (unsigned)st.tec, (unsigned)st.rec,
@@ -2650,14 +2652,14 @@ static void logLoopWindow(uint32_t now)
 #endif
     // The L2 baseline (flash erases freezing both cores): read it during a
     // log rotate. at= is the uptime of the worst gap in this window.
-    LOGI("stall", "loopGapMax=%u us at=%u ms", (unsigned)g_stallWinMaxUs,
+    LOGS("stall", "loopGapMax=%u us at=%u ms", (unsigned)g_stallWinMaxUs,
          (unsigned)g_stallWinAtMs);
     g_stallWinMaxUs = 0;
     g_stallWinAtMs = 0;
     // Slowest loop pass and its worst section: this window's maximum. Keys no
     // longer wait for it. The media source's mutex is the ui task's to wait
     // for now: its misses are in [ui] mediaBusy.
-    LOGI("loop", "max=%u ms (%s %u ms)", (unsigned)(g_loopWinMaxUs / 1000),
+    LOGS("loop", "max=%u ms (%s %u ms)", (unsigned)(g_loopWinMaxUs / 1000),
          g_loopWinWhere, (unsigned)(g_loopWinWhereUs / 1000));
     g_loopWinMaxUs = 0; g_loopWinWhere = "-"; g_loopWinWhereUs = 0;
 }

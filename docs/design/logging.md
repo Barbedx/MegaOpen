@@ -124,6 +124,14 @@ Today's `[hb] [win] [task] [stk] [can] [panel] [stall] [loop] [hu] [key] [car]
 [can2] [cap] [ble] [media] [ui] [drive] [gear] [push]` periodic lines each
 become one provider; their tasks no longer print on a timer.
 
+**As built (step 3, 2026-10-28):** each task keeps writing its own status
+line from its own counters (only it owns them; a provider called from the
+logger's task would read them across tasks), through `LOGS(tag, ...)`, which asks
+`Log::statusOn(tag)`: due every window at DBG, else once per `logStatus`
+interval. A task with several lines per window (`[task]`) asks once and writes
+them all. The combined `[status]` line and the JSON snapshots stay to do
+(queue: status JSON to GitHub).
+
 **What each level carries after slice 2** (the rules for converting a call):
 
 | level | what goes there | examples |
