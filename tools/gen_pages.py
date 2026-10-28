@@ -30,7 +30,7 @@ Python wrote it last, and every `pio run` after a hand run dirtied the tree
 (and the build stamp). Every build writes it before compiling; the checks
 that read it (check_pages, check_nav) say "build first" when it is missing.
 """
-import gzip, json, os, re
+import base64, gzip, json, os, re
 
 try:                                  # under PlatformIO's SCons, __file__ is not a given
     Import("env")                     # noqa: F821
@@ -103,7 +103,10 @@ def app_parts(langs=("uk",)):
     jsdir = os.path.join(WEB, "js")
     js = "\n".join(rd("js", n) for n in sorted(os.listdir(jsdir)) if n.endswith(".js"))
     js = "const I18N={%s};\n" % ",".join('"%s":%s' % (l, i18n_min(l)) for l in langs) + js
-    return rd("index.html"), rd("app.css"), js
+    # the favicon (tools/gen_icons.py), inline: the board serves no /favicon.ico
+    with open(os.path.join(WEB, "icon.png"), "rb") as f:
+        icon = '<link rel="icon" type="image/png" href="data:image/png;base64,%s">' % base64.b64encode(f.read()).decode()
+    return rd("index.html").replace("<!--ICON-->", icon), rd("app.css"), js
 
 def app_inline(shell, css, scripts):
     """Fill the shell's two placeholders. `scripts` is a list: the board gets
