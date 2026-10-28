@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+- The car's tables live in a file, `/cfg/car.json` in LittleFS, not in NVS (rules 1.7, slice 1a): the CAN decode map (rows and constants) and the head-unit field map, every signal by NAME, so a firmware that adds or reorders signals reads the same file and a name it does not know is skipped, never taken for another signal. The first boot builds the file from 1.6.x's NVS; the NVS copies are erased only on a later boot that is not on an OTA trial, so a rollback during the trial still finds them. Going back to an older firmware after that starts from the factory map.
+- A settings file carries the map the same way (`decode` and `hu` as objects by name). A 1.6.x file's base64 `decode` / `hu.fields` is refused (`decode: not_object`); its other settings still import.
+- An image without LittleFS (env `direct`) keeps the factory tables and does not save edits to them.
+
 ## [1.6.8] - 2026-10-28
 
 ### Added
