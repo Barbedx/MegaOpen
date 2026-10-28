@@ -315,6 +315,20 @@ namespace Cfg
         return !_p.isKey("decode") || _p.remove("decode");
     }
 
+    bool Config::saveFieldMap(const Canbox::FieldMap& m)
+    {
+        uint8_t blob[Canbox::FieldMap::BLOB_MAX];
+        const size_t n = m.pack(blob, sizeof(blob));
+        return n && _p.putBytes("huFmap", blob, n) == n;
+    }
+
+    bool Config::loadFieldMap(Canbox::FieldMap& m)
+    {
+        uint8_t blob[Canbox::FieldMap::BLOB_MAX];
+        const size_t n = _p.getBytes("huFmap", blob, sizeof(blob));
+        return n && m.unpack(blob, n);
+    }
+
     bool Config::saveAlerts(const Vehicle::AlertRules& a)
     {
         uint8_t blob[Vehicle::AlertRules::BLOB_BYTES];

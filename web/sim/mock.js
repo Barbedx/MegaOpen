@@ -564,6 +564,9 @@ const lpView=()=>{const v=S.lp||(S.lp={on:true,tok:false,repo:'Barbedx/megaopen-
   queued:Math.round(Math.min(now()-v.at,600000)/60000*9000),spool:1048576,okAgoMs:v.files?now()-v.at:0,nextInMs:live?Math.max(0,60000-(now()-v.at)):0,heapMin:S.heap,
   can:v.can,canMB:v.canMB,canToday:v.canToday,canFile:0,canBudget:v.canToday>=v.canMB*1048576}};
 g('/api/logpush',lpView);
+/* /api/hu/fields (src/net/WebUiMap.cpp): поля ГУ, їхні правила (S.fm) і значення, що йде */
+g('/api/hu/fields',()=>({proto:'raise112',rows:(C.raise||[]).map(x=>({id:x.id,sig:x.id,v:null,rule:(S.fm||{})[x.id]||null}))}));
+po('/api/hu/fields',q=>{S.fm=S.fm||{};for(const r of q.rows||[]){if(r.from==='auto')delete S.fm[r.id];else S.fm[r.id]={from:r.from,src:r.src||'',mul:r.mul||1,div:r.div||1,add:r.add||0}}return ok});
 g('/api/logs/tags',()=>({tags:['boot','wifi','hu','key','car','push','ota'].map(x=>({tag:x,lvl:null})),spec:S.set.logTags||''}));
 /* /api/gears (src/net/WebUiMap.cpp): живі значення передачі, таблиця, піки навчання */
 g('/api/gears',()=>{const v=S.car&&S.car.speed!==undefined?S.car.speed:4250,r=2100,k=Math.round(v/r*100);

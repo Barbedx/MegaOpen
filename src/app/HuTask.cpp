@@ -94,6 +94,7 @@ namespace App
                 s_s.emitter->setEnabled(c.enabled);
                 s_s.emitter->setTuning(c.tuning);
                 s_s.emitter->setExperiments(c.exp);
+                s_s.emitter->setFieldMap(c.fields);
                 for (uint8_t i = 0; i < Canbox::Rav4Emitter::MAX_MESSAGES; ++i)
                     s_s.emitter->setMsgEnabled(i, c.msgOn[i]);
             }

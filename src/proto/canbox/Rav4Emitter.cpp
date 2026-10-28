@@ -610,17 +610,19 @@ namespace Canbox
         }
     }
 
-    bool Rav4Emitter::preview(uint8_t msgIndex, const FieldView& s,
+    bool Rav4Emitter::preview(uint8_t msgIndex, const FieldView& in,
                               uint8_t* frame, uint8_t& frameLen) const
     {
+        const FieldView s(in.state(), &_map);   // the owner's field map on
         uint8_t cmd = 0, len = 0, p[MAX_PAYLOAD];
         if (!build(msgIndex, s, cmd, p, len)) return false;
         frameLen = buildFrame(cmd, p, len, frame);
         return frameLen != 0;
     }
 
-    bool Rav4Emitter::sendNow(uint8_t msgIndex, const FieldView& s)
+    bool Rav4Emitter::sendNow(uint8_t msgIndex, const FieldView& in)
     {
+        const FieldView s(in.state(), &_map);   // the owner's field map on
         uint8_t cmd = 0, len = 0, p[MAX_PAYLOAD];
         if (!build(msgIndex, s, cmd, p, len)) return false;
         emit(cmd, p, len);
@@ -628,8 +630,9 @@ namespace Canbox
         return true;
     }
 
-    bool Rav4Emitter::sendByCmd(uint8_t cmd, const FieldView& s)
+    bool Rav4Emitter::sendByCmd(uint8_t cmd, const FieldView& in)
     {
+        const FieldView s(in.state(), &_map);   // the owner's field map on
         for (uint8_t i = 0; i < M_COUNT; ++i) {
             if (kCmd[i] != cmd) continue;
             // 0x28 maps to two rows; send only the selected form.
@@ -657,8 +660,9 @@ namespace Canbox
         return false;
     }
 
-    void Rav4Emitter::tick(const FieldView& s, uint32_t nowMs)
+    void Rav4Emitter::tick(const FieldView& in, uint32_t nowMs)
     {
+        const FieldView s(in.state(), &_map);   // the owner's field map on
         if (!_enabled) return;
         // The outside temperature shown in 0x28, held against flicker.
         if (s.has(SIG_OUT_TEMP) && !s.pinned(SIG_OUT_TEMP)) _temp.step(s.get(SIG_OUT_TEMP), nowMs);

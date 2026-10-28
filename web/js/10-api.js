@@ -3,7 +3,7 @@
    виклики йдуть у мок; це єдине місце, де сторінка знає про симулятор
    і про застосунок (window.MOLink, нижче). */
 /* ці маршрути приймають JSON; решта — форма (urlencoded) */
-const JSON_PATHS=new Set(['/api/settings','/api/display','/api/media','/api/wifi','/api/affamap','/api/knobs','/api/macros','/api/map','/api/map/test','/api/config',
+const JSON_PATHS=new Set(['/api/settings','/api/display','/api/media','/api/wifi','/api/affamap','/api/knobs','/api/macros','/api/map','/api/map/test','/api/hu/fields','/api/config',
  '/api/keymap','/api/res','/api/res/map','/api/res/auto','/api/res/learn','/api/logpush','/api/fw/channel','/api/diag','/api/alerts/test']);
 /* форма: так/ні йде як 1/0 — прошивка порівнює з "1" (paramStr(r,"on")=="1") */
 const formBody=params=>new URLSearchParams(Object.entries(params).map(([k,v])=>[k,v===true?'1':v===false?'0':String(v)]));

@@ -6,6 +6,7 @@
 #include "../app/HuTask.h"
 #include "../app/CarDiag.h"
 #include "../proto/canbox/RaiseTargets.h"
+#include "../proto/canbox/FieldView.h"
 #include "../vehicle/DecodeTable.h"
 #include "../vehicle/Derived.h"
 #include "../utils/LogBus.h"
@@ -207,6 +208,74 @@ void WebUi::routesMap()
     // {reset:true} (back to decode_defaults.inc: the NVS blob is erased). Every
     // part is checked before any is applied. A row replaces whatever bound
     // that field; the map goes to the car task (no reboot) and to NVS (`decode`).
+    // ---- the head-unit field map (docs/design/hu-mapping.md, step 2) ----------
+    // GET: every field of the active protocol (RAV4 today), its rule (null =
+    // its own signal) and the value it sends now. POST {rows:[{id, from:
+    // "auto"|"sig"|"k"|"off", src, mul, div, add}]}: rules set or cleared,
+    // applied at the hu task's next pass and saved (NVS "huFmap").
+    route("/api/hu/fields", HTTP_GET, [this](PsychicRequest* r) {
+        if (!_state) return r->reply(503, "text/plain", "not_built vehicle");
+        App::Hu::EmitterCfg cfg;
+        if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
+        ChunkOut out(r);
+        char b[220], v[16];
+        out.put("{\"proto\":\"raise112\",\"rows\":[");
+        for (uint8_t i = 0; i < RT::count(); ++i) {
+            const TargetView t = RT::at(i);
+            if (t.sig >= Vehicle::SIG_COUNT) continue;
+            const Canbox::FieldView fv(*_state, &cfg.fields);
+            const bool has = fv.has(t.sig);
+            out.put(b, fit(snprintf(b, sizeof(b), "%s{\"id\":\"%s\",\"sig\":\"%s\",\"v\":%s,\"rule\":",
+                                i ? "," : "", t.id, Vehicle::meta(t.sig).name,
+                                has ? RT::fmt(v, sizeof(v), fv.get(t.sig), t.dec) : "null"), sizeof(b)));
+            const Canbox::FieldRule* ru = cfg.fields.find(t.sig);
+            if (!ru) out.put("null}");
+            else {
+                static const char* const FROM[] = {"", "sig", "k", "off"};
+                out.put(b, fit(snprintf(b, sizeof(b), "{\"from\":\"%s\",\"src\":\"%s\",\"mul\":%d,\"div\":%d,\"add\":%ld}}",
+                                    FROM[ru->kind <= 3 ? ru->kind : 0],
+                                    ru->kind == Canbox::FK_SIGNAL && ru->src < Vehicle::SIG_COUNT ? Vehicle::meta(ru->src).name : "",
+                                    (int)ru->mul, (int)ru->div, (long)ru->add), sizeof(b)));
+            }
+        }
+        out.put("]}");
+        return out.finish();
+    });
+
+    route("/api/hu/fields", HTTP_POST, [this](PsychicRequest* r) {
+        JsonDocument d;
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
+        App::Hu::EmitterCfg cfg;
+        if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
+        Canbox::FieldMap m = cfg.fields;
+        for (JsonObjectConst row : d["rows"].as<JsonArrayConst>()) {
+            const int ti = RT::find(row["id"] | "");
+            if (ti < 0) return r->reply(400, "text/plain", "param id");
+            const uint8_t field = RT::at((uint8_t)ti).sig;
+            const char* from = row["from"] | "auto";
+            if (!strcmp(from, "auto")) { m.clear(field); continue; }
+            Canbox::FieldRule ru;
+            ru.field = field;
+            if (!strcmp(from, "off")) ru.kind = Canbox::FK_OFF;
+            else if (!strcmp(from, "k")) { ru.kind = Canbox::FK_CONST; ru.add = row["add"] | 0; }
+            else if (!strcmp(from, "sig")) {
+                ru.kind = Canbox::FK_SIGNAL;
+                ru.src = Vehicle::sigByName(row["src"] | "");
+                if (ru.src >= Vehicle::SIG_COUNT) return r->reply(400, "text/plain", "param src");
+                ru.mul = (int16_t)(row["mul"] | 1);
+                ru.div = (int16_t)(row["div"] | 1);
+                ru.add = row["add"] | 0;
+            } else return r->reply(400, "text/plain", "param from");
+            if (ru.kind == Canbox::FK_SIGNAL && !ru.div) return r->reply(400, "text/plain", "param div");
+            if (!m.set(ru)) return r->reply(400, "text/plain", "rows_max 32");
+        }
+        const bool staged = App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& c) { c.fields = m; });
+        if (!staged) return r->reply(503, "text/plain", "busy");
+        const bool saved = _cfg->saveFieldMap(m);
+        LOGI("hu", "field map: %u rule(s)%s", (unsigned)m.count(), saved ? "" : ", NOT saved");
+        return r->reply(200, "application/json", saved ? "{\"ok\":true}" : "{\"ok\":true,\"saved\":false}");
+    });
+
     route("/api/map", HTTP_POST, [this](PsychicRequest* r) {
         JsonDocument d;
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");

@@ -1,4 +1,5 @@
 #pragma once
+#include "../proto/canbox/FieldMap.h"
 #include <Arduino.h>
 #include <Preferences.h>
 #include <atomic>
@@ -53,6 +54,9 @@ namespace Cfg
         bool loadHuSend()        { return _p.getBool("huSend", false); }
         // The head-unit experiments (Rav4Emitter::Exp), all off until switched.
         void    saveHuExp(uint8_t m) { _p.putUChar("huExp", m); }
+        // The head-unit field map (Canbox::FieldMap), one blob.
+        bool    saveFieldMap(const Canbox::FieldMap& m);
+        bool    loadFieldMap(Canbox::FieldMap& m);
         uint8_t loadHuExp()          { return _p.getUChar("huExp", 0); }
         // The user's decode map (Vehicle::DecodeTable::pack), key "decode".
         // load: its length, 0 when there is none or it does not fit `cap`.

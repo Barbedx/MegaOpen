@@ -1945,6 +1945,8 @@ void setup()
         g_cfg.loadTuning(ec.tuning);
         ec.enabled = g_cfg.loadHuSend() && g_cfg.s().uartEnabled;
         ec.exp     = g_cfg.loadHuExp();
+        if (g_cfg.loadFieldMap(ec.fields) && ec.fields.count())
+            LOGI("hu", "field map: %u rule(s) from NVS", (unsigned)ec.fields.count());
         App::Hu::Setup hs;
         hs.port    = &Serial1;
         hs.tx      = &g_tx;

@@ -32,6 +32,7 @@ namespace App
             Canbox::Tuning tuning;
             bool           msgOn[Canbox::Rav4Emitter::MAX_MESSAGES];
             uint8_t        exp = 0;          // Rav4Emitter::Exp, NVS "huExp"
+            Canbox::FieldMap fields;          // the owner's field map, NVS "huFmap"
             EmitterCfg() { for (bool& b : msgOn) b = true; }
         };
 

@@ -205,6 +205,9 @@ namespace Canbox
         // settled for the battery (its rival is switched off).
         static uint8_t sanitizeExperiments(uint8_t m);
         void    setExperiments(uint8_t m) { _exp = sanitizeExperiments(m); }
+        // The owner's field map (FieldMap.h): applied to every value it sends.
+        void    setFieldMap(const FieldMap& m) { _map = m; }
+        const FieldMap& fieldMap() const { return _map; }
         uint8_t experiments() const { return _exp; }
         // Battery volts x10 (SIG_BATT_V is x100), rounded; the field's value.
         static uint16_t battField(int32_t battX100);
@@ -226,7 +229,8 @@ namespace Canbox
         WriteFn  _write = nullptr;
         void*    _ctx = nullptr;
         bool     _enabled = true;
-        uint8_t  _exp = 0;               // Exp bits
+        uint8_t  _exp = 0;
+        FieldMap _map;               // Exp bits
         Tuning   _t;                    // every value the sources disagree about
         uint32_t _framesSent = 0;
         uint32_t _climateChanges = 0;
