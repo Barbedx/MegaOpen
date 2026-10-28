@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+- Where a car signal comes from (a CAN row, a constant, nothing) is edited in one place, the signals table (Авто — наживо): its source chip opens the editor, «Запам'ятати / показати зміни» included, for every signal, not only the ~60 a head-unit field has (`POST /api/map` takes any signal's name; `GET /api/map?sig=<name>` gives one signal's binding). The head-unit map's editor keeps «Звідки» only; under «свій сигнал» it says where that signal comes from, with «змінити в таблиці сигналів», which opens it there (step 4 of docs/design/hu-mapping.md, first half).
+
 ### Fixed
 - A coredump pushed to GitHub could not be decoded when the redaction had blanked a secret in it (`Invalid core dump CRC`): its CRC-32 is written again over the redacted bytes. Checked on the bench's redacted dump of boot 122 (re-sealed offline, then decoded).
 

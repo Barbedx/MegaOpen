@@ -16,24 +16,47 @@ const srcBtn=r=>r.rule?`<button class="srcb k" type="button" data-ed>${esc(ruleL
 const vCell=r=>(r.rule||r.def?(r.sent==null?DASH:String(r.sent)):fmtV(r))+(r.how==='test'?t('ca.testLeft',r.left):'');
 const mapRow=r=>`<tr data-id="${r.id}" data-g="${esc(r.group)}"${r.def?' data-def="1"':''} class="${r.fw?'':'nofw'}${r.how==='test'?' testing':''}"><td>${esc(r.name)}<small>${r.fw?r.cmd:esc(r.why||'')}</small></td><td class="num" data-v>${esc(vCell(r))}</td><td>${srcBtn(r)}</td>
  <td>${!r.fw?'':`<div class="tcell">${r.kind==='b'?`<select class="in" data-t aria-label="${esc(t('ca.testVal'))}"><option value="1">${t('ca.yes')}</option><option value="0">${t('ca.no')}</option></select>`:`<input class="in" type="number" data-t step="${r.dec?Math.pow(10,-r.dec):1}" min="${r.min}" max="${r.max}" placeholder="${r.min}…${r.max}" aria-label="${esc(t('ca.testVal'))}">`}<button class="btn sm" type="button" data-send title="${esc(t('ca.sendT'))}">▶</button></div>`}</td></tr>`;
-const mapEd=(r,sigs)=>{const c=r.can||{id:'',byte:0,len:1,shift:0,mask:'FF',mul:1,div:1,add:0,le:false,signed:false},ru=r.rule||{from:'auto',src:'',mul:1,div:1,add:0};return `<tr class="mapEd" data-for="${r.id}"><td colspan="4"><div class="mg">
- <label>${t('ca.from')}${sel('#from',[['auto',r.def?t('ca.fromDefL',ruleLbl(r.def)):t('ca.fromOwn')],...(r.def?[['own',t('ca.fromOwnL')]]:[]),['sig',t('ca.fromSig')],['k',t('ca.fromK')],['off',t('ca.fromOff')]],ru.from,'data-str')}</label>
- <label data-fr="sig">${t('ca.fromSigPick')}${sel('#fsrc',(sigs||[]).map(m=>[m[0],lvName(m)]),ru.src,'data-str')}</label>
- <label data-fr="sig">×${num('#fmul',ru.mul,'step="1"')}</label><label data-fr="sig">÷${num('#fdiv',ru.div,'step="1" min="1"')}</label><label data-fr="sig">+${num('#fadd',ru.from==='sig'?ru.add:0,'step="1"')}</label>
- <label data-fr="k">${t('ca.value')}${num('#fk',ru.from==='k'?ru.add:0,'step="1"')}</label>
- <label data-fr="auto">${t('ca.src')}${sel('#src',enumOpts('mapSrc').map(o=>r.calc&&o[0]==='off'?['off',t('ca.calc')]:o),r.src,'data-str')}</label>
+/* прив'язка сигналу до машини: CAN-рядок, константа або вимк. Одна на сигнал (POST /api/map {rows:[{id,src,k,can}]},
+   id — назва сигналу); редагується в таблиці сигналів «Авто — наживо», рядок — GET /api/map?sig=<назва> */
+const bindLbl=r=>r.src==='can'&&r.can?t('ca.byte',r.can.id,r.can.byte)+(r.can.len>1?'–'+(r.can.byte+r.can.len-1):''):r.src==='const'?t('ca.const',r.k):r.calc?t('ca.calc'):t('ca.unbound');
+const bindEd=(r,cols)=>{const c=r.can||{id:'',byte:0,len:1,shift:0,mask:'FF',mul:1,div:1,add:0,le:false,signed:false};return `<tr class="bindEd" data-for="${r.id}"><td colspan="${cols}"><div class="mg">
+ <label>${t('ca.src')}${sel('#src',enumOpts('mapSrc').map(o=>r.calc&&o[0]==='off'?['off',t('ca.calc')]:o),r.src,'data-str')}</label>
  <label data-s="can">ID<input class="in" data-f="id" list="idl" value="${esc(c.id)}" placeholder="0x354" autocomplete="off"></label>
  <label data-s="can">${t('ca.byteL')}${num('#byte',c.byte,'min="0" max="7"')}</label><label data-s="can">${t('ca.len')}${num('#len',c.len,'min="1" max="4"')}</label>
  <label data-s="can">${t('ca.shift')}${num('#shift',c.shift,'min="0" max="31"')}</label><label data-s="can">${t('ca.mask')}${txt('#mask',c.mask,'FF','in')}</label>
  <label data-s="can">×${num('#mul',c.mul,'step="any"')}</label><label data-s="can">÷${num('#div',c.div,'step="any"')}</label><label data-s="can">+${num('#add',c.add,'step="any"')}</label>
  <label data-s="can" class="ck"><input type="checkbox" class="cb" data-f="le"${c.le?' checked':''}> ${t('ca.le')}</label><label data-s="can" class="ck"><input type="checkbox" class="cb" data-f="signed"${c.signed?' checked':''}> ${t('ca.signed')}</label>
  <label data-s="const">${t('ca.value')}${num('#k',r.k,'step="any"')}</label></div>
- <div class="mf" style="margin-top:8px"><span class="mw" data-raw style="color:var(--mute)"></span>${has('vehicle')?`<button class="btn sm" type="button" data-learn>${t('ca.learn')}</button>`:''}<button class="btn sm pri" type="button" data-save>${t('ca.save')}</button><button class="btn sm" type="button" data-close>✕</button></div></td></tr>`};
+ <div class="mf" style="margin-top:8px"><span class="mw" data-raw style="color:var(--mute)">${esc(r.raw?r.raw+' → '+fmtV(r):'')}</span>${has('vehicle')?`<button class="btn sm" type="button" data-learn>${t('ca.learn')}</button>`:''}<button class="btn sm pri" type="button" data-save>${t('ca.save')}</button><button class="btn sm" type="button" data-close>✕</button></div></td></tr>`};
+/* кнопки редактора прив'язки; done() — після збереження. learn: стан «запам'ятати / показати зміни» на сигнал */
+const BIND={learn:{},
+ vis(ed){const s=val($('[data-f="src"]',ed));$$('[data-s]',ed).forEach(l=>l.hidden=l.dataset.s!==s)},
+ async click(b,ed,done){const id=ed.dataset.for,g=f=>val($(`[data-f="${f}"]`,ed));
+  if(b.dataset.close!==undefined){ed.remove();return}
+  if(b.dataset.save!==undefined){const src=g('src');
+   const row={id,src,k:g('k')||0,can:src==='can'?{id:(g('id')||'').trim(),byte:g('byte'),len:g('len'),shift:g('shift')||0,mask:(g('mask')||'').replace(/^0x/i,''),mul:g('mul'),div:g('div'),add:g('add')||0,le:g('le'),signed:g('signed')}:null};
+   run(b,()=>API.post('/api/map',{rows:[row]}),t('ca.saved')).then(r=>{if(r){ed.remove();done()}});return}
+  if(b.dataset.learn!==undefined){const cid=val($('[data-f="id"]',ed)).trim().toUpperCase().replace('0X','0x');
+   if(!this.learn[id]){await run(b,()=>API.post('/api/can/baseline'),t('ca.baseOk'));this.learn[id]=true;b.textContent=t('ca.showChanges');$('[data-raw]',ed).textContent=t('ca.doIt');return}
+   const r=await API.get('/api/can/ids');const ch=r.ids.filter(x=>x.changed).map(idRow);const mine=ch.find(x=>x.id===cid);
+   $('[data-raw]',ed).innerHTML=(mine?esc(t('ca.changedBytes',cid,mine.bytes.map((b,i)=>mine.ch[i]?i:null).filter(x=>x!==null).join(', '))):cid?esc(t('ca.notChanged',cid)):'')+esc(t('ca.changed'))+(ch.map(x=>`<a href="#" data-pick="${x.id}">${x.id}</a>`).join(' ')||esc(t('ca.nothing')));
+   this.learn[id]=false;b.textContent=t('ca.learn')}},
+ /* слухачі на таблиці: вибір ID зі змінених, зміна джерела */
+ wire(tb){tb.addEventListener('click',e=>{const a=e.target.closest('[data-pick]');if(!a)return;e.preventDefault();$('[data-f="id"]',a.closest('tr.bindEd')).value=a.dataset.pick});
+  tb.addEventListener('change',e=>{const ed=e.target.closest('tr.bindEd');if(ed&&e.target.dataset.f==='src')this.vis(ed)})},
+ async ids(){const r=await API.get('/api/can/ids');const d=$('#idl');if(d)d.innerHTML=r.ids.map(idRow).map(x=>`<option value="${x.id}">${x.bytes.join(' ')}</option>`).join('')}};
+const mapEd=(r,sigs)=>{const c=r.can||{id:'',byte:0,len:1,shift:0,mask:'FF',mul:1,div:1,add:0,le:false,signed:false},ru=r.rule||{from:'auto',src:'',mul:1,div:1,add:0};return `<tr class="mapEd" data-for="${r.id}"><td colspan="4"><div class="mg">
+ <label>${t('ca.from')}${sel('#from',[['auto',r.def?t('ca.fromDefL',ruleLbl(r.def)):t('ca.fromOwn')],...(r.def?[['own',t('ca.fromOwnL')]]:[]),['sig',t('ca.fromSig')],['k',t('ca.fromK')],['off',t('ca.fromOff')]],ru.from,'data-str')}</label>
+ <label data-fr="sig">${t('ca.fromSigPick')}${sel('#fsrc',(sigs||[]).map(m=>[m[0],lvName(m)]),ru.src,'data-str')}</label>
+ <label data-fr="sig">×${num('#fmul',ru.mul,'step="1"')}</label><label data-fr="sig">÷${num('#fdiv',ru.div,'step="1" min="1"')}</label><label data-fr="sig">+${num('#fadd',ru.from==='sig'?ru.add:0,'step="1"')}</label>
+ <label data-fr="k">${t('ca.value')}${num('#fk',ru.from==='k'?ru.add:0,'step="1"')}</label>
+ <span data-fr="auto" class="mw">${esc(t('ca.ownIs',bindLbl(r)))} <a href="#live" data-goto="${r.id}">${t('ca.ownEdit')}</a></span></div>
+ <div class="mf" style="margin-top:8px"><button class="btn sm pri" type="button" data-save>${t('ca.save')}</button><button class="btn sm" type="button" data-close>✕</button></div></td></tr>`};
 SCR.car={title:'nav.car',async render(m){
  const C2=has('can2'),CP=has('capture'),V=has('vehicle');
  const DG=has('diag');
  const[c2,cp,mp,cb,dg,lp]=await Promise.all([getIf(C2,'/api/can2'),getIf(CP,'/api/cap'),API.get('/api/map'),getIf(V,'/api/can'),getIf(DG,'/api/diag'),getIf(has('logpush'),'/api/logpush')]);
- this.n=0;this.filesSig='';this.grp='all';this.learn={};this.mp=mp;
+ this.n=0;this.filesSig='';this.grp='all';this.mp=mp;
  /* фільтр за групою: значення — 'all' або назва групи, як у data-g рядка */
  const groups=[['all',t('ca.all')],...[...new Set(CAT.raise.map(x=>x.group))].map(g=>[g,g])];
  m.innerHTML=
@@ -63,7 +86,7 @@ SCR.car={title:'nav.car',async render(m){
   row(t('ca.sweep'),`<span class="fr"><select class="in" id="mSwT" aria-label="${esc(t('ca.step'))}">${[3,5,8].map(s=>`<option value="${s}"${s===5?' selected':''}>${t('ca.sec',s)}</option>`).join('')}</select><button class="btn" type="button" id="mSwGo">${t('ca.sweepGo')}</button><b class="mono" id="mSwV">—</b></span>`,'0x7D 06, D2 = 0…15',t('ca.sweepH'),'mSwRow')+
   `<div class="pad"><div class="seg wrap" id="mGrp" data-v="all">${groups.map(([v,n])=>`<button type="button" data-val="${esc(v)}" class="${v==='all'?'on':''}">${esc(n)}</button>`).join('')}</div></div>`+
   `<div class="fr"><button class="btn" type="button" id="mReset">${t('ca.factory')}</button></div>`+
-  `<div class="tw"><table class="mapt"><thead><tr><th>${t('ca.thField')}</th><th>${t('ca.thNow')}</th><th>${t('ca.thFrom')}</th><th>${t('ca.thTest')}</th></tr></thead><tbody id="map">${raiseRows(mp).map(mapRow).join('')}</tbody></table></div><datalist id="idl"></datalist>`,'cMap','custom full')+
+  `<div class="tw"><table class="mapt"><thead><tr><th>${t('ca.thField')}</th><th>${t('ca.thNow')}</th><th>${t('ca.thFrom')}</th><th>${t('ca.thTest')}</th></tr></thead><tbody id="map">${raiseRows(mp).map(mapRow).join('')}</tbody></table></div>`,'cMap','custom full')+
  fold(t('ca.hu'),row(t('ca.show'),seg('#huIn',[['1',t('ca.fromHu')],['0',t('ca.everything')]],'1'),'',t('ca.huH'))+`<div class="tw"><table><thead><tr><th>${t('ca.ago')}</th><th>${t('ca.who')}</th><th>${t('ca.cmd')}</th><th>${t('ca.data')}</th></tr></thead><tbody id="huLog"></tbody></table></div>`,'cHu')+
  (V?fold(t('ca.ids'),row(t('ca.idTable'),sw('/api/can/sniff|on',!!cb.sniff),'',t('ca.idTableH'))+`<div class="fr"><button class="btn" type="button" id="idBase">${t('ca.baseline')}</button><button class="btn" type="button" id="idClr">${t('ca.clear')}</button></div><div class="tw"><table><thead><tr><th>ID</th><th>${t('ca.count')}</th><th>${t('ca.bytes')}</th></tr></thead><tbody id="ids"></tbody></table></div>`,'cIds'):'');
  $$('.card:not(.custom)',m).forEach(c=>saver(c,genericSave,'[data-k]'));
@@ -100,36 +123,27 @@ $('#mSwGo').onclick=async e=>{const b=e.target,v=$('#mSwV'),live=tok=>this.sw===
  mapT.addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;
   const tr=b.closest('tr');
   if(b.dataset.send!==undefined){const id=tr.dataset.id,v=$('[data-t]',tr).value;if(v===''){sv(svOf(b),'bad',t('ca.enterVal'));return}run(b,()=>API.post('/api/map/test',{id,value:+v})).then(()=>this.map());return}
-  if(b.dataset.ed!==undefined){const id=tr.dataset.id,open=$(`#map tr[data-for="${id}"]`);if(open){open.remove();return}if(!this.sigs)this.sigs=(await API.get('/api/map?meta=1&live=1')).meta||[];const r=this.withRules(raiseRows(this.mp)).find(x=>x.id===id);tr.insertAdjacentHTML('afterend',mapEd(r,this.sigs));this.edVis($(`#map tr[data-for="${id}"]`));if(has('vehicle'))this.fillIds();return}
+  if(b.dataset.ed!==undefined){const id=tr.dataset.id,open=$(`#map tr[data-for="${id}"]`);if(open){open.remove();return}if(!this.sigs)this.sigs=(await API.get('/api/map?meta=1&live=1')).meta||[];const r=this.withRules(raiseRows(this.mp)).find(x=>x.id===id);tr.insertAdjacentHTML('afterend',mapEd(r,this.sigs));this.edVis($(`#map tr[data-for="${id}"]`));return}
   const ed=b.closest('tr.mapEd');if(!ed)return;const id=ed.dataset.for;
   if(b.dataset.close!==undefined){ed.remove();return}
   if(b.dataset.save!==undefined){const g=f=>val($(`[data-f="${f}"]`,ed));const from=g('from')||'auto';
    if(from==='auto'&&this.fl&&this.fl[id]&&this.fl[id].def){run(b,()=>API.post('/api/hu/fields',{rows:[{id,from:'auto'}]}),t('ca.saved')).then(r=>{if(r){ed.remove();this.map(true)}});return}
    if(from!=='auto'){const rule={id,from,src:g('fsrc'),mul:+g('fmul')||1,div:+g('fdiv')||1,add:from==='k'?(+g('fk')||0):(+g('fadd')||0)};
     run(b,()=>API.post('/api/hu/fields',{rows:[rule]}),t('ca.saved')).then(r=>{if(r){ed.remove();this.map(true)}});return}
-   if(this.fl&&this.fl[id]&&this.fl[id].rule)await API.post('/api/hu/fields',{rows:[{id,from:'auto'}]});
-   const src=g('src');
-   const row={id,src,k:g('k')||0,can:src==='can'?{id:(g('id')||'').trim(),byte:g('byte'),len:g('len'),shift:g('shift')||0,mask:(g('mask')||'').replace(/^0x/i,''),mul:g('mul'),div:g('div'),add:g('add')||0,le:g('le'),signed:g('signed')}:null};
-   run(b,()=>API.post('/api/map',{rows:[row]}),t('ca.saved')).then(r=>{if(r){ed.remove();this.map(true)}});return}
-  if(b.dataset.learn!==undefined){const cid=val($('[data-f="id"]',ed)).trim().toUpperCase().replace('0X','0x');
-   if(!this.learn[id]){await run(b,()=>API.post('/api/can/baseline'),t('ca.baseOk'));this.learn[id]=true;b.textContent=t('ca.showChanges');$('[data-raw]',ed).textContent=t('ca.doIt');return}
-   const r=await API.get('/api/can/ids');const ch=r.ids.filter(x=>x.changed).map(idRow);const mine=ch.find(x=>x.id===cid);
-   $('[data-raw]',ed).innerHTML=(mine?esc(t('ca.changedBytes',cid,mine.bytes.map((b,i)=>mine.ch[i]?i:null).filter(x=>x!==null).join(', '))):cid?esc(t('ca.notChanged',cid)):'')+esc(t('ca.changed'))+(ch.map(x=>`<a href="#" data-pick="${x.id}">${x.id}</a>`).join(' ')||esc(t('ca.nothing')));
-   this.learn[id]=false;b.textContent=t('ca.learn')}});
- mapT.addEventListener('click',e=>{const a=e.target.closest('[data-pick]');if(!a)return;e.preventDefault();const ed=a.closest('tr.mapEd');$('[data-f="id"]',ed).value=a.dataset.pick});
- mapT.addEventListener('change',e=>{const ed=e.target.closest('tr.mapEd');if(ed&&(e.target.dataset.f==='src'||e.target.dataset.f==='from'))this.edVis(ed)});
+   run(b,()=>API.post('/api/hu/fields',{rows:[{id,from:'auto'}]}),t('ca.saved')).then(r=>{if(r){ed.remove();this.map(true)}});return}});
+ /* «змінити» біля власного сигналу: таблиця сигналів відкриває його прив'язку */
+ mapT.addEventListener('click',e=>{const a=e.target.closest('[data-goto]');if(!a)return;LIVE_OPEN=a.dataset.goto});
+ mapT.addEventListener('change',e=>{const ed=e.target.closest('tr.mapEd');if(ed&&e.target.dataset.f==='from')this.edVis(ed)});
  if(CP)await this.files(true);await this.tick(true);
-},edVis(ed){const fr=val($('[data-f="from"]',ed))||'auto',s=val($('[data-f="src"]',ed));
- const own=fr==='auto'&&!$(`#map tr[data-id="${ed.dataset.for}"]`).dataset.def;
- $$('[data-fr]',ed).forEach(l=>l.hidden=l.dataset.fr==='auto'?!own:l.dataset.fr!==fr);$$('[data-s]',ed).forEach(l=>l.hidden=!own||l.dataset.s!==s)},
+},edVis(ed){const fr=val($('[data-f="from"]',ed))||'auto';
+ const own=fr==='own'||fr==='auto'&&!$(`#map tr[data-id="${ed.dataset.for}"]`).dataset.def;
+ $$('[data-fr]',ed).forEach(l=>l.hidden=l.dataset.fr==='auto'?!own:l.dataset.fr!==fr)},
 /* правила полів ГУ з /api/hu/fields на рядки мапи: r.rule, r.sent (те, що йде в ГУ) */
 withRules(rows){const fl=this.fl||{};return rows.map(r=>{const f=fl[r.id];return f?{...r,rule:f.rule,def:f.def,sent:f.v}:r})},
-async fillIds(){const r=await API.get('/api/can/ids');const d=$('#idl');if(d)d.innerHTML=r.ids.map(idRow).map(x=>`<option value="${x.id}">${x.bytes.join(' ')}</option>`).join('')},
 async map(){const[mp,hf]=await Promise.all([API.get('/api/map'),API.get('/api/hu/fields').catch(()=>null)]);this.mp=mp;if(!$('#map'))return;
  this.fl=Object.fromEntries(((hf&&hf.rows)||[]).map(x=>[x.id,x]));
  this.withRules(raiseRows(mp)).forEach(r=>{const tr=$(`#map tr[data-id="${r.id}"]`);if(!tr)return;$('[data-v]',tr).textContent=vCell(r);tr.classList.toggle('testing',r.how==='test');
-  const sb=tr.children[2];const h=srcBtn(r);if(sb.innerHTML!==h)sb.innerHTML=h;if(r.def)tr.dataset.def='1';else delete tr.dataset.def;
-  const ed=$(`#map tr[data-for="${r.id}"] [data-raw]`);if(ed&&!this.learn[r.id]&&!ed.querySelector('a'))ed.textContent=r.raw?r.raw+' → '+fmtV(r):''});
+  const sb=tr.children[2];const h=srcBtn(r);if(sb.innerHTML!==h)sb.innerHTML=h;if(r.def)tr.dataset.def='1';else delete tr.dataset.def});
  put($('[data-k="/api/map|send"]'),mp.send)},
 async files(force){const l=(await API.get('/api/cap/list')).files||[];const sig=JSON.stringify(l.map(f=>[f.f,f.protected,f.current,Math.round(f.size/65536)]));const el=$('#files');if(!el)return;
  if(!force&&(sig===this.filesSig||el.parentElement.querySelector('.ask')))return;this.filesSig=sig;el.innerHTML=l.length?l.slice().reverse().map(fileRow).join(''):`<div class="row muted">${esc(t('ca.noFiles'))}</div>`},

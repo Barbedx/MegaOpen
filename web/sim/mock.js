@@ -415,12 +415,16 @@ function liveVal(n,t){const s=t/1000,w=(p,a,b)=>a+(b-a)*(.5+.5*Math.sin(s/p));
   fuel_counter:Math.floor(s*7)%256,oil_level:9,service_km:12500,locked:0,belt_drv:1,belt_pass:0,odo_cluster:184321,fuel_level_apv:30};
  const R5=[75,136,200,270,352];v.gear_ratio=Math.round(v.speed*100/v.rpm);let gi=0;R5.forEach((r,i)=>{if(Math.abs(v.gear_ratio-r)<Math.abs(v.gear_ratio-R5[gi]))gi=i});v.gear=v.speed<300?0:gi+1;
  return v[n]}
+/* будь-який сигнал за назвою (WebUiMap.cpp: id поля ГУ — назва його сигналу): межі з META, прив'язка — своя, заводська або нема */
+const sigT=id=>C.raise.find(x=>x.id===id)||(m=>m&&{id:m[0],dec:m[2],min:+decStr(m[5],m[2]),max:+decStr(m[6],m[2]),kind:m[3]?'b':'n'})(META.find(m=>m[0]===id));
+const bindOf=id=>S.map[id]||(r=>r&&r.can?{src:'can',can:r.can,k:0}:{src:'off',can:null,k:0})(SIM_DECODE.rows.find(x=>x.sig===id));
 const mapBase=()=>({send:S.emitter,uart:S.set.uartEnabled,units:{fuel:S.tun.fuelUnit,trip:S.tun.tripUnit}});
 g('/api/map',q=>{const o=mapBase();o.rows=q.live?[]:C.raise.map(t=>({id:t.id,...S.map[t.id],...mapVal(t)}));
  if(q.live){const t=Date.now();o.sigs=META.map(m=>{const v=liveVal(m[0],t),src=DERIVED.has(m[0])?'d':BOUND.has(m[0])?'c':'o';
   const ms=src==='c'&&measured(m[0]);
   return [v===undefined?null:decStr(v,m[2]),v===undefined?null:Math.floor(Math.random()*300),src,ms?1:0,src!=='c'?0:!ms?1:FACT_HYP.has(m[0])?2:0]});
   o.alertStats={fired:0,shown:0,dropped:0}}
+ if(q.sig){const t=sigT(q.sig);if(!t)return fail(404,'not_found');o.rows=[{id:t.id,...bindOf(t.id),...mapVal(t),...(DERIVED.has(t.id)?{calc:true}:{})}]}
  if(q.meta)o.meta=META.map(m=>[m[0],m[1],m[2],m[3],m[4],decStr(m[5],m[2]),decStr(m[6],m[2]),m[7]]);
  return o});
 const isInt=x=>Number.isInteger(x),hexOk=x=>/^(0x)?[0-9a-f]{1,8}$/i.test(String(x==null?'':x)),hexV=x=>parseInt(String(x).replace(/^0x/i,''),16);
@@ -432,8 +436,7 @@ function canWhy(c){if(!hexOk(c.id)||hexV(c.id)>0x1FFFFFFF)return 'can.id: param'
 po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(409,'uart_off');
  if(q.units){const f=q.units.fuel??S.tun.fuelUnit,t=q.units.trip??S.tun.tripUnit;if(!C.enums.fuelUnits.some(e=>e.v===f))return fail(400,'param units.fuel');if(!C.enums.tripUnits.some(e=>e.v===t))return fail(400,'param units.trip')}
  const rows=q.rows||[];if(rows.length>16)return fail(400,'param rows');const E=[];
- for(const r of rows){const t=C.raise.find(x=>x.id===r.id);if(!t)return fail(404,'not_found');
-  if(!SIM_DECODE.sigs.includes(t.id))return fail(409,r.id+': no_signal');
+ for(const r of rows){const t=sigT(r.id);if(!t)return fail(404,'not_found');
   if(E.some(([x])=>x.id===r.id))return fail(400,r.id+': twice');
   if(!['can','const','off'].includes(r.src))return fail(400,r.id+': param src');
   if(r.src==='can'){if(!r.can||typeof r.can!=='object')return fail(400,r.id+': param can');const w=canWhy(r.can);if(w)return fail(400,r.id+': '+w)}

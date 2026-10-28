@@ -145,13 +145,26 @@ void WebUi::routesMap()
         // ?live=1: the live-car page's poll, every signal and no Raise rows;
         // ?meta=1: the signals' descriptions, once.
         const bool live = r->hasParam("live"), meta = r->hasParam("meta");
+        // ?sig=<name>: that one car signal's binding (the signals page's
+        // editor), as one row; any signal, not only a head-unit field.
+        const String one = r->hasParam("sig") ? r->getParam("sig")->value() : String();
+        const uint8_t oneSig = one.length() ? Vehicle::sigByName(one.c_str()) : Vehicle::SIG_COUNT;
+        if (one.length() && oneSig >= Vehicle::SIG_COUNT) return r->reply(404, "text/plain", "not_found");
         ChunkOut out(r);
         char b[200], v[16], k[16];
         out.put(b, fit(snprintf(b, sizeof(b), "{\"send\":%s,\"uart\":%s,\"units\":{\"fuel\":%u,\"trip\":%u},\"rows\":[",
                             cfg.enabled ? "true" : "false", _cfg->s().uartEnabled ? "true" : "false",
                             (unsigned)cfg.tuning.fuelUnit, (unsigned)cfg.tuning.tripUnit), sizeof(b)));
-        for (uint8_t i = 0; !live && i < RT::count(); ++i) {
-            const TargetView t = RT::at(i);
+        const uint8_t nRows = oneSig < Vehicle::SIG_COUNT ? 1 : RT::count();
+        for (uint8_t i = 0; !live && i < nRows; ++i) {
+            struct { const char* id; uint8_t sig; uint8_t dec; } t;
+            if (oneSig < Vehicle::SIG_COUNT) {
+                const Vehicle::Meta& mt = Vehicle::meta(oneSig);
+                t = {mt.name, oneSig, mt.decimals};
+            } else {
+                const TargetView rt = RT::at(i);
+                t = {rt.id, rt.sig, rt.dec};
+            }
             // The binding, copied out under the staging mutex (the newest edit).
             Vehicle::DecodeRow row{};
             int32_t kv = 0;
@@ -345,11 +358,13 @@ void WebUi::routesMap()
         JsonArrayConst rows = d["rows"].as<JsonArrayConst>();
         if (rows.size() > MAX_EDITS) return r->reply(400, "text/plain", "param rows");
         for (JsonObjectConst o : rows) {
+            // Any car signal by its name (a head-unit field's id is its
+            // signal's): the binding is the signal's, wherever it is edited.
             const char* id = o["id"] | "";
-            const int ti = RT::find(id);
-            if (ti < 0) return bad(r, 404, nullptr, "not_found");
-            const TargetView t = RT::at((uint8_t)ti);
-            if (t.sig >= Vehicle::SIG_COUNT) return bad(r, 409, id, "no_signal");   // the firmware has no signal for it yet
+            const uint8_t sig = Vehicle::sigByName(id);
+            if (sig >= Vehicle::SIG_COUNT) return bad(r, 404, nullptr, "not_found");
+            const Vehicle::Meta& mt = Vehicle::meta(sig);
+            struct { uint8_t sig; int32_t min, max; uint8_t dec; } t{sig, mt.min, mt.max, mt.decimals};
             const int s = uiFind(Vehicle::MAP_SRC, o["src"] | "");
             if (s < 0) return bad(r, 400, id, "param src");   // can, const or off
             for (uint8_t j = 0; j < n; ++j)
