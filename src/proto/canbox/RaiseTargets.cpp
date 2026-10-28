@@ -31,8 +31,9 @@ namespace Canbox
         // "": the words are the page's (k.raise.<id>.why); non-null says "not sent".
         const char* const kNoFw[] = {
             // 0x41 02 is VW's; this head unit decodes 0x41 into Toyota codes
-            // and 0x7D 0B not at all (docs/hu-decoder.md §2b-2c). EXP_BATT
-            // borrows another field instead.
+            // and 0x7D 0B not at all (docs/hu-decoder.md §2b-2c). Another
+            // field can carry it: «Звідки» → batt_v ÷10 on range, fuel_avg
+            // or fuel_pct.
             "",
         };
 
@@ -73,6 +74,7 @@ namespace Canbox
 
             T(SIG_FUEL_INST, MSG_FUEL_INST, G_FUEL, nullptr),
             T(SIG_FUEL_AVG, MSG_FUEL_HIST, G_FUEL, nullptr),
+            T(SIG_FUEL_PCT, MSG_ODO, G_FUEL, nullptr),       // 0x7D 04 D4-D5, off by default
 
             T(SIG_ENG_TEMP, MSG_COOLANT, G_ENGINE, nullptr),
             X(SIG_BATT_V, G_ENGINE, nullptr, NF_BATT),

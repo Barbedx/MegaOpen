@@ -33,7 +33,11 @@ namespace Canbox
     int32_t FieldMap::scale(const FieldRule& r, int32_t v)
     {
         int64_t x = (int64_t)v * r.mul;
-        if (r.div) x /= r.div;
+        if (r.div) {   // to the nearest, halves away from zero (12.65 V x10 -> 127)
+            const int64_t d = r.div < 0 ? -(int64_t)r.div : r.div;
+            x = (x >= 0 ? x + d / 2 : x - d / 2) / d;
+            if (r.div < 0) x = -x;
+        }
         x += r.add;
         if (x > INT32_MAX) x = INT32_MAX;
         if (x < INT32_MIN) x = INT32_MIN;

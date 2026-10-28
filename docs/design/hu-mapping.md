@@ -90,6 +90,15 @@ One page, two tables, same row shape:
    No behaviour change; host tests prove the bytes are identical.
 2. **The mapping:** NVS table, defaults from the module, `/api/hu/fields`;
    the experiments become default mappings and their flags are removed.
+   *As built (1.6.2 / 1.6.3):* `FieldMap` rules (another signal ×÷+, a
+   constant, off, own) keyed by the field's default signal; `FieldView` puts
+   them between State and the emitter; NVS `huFmap`, settings file `hu.fields`.
+   The module's defaults are rules too (`Rav4Emitter::defaults()`): coolant,
+   the PRND probe and the tank % (a new derived signal, `fuel_pct`) start off.
+   The experiment bits are gone: `experimentsToRules` turns an old NVS
+   `huExp` or a settings file's `exp` into rules once. «Computed» is now a
+   plain rule (range ← range_calc and so on) that replaces the field's own
+   signal instead of standing in for it when unbound.
 3. **Signals cleanup:** Raise-only Sigs become fields; the decode table and
    `Derived` keep car meanings only; the migration.
 4. **The page:** the two-table «Мапа», the protocol select, the old RAV4 card

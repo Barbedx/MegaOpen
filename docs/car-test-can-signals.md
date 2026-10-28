@@ -69,13 +69,14 @@ against flicker, and the A/C form is sent only from measured or pinned
 signals. Expect 0-2 changes and as many pops; more pops than changes means
 something else opens it (write down what the car was doing).
 
-**Head-unit experiments** (Авто → RAV4 → ГУ → Експерименти ГУ, all off).
-Switch one on at a time and note what changes on the tablet's dashboard.
-- **t° ОР:** coolant in `0x7D 09`.
-- **пальне в 7D04:** fuel litres in `0x7D 04` D4-D5.
-- **розрах. витрата:** the computed range and consumption in
-  `0x21`/`0x22`/`0x23` (hu-decoder.md §2b).
-- **селектор 7D06:** with it on, "Прогін селектора" steps `0x7D 06` D2
+**Head-unit fields that start off** (Авто → мапа ГУ, «Звідки» → свій
+сигнал). Switch one on at a time and note what changes on the tablet's dashboard.
+- **t° охолодної рідини:** coolant in `0x7D 09`.
+- **Бак, %:** the tank in per cent x10 in `0x7D 04` D4-D5 (F2 08 while off).
+- **range / consumption from the board:** «Запас ходу» ← `range_calc`,
+  «Миттєва витрата» ← `cons_inst`, «Витрата за поїздку» ← `cons_avg`
+  (`0x21`/`0x22`/`0x23`, hu-decoder.md §2b).
+- **Селектор P R N D:** with it on, "Прогін селектора" steps `0x7D 06` D2
   through 0…15, 3, 5 or 8 s a value. Note the D2 at which the tablet shows P,
   R, N or D. This sends only to the tablet, never to the car.
 

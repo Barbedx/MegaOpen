@@ -301,8 +301,9 @@ Two more tables widen the search: `0x2A [code][state]` (`f3158q`, adds actions
 3. `0x7D 09 [00][coolant+40]` — does a temperature appear? (Ready: the
    "t° ОР" experiment.)
 4. `0x7D 05` — same icons as `0x24`, plus bonnet?
-5. `0x7D 06` D2 = 0…15 — PRND? Ready: switch on "селектор 7D06" (Авто →
-   RAV4 → ГУ → Експерименти ГУ, `EXP_GEAR`), then "Прогін селектора" sends
+5. `0x7D 06` D2 = 0…15 — PRND? Ready: switch the selector field on (Авто →
+   мапа ГУ → «Селектор P R N D» → «Звідки» → свій сигнал; it starts off),
+   then "Прогін селектора" sends
    `0x7D 06 [00][n]` for n = 0…15, one value a step (3/5/8 s), through
    `/api/map/test` with id `prnd`. Note the D2 at which the tablet shows P, R,
    N or D; the emitter can then map `gear` onto it. Nothing builds a

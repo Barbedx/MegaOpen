@@ -68,10 +68,6 @@ namespace Canbox
         bool fromBlob(const uint8_t* in, uint8_t len);
     };
 
-    // The Mégane II's tank, litres: the base of the fuel per cent in 0x7D 04
-    // (EXP_FUEL_7D04). A constant because the tuning blob has no room left.
-    inline constexpr int32_t TANK_L = 60;
-
     class Rav4Emitter {
     public:
         using WriteFn = void (*)(const uint8_t* frame, uint8_t len, void* ctx);
@@ -100,8 +96,8 @@ namespace Canbox
             MSG_SEATS,       // 0x58        seat heat / ventilation
             MSG_HYBRID,      // 0x1F        hybrid energy status
             MSG_VERSION,     // 0x30        version string
-            MSG_COOLANT,     // 0x7D 09     coolant on the dashboard channel — EXP_COOLANT
-            MSG_GEAR,        // 0x7D 06     D2 low nibble, the PRND probe — EXP_GEAR
+            MSG_COOLANT,     // 0x7D 09     coolant on the dashboard channel (field off by default)
+            MSG_GEAR,        // 0x7D 06     D2 low nibble, the PRND probe (field off by default)
             MSG_COUNT
         };
 
@@ -172,45 +168,33 @@ namespace Canbox
 
         static constexpr uint8_t MAX_MESSAGES = 24;
 
-        // Experiments on fields the head unit decodes but no capture has shown
-        // in use (docs/hu-decoder.md §2b, §6). Each is its own switch, all OFF
-        // by default (NVS "huExp"): only the tablet can say what they show.
-        // A test send from the map page ignores them, like the schedule, except
-        // EXP_GEAR: the PRND probe is never sent with it off.
-        enum Exp : uint8_t {
-            EXP_COOLANT  = 1 << 0,   // schedule 0x7D 09 [00][t+40] (1049 idx 2)
-            EXP_FUEL_7D04 = 1 << 1,  // 0x7D 04 D4-D5 = fuel litres x10, not F2 08 (1049 idx 5)
-            EXP_COMPUTED = 1 << 2,   // range / consumption from Derived when no
-                                     // range / fuel_inst / fuel_avg is bound
-            EXP_GEAR     = 1 << 3,   // 0x7D 06 [00][prnd & 0x0F] (1049 idx 4): the
-                                     // only way a 0x7D 06 goes out, test or not;
-                                     // a bench sweep finds which value is P/R/N/D
-            EXP_BATT     = 1 << 4,   // battery volts x10 in a borrowed field: the
-                                     // RAV4 profile has none (12.6 V -> 126)
-            EXP_BATT_AT  = 3 << 5,   // which field (BattAt), bits 5-6
-            EXP_ALL      = 0x7F,
-        };
-        // The borrowed field, each with its own unit label on the tablet: the
-        // range in 0x21 (D4-D5, BE; "126 km"), 0x7D 04 D4-D5 (LE, the unit
-        // divides by 10: "12.6"), or the current value of 0x23 (BE, /10).
-        enum class BattAt : uint8_t { Range21 = 0, Odo7D04 = 1, Hist23 = 2 };
-        static BattAt battAt(uint8_t m) { return (BattAt)((m & EXP_BATT_AT) >> 5); }
-        static uint8_t withBattAt(uint8_t m, BattAt a) { return (uint8_t)((m & ~EXP_BATT_AT) | ((uint8_t)a << 5)); }
-        // A switch set the emitter can run: null, or why not. The battery and
-        // the experiment that already fills its field cannot both be on
-        // (0x21/0x23: EXP_COMPUTED; 0x7D 04: EXP_FUEL_7D04), and BattAt 3 is
-        // no field.
-        static const char* experimentsWhy(uint8_t m);
-        // What setExperiments() runs: out-of-range bits dropped; a clash is
-        // settled for the battery (its rival is switched off).
-        static uint8_t sanitizeExperiments(uint8_t m);
-        void    setExperiments(uint8_t m) { _exp = sanitizeExperiments(m); }
-        // The owner's field map (FieldMap.h): applied to every value it sends.
-        void    setFieldMap(const FieldMap& m) { _map = m; }
-        const FieldMap& fieldMap() const { return _map; }
-        uint8_t experiments() const { return _exp; }
-        // Battery volts x10 (SIG_BATT_V is x100), rounded; the field's value.
-        static uint16_t battField(int32_t battX100);
+        // The fields that start off (FieldMap rules FK_OFF): ones the head unit
+        // decodes but no capture has shown in use (docs/hu-decoder.md §2b, §6),
+        // so only the tablet can say what they show. The owner turns one on by
+        // mapping it («свій сигнал», or another signal) on the map page.
+        //   eng_temp  0x7D 09 [00][78 - t]       (1049 idx 2)
+        //   prnd      0x7D 06 [00][prnd & 0x0F]  (1049 idx 4), the PRND probe
+        //   fuel_pct  0x7D 04 D4-D5, LE x10      (1049 idx 5): F2 08 while off
+        static const FieldMap& defaults();
+        // The owner's field map (FieldMap.h) over defaults(): a rule of theirs
+        // replaces the default for its field; the rest keep it.
+        void    setFieldMap(const FieldMap& m);
+        const FieldMap& fieldMap() const { return _own; }       // the owner's rules
+        const FieldMap& effective() const { return _map; }      // what is sent
+        // The old experiment switches (NVS "huExp", settings files before
+        // 1.6.2) as rules, added to `m` where it has none for that field: the
+        // one-time migration. False when a bit has no field (0x80) or two
+        // fill one field.
+        static bool experimentsToRules(uint8_t bits, FieldMap& m);
+        // defaults() with the owner's rules over them, into `out`: what is sent.
+        static void withDefaults(const FieldMap& own, FieldMap& out);
+        // The rule a field is sent by with the owner's map `own`: theirs, else
+        // the default, else null (its own signal).
+        static const FieldRule* ruleFor(const FieldMap& own, uint8_t field)
+        {
+            const FieldRule* r = own.find(field);
+            return r ? r : defaults().find(field);
+        }
 
         Rav4Emitter();
 
@@ -222,15 +206,12 @@ namespace Canbox
         bool build(uint8_t msgIndex, const FieldView& s,
                    uint8_t& cmd, uint8_t* payload, uint8_t& len) const;
         uint8_t radar(int32_t v) const;   // distance + the polarity switch
-        // `sig` when it has a value; else, under EXP_COMPUTED, `computed`;
-        // else SIG_COUNT.
-        uint8_t pick(const FieldView& s, uint8_t sig, uint8_t computed) const;
 
         WriteFn  _write = nullptr;
         void*    _ctx = nullptr;
         bool     _enabled = true;
-        uint8_t  _exp = 0;
-        FieldMap _map;               // Exp bits
+        FieldMap _own;                   // the owner's rules (setFieldMap)
+        FieldMap _map;                   // defaults() with _own over them
         Tuning   _t;                    // every value the sources disagree about
         uint32_t _framesSent = 0;
         uint32_t _climateChanges = 0;

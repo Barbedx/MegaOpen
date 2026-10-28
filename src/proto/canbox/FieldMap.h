@@ -5,7 +5,7 @@
 // The owner's head-unit field map (docs/design/hu-mapping.md, step 2): which
 // value each protocol field sends. A field with no rule sends the car signal of
 // its own id (the identity, as before); a rule makes it:
-//   SIGNAL  another signal, scaled: value * mul / div + add
+//   SIGNAL  another signal, scaled: value * mul / div (to the nearest) + add
 //   CONST   a fixed value
 //   OFF     nothing (the field reads as absent: its message leaves it out)
 // Fields and signals are Vehicle::Sig ids (the RAV4 fields are Sigs today).

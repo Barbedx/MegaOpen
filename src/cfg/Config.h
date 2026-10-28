@@ -53,7 +53,9 @@ namespace Cfg
         void saveHuSend(bool on) { _p.putBool("huSend", on); }
         bool loadHuSend()        { return _p.getBool("huSend", false); }
         // The head-unit experiments (Rav4Emitter::Exp), all off until switched.
-        void    saveHuExp(uint8_t m) { _p.putUChar("huExp", m); }
+        // The experiment switches before 1.6.2: read once, made field rules
+        // (Rav4Emitter::experimentsToRules) and removed.
+        void    clearHuExp() { _p.remove("huExp"); }
         // The head-unit field map (Canbox::FieldMap), one blob.
         bool    saveFieldMap(const Canbox::FieldMap& m);
         bool    loadFieldMap(Canbox::FieldMap& m);

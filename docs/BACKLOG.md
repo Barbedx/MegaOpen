@@ -54,11 +54,12 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   `0x7D 04` D4-D5 and the computed trip fields go out behind switches that
   are off (88c6b9e). Left:
   - every row is a hypothesis until docs/car-test-can-signals.md is run;
-  - what each experiment shows on the tablet (one at a time);
+  - what each field that starts off shows on the tablet (coolant 0x7D 09,
+    tank % in 0x7D 04 D4-D5, the PRND probe 0x7D 06), one at a time;
   - battery volts on the tablet: protocol 112 has no field for them, so
-    the experiment «Напруга АКБ у полі ГУ» (EXP_BATT) puts volts x10 in a
-    borrowed one (0x21 range, 0x7D 04 idx 5 or the 0x23 bar). Left: which
-    one the tablet shows (docs/car-test-can-signals.md).
+    another field takes them («Звідки» → batt_v ÷10 on range 0x21, tank %
+    0x7D 04 idx 5 or the 0x23 bar). Left: which one the tablet shows
+    (docs/car-test-can-signals.md).
 - **Track position, duration, play state from the head unit.** Protocol 112
   never sends them (com.syu.ms is a platform-signed system app, patching it
   needs root). Path: a user app with a NotificationListenerService reading

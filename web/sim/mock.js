@@ -415,7 +415,7 @@ function liveVal(n,t){const s=t/1000,w=(p,a,b)=>a+(b-a)*(.5+.5*Math.sin(s/p));
   fuel_counter:Math.floor(s*7)%256,oil_level:9,service_km:12500,locked:0,belt_drv:1,belt_pass:0,odo_cluster:184321,fuel_level_apv:30};
  const R5=[75,136,200,270,352];v.gear_ratio=Math.round(v.speed*100/v.rpm);let gi=0;R5.forEach((r,i)=>{if(Math.abs(v.gear_ratio-r)<Math.abs(v.gear_ratio-R5[gi]))gi=i});v.gear=v.speed<300?0:gi+1;
  return v[n]}
-const mapBase=()=>({send:S.emitter,uart:S.set.uartEnabled,units:{fuel:S.tun.fuelUnit,trip:S.tun.tripUnit},exp:S.huExp||0});
+const mapBase=()=>({send:S.emitter,uart:S.set.uartEnabled,units:{fuel:S.tun.fuelUnit,trip:S.tun.tripUnit}});
 g('/api/map',q=>{const o=mapBase();o.rows=q.live?[]:C.raise.map(t=>({id:t.id,...S.map[t.id],...mapVal(t)}));
  if(q.live){const t=Date.now();o.sigs=META.map(m=>{const v=liveVal(m[0],t),src=DERIVED.has(m[0])?'d':BOUND.has(m[0])?'c':'o';
   const ms=src==='c'&&measured(m[0]);
@@ -443,11 +443,6 @@ po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(
   if(q.confirm.on!=null&&typeof q.confirm.on!=='boolean')return fail(400,'param confirm.on');
   if(!BOUND.has(n))return fail(409,'confirm: no_can_row')}
 
- if(q.exp!==undefined&&!(isInt(q.exp)&&q.exp>=0&&q.exp<=127))return fail(400,'param exp');
- if(q.exp!==undefined&&q.exp&16){const at=(q.exp>>5)&3;if(at>2)return fail(400,'param exp');
-  if(at===1&&q.exp&2)return fail(400,'exp_7d04');
-  if(at!==1&&q.exp&4)return fail(400,'exp_range')}
- if(q.exp!==undefined){S.huExp=q.exp;emit(2,'HU','[map] head-unit experiments: '+q.exp)}
  if(q.send!==undefined){S.emitter=!!q.send;emit(2,'HU','[map] send to the head unit '+(S.emitter?'on':'off'))}
  if(q.units){if(q.units.fuel!=null)S.tun.fuelUnit=q.units.fuel;if(q.units.trip!=null)S.tun.tripUnit=q.units.trip}
  if(q.reset){S.map=defMap();S.conf={}}
@@ -459,7 +454,7 @@ const frameFor=(t,v)=>{const[c,sub0]=t.cmd.split(' '),sub=sub0&&sub0!=='A/C'?sub
 /* WebUiMap.cpp: перед тестом — чи носить 0x28 цю форму; ворота повідомлень (одометр, TPMS…) мок не моделює */
 po('/api/map/test',q=>{const t=C.raise.find(x=>x.id===q.id);if(!t)return fail(404,'not_found');if(!t.fw)return fail(409,t.id+': no_field_112');if(!S.set.uartEnabled)return fail(409,'uart_off');
  if(t.cmd==='28'&&S.tun.cmd28)return fail(409,t.id+': form_ac');
- if(t.id==='prnd'&&!((S.huExp|0)&8))return fail(409,'prnd: exp_gear_off');
+ if(fmOff(t.id))return fail(409,t.id+': field_off');
  if(t.cmd==='28 A/C'&&!S.tun.cmd28)return fail(409,t.id+': form_temp');
  const v=q.value;if(typeof v!=='number'||!(v>=t.min&&v<=t.max)||(t.kind==='b'&&v!==0&&v!==1))return fail(400,t.id+': value: between '+t.min+' '+t.max);
  S.tests[t.id]={v,until:now()+30000};const b=frameFor(t,v);uart('T',b);S.hu.txVeh++;emit(2,'HU','[map] test '+t.id+' = '+v+' -> '+b);return {ok:true,bytes:b}});
@@ -565,8 +560,11 @@ const lpView=()=>{const v=S.lp||(S.lp={on:true,tok:false,repo:'Barbedx/megaopen-
   can:v.can,canMB:v.canMB,canToday:v.canToday,canFile:0,canBudget:v.canToday>=v.canMB*1048576}};
 g('/api/logpush',lpView);
 /* /api/hu/fields (src/net/WebUiMap.cpp): поля ГУ, їхні правила (S.fm) і значення, що йде */
-g('/api/hu/fields',()=>({proto:'raise112',rows:(C.raise||[]).map(x=>({id:x.id,sig:x.id,v:null,rule:(S.fm||{})[x.id]||null}))}));
-po('/api/hu/fields',q=>{S.fm=S.fm||{};for(const r of q.rows||[]){if(r.from==='auto')delete S.fm[r.id];else S.fm[r.id]={from:r.from,src:r.src||'',mul:r.mul||1,div:r.div||1,add:r.add||0}}return ok});
+/* поля, що спершу вимкнені (Rav4Emitter::defaults) */
+const FM_DEF={eng_temp:1,prnd:1,fuel_pct:1},fmDef=id=>FM_DEF[id]?{from:'off',src:'',mul:1,div:1,add:0}:null;
+function fmOff(id){const r=(S.fm||{})[id]||fmDef(id);return !!r&&r.from==='off'}
+g('/api/hu/fields',()=>({proto:'raise112',rows:(C.raise||[]).filter(x=>x.fw).map(x=>({id:x.id,sig:x.id,v:fmOff(x.id)?null:mapVal(x).v??null,rule:(S.fm||{})[x.id]||null,def:fmDef(x.id)}))}));
+po('/api/hu/fields',q=>{S.fm=S.fm||{};for(const r of q.rows||[]){if(r.from==='auto')delete S.fm[r.id];else S.fm[r.id]={from:r.from,src:r.from==='own'?r.id:r.src||'',mul:r.mul||1,div:r.div||1,add:r.add||0}}return ok});
 g('/api/logs/tags',()=>({tags:['boot','wifi','hu','key','car','push','ota'].map(x=>({tag:x,lvl:null})),spec:S.set.logTags||''}));
 /* /api/gears (src/net/WebUiMap.cpp): живі значення передачі, таблиця, піки навчання */
 g('/api/gears',()=>{const v=S.car&&S.car.speed!==undefined?S.car.speed:4250,r=2100,k=Math.round(v/r*100);

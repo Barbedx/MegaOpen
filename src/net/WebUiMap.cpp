@@ -1,4 +1,5 @@
 #include "WebUi.h"
+#include "../utils/Scratch.h"
 #include <math.h>
 #include <esp_heap_caps.h>
 #include <mbedtls/base64.h>
@@ -135,7 +136,10 @@ void WebUi::routesMap()
     // The field's name, unit, range and fw are the catalog's (`raise`); the
     // page joins the two by id. Values have the decimal point placed.
     route("/api/map", HTTP_GET, [this](PsychicRequest* r) {
-        App::Hu::EmitterCfg cfg;
+        // ~450 B with the field map: per request (Scratch), not on httpd's 4 kB stack.
+        Scratch<App::Hu::EmitterCfg> cfgBox;
+        if (!cfgBox) return r->reply(503, "text/plain", "no_memory");
+        App::Hu::EmitterCfg& cfg = *cfgBox;
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
         const uint32_t now = millis();
         // ?live=1: the live-car page's poll, every signal and no Raise rows;
@@ -143,9 +147,9 @@ void WebUi::routesMap()
         const bool live = r->hasParam("live"), meta = r->hasParam("meta");
         ChunkOut out(r);
         char b[200], v[16], k[16];
-        out.put(b, fit(snprintf(b, sizeof(b), "{\"send\":%s,\"uart\":%s,\"units\":{\"fuel\":%u,\"trip\":%u},\"exp\":%u,\"rows\":[",
+        out.put(b, fit(snprintf(b, sizeof(b), "{\"send\":%s,\"uart\":%s,\"units\":{\"fuel\":%u,\"trip\":%u},\"rows\":[",
                             cfg.enabled ? "true" : "false", _cfg->s().uartEnabled ? "true" : "false",
-                            (unsigned)cfg.tuning.fuelUnit, (unsigned)cfg.tuning.tripUnit, (unsigned)cfg.exp), sizeof(b)));
+                            (unsigned)cfg.tuning.fuelUnit, (unsigned)cfg.tuning.tripUnit), sizeof(b)));
         for (uint8_t i = 0; !live && i < RT::count(); ++i) {
             const TargetView t = RT::at(i);
             // The binding, copied out under the staging mutex (the newest edit).
@@ -202,41 +206,55 @@ void WebUi::routesMap()
         return out.finish();
     });
 
-    // Any of: {send:bool}, {units:{fuel,trip}}, {exp:n}, {rows:[{id,src,k,can}]},
+    // Any of: {send:bool}, {units:{fuel,trip}}, {rows:[{id,src,k,can}]},
     // {confirm:{sig,on}} (the owner's ✓: that signal's CAN rows measured, or
     // a hypothesis again; reset brings the factory's flags back),
     // {reset:true} (back to decode_defaults.inc: the NVS blob is erased). Every
     // part is checked before any is applied. A row replaces whatever bound
     // that field; the map goes to the car task (no reboot) and to NVS (`decode`).
     // ---- the head-unit field map (docs/design/hu-mapping.md, step 2) ----------
-    // GET: every field of the active protocol (RAV4 today), its rule (null =
-    // its own signal) and the value it sends now. POST {rows:[{id, from:
-    // "auto"|"sig"|"k"|"off", src, mul, div, add}]}: rules set or cleared,
-    // applied at the hu task's next pass and saved (NVS "huFmap").
+    // GET: every field of the active protocol (RAV4 today): `rule`, the
+    // owner's (null: none), `def`, the protocol's default (null: its own
+    // signal; the fields that start off), and `v`, the value sent now. POST
+    // {rows:[{id, from: "auto"|"own"|"sig"|"k"|"off", src, mul, div, add}]}:
+    // "auto" drops the owner's rule (the default again); the rest set one.
+    // Applied at the hu task's next pass and saved (NVS "huFmap").
     route("/api/hu/fields", HTTP_GET, [this](PsychicRequest* r) {
         if (!_state) return r->reply(503, "text/plain", "not_built vehicle");
-        App::Hu::EmitterCfg cfg;
+        // ~450 B with the field map: per request (Scratch), not on httpd's 4 kB stack.
+        Scratch<App::Hu::EmitterCfg> cfgBox;
+        if (!cfgBox) return r->reply(503, "text/plain", "no_memory");
+        App::Hu::EmitterCfg& cfg = *cfgBox;
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
+        Scratch<Canbox::FieldMap> eff;
+        if (!eff) return r->reply(503, "text/plain", "no_memory");
+        Canbox::Rav4Emitter::withDefaults(cfg.fields, *eff);
+        const Canbox::FieldView fv(*_state, eff.get());
         ChunkOut out(r);
         char b[220], v[16];
+        auto rule = [&](const Canbox::FieldRule* ru, uint8_t field) {
+            if (!ru) { out.put("null"); return; }
+            static const char* const FROM[] = {"", "sig", "k", "off"};
+            const bool own = ru->kind == Canbox::FK_SIGNAL && ru->src == field;
+            out.put(b, fit(snprintf(b, sizeof(b), "{\"from\":\"%s\",\"src\":\"%s\",\"mul\":%d,\"div\":%d,\"add\":%ld}",
+                                own ? "own" : FROM[ru->kind <= 3 ? ru->kind : 0],
+                                ru->kind == Canbox::FK_SIGNAL && ru->src < Vehicle::SIG_COUNT ? Vehicle::meta(ru->src).name : "",
+                                (int)ru->mul, (int)ru->div, (long)ru->add), sizeof(b)));
+        };
         out.put("{\"proto\":\"raise112\",\"rows\":[");
+        bool first = true;
         for (uint8_t i = 0; i < RT::count(); ++i) {
             const TargetView t = RT::at(i);
-            if (t.sig >= Vehicle::SIG_COUNT) continue;
-            const Canbox::FieldView fv(*_state, &cfg.fields);
+            if (t.sig >= Vehicle::SIG_COUNT || !t.fw) continue;
             const bool has = fv.has(t.sig);
             out.put(b, fit(snprintf(b, sizeof(b), "%s{\"id\":\"%s\",\"sig\":\"%s\",\"v\":%s,\"rule\":",
-                                i ? "," : "", t.id, Vehicle::meta(t.sig).name,
+                                first ? "" : ",", t.id, Vehicle::meta(t.sig).name,
                                 has ? RT::fmt(v, sizeof(v), fv.get(t.sig), t.dec) : "null"), sizeof(b)));
-            const Canbox::FieldRule* ru = cfg.fields.find(t.sig);
-            if (!ru) out.put("null}");
-            else {
-                static const char* const FROM[] = {"", "sig", "k", "off"};
-                out.put(b, fit(snprintf(b, sizeof(b), "{\"from\":\"%s\",\"src\":\"%s\",\"mul\":%d,\"div\":%d,\"add\":%ld}}",
-                                    FROM[ru->kind <= 3 ? ru->kind : 0],
-                                    ru->kind == Canbox::FK_SIGNAL && ru->src < Vehicle::SIG_COUNT ? Vehicle::meta(ru->src).name : "",
-                                    (int)ru->mul, (int)ru->div, (long)ru->add), sizeof(b)));
-            }
+            first = false;
+            rule(cfg.fields.find(t.sig), t.sig);
+            out.put(",\"def\":");
+            rule(Canbox::Rav4Emitter::defaults().find(t.sig), t.sig);
+            out.put("}");
         }
         out.put("]}");
         return out.finish();
@@ -245,9 +263,12 @@ void WebUi::routesMap()
     route("/api/hu/fields", HTTP_POST, [this](PsychicRequest* r) {
         JsonDocument d;
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
-        App::Hu::EmitterCfg cfg;
+        // ~450 B with the field map: per request (Scratch), not on httpd's 4 kB stack.
+        Scratch<App::Hu::EmitterCfg> cfgBox;
+        if (!cfgBox) return r->reply(503, "text/plain", "no_memory");
+        App::Hu::EmitterCfg& cfg = *cfgBox;
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
-        Canbox::FieldMap m = cfg.fields;
+        Canbox::FieldMap& m = cfg.fields;   // the copy in Scratch, edited
         for (JsonObjectConst row : d["rows"].as<JsonArrayConst>()) {
             const int ti = RT::find(row["id"] | "");
             if (ti < 0) return r->reply(400, "text/plain", "param id");
@@ -258,6 +279,7 @@ void WebUi::routesMap()
             ru.field = field;
             if (!strcmp(from, "off")) ru.kind = Canbox::FK_OFF;
             else if (!strcmp(from, "k")) { ru.kind = Canbox::FK_CONST; ru.add = row["add"] | 0; }
+            else if (!strcmp(from, "own")) { ru.kind = Canbox::FK_SIGNAL; ru.src = field; }
             else if (!strcmp(from, "sig")) {
                 ru.kind = Canbox::FK_SIGNAL;
                 ru.src = Vehicle::sigByName(row["src"] | "");
@@ -280,7 +302,10 @@ void WebUi::routesMap()
         JsonDocument d;
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
 
-        App::Hu::EmitterCfg cfg;
+        // ~450 B with the field map: per request (Scratch), not on httpd's 4 kB stack.
+        Scratch<App::Hu::EmitterCfg> cfgBox;
+        if (!cfgBox) return r->reply(503, "text/plain", "no_memory");
+        App::Hu::EmitterCfg& cfg = *cfgBox;
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
 
         // ---- check ----
@@ -288,16 +313,6 @@ void WebUi::routesMap()
         const bool send = d["send"] | false;
         if (hasSend && send && !_cfg->s().uartEnabled) return r->reply(409, "text/plain", "uart_off");
 
-        // {exp: n}: the head-unit experiments, Rav4Emitter::Exp bits.
-        const bool hasExp = !d["exp"].isNull();
-        const int exp = d["exp"] | -1;
-        if (hasExp && (!d["exp"].is<int>() || exp < 0 || exp > Canbox::Rav4Emitter::EXP_ALL))
-            return r->reply(400, "text/plain", "param exp");
-        // Two experiments in one field are refused, not settled behind the
-        // page's back (the emitter would keep the battery).
-        if (hasExp)
-            if (const char* why = Canbox::Rav4Emitter::experimentsWhy((uint8_t)exp))
-                return r->reply(400, "text/plain", why);
 
         const bool hasUnits = d["units"].is<JsonObject>();
         int fuel = cfg.tuning.fuelUnit, trip = cfg.tuning.tripUnit;
@@ -373,26 +388,15 @@ void WebUi::routesMap()
             if (why) return r->reply(409, "text/plain", why);
         }
 
-        if (hasSend || hasUnits || hasExp) {
+        if (hasSend || hasUnits) {
             if (!App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& c) {
                     if (hasSend) c.enabled = send;
                     if (hasUnits) { c.tuning.fuelUnit = (uint8_t)fuel; c.tuning.tripUnit = (uint8_t)trip; }
-                    if (hasExp) c.exp = (uint8_t)exp;
                     cfg = c;
                 }))
                 return r->reply(503, "text/plain", "busy");
             if (hasUnits) _cfg->saveTuning(cfg.tuning);
             if (hasSend) _cfg->saveHuSend(send);
-            if (hasExp) {
-                _cfg->saveHuExp((uint8_t)exp);
-                static const char* const kAt[] = {"0x21", "0x7D 04", "0x23", "?"};
-                LOGI("map", "head-unit experiments: coolant %s, fuel in 7D04 %s, computed %s, selector %s, battery %s",
-                               exp & Canbox::Rav4Emitter::EXP_COOLANT ? "on" : "off",
-                               exp & Canbox::Rav4Emitter::EXP_FUEL_7D04 ? "on" : "off",
-                               exp & Canbox::Rav4Emitter::EXP_COMPUTED ? "on" : "off",
-                               exp & Canbox::Rav4Emitter::EXP_GEAR ? "on" : "off",
-                               exp & Canbox::Rav4Emitter::EXP_BATT ? kAt[(exp >> 5) & 3] : "off");
-            }
             if (hasSend) LOGI("map", "send to the head unit %s", send ? "on" : "off");
         }
 
@@ -438,12 +442,16 @@ void WebUi::routesMap()
         const TargetView t = RT::at((uint8_t)ti);
         if (!t.fw) return bad(r, 409, id, "no_field_112");
         if (!_cfg->s().uartEnabled) return r->reply(409, "text/plain", "uart_off");
-        App::Hu::EmitterCfg cfg;
+        // ~450 B with the field map: per request (Scratch), not on httpd's 4 kB stack.
+        Scratch<App::Hu::EmitterCfg> cfgBox;
+        if (!cfgBox) return r->reply(503, "text/plain", "no_memory");
+        App::Hu::EmitterCfg& cfg = *cfgBox;
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
         if (const char* why = formWhy(t.msg, cfg.tuning.cmd28)) return bad(r, 409, id, why);
-        // An unknown frame to the tablet: only with its switch on, test or not.
-        if (t.msg == Canbox::Rav4Emitter::MSG_GEAR && !(cfg.exp & Canbox::Rav4Emitter::EXP_GEAR))
-            return bad(r, 409, id, "exp_gear_off");   // switch on the selector experiment first
+        // A field that is off (the owner's rule, or one that starts off: an
+        // unknown frame to the tablet) is not sent, test or not.
+        const Canbox::FieldRule* fr = Canbox::Rav4Emitter::ruleFor(cfg.fields, t.sig);
+        if (fr && fr->kind == Canbox::FK_OFF) return bad(r, 409, id, "field_off");
 
         int32_t v = 0;
         if (!d["value"].is<double>() || !RT::toInt(d["value"].as<double>(), t.dec, v) ||
@@ -512,12 +520,20 @@ void WebUi::mapToFile(ChunkOut& out)
     heap_caps_free(b64);
     heap_caps_free(blob);
 
-    App::Hu::EmitterCfg c;
-    if (App::Hu::emitterCfg().peek(c)) {
+    Scratch<App::Hu::EmitterCfg> cBox;   // not on httpd's stack (see the routes)
+    if (cBox && App::Hu::emitterCfg().peek(*cBox)) {
+        const App::Hu::EmitterCfg& c = *cBox;
         char b[120];
-        out.put(b, fit(snprintf(b, sizeof(b), ",\"hu\":{\"send\":%s,\"units\":{\"fuel\":%u,\"trip\":%u},\"exp\":%u}",
+        out.put(b, fit(snprintf(b, sizeof(b), ",\"hu\":{\"send\":%s,\"units\":{\"fuel\":%u,\"trip\":%u},\"fields\":\"",
                                 c.enabled ? "true" : "false", (unsigned)c.tuning.fuelUnit,
-                                (unsigned)c.tuning.tripUnit, (unsigned)c.exp), sizeof(b)));
+                                (unsigned)c.tuning.tripUnit), sizeof(b)));
+        // The field map, packed (FieldMap::pack) and base64, like the decode table.
+        uint8_t fm[Canbox::FieldMap::BLOB_MAX];
+        char fb[4 * ((sizeof(fm) + 2) / 3) + 1];
+        size_t fo = 0;
+        const size_t fn = c.fields.pack(fm, sizeof(fm));
+        if (fn && mbedtls_base64_encode((unsigned char*)fb, sizeof(fb), &fo, fm, fn) == 0) out.put(fb, fo);
+        out.put("\"}");
     }
 }
 
@@ -538,7 +554,9 @@ const char* WebUi::mapFromFile(JsonVariantConst decode, JsonVariantConst hu, boo
         changedMap = true;
     }
 
-    App::Hu::EmitterCfg c;
+    Scratch<App::Hu::EmitterCfg> cBox;   // not on httpd's stack (see the routes)
+    if (!cBox) return "no_memory";
+    App::Hu::EmitterCfg& c = *cBox;
     if (!hu.isNull()) {
         if (!hu.is<JsonObjectConst>()) return "hu: not_object";
         if (!App::Hu::emitterCfg().peek(c)) return "busy";
@@ -552,10 +570,20 @@ const char* WebUi::mapFromFile(JsonVariantConst decode, JsonVariantConst hu, boo
         if (!tok) return "hu: units.trip";
         c.tuning.fuelUnit = (uint8_t)fuel;
         c.tuning.tripUnit = (uint8_t)trip;
-        const int exp = hu["exp"] | (int)c.exp;
-        if (exp < 0 || exp > Canbox::Rav4Emitter::EXP_ALL) return "hu: exp";
-        if (const char* why = Canbox::Rav4Emitter::experimentsWhy((uint8_t)exp)) return why;
-        c.exp = (uint8_t)exp;
+        if (!hu["fields"].isNull()) {
+            const char* f = hu["fields"].as<const char*>();
+            uint8_t fm[Canbox::FieldMap::BLOB_MAX];
+            size_t fn = 0;
+            if (!f || mbedtls_base64_decode(fm, sizeof(fm), &fn, (const unsigned char*)f, strlen(f)) != 0 ||
+                !c.fields.unpack(fm, fn))   // unpack leaves the map as it was on a bad blob
+                return "hu: fields";
+        }
+        // A file from 1.6.1 or before: its experiment switches, as rules.
+        if (!hu["exp"].isNull()) {
+            const int exp = hu["exp"] | -1;
+            if (exp < 0 || exp > 0xFF || !Canbox::Rav4Emitter::experimentsToRules((uint8_t)exp, c.fields))
+                return "hu: exp";
+        }
         changedHu = true;
     }
     if (dry) return nullptr;
@@ -569,9 +597,9 @@ const char* WebUi::mapFromFile(JsonVariantConst decode, JsonVariantConst hu, boo
         if (!App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& e) { e = c; })) return "busy";
         _cfg->saveTuning(c.tuning);
         _cfg->saveHuSend(c.enabled);
-        _cfg->saveHuExp(c.exp);
-        LOGI("map", "head unit set from a settings file: send %s, exp %u", c.enabled ? "on" : "off",
-                       (unsigned)c.exp);
+        if (!_cfg->saveFieldMap(c.fields)) return "nvs_failed";
+        LOGI("map", "head unit set from a settings file: send %s, %u field rule(s)", c.enabled ? "on" : "off",
+                       (unsigned)c.fields.count());
     }
     return nullptr;
 }

@@ -223,7 +223,7 @@ namespace Vehicle
         SIG_TRIP_FUEL,         // L x100, since boot
         SIG_TRIP_KM,           // km x10, since boot
         // A head-unit probe, not a car value: 0x7D 06 D2's low nibble, set by
-        // hand from the map page (Rav4Emitter::EXP_GEAR) to find PRND.
+        // hand from the map page to find PRND (its field is off by default).
         SIG_PRND,
         // 0x24 D1 b7 on the head unit (docs/hu-decoder.md §2a). The X84
         // broadcast matrix has no bonnet contact, so no factory row: bind it
@@ -241,6 +241,9 @@ namespace Vehicle
         // handbrake up. Yes/no, for the panel alerts.
         SIG_DRIVE_NO_LIGHTS,
         SIG_DRIVE_HANDBRAKE,
+        // The tank in per cent x10 (Vehicle::Derived): fuel_level over
+        // Derived::TANK_L. Last, so the saved map's indices hold.
+        SIG_FUEL_PCT,
 
         SIG_COUNT
     };

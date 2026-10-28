@@ -8,6 +8,30 @@
 
 using namespace Vehicle;
 using E = Canbox::Rav4Emitter;
+using Canbox::FieldMap;
+using Canbox::FieldRule;
+using Canbox::FK_SIGNAL;
+using Canbox::FK_CONST;
+using Canbox::FK_OFF;
+
+// Field-map rules for the emitter tests.
+static FieldRule from(uint8_t field, uint8_t src, int16_t mul = 1, int16_t div = 1)
+{
+    FieldRule r; r.field = field; r.kind = FK_SIGNAL; r.src = src; r.mul = mul; r.div = div;
+    return r;
+}
+static FieldRule own(uint8_t field) { return from(field, field); }
+static FieldRule konst(uint8_t field, int32_t v)
+{
+    FieldRule r; r.field = field; r.kind = FK_CONST; r.add = v;
+    return r;
+}
+static FieldMap fields(std::initializer_list<FieldRule> rules)
+{
+    FieldMap m;
+    for (const FieldRule& r : rules) m.set(r);
+    return m;
+}
 
 void setUp() {}
 void tearDown() {}
@@ -935,7 +959,7 @@ void test_every_sent_raise_target_changes_its_message()
     // message's builder: the row is wired to the bytes it claims.
     namespace RT = Canbox::RaiseTargets;
     E e;
-    e.setExperiments(E::EXP_GEAR);                  // 0x7D 06 is built only with it
+    e.setFieldMap(fields({own(SIG_PRND), own(SIG_ENG_TEMP), own(SIG_FUEL_PCT)}));   // the fields that start off
     for (uint8_t i = 0; i < RT::count(); ++i) {
         const Canbox::TargetView t = RT::at(i);
         if (!t.fw) continue;
@@ -956,14 +980,15 @@ void test_every_sent_raise_target_changes_its_message()
     // And every signal the emitter reads has a row (only the 8 it does not
     // send are missing). The Mégane broadcast signals from SIG_FUEL_LEVEL on
     // have no Raise field, except the selector probe, SIG_PRND, the bonnet,
-    // and the battery (listed, not sent).
+    // the tank in per cent, and the battery (listed, not sent).
     bool listed[SIG_COUNT] = {};
     uint8_t n = 0;
     for (uint8_t i = 0; i < RT::count(); ++i) {
         const uint8_t sg = RT::at(i).sig;
         if (sg < SIG_COUNT && !listed[sg]) { listed[sg] = true; ++n; }
     }
-    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LEVEL - 7 + 3, n);
+    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LEVEL - 7 + 4, n);
+    TEST_ASSERT_TRUE(listed[SIG_FUEL_PCT]);
     TEST_ASSERT_TRUE(listed[SIG_PRND]);
     TEST_ASSERT_TRUE(listed[SIG_BONNET]);
     TEST_ASSERT_TRUE(listed[SIG_BATT_V]);
@@ -985,7 +1010,7 @@ void test_raise_values_place_the_decimal_point()
     TEST_ASSERT_FALSE(RT::toInt(1e12, 0, v));
 }
 
-// ---- head-unit experiments: each its own switch, all off by default --------------
+// ---- head-unit fields that start off, and the old experiment switches ---------------
 
 static int g_sub09, g_cmd21, g_cmd22, g_cmd23;
 static uint8_t g_odo[16];
@@ -998,51 +1023,68 @@ static void expCapture(const uint8_t* f, uint8_t n, void*)
     g_cmd23 += f[1] == 0x23;
 }
 
-void test_experiments_are_off_by_default_and_each_switches_one_thing()
+// The 1.6.1 switches as rules (Rav4Emitter::experimentsToRules, the boot
+// migration): each one fills its field from what it used to, nothing else.
+void test_old_experiments_become_field_rules()
 {
     State s;
     s.set(SIG_ENG_TEMP, 90, 1);
-    s.set(SIG_FUEL_LEVEL, 31, 1);
+    s.set(SIG_FUEL_PCT, 516, 1);                    // 31 L of 60 (Derived)
     s.set(SIG_ODO_CLUSTER, 123456, 1);
     s.set(SIG_CONS_INST, 72, 1);
     s.set(SIG_CONS_AVG, 65, 1);
     s.set(SIG_RANGE_CALC, 477, 1);
     E e;
     e.begin(expCapture, nullptr);
-    TEST_ASSERT_EQUAL_UINT8(0, e.experiments());
-    auto run = [&](uint8_t exp) {
+    TEST_ASSERT_EQUAL_UINT8(0, e.fieldMap().count());
+    uint32_t base = 0;
+    auto run = [&](uint8_t bits) {
         g_sub09 = g_cmd21 = g_cmd22 = g_cmd23 = 0;
         memset(g_odo, 0, sizeof(g_odo));
-        e.setExperiments(exp);
-        for (uint32_t t = 0; t < 12000; t += 100) e.tick(s, 100000 * (exp + 1) + t);
+        FieldMap m;
+        TEST_ASSERT_TRUE(E::experimentsToRules(bits, m));
+        e.setFieldMap(m);
+        base += 100000;
+        for (uint32_t t = 0; t < 12000; t += 100) e.tick(s, base + t);
     };
     run(0);                                         // nothing new reaches the head unit
     TEST_ASSERT_EQUAL_INT(0, g_sub09);
     TEST_ASSERT_EQUAL_INT(0, g_cmd21 + g_cmd22 + g_cmd23);
-    // No 0x5FD: the cluster's odometer (0x5C5) still goes in 7D 04, with no fuel in D4-D5.
-    const uint8_t plain[] = {0x2E, 0x7D, 0x0C, 0x04, 0x40, 0xE2, 0x01};
+    // No 0x5FD: the cluster's odometer (0x5C5) still goes in 7D 04, F2 08 in D4-D5.
+    const uint8_t plain[] = {0x2E, 0x7D, 0x0C, 0x04, 0x40, 0xE2, 0x01, 0xF2, 0x08};
     TEST_ASSERT_EQUAL_HEX8_ARRAY(plain, g_odo, sizeof(plain));
-    run(E::EXP_COOLANT);
+    run(1);                                         // coolant
     TEST_ASSERT_TRUE(g_sub09 > 0);
     TEST_ASSERT_EQUAL_INT(0, g_cmd22);
-    run(E::EXP_FUEL_7D04);                          // the cluster's odometer, 31 L of 60 = 51.6 % in D4-D5
+    run(2);                                         // the tank, 51.6 % in D4-D5
     TEST_ASSERT_EQUAL_INT(0, g_sub09);
     const uint8_t odo[] = {0x2E, 0x7D, 0x0C, 0x04, 0x40, 0xE2, 0x01, 0x04, 0x02};   // 516 = 51.6 % x10
     TEST_ASSERT_EQUAL_HEX8_ARRAY(odo, g_odo, sizeof(odo));
-    run(E::EXP_COMPUTED);
+    run(4);                                         // range and consumption from the board
     TEST_ASSERT_TRUE(g_cmd21 > 0 && g_cmd22 > 0 && g_cmd23 > 0);
-    // A bound Raise signal still wins over the computed one.
+    // A rule is the field's source: a value of the field's own signal is not read.
     uint8_t frame[64], len = 0;
     TEST_ASSERT_TRUE(e.preview(E::MSG_FUEL_INST, s, frame, len));
     TEST_ASSERT_EQUAL_HEX8(72, frame[5]);
     s.pin(SIG_FUEL_INST, 99);
     TEST_ASSERT_TRUE(e.preview(E::MSG_FUEL_INST, s, frame, len));
-    TEST_ASSERT_EQUAL_HEX8(99, frame[5]);
+    TEST_ASSERT_EQUAL_HEX8(72, frame[5]);
     // The coolant frame itself: 0x7D 09 [00][78 - 90 = 0xF4]; the tablet
     // shows (78 - D2) mod 256 (owner's sweep 2026-10-25), so 90.
+    run(1);
     TEST_ASSERT_TRUE(e.preview(E::MSG_COOLANT, s, frame, len));
     const uint8_t cool[] = {0x2E, 0x7D, 0x03, 0x09, 0x00, 0xF4};
     TEST_ASSERT_EQUAL_HEX8_ARRAY(cool, frame, sizeof(cool));
+    // Two fills of one field, and a bit with no field, do not convert.
+    FieldMap m;
+    TEST_ASSERT_FALSE(E::experimentsToRules(16 | (1 << 5) | 2, m));   // the battery and the tank, both 7D 04
+    TEST_ASSERT_FALSE(E::experimentsToRules(16 | 4, m));              // the battery and the range, both 0x21
+    TEST_ASSERT_FALSE(E::experimentsToRules(16 | (3 << 5), m));       // no field 3
+    TEST_ASSERT_FALSE(E::experimentsToRules(0x80, m));
+    // A rule the owner already has is kept.
+    FieldMap k = fields({konst(SIG_ENG_TEMP, 70)});
+    TEST_ASSERT_TRUE(E::experimentsToRules(1, k));
+    TEST_ASSERT_EQUAL_UINT8(FK_CONST, k.find(SIG_ENG_TEMP)->kind);
 }
 
 static int g_sub06;
@@ -1052,9 +1094,9 @@ static void gearCapture(const uint8_t* f, uint8_t n, void*)
     if (f[1] == 0x7D && f[3] == 0x06) { ++g_sub06; if (n <= sizeof(g_gear)) memcpy(g_gear, f, n); }
 }
 
-// 0x7D 06 is an unknown frame to the tablet: nothing builds it, schedule or
-// test, until the selector experiment is on, and then only from the probe.
-void test_selector_probe_goes_out_only_with_its_experiment()
+// 0x7D 06 is an unknown frame to the tablet: its field starts off, so nothing
+// builds it, schedule or test, until the owner maps it; then only from the probe.
+void test_selector_probe_goes_out_only_when_its_field_is_on()
 {
     State s;
     E e;
@@ -1066,8 +1108,10 @@ void test_selector_probe_goes_out_only_with_its_experiment()
     TEST_ASSERT_EQUAL_INT(0, g_sub06);
     TEST_ASSERT_FALSE(e.preview(E::MSG_GEAR, s, frame, len));
     TEST_ASSERT_FALSE(e.sendNow(E::MSG_GEAR, s));
+    TEST_ASSERT_EQUAL_UINT8(FK_OFF, E::ruleFor(FieldMap(), SIG_PRND)->kind);
     // On: 0x7D 06 [00][02], and each new value goes out at once.
-    e.setExperiments(E::EXP_GEAR);
+    e.setFieldMap(fields({own(SIG_PRND)}));
+    TEST_ASSERT_NULL(E::ruleFor(FieldMap(), SIG_SPEED));
     for (uint32_t t = 0; t < 2000; t += 100) e.tick(s, 10000 + t);
     TEST_ASSERT_TRUE(g_sub06 > 0);
     const uint8_t two[] = {0x2E, 0x7D, 0x03, 0x06, 0x00, 0x02};
@@ -1079,76 +1123,45 @@ void test_selector_probe_goes_out_only_with_its_experiment()
     s.pin(SIG_PRND, 40);
     TEST_ASSERT_TRUE(e.preview(E::MSG_GEAR, s, frame, len));
     TEST_ASSERT_EQUAL_HEX8(0x0F, frame[5]);
-    // No probe value: nothing, even with the switch on.
+    // No probe value: nothing, even with the field on.
     s.unpin(SIG_PRND);
     TEST_ASSERT_FALSE(s.has(SIG_PRND));
     TEST_ASSERT_FALSE(e.preview(E::MSG_GEAR, s, frame, len));
 }
 
-// Battery volts in a borrowed field (the RAV4 profile has none): volts x10,
-// 12.6 V -> 126, in the one field chosen; never beside the experiment that
-// fills the same field.
-void test_battery_in_a_borrowed_field()
+// Battery volts in another field (the RAV4 profile has none): batt_v ÷10,
+// rounded (12.55 V -> 126), in the field the owner maps it to.
+void test_battery_in_another_field()
 {
-    TEST_ASSERT_EQUAL_UINT16(126, E::battField(1260));
-    TEST_ASSERT_EQUAL_UINT16(126, E::battField(1255));               // rounded
-    TEST_ASSERT_EQUAL_UINT16(0, E::battField(-5));
     State s;
-    s.set(SIG_BATT_V, 1260, 1);                                      // 12.60 V
+    s.set(SIG_BATT_V, 1255, 1);                                      // 12.55 V
     s.set(SIG_ODO_CLUSTER, 1000, 1);
     E e;
     uint8_t f[64], n = 0;
     // 0x21: the range, BE at D4-D5.
-    e.setExperiments(E::EXP_BATT | (uint8_t)((uint8_t)E::BattAt::Range21 << 5));
+    e.setFieldMap(fields({from(SIG_RANGE, SIG_BATT_V, 1, 10)}));
     TEST_ASSERT_TRUE(e.preview(E::MSG_TRIP, s, f, n));
     TEST_ASSERT_EQUAL_HEX8(0x21, f[1]);
     TEST_ASSERT_EQUAL_HEX8(0x00, f[3 + 4]);
     TEST_ASSERT_EQUAL_HEX8(126, f[3 + 5]);
     // 0x7D 04 D4-D5, LE; the cluster's odometer carries the frame.
-    e.setExperiments(E::withBattAt(E::EXP_BATT, E::BattAt::Odo7D04));
+    e.setFieldMap(fields({from(SIG_FUEL_PCT, SIG_BATT_V, 1, 10)}));
     TEST_ASSERT_TRUE(e.preview(E::MSG_ODO, s, f, n));
     TEST_ASSERT_EQUAL_HEX8(0x04, f[3]);
     TEST_ASSERT_EQUAL_HEX8(126, f[3 + 4]);
     TEST_ASSERT_EQUAL_HEX8(0x00, f[3 + 5]);
     // 0x23: the current value, BE at D1-D2.
-    e.setExperiments(E::withBattAt(E::EXP_BATT, E::BattAt::Hist23));
+    e.setFieldMap(fields({from(SIG_FUEL_AVG, SIG_BATT_V, 1, 10)}));
     TEST_ASSERT_TRUE(e.preview(E::MSG_FUEL_HIST, s, f, n));
     TEST_ASSERT_EQUAL_HEX8(0x23, f[1]);
     TEST_ASSERT_EQUAL_HEX8(0x00, f[3 + 1]);
     TEST_ASSERT_EQUAL_HEX8(126, f[3 + 2]);
-    // Off: 0x23 has nothing to say, 0x7D 04 keeps F2 08.
-    e.setExperiments(0);
+    // None: 0x23 has nothing to say, 0x7D 04 keeps F2 08.
+    e.setFieldMap(FieldMap());
     TEST_ASSERT_FALSE(e.preview(E::MSG_FUEL_HIST, s, f, n));
-}
-
-void test_battery_and_its_rival_are_never_both_on()
-{
-    const uint8_t at21 = E::withBattAt(E::EXP_BATT, E::BattAt::Range21);
-    const uint8_t at04 = E::withBattAt(E::EXP_BATT, E::BattAt::Odo7D04);
-    const uint8_t at23 = E::withBattAt(E::EXP_BATT, E::BattAt::Hist23);
-    // The web refuses a clash...
-    TEST_ASSERT_NOT_NULL(E::experimentsWhy(at21 | E::EXP_COMPUTED));
-    TEST_ASSERT_NOT_NULL(E::experimentsWhy(at23 | E::EXP_COMPUTED));
-    TEST_ASSERT_NOT_NULL(E::experimentsWhy(at04 | E::EXP_FUEL_7D04));
-    TEST_ASSERT_NOT_NULL(E::experimentsWhy((uint8_t)(E::EXP_BATT | (3 << 5))));   // no field 3
-    TEST_ASSERT_NOT_NULL(E::experimentsWhy(0x80));
-    // ...and takes the rest, the rival of another field included.
-    TEST_ASSERT_NULL(E::experimentsWhy(at21 | E::EXP_FUEL_7D04 | E::EXP_COOLANT | E::EXP_GEAR));
-    TEST_ASSERT_NULL(E::experimentsWhy(at04 | E::EXP_COMPUTED));
-    TEST_ASSERT_NULL(E::experimentsWhy(E::EXP_COMPUTED | E::EXP_FUEL_7D04));
-    // The emitter settles one that got past (an old NVS byte) for the battery.
-    E e;
-    e.setExperiments(at21 | E::EXP_COMPUTED | E::EXP_FUEL_7D04);
-    TEST_ASSERT_EQUAL_HEX8(at21 | E::EXP_FUEL_7D04, e.experiments());
-    e.setExperiments(at04 | E::EXP_FUEL_7D04 | E::EXP_COMPUTED);
-    TEST_ASSERT_EQUAL_HEX8(at04 | E::EXP_COMPUTED, e.experiments());
-    e.setExperiments((uint8_t)(E::EXP_BATT | (3 << 5)));
-    TEST_ASSERT_EQUAL_HEX8(at21, e.experiments());
-    e.setExperiments(0xFF);
-    TEST_ASSERT_EQUAL_HEX8(0, e.experiments() & 0x80);
-    // Without the battery the old switches are as they were.
-    e.setExperiments(E::EXP_COMPUTED | E::EXP_FUEL_7D04);
-    TEST_ASSERT_EQUAL_HEX8(E::EXP_COMPUTED | E::EXP_FUEL_7D04, e.experiments());
+    TEST_ASSERT_TRUE(e.preview(E::MSG_ODO, s, f, n));
+    TEST_ASSERT_EQUAL_HEX8(0xF2, f[3 + 4]);
+    TEST_ASSERT_EQUAL_HEX8(0x08, f[3 + 5]);
 }
 
 // The climate overlay pops on a changed 0x28. The outside temperature in it
@@ -1223,13 +1236,12 @@ void test_ac_form_needs_a_trusted_signal()
 int main(int, char**)
 {
     UNITY_BEGIN();
-    RUN_TEST(test_experiments_are_off_by_default_and_each_switches_one_thing);
-    RUN_TEST(test_battery_in_a_borrowed_field);
-    RUN_TEST(test_battery_and_its_rival_are_never_both_on);
+    RUN_TEST(test_old_experiments_become_field_rules);
+    RUN_TEST(test_battery_in_another_field);
     RUN_TEST(test_outside_temp_is_held_against_flicker);
     RUN_TEST(test_climate_frame_changes_only_on_a_lasting_value);
     RUN_TEST(test_ac_form_needs_a_trusted_signal);
-    RUN_TEST(test_selector_probe_goes_out_only_with_its_experiment);
+    RUN_TEST(test_selector_probe_goes_out_only_when_its_field_is_on);
     RUN_TEST(test_raise_targets_ids_are_unique_and_name_real_signals);
     RUN_TEST(test_every_sent_raise_target_changes_its_message);
     RUN_TEST(test_raise_values_place_the_decimal_point);

@@ -1,4 +1,5 @@
 #include "HuTask.h"
+#include "../utils/Scratch.h"
 #include "Rt.h"
 #include "RequestReply.h"
 #include "../sinks/UartTx.h"
@@ -93,7 +94,6 @@ namespace App
             {
                 s_s.emitter->setEnabled(c.enabled);
                 s_s.emitter->setTuning(c.tuning);
-                s_s.emitter->setExperiments(c.exp);
                 s_s.emitter->setFieldMap(c.fields);
                 for (uint8_t i = 0; i < Canbox::Rav4Emitter::MAX_MESSAGES; ++i)
                     s_s.emitter->setMsgEnabled(i, c.msgOn[i]);
@@ -347,13 +347,15 @@ namespace App
         bool preview(uint8_t idx, uint8_t* frame, uint8_t& len)
         {
             if (!s_s.state) return false;
-            EmitterCfg c;
-            if (!s_cfg.peek(c)) return false;
             // A scratch emitter: the hu task's own is never read off its task.
-            Canbox::Rav4Emitter e;
-            e.setTuning(c.tuning);
-            e.setExperiments(c.exp);
-            return e.preview(idx, *s_s.state, frame, len);
+            // Both in Scratch: the caller is httpd (4 kB stack), and the two
+            // hold three field maps (~1.2 kB).
+            struct Work { EmitterCfg c; Canbox::Rav4Emitter e; };
+            Scratch<Work> w;
+            if (!w || !s_cfg.peek(w->c)) return false;
+            w->e.setTuning(w->c.tuning);
+            w->e.setFieldMap(w->c.fields);
+            return w->e.preview(idx, *s_s.state, frame, len);
         }
 
         bool sendByCmd(uint8_t cmd)

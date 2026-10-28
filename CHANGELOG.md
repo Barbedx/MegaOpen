@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+- The head-unit experiments are field-map rules now (step 2 of docs/design/hu-mapping.md, finished): the switches «Експерименти ГУ» and «Напруга АКБ у полі ГУ» are gone. The fields they fed start off and are switched on in the map table's «Звідки» like any other: coolant (0x7D 09), the PRND probe (0x7D 06) and «Бак, %» (0x7D 04 D4-D5, F2 08 while off) → «свій сигнал»; the battery → another field's «Звідки» → `batt_v` ÷10 (rounded); the board's range and consumption → «Запас ходу» ← `range_calc` etc. On the first boot the old switches (NVS `huExp`) become those rules once (`W [hu] experiments 0x.. -> field map: saved`); a settings file from before brings its `exp` the same way and a new one carries `hu.fields`. A test send of a field that is off answers «поле вимкнене».
+- The tank in per cent is a car signal, `fuel_pct` (x10, `fuel_level` over 60 L, derived).
+- `[stk]` also shows `httpd`, the web server's stack left.
+
+### Fixed
+- A crash of the web server (`task=httpd`, a stack overflow): the head unit's settings, now with the field map, were copied onto httpd's 4 kB stack by every map route; they are per-request (PSRAM) now. 1.6.2 has half of it (the map page's field column). After the map routes, httpd keeps 764 B free on the bench.
+
 ## [1.6.2] - 2026-10-28
 
 ### Added

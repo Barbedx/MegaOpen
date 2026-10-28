@@ -1,4 +1,5 @@
 #include "Rav4Emitter.h"
+#include <initializer_list>
 #include "RaiseFramer.h"
 
 namespace Canbox
@@ -81,42 +82,60 @@ namespace Canbox
         return (uint8_t)(5 - d);
     }
 
-    const char* Rav4Emitter::experimentsWhy(uint8_t m)
+    const FieldMap& Rav4Emitter::defaults()
     {
-        if (m & ~EXP_ALL) return "param exp";
-        if (!(m & EXP_BATT)) return nullptr;
-        const uint8_t at = (uint8_t)((m & EXP_BATT_AT) >> 5);
-        if (at > (uint8_t)BattAt::Hist23) return "param exp";   // battery field: 0x21, 0x7D 04 or 0x23
-        if (at == (uint8_t)BattAt::Odo7D04 && (m & EXP_FUEL_7D04))
-            return "exp_7d04";    // battery and fuel both in 0x7D 04
-        if (at != (uint8_t)BattAt::Odo7D04 && (m & EXP_COMPUTED))
-            return "exp_range";   // battery in 0x21/0x23 and the computed range/consumption
-        return nullptr;
-    }
-
-    uint8_t Rav4Emitter::sanitizeExperiments(uint8_t m)
-    {
-        m &= EXP_ALL;
-        if (!(m & EXP_BATT)) return m;
-        BattAt at = battAt(m);
-        if ((uint8_t)at > (uint8_t)BattAt::Hist23) { at = BattAt::Range21; m = withBattAt(m, at); }
-        if (at == BattAt::Odo7D04) m &= (uint8_t)~EXP_FUEL_7D04;
-        else                       m &= (uint8_t)~EXP_COMPUTED;
+        static const FieldMap m = [] {
+            FieldMap d;
+            for (const uint8_t f : {SIG_ENG_TEMP, SIG_PRND, SIG_FUEL_PCT}) {
+                FieldRule r;
+                r.field = f;
+                r.kind = FK_OFF;
+                d.set(r);
+            }
+            return d;
+        }();
         return m;
     }
 
-    uint16_t Rav4Emitter::battField(int32_t v)
+    void Rav4Emitter::withDefaults(const FieldMap& own, FieldMap& out)
     {
-        if (v <= 0) return 0;
-        const int32_t x = (v + 5) / 10;
-        return (uint16_t)(x > 0xFFFF ? 0xFFFF : x);
+        out = defaults();
+        for (uint8_t i = 0; i < own.count(); ++i) out.set(own.at(i));
     }
 
-    uint8_t Rav4Emitter::pick(const FieldView& s, uint8_t sig, uint8_t computed) const
+    void Rav4Emitter::setFieldMap(const FieldMap& own)
     {
-        if (s.has(sig)) return sig;
-        if ((_exp & EXP_COMPUTED) && s.has(computed)) return computed;
-        return SIG_COUNT;
+        _own = own;
+        withDefaults(own, _map);
+    }
+
+    bool Rav4Emitter::experimentsToRules(uint8_t bits, FieldMap& m)
+    {
+        // The bits as they were (1.6.1): coolant 1, fuel % in 7D 04 2, the
+        // computed range and consumption 4, PRND 8, the battery 16 in the
+        // field of bits 5-6 (0x21 range, 0x7D 04, 0x23).
+        if (bits & 0x80) return false;
+        const uint8_t at = (bits >> 5) & 3;
+        if ((bits & 16) && (at == 3 || (at == 1 && (bits & 2)) || (at != 1 && (bits & 4)))) return false;
+        auto own = [&](uint8_t f) {
+            FieldRule r; r.field = f; r.kind = FK_SIGNAL; r.src = f;
+            if (!m.find(f)) m.set(r);
+        };
+        auto from = [&](uint8_t f, uint8_t src, int16_t div) {
+            FieldRule r; r.field = f; r.kind = FK_SIGNAL; r.src = src; r.div = div;
+            if (!m.find(f)) m.set(r);
+        };
+        if (bits & 1) own(SIG_ENG_TEMP);
+        if (bits & 2) own(SIG_FUEL_PCT);
+        if (bits & 8) own(SIG_PRND);
+        if (bits & 4) {
+            from(SIG_RANGE, SIG_RANGE_CALC, 1);
+            from(SIG_FUEL_INST, SIG_CONS_INST, 1);
+            from(SIG_FUEL_AVG, SIG_CONS_AVG, 1);
+        }
+        if (bits & 16)   // volts x100 -> x10, rounded
+            from(at == 0 ? SIG_RANGE : at == 1 ? SIG_FUEL_PCT : SIG_FUEL_AVG, SIG_BATT_V, 10);
+        return true;
     }
 
     // ---- Tuning persistence -------------------------------------------------
@@ -178,6 +197,7 @@ namespace Canbox
     Rav4Emitter::Rav4Emitter()
     {
         for (uint8_t i = 0; i < MAX_MESSAGES; ++i) _msgOn[i] = true;
+        _map = defaults();
     }
 
     uint8_t Rav4Emitter::messageCount() { return M_COUNT; }
@@ -356,8 +376,6 @@ namespace Canbox
                 // 0x5FD when it speaks, else the cluster's odometer (0x5C5, in the
                 // X84 matrix and on the bus all the time): the car's 0x5FD did not
                 // come once in a whole drive (1.6.1 [drive], 2026-10-27).
-                const bool fuelExp = (_exp & EXP_FUEL_7D04) != 0;
-                const bool battExp = (_exp & EXP_BATT) && battAt(_exp) == BattAt::Odo7D04;
                 const uint8_t odo = s.has(SIG_ODOMETER) ? SIG_ODOMETER
                                   : s.has(SIG_ODO_CLUSTER) ? SIG_ODO_CLUSTER : SIG_COUNT;
                 if (odo == SIG_COUNT) return false;
@@ -368,19 +386,12 @@ namespace Canbox
                 p[2] = (uint8_t)((km >> 8) & 0xFF);
                 p[3] = (uint8_t)((km >> 16) & 0xFF);
                 p[4] = 0xF2; p[5] = 0x08;    // in every capture: 2290, /10 -> 1049 idx 5, meaning unknown
-                if (fuelExp && s.has(SIG_FUEL_LEVEL)) {
+                if (s.has(SIG_FUEL_PCT)) {
                     // The tank in per cent x10, LE: DUDU draws "518 km [bar] 84%" in its
                     // status bar from this field (1049 idx 5), and 2290 (229 %) is
-                    // why every canbox's F2 08 shows nothing. Litres over TANK_L.
-                    int32_t pct10 = s.get(SIG_FUEL_LEVEL) * 1000 / TANK_L;
-                    if (pct10 < 0) pct10 = 0;
-                    if (pct10 > 1000) pct10 = 1000;
-                    const uint16_t f = (uint16_t)pct10;
+                    // why every canbox's F2 08 shows nothing. Off by default.
+                    const uint16_t f = (uint16_t)s.get(SIG_FUEL_PCT);
                     p[4] = (uint8_t)f; p[5] = (uint8_t)(f >> 8);
-                }
-                if (battExp && s.has(SIG_BATT_V)) {
-                    const uint16_t b = battField(s.get(SIG_BATT_V));            // V x10, LE
-                    p[4] = (uint8_t)b; p[5] = (uint8_t)(b >> 8);
                 }
                 // trip1/trip2, LE u24 each, in 0.1 km.
                 uint32_t t1 = (uint32_t)s.get(SIG_TRIP1);
@@ -403,9 +414,8 @@ namespace Canbox
                 return true;
             }
             case M_TRIP: {
-                const uint8_t range = pick(s, SIG_RANGE, SIG_RANGE_CALC);
-                const bool batt = (_exp & EXP_BATT) && battAt(_exp) == BattAt::Range21 && s.has(SIG_BATT_V);
-                if (!(s.has(SIG_AVG_SPEED) || s.has(SIG_TRIP_ELAPSED) || range != SIG_COUNT || batt))
+                const bool range = s.has(SIG_RANGE);
+                if (!(s.has(SIG_AVG_SPEED) || s.has(SIG_TRIP_ELAPSED) || range))
                     return false;
                 // Big-endian; elapsed is in minutes, not seconds.
                 // mikescotland: p[0..3] zero padding, p[4..5] range (BE16), p[6]
@@ -419,29 +429,24 @@ namespace Canbox
                     putBE16(p + 0, 0);
                     putBE16(p + 2, 0);
                 }
-                putBE16(p + 4, batt ? battField(s.get(SIG_BATT_V))
-                                    : (uint16_t)(range != SIG_COUNT ? s.get(range) : 0));
+                putBE16(p + 4, (uint16_t)(range ? s.get(SIG_RANGE) : 0));
                 p[6] = _t.tripUnit;
                 return true;
             }
             case M_FUEL_INST: {
-                const uint8_t inst = pick(s, SIG_FUEL_INST, SIG_CONS_INST);
-                if (inst == SIG_COUNT) return false;
+                if (!s.has(SIG_FUEL_INST)) return false;
                 cmd = 0x22; len = 3;
                 p[0] = _t.fuelUnit;
-                putBE16(p + 1, (uint16_t)s.get(inst));          // x10
+                putBE16(p + 1, (uint16_t)s.get(SIG_FUEL_INST));   // x10
                 return true;
             }
             case M_FUEL_HIST: {
-                const uint8_t avg = pick(s, SIG_FUEL_AVG, SIG_CONS_AVG);
-                const bool batt = (_exp & EXP_BATT) && battAt(_exp) == BattAt::Hist23 && s.has(SIG_BATT_V);
-                if (avg == SIG_COUNT && !batt) return false;
+                if (!s.has(SIG_FUEL_AVG)) return false;
                 // len 13, not 3: the unit's exact-length guard drops 3.
                 // Unused slots are 0xFFFF = invalid, filled from the end.
                 cmd = 0x23; len = _t.histLen ? _t.histLen : 13;
                 p[0] = _t.fuelUnit;
-                putBE16(p + 1, batt ? battField(s.get(SIG_BATT_V))   // the borrowed bar
-                                    : (uint16_t)s.get(avg));                 // current trip
+                putBE16(p + 1, (uint16_t)s.get(SIG_FUEL_AVG));   // current trip
                 for (uint8_t i = 3; i + 1 < len; i += 2) putBE16(p + i, 0xFFFF);
                 return true;
             }
@@ -594,7 +599,7 @@ namespace Canbox
                 // D1 bits are other flags (codes 138/139, 1049 idx 12): left 0.
                 // D2's low nibble goes to 1049 idx 4, the shape of PRND
                 // (docs/hu-decoder.md §2b); the values are the bench's to find.
-                if (!(_exp & EXP_GEAR) || !s.has(SIG_PRND)) return false;
+                if (!s.has(SIG_PRND)) return false;   // its field is off by default
                 cmd = 0x7D; len = 3;
                 p[0] = 0x06; p[1] = 0x00; p[2] = nib(s.get(SIG_PRND), 15);
                 return true;
@@ -672,7 +677,6 @@ namespace Canbox
             // The two 0x28 forms are mutually exclusive on the wire.
             if (i == M_TEMP && _t.cmd28 != 0) continue;
             if (i == M_AC   && _t.cmd28 == 0) continue;
-            if (i == M_COOLANT && !(_exp & EXP_COOLANT)) continue;
 
             uint8_t cmd = 0, len = 0, p[MAX_PAYLOAD];
             if (!build(i, s, cmd, p, len)) continue;

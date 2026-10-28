@@ -33,6 +33,7 @@ namespace Vehicle
         // crawling round the threshold does not flicker.
         static constexpr uint8_t  LIGHTS_KMH = 10, BRAKE_KMH = 5;
         static constexpr uint8_t  BAND_PCT   = 12;      // a gear matches within ±12 %
+        static constexpr int32_t  TANK_L     = 60;      // the Mégane II's tank: fuel_pct
 
         // km/h per 1000 rpm x10, 1st..6th; 0 = no such gear. The defaults are
         // the owner's Mégane II CC, a six-speed: 2nd..6th learned on a drive
@@ -77,10 +78,11 @@ namespace Vehicle
         void gear(State& s, uint32_t now);
         void fuel(State& s, uint32_t now);
         void safety(State& s, uint32_t now);
+        void tank(State& s, uint32_t now);
 
         Gears    _g;
         int32_t  _lightsOn = LIGHTS_KMH * 100, _brakeOn = BRAKE_KMH * 100;   // km/h x100
-        uint32_t _speedTs = 0, _rpmTs = 0, _cntTs = 0;
+        uint32_t _speedTs = 0, _rpmTs = 0, _cntTs = 0, _levelTs = 0;
         uint8_t  _cnt = 0;
         bool     _haveCnt = false;
         // Distance: speed integrated between two counter frames, in mm.

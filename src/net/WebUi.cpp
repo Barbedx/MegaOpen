@@ -2293,7 +2293,9 @@ void WebUi::routesCanbox()
     // The emitter is the hu task's: its settings are read from the staged copy
     // (the newest edit) and previews are built on this handler's stack.
     route("/api/messages", HTTP_GET, [this](PsychicRequest* r) {
-        App::Hu::EmitterCfg cfg;
+        Scratch<App::Hu::EmitterCfg> cfgBox;   // ~450 B: not on httpd's 4 kB stack
+        if (!cfgBox) return r->reply(503, "text/plain", "no_memory");
+        App::Hu::EmitterCfg& cfg = *cfgBox;
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
         JsonDocument d;
         JsonArray a = d["messages"].to<JsonArray>();

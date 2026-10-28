@@ -1561,15 +1561,20 @@ static void hkBeat(uint32_t now)
     // [stk] is a subset of [task] now. Kept until Step 6 retires it, so old
     // logs and new ones still compare line for line.
     const TaskHandle_t net = App::Housekeeping::task();
-    LOGS("stk", "loop=%u net=%u ble=%u knobs=%u",
+    // httpd: the web server's own task (4 kB), where every route runs; found
+    // by name once it exists (the server starts after this line's first pass).
+    static TaskHandle_t s_httpd = nullptr;
+    if (!s_httpd) s_httpd = xTaskGetHandle("httpd");
+    LOGS("stk", "loop=%u net=%u ble=%u knobs=%u httpd=%u",
          g_loopTask ? (unsigned)uxTaskGetStackHighWaterMark(g_loopTask) : 0u,
          net ? (unsigned)uxTaskGetStackHighWaterMark(net) : 0u,
          g_bleTask ? (unsigned)uxTaskGetStackHighWaterMark(g_bleTask) : 0u,
 #if FEATURE_KNOBS
-         (unsigned)g_knobs.stackFree());
+         (unsigned)g_knobs.stackFree(),
 #else
-         0u);
+         0u,
 #endif
+         s_httpd ? (unsigned)uxTaskGetStackHighWaterMark(s_httpd) : 0u);
     // [hu] and [key] are logged by the hu and keys tasks themselves, [car]
     // by the car task, and [can], [panel], [stall] and [loop] by the loop,
     // each from its own window.
@@ -1944,8 +1949,17 @@ void setup()
         App::Hu::EmitterCfg ec;
         g_cfg.loadTuning(ec.tuning);
         ec.enabled = g_cfg.loadHuSend() && g_cfg.s().uartEnabled;
-        ec.exp     = g_cfg.loadHuExp();
-        if (g_cfg.loadFieldMap(ec.fields) && ec.fields.count())
+        g_cfg.loadFieldMap(ec.fields);
+        // The experiment switches of 1.6.1 and before become field rules, once.
+        if (const uint8_t bits = g_cfg.loadHuExp()) {
+            const bool ok = Canbox::Rav4Emitter::experimentsToRules(bits, ec.fields);
+            const bool saved = ok && g_cfg.saveFieldMap(ec.fields);
+            if (saved) g_cfg.clearHuExp();
+            LOGW("hu", "experiments 0x%02X -> field map: %s", (unsigned)bits,
+                 !ok ? "not convertible, dropped" : saved ? "saved" : "NOT saved, again next boot");
+            if (!ok) g_cfg.clearHuExp();
+        }
+        if (ec.fields.count())
             LOGI("hu", "field map: %u rule(s) from NVS", (unsigned)ec.fields.count());
         App::Hu::Setup hs;
         hs.port    = &Serial1;

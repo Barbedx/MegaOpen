@@ -12,6 +12,7 @@ namespace Vehicle
         const uint8_t kRange[] = {SIG_FUEL_COUNTER, SIG_SPEED, SIG_FUEL_LEVEL};
         const uint8_t kNoLights[]  = {SIG_SPEED, SIG_LIGHT_DIPPED, SIG_LIGHT_MAIN};
         const uint8_t kHandbrake[] = {SIG_SPEED, SIG_HANDBRAKE};
+        const uint8_t kTank[]  = {SIG_FUEL_LEVEL};
 
         template <size_t N>
         uint8_t give(const uint8_t (&a)[N], const uint8_t*& list) { list = a; return (uint8_t)N; }
@@ -38,6 +39,7 @@ namespace Vehicle
             case SIG_RANGE_CALC: return give(kRange, list);
             case SIG_DRIVE_NO_LIGHTS: return give(kNoLights, list);
             case SIG_DRIVE_HANDBRAKE: return give(kHandbrake, list);
+            case SIG_FUEL_PCT:   return give(kTank, list);
             default:             list = nullptr; return 0;
         }
     }
@@ -81,6 +83,17 @@ namespace Vehicle
             _cntTs = s.stamp(SIG_FUEL_COUNTER);
             fuel(s, now);
         }
+        if (s.stamp(SIG_FUEL_LEVEL) != _levelTs) {
+            _levelTs = s.stamp(SIG_FUEL_LEVEL);
+            tank(s, now);
+        }
+    }
+
+    // Litres over the tank, per cent x10, cut down (31 L of 60: 516 = 51.6 %).
+    void Derived::tank(State& s, uint32_t now)
+    {
+        if (!s.has(SIG_FUEL_LEVEL)) return;
+        put(s, SIG_FUEL_PCT, (int64_t)s.get(SIG_FUEL_LEVEL) * 1000 / TANK_L, now);
     }
 
     void Derived::gear(State& s, uint32_t now)
