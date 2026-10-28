@@ -13,6 +13,7 @@ namespace Vehicle
     void State::set(uint8_t s, int32_t v, uint32_t nowMs)
     {
         if (s >= SIG_COUNT) return;
+        if (!_pinned[s] && (!_ts[s] || _val[s] != v)) _changed.set(s);
         _val[s] = v;
         _ts[s]  = nowMs ? nowMs : 1;    // 0 stays the "never decoded" sentinel
     }
@@ -20,12 +21,16 @@ namespace Vehicle
     void State::pin(uint8_t s, int32_t v)
     {
         if (s >= SIG_COUNT) return;
-        _pin[s]    = clamp(s, v);
+        const int32_t c = clamp(s, v);
+        if (!_pinned[s] || _pin[s] != c) _changed.set(s);
+        _pin[s]    = c;
         _pinned[s] = true;
     }
 
     void State::unpin(uint8_t s)
     {
-        if (s < SIG_COUNT) _pinned[s] = false;
+        if (s >= SIG_COUNT || !_pinned[s]) return;
+        _pinned[s] = false;
+        _changed.set(s);
     }
 }

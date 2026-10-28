@@ -9,6 +9,7 @@
 #include "../proto/canbox/Protocol.h"
 #include "../cfg/CarFile.h"
 #include "../cfg/CarStore.h"
+#include "../vehicle/ExprState.h"
 #include "../utils/PsramJson.h"
 #include "../proto/canbox/FieldView.h"
 #include "../proto/canbox/Protocol.h"
@@ -412,6 +413,48 @@ void WebUi::routesMap()
         }
 
         return r->reply(200, "application/json", "{\"ok\":true}");
+    });
+
+    // A formula (src/vehicle/Expr.h) checked and evaluated once on the car's
+    // signals now: {f} -> {ok:true, v, inputs:[names], timed} or {ok:false,
+    // code, pos} (code an e.<code>, pos the byte). The editor's live check;
+    // nothing is saved. Functions with state read their first evaluation.
+    route("/api/expr", HTTP_POST, [this](PsychicRequest* r) {
+        if (!_state) return r->reply(503, "text/plain", "not_built vehicle");
+        JsonDocument d;
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
+        if (!d["f"].is<const char*>()) return r->reply(400, "text/plain", "param f");
+        Scratch<Expr::Program> p;
+        Scratch<Expr::Program::State> ps;
+        if (!p || !ps) return r->reply(503, "text/plain", "no_memory");
+        Expr::Error e;
+        JsonDocument o;
+        if (!p->compile(d["f"].as<const char*>(), Vehicle::exprResolve, nullptr, e) || !p->reset(*ps)) {
+            o["ok"] = false;
+            o["code"] = e.code ? e.code : "no_memory";
+            o["pos"] = e.pos;
+        } else {
+            const uint32_t now = millis();
+            Vehicle::ExprCtx c{_state, now};
+            const Expr::Num v = p->eval(*ps, Vehicle::exprRead, &c, now);
+            o["ok"] = true;
+            if (v == Expr::NONE) o["v"] = nullptr;
+            else {
+                // x SCALE, three decimals, trailing zeros cut: 52.5, not 52.500.
+                char b[32];
+                const unsigned long long m = v < 0 ? (unsigned long long)(-(v + 1)) + 1 : (unsigned long long)v;
+                int n = snprintf(b, sizeof(b), "%s%llu.%03llu", v < 0 ? "-" : "", m / 1000, m % 1000);
+                while (n > 0 && b[n - 1] == '0') b[--n] = 0;
+                if (n > 0 && b[n - 1] == '.') b[--n] = 0;
+                o["v"] = serialized(String(b));
+            }
+            JsonArray in = o["inputs"].to<JsonArray>();
+            for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) if (p->inputs().has(s)) in.add(Vehicle::meta(s).name);
+            o["timed"] = p->timed();
+        }
+        String out;
+        serializeJson(o, out);
+        return replyJson(r, out);
     });
 
     // {id, value}: the value is pinned for 30 s (RAM only, a pin wins over

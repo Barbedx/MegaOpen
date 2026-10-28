@@ -1,5 +1,6 @@
 #pragma once
 #include "Signals.h"
+#include "Expr.h"
 
 // One value per signal, plus where it came from:
 //   * unknown      — never decoded, not pinned: the emitter stays silent about it;
@@ -45,7 +46,14 @@ namespace Vehicle
 
         static int32_t clamp(uint8_t s, int32_t v);
 
+        // --- what changed (the rules engine, docs/design/rules.md) ------------
+        // The signals whose value (as get() reads it) changed since the last
+        // take, or that got their first value or lost a pin. The car task
+        // only: it is the one writer, and the one taker.
+        void takeChanged(Expr::SigSet& out) { out = _changed; _changed.clear(); }
+
     private:
+        Expr::SigSet _changed;
         int32_t  _val[SIG_COUNT] = {};
         uint32_t _ts[SIG_COUNT]  = {};    // 0 = never decoded
         int32_t  _pin[SIG_COUNT] = {};
