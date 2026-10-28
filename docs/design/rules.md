@@ -215,21 +215,31 @@ at build time; here it is an on-device expression language:
   binding one (it replaces ×÷+);
 - state through functions, not loops: `min max abs clamp if delta rate
   integral avg(x, n s) held(c, n s) lookup`;
-- factory formulas ship as rows like everything else. Which of `Derived.cpp`
-  moves (fuel_pct, range, average speed) and what stays C++ (gear matching,
-  the 0x551 counter) is the owner's call, asked 2026-10-28.
+- factory formulas ship as rows like everything else.
+- **Decided (owner, 2026-10-28): what reads as one formula moves.** `fuel_pct`,
+  the range and the average speed become factory formulas in `Derived`'s
+  place; gear matching (a table search) and the 0x551 consumption counter
+  (wrap-around integration) stay C++ and keep feeding signals.
 
-## Slice order (replaces the list above)
+## Slice order (replaces the lists above, 2026-10-28)
 
-0. HU protocol module (above).
-1. Names and source classes; config file `/cfg/car.json` in LittleFS,
-   loaded into PSRAM; `decode` / `huFmap` / `alerts` migrate out of NVS.
-2. Rule engine: condition tree, FOR, ELSE, actions popup + set; alerts migrate
-   into rules, `AlertRules` / `AlertEval` / `alerts` are deleted.
-3. User signals.
-4. Reminders as factory rules; `Derived` and Settings › Reminders lose them.
-5. HU and phone signals (inbound through `Hu::Protocol` and the BLE services).
-6. The editor «Мапа › Правила».
-7. Head unit: «одразу при зміні» + gap, `hu <message> now`, user signals in
-   «Поля ГУ».
-8. Factory profile as JSON in the image, export / import, docs.
+0. HU protocol module. **Done** (master b55e239).
+1. Names and source classes; the car file `/cfg/car.json` in LittleFS, held in
+   PSRAM; `decode` / `huFmap` / `alerts` leave NVS once (migrated on boot,
+   then the keys are erased). Every saved reference to a signal is its name.
+2. The formula language (`src/vehicle/Expr.*`, portable): parser to bytecode
+   with error code + position, the evaluator, the functions (pure and
+   stateful), the changed bitmap that decides what to re-evaluate.
+3. User signals as formulas, and the factory formulas that replace `Derived`'s
+   `fuel_pct`, range and average speed.
+4. Rules: a condition is a boolean formula, FOR is `held()`, ELSE, actions
+   popup / set / hu-now; alerts migrate into rules, `AlertRules` /
+   `AlertEval` / `alerts` go.
+5. The reminders as factory rules; Settings › Reminders goes. HU and phone
+   signals through `HuInbound` and the BLE services (Raise's last two names
+   outside the module go here).
+6. The editor «Мапа › Правила» and the formula field (live value, names from
+   `/api/map?meta=1`).
+7. Head unit: «одразу при зміні» with its gap, HU field bindings as formulas
+   (×÷+ goes), user signals in «Поля ГУ».
+8. The factory profile as JSON in the image, export / import, docs.
