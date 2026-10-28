@@ -5,17 +5,21 @@ const bars=r=>{const n=r>-55?4:r>-67?3:r>-78?2:1;return `<span class="sig">${[1,
 /* усі налаштування з реєстру прошивки (CAT.settings): ті самі, що в меню на щитку;
    ті, що вже є на сторінці (data-k в `have`), не дублюються; reboot -> смуга перезавантаження.
    Одиниця — уже в назві («Брязкіт, мс»), тож поруч не дописується; лише значення «лише читати» несе її */
-const allSettings=(se,have)=>{let h='';for(const f of CAT.settings||[]){
- if(f.type==='group'){h+=`<div class="row muted"><b>${esc(f.label)}</b></div>`;continue}
- if(f.type==='table')continue;/* таблиці малює своя сторінка (сповіщення — «Авто — наживо») */
- if(!(f.id in se)||have.includes(`|${f.id}"`))continue;
+/* один параметр реєстру рядком (той самий вигляд, що в «Усіх налаштуваннях») */
+const setField=(se,f,hint='')=>{
  const v=se[f.id],k=(f.reboot?'rb:':'')+'/api/settings|'+f.id,ex=f.reboot?rbA(k,v,f.label):'';let c;
  if(f.ro)c=`<span class="mono">${esc(f.enum?((f.enum.find(o=>o.v===v)||{}).name||v):v)}${f.unit?' '+esc(unitT(f.unit)):''}</span>`;
  else if(f.type==='bool')c=sw(k,v,ex);
  else if(f.type==='enum')c=sel(k,f.enum.map(o=>[o.v,o.name]),v,'data-str'+ex);
  else if(f.type==='str')c=txt(k,v,'','in','text',`maxlength="${f.max}"${ex}`);
  else c=num(k,v,`min="${f.min}" max="${f.max}"${f.step?` step="${f.step}"`:''}${ex}`);
- h+=row(esc(f.label),c,f.volatile?t('bd.volatile'):'')}
+ return row(esc(f.label),c,f.volatile?t('bd.volatile'):'',hint)};
+const setById=(se,id,hint)=>{const f=(CAT.settings||[]).find(x=>x.id===id);return f&&id in se?setField(se,f,hint):''};
+const allSettings=(se,have)=>{let h='';for(const f of CAT.settings||[]){
+ if(f.type==='group'){h+=`<div class="row muted"><b>${esc(f.label)}</b></div>`;continue}
+ if(f.type==='table')continue;/* таблиці малює своя сторінка (сповіщення — «Авто — наживо») */
+ if(!(f.id in se)||have.includes(`|${f.id}"`))continue;
+ h+=setField(se,f)}
  return h};
 SCR.board={title:'nav.board',async render(m){
  const B=has('ble');
@@ -43,6 +47,11 @@ SCR.board={title:'nav.board',async render(m){
   (lp.canMB!==undefined?row(t('bd.pushCan'),sw('/api/logpush|can',lp.can),'',t('bd.pushCanH'))+
    row(t('bd.pushCanMB'),txt('/api/logpush|canMB',lp.canMB,'200','in','number','min="1" max="5000" style="max-width:8em"'),'<span id="pCan"></span>'):'')+
   `<div class="fr"><button class="btn" type="button" id="pNow">${t('bd.pushNow')}</button></div>`,'cPush'):'')+
+ /* «Журнал» (docs/design/logging.md): рівень, рядки стану, приймачі; рівні окремих тегів рядками */
+ card(t('bd.journal'),setById(se,'logLevel',t('bd.logLevelH'))+setById(se,'logStatus')+
+  setById(se,'logWeb')+setById(se,'logFlash',t('bd.logFlashH'))+setById(se,'logPush')+setById(se,'logSerial')+
+  row(t('bd.logTags'),'','',t('bd.logTagsH'))+`<div id="ltRows"></div>`+
+  `<div class="fr"><select class="in" id="ltTag" data-nosave aria-label="${esc(t('bd.logTag'))}"></select><select class="in" id="ltLvl" data-nosave aria-label="${esc(t('bd.logLvl'))}">${enumOpts('logLevels').map(o=>`<option value="${esc(o[0])}">${esc(o[1])}</option>`).join('')}</select><button class="btn" type="button" id="ltAdd">${t('bd.logTagAdd')}</button></div>`,'cLog')+
  (has('logfs')?card(t('bd.log'),row('','',t('bd.logH'))+`<div id="logs">${(lg.files||[]).map(f=>row(f.n?t('bd.bootN',f.n):t('bd.bootThis'),`<button class="btn sm" type="button" data-n="${f.n}">${t('bd.download')}</button>`,fmtB(f.size))).join('')}</div>`,'','custom'):'')+
  '<div id="allSlot"></div>'+
  card(t('bd.toFile'),row('','',t('bd.toFileH'))+
@@ -52,6 +61,7 @@ SCR.board={title:'nav.board',async render(m){
  $('#allSlot').outerHTML=fold(t('bd.all'),row('','',t('bd.allH'))+allSettings(se,m.innerHTML),'cAll');
  saver($('#cWifi'),genericSave,'[data-k]');
  saver($('#cAll'),genericSave,'[data-k]');
+ this.logTags(se.logTags||'');
  this.lp=!!lp;if(lp){saver($('#cPush'),genericSave,'[data-k]');$('#pNow').onclick=e=>run(e.target,async()=>{await API.post('/api/logpush',{now:true});await this.push()})}
  if(B){saver($('[data-k="rb:/api/settings|bleMode"]').closest('.card'),genericSave,'[data-k]');
  $('[data-k="rb:/api/settings|bleMode"]').addEventListener('change',e=>{$('#bHint').textContent=bleHint(e.target.value)});
@@ -108,6 +118,18 @@ async gh(){const v=await API.get('/api/fw');if(!$('#ghSt'))return;this.ghTag=v.l
  const go=$('#ghGo');go.hidden=v.phase!=='available';go.textContent=t('bd.gh.updateTo',v.latest);
  $('#ghP').hidden=v.phase!=='downloading';$('#ghBar').style.width=pct+'%';
  if(v.phase==='rebooting'&&!REBOOTING)reboot(async()=>{},undefined,t('bd.gh.from',v.latest))},
+/* рівні окремих тегів: рядок "tag=LVL tag=LVL" (logTags) рядками; теги — ті, що плата бачила (/api/logs/tags) */
+async logTags(spec){const box=$('#ltRows');if(!box)return;
+ const parse=s=>s.split(/[\s,;]+/).filter(Boolean).map(x=>x.split('=')).filter(p=>p.length===2&&p[0]);
+ let rows=parse(spec);
+ const save=async b=>{const v=rows.map(p=>p[0]+'='+p[1]).join(' ');await run(b,()=>API.post('/api/settings',{logTags:v}),t('lv.saved'));draw()};
+ const draw=()=>{box.innerHTML=rows.length?rows.map((p,i)=>row(`<span class="mono">${esc(p[0])}</span>`,`<span class="mono">${esc(p[1])}</span> <button class="btn sm" type="button" data-rm="${i}" aria-label="${esc(t('bd.logTagRm'))}">✕</button>`)).join(''):`<div class="row muted">${esc(t('bd.logTagsNone'))}</div>`};
+ draw();
+ const r=await getIf(true,'/api/logs/tags');const tags=((r&&r.tags)||[]).map(x=>x.tag).sort();
+ $('#ltTag').innerHTML=tags.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+ box.onclick=e=>{const b=e.target.closest('[data-rm]');if(!b)return;rows.splice(+b.dataset.rm,1);save(b)};
+ $('#ltAdd').onclick=e=>{const tg=$('#ltTag').value,lv=$('#ltLvl').value;if(!tg)return;
+  rows=rows.filter(p=>p[0]!==tg);rows.push([tg,lv]);save(e.target)}},
 /* LogPush: стан з /api/logpush -> чип і рядок (файли, надіслано, у черзі, помилка) */
 async push(){const v=await API.get('/api/logpush');if(!$('#pSt'))return;
  const[st,tx]={off:['off',t('bd.push.off')],waiting:['ok',t('bd.push.waiting')],pushing:['warn',t('bd.push.pushing')],stopped:['bad',t('bd.push.stopped')]}[v.state]||['off',v.state];

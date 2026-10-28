@@ -685,6 +685,24 @@ void WebUi::routes()
 
     // ?since=N: the live log (logLines). Without it, the log pipeline: ring
     // counters always; the flash files where they exist.
+    // The tags seen this boot (they register on first use) and their own
+    // level, null = the global one: the «Журнал» card's per-tag rows.
+    route("/api/logs/tags", HTTP_GET, [](PsychicRequest* r) {
+        JsonDocument d;
+        JsonArray a = d["tags"].to<JsonArray>();
+        const uint8_t n = Log::tagCount();
+        for (uint8_t i = 0; i < n; ++i) {
+            JsonObject o = a.add<JsonObject>();
+            o["tag"] = Log::tagName(i);
+            const uint8_t ov = Log::tagOverride(i);
+            if (ov < Log::LEVELS) o["lvl"] = Log::LEVEL_NAMES[ov];
+            else o["lvl"] = nullptr;
+        }
+        d["spec"] = Log::tagSpec();
+        String out; serializeJson(d, out);
+        return replyJson(r, out);
+    });
+
     route("/api/logs", HTTP_GET, [](PsychicRequest* r) {
         if (r->hasParam("since")) return logLines(r, paramU32(r, "since", "0", 10));
         JsonDocument d;
