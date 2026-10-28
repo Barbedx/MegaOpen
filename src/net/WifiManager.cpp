@@ -262,6 +262,7 @@ void WifiManager::loop(uint32_t nowMs)
         }
         _staDownAt = 0;
         if (!_mdnsUp) startMdns();   // back after a drop, maybe a new lease
+        deadLink(nowMs);
         return;
     }
 
@@ -278,6 +279,24 @@ void WifiManager::loop(uint32_t nowMs)
         else useNet(_ssid1.length() ? 0 : 1);
         startJoin(nowMs, RETRY_JOIN_MS);
     }
+}
+
+void WifiManager::deadLink(uint32_t nowMs)
+{
+    if (!_noAnswer) return;
+    const uint32_t n = _noAnswer();
+    if (n < _deadBase) _deadBase = 0;   // an answer came: the count started over
+    if (n == 0) { _deadWait = 0; return; }
+    if (n - _deadBase < DEAD_AFTER) return;
+    if (_deadAt && (uint32_t)(nowMs - _deadAt) < _deadWait) return;
+    _deadWait = !_deadWait ? DEAD_WAIT_MS : _deadWait * 2 > DEAD_WAIT_MAX_MS ? DEAD_WAIT_MAX_MS : _deadWait * 2;
+    LOGW("wifi", "\"%s\" connected, %u push(es) in a row with no answer; leaving and rejoining (next try in %u min)",
+         _curSsid.c_str(), (unsigned)(n - _deadBase), (unsigned)(_deadWait / 60000));
+    _deadBase = n;
+    _deadAt = nowMs ? nowMs : 1;
+    // Leaves and associates again (a new lease); a join that fails from here
+    // is any other drop: setAutoReconnect, then the AP after STA_LOST_TO_AP_MS.
+    WiFi.reconnect();
 }
 
 // Raise STA only long enough to scan. applySleep() after every mode() call:

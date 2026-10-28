@@ -49,6 +49,10 @@ namespace LogPush
     void sink(const char* line, int len, uint32_t ms);
     // net_svc, every pass: starts a push when one is due.
     void tick(uint32_t now, bool online);
+    // PUTs over WiFi in a row that got no HTTP answer at all (DNS, TCP, TLS);
+    // any answer resets it. WifiManager reads it to spot a link that is
+    // "connected" and carries nothing.
+    uint32_t wifiNoAnswer();
 
     enum class State : uint8_t {
         Off,        // switched off, or no token

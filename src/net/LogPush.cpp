@@ -8,6 +8,7 @@
 #include <mbedtls/base64.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include <atomic>
 #include "GhRoots.h"
 #include "TlsJob.h"
 #include "../Version.h"
@@ -86,6 +87,7 @@ namespace LogPush
         bool     s_canBudget = false;
         bool     s_canStarted = false;  // the recorder was started for it this boot
         uint32_t s_spoolAt = 0;         // millis() of the last spool push
+        std::atomic<uint32_t> s_noAnswer{0};   // wifiNoAnswer()
 
         bool ready() { return s_buf && s_on && s_tok[0] && s_repo[0]; }
 
@@ -230,6 +232,8 @@ namespace LogPush
             const int st = err == ESP_OK ? esp_http_client_get_status_code(c) : -1;
             esp_http_client_cleanup(c);
             memset(auth, 0, sizeof(auth));
+            if (st > 0) s_noAnswer = 0;
+            else if (err != ESP_ERR_NO_MEM) ++s_noAnswer;   // our memory is not the link's fault
             return st;
         }
 
@@ -867,6 +871,8 @@ namespace LogPush
             setErr(State::Waiting, "no_memory", 0);
         }
     }
+
+    uint32_t wifiNoAnswer() { return s_noAnswer; }
 
     const char* stateId(State s)
     {

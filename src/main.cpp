@@ -2437,6 +2437,9 @@ void setup()
     // (MegaOpen Companion's "net"). The WebUSB page has none: with WiFi off
     // under it the board had neither, no log push, no update check.
     g_wifi.setLinkAlive(UsbLink::netAvailable);
+#if FEATURE_LOG_PUSH
+    g_wifi.setUplinkProbe(LogPush::wifiNoAnswer);
+#endif
     memMark("usblink");
     // The OTA trial's verdict comes from net_svc (Housekeeping).
     App::OtaTrial::begin();

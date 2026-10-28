@@ -20,6 +20,13 @@ public:
     // gone, so the board is never out of reach (docs/design/usb-link.md).
     // `alive` is UsbLink::alive, asked on every pass.
     void setLinkAlive(bool (*alive)()) { _linkAlive = alive; }
+    // A link that is "connected" and carries nothing (the head unit's hotspot
+    // after its own uplink dropped, a router that lost the lease): `noAnswer`
+    // is LogPush::wifiNoAnswer. After DEAD_AFTER of them in a row it leaves and
+    // rejoins the network, then waits twice as long before the next try
+    // (DEAD_WAIT_MS up to DEAD_WAIT_MAX_MS), so a hotspot that simply has no
+    // internet (the garage) costs a few seconds an hour, not a reconnect loop.
+    void setUplinkProbe(uint32_t (*noAnswer)()) { _noAnswer = noAnswer; }
     bool off() const { return _off; }
     // A boot join, scan or AP retry in progress; neither STA nor AP is settled.
     bool connecting() const { return _phase != Phase::Idle; }
@@ -54,6 +61,12 @@ private:
 
     static constexpr uint32_t OFF_AFTER_MS = 10000;   // the app this long on USB: WiFi off
     static constexpr uint32_t ON_AFTER_MS  = 30000;   // the app this long gone: WiFi back
+
+    static constexpr uint32_t DEAD_AFTER       = 3;                 // PUTs in a row with no answer
+    static constexpr uint32_t DEAD_WAIT_MS     = 5UL * 60 * 1000;   // after the first rejoin
+    static constexpr uint32_t DEAD_WAIT_MAX_MS = 60UL * 60 * 1000;
+    // Connected STA: rejoin when the uplink is dead (setUplinkProbe).
+    void deadLink(uint32_t nowMs);
 
     enum class Phase : uint8_t { Idle, Scanning, Joining };
     void start(uint32_t nowMs);   // STA (or a scan of two) if there are networks, else AP
@@ -100,4 +113,8 @@ private:
     bool     _off = false;
     uint32_t _linkSince = 0;     // the app on USB since; 0 = not
     uint32_t _linkGoneAt = 0;    // the app gone since; 0 = there
+    uint32_t (*_noAnswer)() = nullptr;
+    uint32_t _deadBase = 0;      // the probe's count at the last rejoin
+    uint32_t _deadAt = 0;        // millis() of the last rejoin, 0 none
+    uint32_t _deadWait = 0;      // 0: the next rejoin needs no wait
 };
