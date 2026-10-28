@@ -504,9 +504,10 @@ void WebUi::mapToFile(ChunkOut& out)
         CarFile::putFields(o, Canbox::activeProtocol(), c->fields);
         o["hu"]["send"] = c->enabled;
     }
+    // serializeJson into a String replaces it: the key goes out on its own.
     String s;
-    if (haveT) { s = ",\"decode\":"; serializeJson(o["decode"], s); out.put(s.c_str(), s.length()); }
-    if (haveC) { s = ",\"hu\":";     serializeJson(o["hu"], s);     out.put(s.c_str(), s.length()); }
+    if (haveT) { out.put(",\"decode\":"); serializeJson(o["decode"], s); out.put(s.c_str(), s.length()); }
+    if (haveC) { out.put(",\"hu\":");     serializeJson(o["hu"], s);     out.put(s.c_str(), s.length()); }
 }
 
 const char* WebUi::mapFromFile(JsonObjectConst file, bool dry, bool& changedMap, bool& changedHu)
