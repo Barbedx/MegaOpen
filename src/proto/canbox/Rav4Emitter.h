@@ -3,6 +3,7 @@
 #include "../../vehicle/VehicleState.h"
 #include "../../Version.h"
 #include "TempHold.h"
+#include "FieldView.h"
 
 // Everything this firmware can tell a RAV4-profile head unit, on a schedule
 // (ARCHITECTURE.md §7.3). Portable: frames leave through a write callback, time
@@ -139,22 +140,22 @@ namespace Canbox
         bool msgEnabled(uint8_t i) const;
 
         // Run every scheduler against the current state.
-        void tick(const Vehicle::State& s, uint32_t nowMs);
+        void tick(const FieldView& s, uint32_t nowMs);
 
         // Emit one message now, regardless of schedule (web UI "send now").
-        bool sendNow(uint8_t msgIndex, const Vehicle::State& s);
+        bool sendNow(uint8_t msgIndex, const FieldView& s);
 
         // The 0x90 responder: the head unit names a box->HU command it wants
         // re-sent. False when there is no builder or nothing to say.
-        bool sendByCmd(uint8_t cmd, const Vehicle::State& s);
+        bool sendByCmd(uint8_t cmd, const FieldView& s);
 
         static uint8_t messageCount();
         static const char* messageName(uint8_t i);
         static uint8_t messageCmd(uint8_t i);     // the wire command byte
         static uint32_t messageInterval(uint8_t i);
 
-        static uint8_t doorsMask(const Vehicle::State& s);
-        static uint8_t lightsMask(const Vehicle::State& s);
+        static uint8_t doorsMask(const FieldView& s);
+        static uint8_t lightsMask(const FieldView& s);
 
         uint32_t framesSent() const { return _framesSent; }
         // 0x28 frames sent whose payload differed from the 0x28 before: each
@@ -163,10 +164,10 @@ namespace Canbox
         // The A/C form of 0x28 goes out only when one of its signals is
         // trusted: measured in a car (Vehicle::verified) or pinned by hand (a
         // test, a constant). A guessed row alone never opens the overlay.
-        static bool acTrusted(const Vehicle::State& s);
+        static bool acTrusted(const FieldView& s);
 
         // Build one message into a caller-owned buffer without transmitting it.
-        bool preview(uint8_t msgIndex, const Vehicle::State& s,
+        bool preview(uint8_t msgIndex, const FieldView& s,
                      uint8_t* frame, uint8_t& frameLen) const;
 
         static constexpr uint8_t MAX_MESSAGES = 24;
@@ -215,12 +216,12 @@ namespace Canbox
 
         void emit(uint8_t cmd, const uint8_t* payload, uint8_t len);
         bool due(Sched& s, uint32_t nowMs, uint32_t interval, uint32_t value, bool onChange);
-        bool build(uint8_t msgIndex, const Vehicle::State& s,
+        bool build(uint8_t msgIndex, const FieldView& s,
                    uint8_t& cmd, uint8_t* payload, uint8_t& len) const;
         uint8_t radar(int32_t v) const;   // distance + the polarity switch
         // `sig` when it has a value; else, under EXP_COMPUTED, `computed`;
         // else SIG_COUNT.
-        uint8_t pick(const Vehicle::State& s, uint8_t sig, uint8_t computed) const;
+        uint8_t pick(const FieldView& s, uint8_t sig, uint8_t computed) const;
 
         WriteFn  _write = nullptr;
         void*    _ctx = nullptr;

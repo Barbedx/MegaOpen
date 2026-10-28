@@ -112,7 +112,7 @@ namespace Canbox
         return (uint16_t)(x > 0xFFFF ? 0xFFFF : x);
     }
 
-    uint8_t Rav4Emitter::pick(const State& s, uint8_t sig, uint8_t computed) const
+    uint8_t Rav4Emitter::pick(const FieldView& s, uint8_t sig, uint8_t computed) const
     {
         if (s.has(sig)) return sig;
         if ((_exp & EXP_COMPUTED) && s.has(computed)) return computed;
@@ -191,7 +191,7 @@ namespace Canbox
     // By side, not role: b7 right-front, b6 left-front, b5 right-rear, b4
     // left-rear, b3 tailgate. "driver = 0x80" only holds in a RHD car
     // (RAV4_BODY_ENGINE_2018_2020.pdf §4: b7 "Driver (UK right front)").
-    uint8_t Rav4Emitter::doorsMask(const State& s)
+    uint8_t Rav4Emitter::doorsMask(const FieldView& s)
     {
         uint8_t m = 0;
         if (s.get(SIG_DOOR_FR)) m |= 0x80;
@@ -202,7 +202,7 @@ namespace Canbox
         return m;
     }
 
-    uint8_t Rav4Emitter::lightsMask(const State& s)
+    uint8_t Rav4Emitter::lightsMask(const FieldView& s)
     {
         uint8_t m = 0;
         if (s.get(SIG_LIGHT_POS))    m |= 0x80;
@@ -245,7 +245,7 @@ namespace Canbox
     // False when no signal is decoded or pinned: silence, never fabricated zeros.
     // Composite messages go out if ANY of their signals is known; unknown
     // fields are 0.
-    bool Rav4Emitter::build(uint8_t msgIndex, const State& s,
+    bool Rav4Emitter::build(uint8_t msgIndex, const FieldView& s,
                             uint8_t& cmd, uint8_t* p, uint8_t& len) const
     {
         switch (msgIndex) {
@@ -610,7 +610,7 @@ namespace Canbox
         }
     }
 
-    bool Rav4Emitter::preview(uint8_t msgIndex, const State& s,
+    bool Rav4Emitter::preview(uint8_t msgIndex, const FieldView& s,
                               uint8_t* frame, uint8_t& frameLen) const
     {
         uint8_t cmd = 0, len = 0, p[MAX_PAYLOAD];
@@ -619,7 +619,7 @@ namespace Canbox
         return frameLen != 0;
     }
 
-    bool Rav4Emitter::sendNow(uint8_t msgIndex, const State& s)
+    bool Rav4Emitter::sendNow(uint8_t msgIndex, const FieldView& s)
     {
         uint8_t cmd = 0, len = 0, p[MAX_PAYLOAD];
         if (!build(msgIndex, s, cmd, p, len)) return false;
@@ -628,7 +628,7 @@ namespace Canbox
         return true;
     }
 
-    bool Rav4Emitter::sendByCmd(uint8_t cmd, const State& s)
+    bool Rav4Emitter::sendByCmd(uint8_t cmd, const FieldView& s)
     {
         for (uint8_t i = 0; i < M_COUNT; ++i) {
             if (kCmd[i] != cmd) continue;
@@ -642,7 +642,7 @@ namespace Canbox
         return false;
     }
 
-    bool Rav4Emitter::acTrusted(const State& s)
+    bool Rav4Emitter::acTrusted(const FieldView& s)
     {
         static const uint8_t kSigs[] = {
             SIG_AC_ON, SIG_AC_COMPRESSOR, SIG_AC_RECIRC, SIG_AC_AUTO_HI,
@@ -657,7 +657,7 @@ namespace Canbox
         return false;
     }
 
-    void Rav4Emitter::tick(const State& s, uint32_t nowMs)
+    void Rav4Emitter::tick(const FieldView& s, uint32_t nowMs)
     {
         if (!_enabled) return;
         // The outside temperature shown in 0x28, held against flicker.
