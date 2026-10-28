@@ -234,7 +234,15 @@ at build time; here it is an on-device expression language:
    `fuel_pct`, range and average speed.
 4. Rules: a condition is a boolean formula, FOR is `held()`, ELSE, actions
    popup / set / hu-now; alerts migrate into rules, `AlertRules` /
-   `AlertEval` / `alerts` go.
+   `AlertEval` / `alerts` go. **Macros merge into rules** (owner,
+   2026-10-28): a rule's trigger is a signal formula or a key gesture
+   (combo, N taps, hold: MacroEngine's), with an optional condition formula
+   for either; the actions are one set (the macros' key action, key code,
+   raw frame, panel text, popup, pane, HU message, plus set-signal). One list
+   in the car file, one editor; the 8 NVS macros migrate once and the macro
+   page goes. Gestures stay on the keys task (only it can swallow a press
+   before the head unit sees it); signal rules run on the car task; one
+   executor routes every action (EffectRoute).
 5. The reminders as factory rules; Settings › Reminders goes. HU and phone
    signals through `HuInbound` and the BLE services (Raise's last two names
    outside the module go here).
