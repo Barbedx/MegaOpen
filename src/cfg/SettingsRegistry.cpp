@@ -72,16 +72,33 @@ namespace Cfg
             "mediaSrc",
         };
 
-        // A car screen row: row 0 is "none" (SIG_COUNT), row i the signal i-1.
-        // The id is the signal's ASCII name; the page has its words (k.sig, k.raise).
+        // A car screen row: row 0 is "none" (SIG_COUNT), then every signal
+        // that exists (the built-ins, the user slots with a name), in id
+        // order. The id is the signal's ASCII name; the page has its words
+        // (k.sig, k.raise; a user signal's name is its own).
+        uint8_t sigOfRow(int32_t v)
+        {
+            for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s)
+                if (Vehicle::exists(s) && --v == 0) return s;
+            return Vehicle::SIG_COUNT;
+        }
+        int32_t sigRowOf(uint8_t sig)
+        {
+            if (sig >= Vehicle::SIG_COUNT || !Vehicle::exists(sig)) return 0;
+            int32_t r = 0;
+            for (uint8_t s = 0; s <= sig; ++s) r += Vehicle::exists(s);
+            return r;
+        }
         const SEnum kSignals = {
-            [] { return (uint8_t)(Vehicle::SIG_COUNT + 1); },
-            [](uint8_t i) { return i ? Vehicle::meta((uint8_t)(i - 1)).name : "none"; },
+            [] {
+                uint8_t n = 1;
+                for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) n += Vehicle::exists(s);
+                return n;
+            },
+            [](uint8_t i) { return i ? Vehicle::meta(sigOfRow(i)).name : "none"; },
             [](uint8_t) -> const char* { return nullptr; },   // k.sig / k.raise (web/i18n)
             "sig",
         };
-        int32_t sigRowOf(uint8_t sig) { return sig < Vehicle::SIG_COUNT ? sig + 1 : 0; }
-        uint8_t sigOfRow(int32_t v)   { return v > 0 ? (uint8_t)(v - 1) : (uint8_t)Vehicle::SIG_COUNT; }
 
         // Cfg::CarPreset, row = value.
         const SEnum kCarPresets = {
@@ -237,12 +254,14 @@ namespace Cfg
 #undef UI_NAMES_ENUM
 
         // ---- the panel alerts (Vehicle::AlertRules) -------------------------
-        // A rule's signal as AlertRules stores it: signal i is row i, and
-        // SIG_COUNT, the last row, is an empty rule ("").
+        // A rule's signal: built-in signal i is row i, and the row after them,
+        // the last, is an empty rule ("", stored as SIG_COUNT). The user
+        // signals have no alert: rules take alerts over (rules.md, slice 4).
+        constexpr uint8_t ALERT_EMPTY = Vehicle::SIG_USER_0;
         const SEnum kAlertSigs = {
-            [] { return (uint8_t)(Vehicle::SIG_COUNT + 1); },
-            [](uint8_t i) { return i < Vehicle::SIG_COUNT ? Vehicle::meta(i).name : ""; },
-            [](uint8_t i) -> const char* { return i >= Vehicle::SIG_COUNT ? "—" : nullptr; },
+            [] { return (uint8_t)(ALERT_EMPTY + 1); },
+            [](uint8_t i) { return i < ALERT_EMPTY ? Vehicle::meta(i).name : ""; },
+            [](uint8_t i) -> const char* { return i >= ALERT_EMPTY ? "—" : nullptr; },
             "sig",
         };
 
@@ -260,8 +279,12 @@ namespace Cfg
 
         const STable kAlerts = {
             [] { return Vehicle::AlertRules::ROWS; }, Vehicle::AlertRules::COLS, kAlertCols,
-            [](const Model& m, uint8_t r, uint8_t c) { return m.a->get(r, c); },
+            [](const Model& m, uint8_t r, uint8_t c) {
+                const int32_t v = m.a->get(r, c);
+                return c == Vehicle::AlertRules::C_SIG && v >= ALERT_EMPTY ? (int32_t)ALERT_EMPTY : v;
+            },
             [](Model& m, uint8_t r, uint8_t c, int32_t v) {
+                if (c == Vehicle::AlertRules::C_SIG && v >= ALERT_EMPTY) v = Vehicle::SIG_COUNT;
                 // An empty rule is never on (the /api/map rule before).
                 if (c == Vehicle::AlertRules::C_ON && m.a->r[r].sig >= Vehicle::SIG_COUNT) v = 0;
                 return m.a->set(r, c, v);

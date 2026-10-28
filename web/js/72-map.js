@@ -134,9 +134,11 @@ setFl(hf){const rows=(hf&&hf.rows)||[];this.fl=Object.fromEntries(rows.map(x=>[x
  for(const f of rows){const s=fieldSig(f);if(s)(this.fs[s]=this.fs[s]||[]).push(f.id)}},
 draw(r){if(r)this.last=r;const tb=$('#lvT');if(!tb||!r||!r.sigs||$('.ask',tb)||$('.bindEd',tb))return;const only=$('[data-f="lvOnly"]').checked;let h='',g=-1;
  const cs=$('[data-f="lvCls"]'),cl=cs?cs.dataset.v:'all',n={};
- for(const x of r.sigs){const c=lvCls(x[2],x[3]);n[c]=(n[c]||0)+1}
- if(cs)$$('button',cs).forEach(b=>{const c=b.dataset.val;b.textContent=t('lv.cls.'+c)+' · '+(c==='all'?r.sigs.length:(n[c]||0))});
- const idx=this.M.map((m,i)=>i).filter(i=>(!only||r.sigs[i][0]!=null)&&(cl==='all'||lvCls(r.sigs[i][2],r.sigs[i][3])===cl)).sort((a,b)=>this.M[a][4]-this.M[b][4]||a-b);
+ /* вільний слот свого сигналу (ім'я "") не існує: його не видно й не лічать */
+ const live=this.M.map((m,i)=>i).filter(i=>this.M[i][0]);
+ for(const i of live){const x=r.sigs[i],c=lvCls(x[2],x[3]);n[c]=(n[c]||0)+1}
+ if(cs)$$('button',cs).forEach(b=>{const c=b.dataset.val;b.textContent=t('lv.cls.'+c)+' · '+(c==='all'?live.length:(n[c]||0))});
+ const idx=live.filter(i=>(!only||r.sigs[i][0]!=null)&&(cl==='all'||lvCls(r.sigs[i][2],r.sigs[i][3])===cl)).sort((a,b)=>this.M[a][4]-this.M[b][4]||a-b);
  for(const i of idx){const m=this.M[i],[v,age,src,ok,cf]=r.sigs[i],fs=this.fs[m[0]];
   const vh=(ok?'✓':`<span class="muted" title="${esc(src==='d'?t('lv.computedT'):t('lv.uncheckedT'))}">?</span>`)+
    (cf===1?` <button class="btn sm" type="button" data-conf="${i}" data-on="1" title="${esc(t('lv.confirmT'))}">${t('lv.confirm')}</button>`:

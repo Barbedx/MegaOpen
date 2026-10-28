@@ -27,6 +27,7 @@ namespace Vehicle
         GRP_ENGINE,      // battery, oil, pedals, gearbox
         GRP_SAFETY,      // belts, airbag, locks, roof
         GRP_DYNAMICS,    // accelerations, yaw
+        GRP_USER,        // the owner's own (formulas)
         GRP_COUNT
     };
 
@@ -248,8 +249,18 @@ namespace Vehicle
         // step of 150 km; this one counts the km down from the step's edge.
         SIG_SERVICE_CALC,
 
+        // The owner's own signals (docs/design/rules.md, slice 3): slots named
+        // at run time by their formulas (setUserSignal). An unnamed slot does
+        // not exist: its name is "" and no list shows it. Last: everything
+        // saved names a signal by NAME, so their ids may move.
+        SIG_USER_0,
+        SIG_USER_LAST = SIG_USER_0 + 63,
+
         SIG_COUNT
     };
+    constexpr uint8_t USER_SIGNALS = SIG_USER_LAST - SIG_USER_0 + 1;
+    static_assert(SIG_COUNT <= 255, "a signal id is a byte, and 255 is no signal");
+    constexpr bool isUser(uint8_t s) { return s >= SIG_USER_0 && s < SIG_COUNT; }
 
     // "No signal" as it is SAVED (the alert blob, the car screen's NVS keys).
     // In RAM an empty row is SIG_COUNT, but SIG_COUNT moves each time a
@@ -282,6 +293,21 @@ namespace Vehicle
 
     const Meta& meta(uint8_t s);
     uint8_t     sigByName(const char* name);   // SIG_COUNT when unknown
+    // A built-in signal, or a user slot with a name.
+    bool        exists(uint8_t s);
+
+    // A user signal's description; null name = the slot is free.
+    struct UserDef {
+        const char* name    = nullptr;   // [a-z_][a-z0-9_]*, at most USER_NAME chars
+        const char* unit    = "";        // at most USER_UNIT chars
+        uint8_t     decimals = 0;
+        bool        boolean = false;
+    };
+    constexpr uint8_t USER_NAME = 23, USER_UNIT = 11;
+    // A whole set of user slots at once: slot i of `defs` (USER_SIGNALS of
+    // them). Readers on any task see the old set or the new one, never half
+    // of one (two tables, the live one swapped). One writer: the car task.
+    void setUserSignals(const UserDef* defs);
 
     // Is this signal's value trustworthy: bound to CAN by rows that are all
     // measured (no DF_HYPOTHESIS), and not pinned. The car task owns the

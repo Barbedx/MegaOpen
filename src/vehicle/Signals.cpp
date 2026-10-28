@@ -1,10 +1,11 @@
 #include "Signals.h"
+#include <atomic>
 #include <string.h>
 
 namespace Vehicle
 {
     // Order must match enum Sig; indexed, not searched.
-    static const Meta kMeta[SIG_COUNT] = {
+    static const Meta kMeta[] = {
         // ---- drive ----------------------------------------------------------
         // Wire limit, not a car's: 0x7D03 carries km/h x100 as u16. Pinning must
         // be able to send any value the protocol can carry.
@@ -194,14 +195,63 @@ namespace Vehicle
         {"service_calc",    "km",     0,   63750, 0, false, GRP_ENGINE},
     };
 
-    static_assert(sizeof(kMeta) / sizeof(kMeta[0]) == SIG_COUNT,
+    static_assert(sizeof(kMeta) / sizeof(kMeta[0]) == SIG_USER_0,
                   "Signals.cpp metadata table is out of step with enum Sig — the table is "
                   "INDEXED by the enum, so a missing row shifts every signal after it and "
                   "the web UI silently edits the wrong one.");
 
     static const Meta kUnknown = {"?", "", 0, 0, 0, false, GRP_COUNT};
 
-    const Meta& meta(uint8_t s) { return s < SIG_COUNT ? kMeta[s] : kUnknown; }
+    // The user slots, twice: readers use the live one, the writer fills the
+    // other and swaps.
+    namespace
+    {
+        struct UserSlot {
+            char name[USER_NAME + 1];
+            char unit[USER_UNIT + 1];
+            Meta m;
+        };
+        UserSlot g_user[2][USER_SIGNALS];
+        std::atomic<uint8_t> g_live{0};
+        const Meta kFreeUser = {"", "", 0, 0, 0, false, GRP_USER};
+    }
+
+    const Meta& meta(uint8_t s)
+    {
+        if (s < SIG_USER_0) return kMeta[s];
+        if (s < SIG_COUNT) {
+            const UserSlot& u = g_user[g_live.load(std::memory_order_acquire)][s - SIG_USER_0];
+            // Never written yet (zeroed): a free slot.
+            return u.m.name ? u.m : kFreeUser;
+        }
+        return kUnknown;
+    }
+
+    bool exists(uint8_t s) { return s < SIG_USER_0 || (s < SIG_COUNT && meta(s).name[0]); }
+
+    void setUserSignals(const UserDef* defs)
+    {
+        const uint8_t w = (uint8_t)(1 - g_live.load(std::memory_order_relaxed));
+        for (uint8_t i = 0; i < USER_SIGNALS; ++i) {
+            UserSlot& u = g_user[w][i];
+            const UserDef& d = defs[i];
+            const bool on = d.name && d.name[0];
+            strncpy(u.name, on ? d.name : "", USER_NAME);
+            u.name[USER_NAME] = 0;
+            strncpy(u.unit, on && d.unit ? d.unit : "", USER_UNIT);
+            u.unit[USER_UNIT] = 0;
+            u.m.name     = u.name;
+            u.m.unit     = u.unit;
+            u.m.min      = INT32_MIN + 1;
+            u.m.max      = INT32_MAX;
+            u.m.decimals = on ? (d.decimals > 3 ? 3 : d.decimals) : 0;
+            u.m.boolean  = on && d.boolean;
+            u.m.group    = GRP_USER;
+            if (u.m.boolean) { u.m.min = 0; u.m.max = 1; u.m.decimals = 0; }
+        }
+        g_live.store(w, std::memory_order_release);
+    }
+
 
     // One bit a signal, written by the car task only; a byte store is atomic,
     // so a reader sees each signal's old or new answer, never a torn one.
@@ -222,8 +272,9 @@ namespace Vehicle
     uint8_t sigByName(const char* name)
     {
         if (!name) return SIG_COUNT;
+        if (!name[0]) return SIG_COUNT;
         for (uint8_t i = 0; i < SIG_COUNT; ++i)
-            if (strcmp(kMeta[i].name, name) == 0) return i;
+            if (strcmp(meta(i).name, name) == 0) return i;
         return SIG_COUNT;
     }
 }

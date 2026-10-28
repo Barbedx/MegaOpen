@@ -34,6 +34,9 @@ namespace Cfg
     public:
         void begin();                      // load or seed defaults
         void save();                       // settings only
+        // The car screen's signals from their saved NAMES (begin() does the
+        // built-ins; call again once the user signals are defined).
+        void resolveCarSigs();
         void saveKeyMap(const Keys::KeyMap& m);
         void loadKeyMap(Keys::KeyMap& m);  // falls back to defaults when absent
 #if FEATURE_DISPLAY_CAN
@@ -128,6 +131,8 @@ namespace Cfg
         uint8_t migratedFrom() const { return _verWas; }
 
     private:
+        Str  _carSigName[3];        // the car screen rows, as saved
+        bool _carSigPending[3] = {}; // named, not yet a signal
         // One-time, versioned fix-ups for older defaults. End of begin(); never
         // touches network settings (see the definition).
         void migrate();

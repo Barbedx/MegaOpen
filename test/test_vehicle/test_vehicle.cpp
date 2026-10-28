@@ -112,13 +112,35 @@ void test_pin_is_clamped_to_the_signal_range()
 // the web UI then edits a different one than the label says.
 void test_every_signal_has_metadata()
 {
-    for (uint8_t i = 0; i < SIG_COUNT; ++i) {
+    for (uint8_t i = 0; i < SIG_USER_0; ++i) {
         const Meta& m = meta(i);
         TEST_ASSERT_NOT_NULL(m.name);
-        TEST_ASSERT_TRUE(m.name[0] != '?');
+        TEST_ASSERT_TRUE(m.name[0] != '?' && m.name[0]);
         TEST_ASSERT_TRUE(m.group < GRP_COUNT);
+        TEST_ASSERT_TRUE(exists(i));
         TEST_ASSERT_EQUAL_UINT8(i, sigByName(m.name));   // names are unique
     }
+    // The user slots: free until a formula names one, and then like any other.
+    for (uint8_t i = SIG_USER_0; i < SIG_COUNT; ++i) {
+        TEST_ASSERT_EQUAL_STRING("", meta(i).name);
+        TEST_ASSERT_FALSE(exists(i));
+        TEST_ASSERT_EQUAL_UINT8(GRP_USER, meta(i).group);
+    }
+    TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, sigByName(""));
+    UserDef d[USER_SIGNALS] = {};
+    d[2].name = "my_pct"; d[2].unit = "%"; d[2].decimals = 1;
+    d[5].name = "parked"; d[5].boolean = true;
+    setUserSignals(d);
+    TEST_ASSERT_EQUAL_UINT8(SIG_USER_0 + 2, sigByName("my_pct"));
+    TEST_ASSERT_EQUAL_STRING("%", meta(SIG_USER_0 + 2).unit);
+    TEST_ASSERT_EQUAL_UINT8(1, meta(SIG_USER_0 + 2).decimals);
+    TEST_ASSERT_TRUE(meta(SIG_USER_0 + 5).boolean);
+    TEST_ASSERT_EQUAL_INT32(1, meta(SIG_USER_0 + 5).max);
+    TEST_ASSERT_TRUE(exists(SIG_USER_0 + 5));
+    TEST_ASSERT_FALSE(exists(SIG_USER_0 + 3));
+    const UserDef none[USER_SIGNALS] = {};
+    setUserSignals(none);
+    TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, sigByName("my_pct"));
 }
 
 // ---- emitter ----------------------------------------------------------------

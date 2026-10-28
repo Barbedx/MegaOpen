@@ -59,13 +59,24 @@ namespace Cfg
         // an IDF error line per boot.
         _s.carScreen = _p.isKey("carScr") ? _p.getBool("carScr", false) : false;
         {
-            static const char* const kSig[3] = {"carSig0", "carSig1", "carSig2"};
+            // By NAME ("carSigN<i>", "" = an empty row): a user signal's id is
+            // known only once its formula is (resolveCarSigs). Before 1.7 an
+            // index ("carSig<i>"; "carSigV" 2: an empty slot saved as
+            // SIG_SAVED_NONE, without it the saving build's SIG_COUNT): read
+            // once, saved by name on the next save.
+            static const char* const kSig[3]  = {"carSig0", "carSig1", "carSig2"};
+            static const char* const kName[3] = {"carSigN0", "carSigN1", "carSigN2"};
+            const bool legacy = !_p.isKey("carSigV");
             for (uint8_t i = 0; i < 3; ++i) {
-                // "carSigV" 2: an empty slot saved as SIG_SAVED_NONE; without
-                // it, the saving build's SIG_COUNT (Signals.h).
-                const bool legacy = !_p.isKey("carSigV");
-                if (_p.isKey(kSig[i])) _s.carSig[i] = Vehicle::sigFromSaved(_p.getUChar(kSig[i], 0), legacy);
+                if (_p.isKey(kName[i])) {
+                    _carSigName[i] = _p.getString(kName[i], "");
+                } else {
+                    const uint8_t s = _p.isKey(kSig[i]) ? Vehicle::sigFromSaved(_p.getUChar(kSig[i], 0), legacy)
+                                                        : _s.carSig[i];
+                    _carSigName[i] = s < Vehicle::SIG_COUNT ? Vehicle::meta(s).name : "";
+                }
             }
+            resolveCarSigs();
         }
         {
             const uint8_t v = _p.isKey("carPre") ? _p.getUChar("carPre", 0) : 0;
@@ -189,10 +200,18 @@ namespace Cfg
         _p.putBool  ("autoTime", _s.autoTime);
         _p.putBool  ("mediaScr", _s.mediaScreen);
         _p.putBool  ("carScr",   _s.carScreen);
-        _p.putUChar ("carSig0",  Vehicle::sigToSaved(_s.carSig[0]));
-        _p.putUChar ("carSig1",  Vehicle::sigToSaved(_s.carSig[1]));
-        _p.putUChar ("carSig2",  Vehicle::sigToSaved(_s.carSig[2]));
-        _p.putUChar ("carSigV",  2);
+        {
+            static const char* const kName[3] = {"carSigN0", "carSigN1", "carSigN2"};
+            for (uint8_t i = 0; i < 3; ++i) {
+                const uint8_t s = _s.carSig[i];
+                // A row whose signal is not there now (a user signal not yet
+                // defined at boot) keeps the name it was saved with.
+                if (s < Vehicle::SIG_COUNT && Vehicle::exists(s)) _carSigName[i] = Vehicle::meta(s).name;
+                else if (s >= Vehicle::SIG_COUNT && !_carSigPending[i]) _carSigName[i] = "";
+                _p.putString(kName[i], _carSigName[i]);
+            }
+            for (const char* k : {"carSig0", "carSig1", "carSig2", "carSigV"}) if (_p.isKey(k)) _p.remove(k);
+        }
         _p.putUChar ("carPre",   _s.carPreset);
 
         _p.putBool  ("ancsPop", _s.ancsPopup);
@@ -281,6 +300,17 @@ namespace Cfg
         return _p.getBytes("paneBits", b, n) == n;
     }
 #endif
+
+    void Config::resolveCarSigs()
+    {
+        for (uint8_t i = 0; i < 3; ++i) {
+            const uint8_t s = _carSigName[i].length() ? Vehicle::sigByName(_carSigName[i].c_str()) : Vehicle::SIG_COUNT;
+            _s.carSig[i] = s;
+            // Named, but not (yet) a signal: a user signal whose formula
+            // comes later. Kept by name until then.
+            _carSigPending[i] = _carSigName[i].length() && s >= Vehicle::SIG_COUNT;
+        }
+    }
 
     void Config::saveTuning(const Canbox::Protocol& p, const void* t)
     {

@@ -86,8 +86,7 @@ namespace Cfg
 
         // The car screen: three signals instead of now-playing, one per row
         // of a fullscreen. carSig holds Vehicle::Sig ids, SIG_COUNT = an empty
-        // row; saved, an empty row is Vehicle::SIG_SAVED_NONE (Signals.h), as
-        // SIG_COUNT moves when a signal is appended.
+        // row; NVS keeps their names (Config::resolveCarSigs).
         bool     carScreen = false;
         uint8_t  carSig[3] = {Vehicle::SIG_ENG_TEMP, Vehicle::SIG_BATT_V, Vehicle::SIG_FUEL_LEVEL};
         // What the rows are: a CarPreset (0 = carSig, 1 = the trip rows).
