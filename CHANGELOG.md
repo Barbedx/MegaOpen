@@ -8,6 +8,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ## [1.6.8] - 2026-10-28
 
 ### Added
+- MegaOpen Companion: a USB tester in «More» › diagnostics: every USB device the head unit sees (name, VID:PID, classes; the board marked), and a log of what was plugged in and unplugged, with the time. A phone or a flash drive in the same cable and port says whether the port carries data; an ESP32-S3 seen as 303A:1001 means the board's own USB never came up.
 - «До ТО, км» (`service_calc`) to the km: the car's frame (0x715) says the km to the service only in steps of 150 km, cut down (27578 on the cluster reads 27450). When the step goes down the board knows the cluster is at its edge and counts the km the cluster's odometer adds from there; the edge is kept in NVS, so a reboot keeps it. Until the first step after a service: the step. The step itself stays as «До ТО, крок 150 км» (`service_km`).
 
 ### Fixed
