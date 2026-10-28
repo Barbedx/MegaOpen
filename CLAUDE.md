@@ -79,7 +79,7 @@ Raise the log level for one session through `/api/settings` `{"logLevel":"DBG"}`
 | track title from HU | `[media]` | `src/media/HuMediaSource.*`, `MediaRouter.*` |
 | iPhone: no track / clock / notifications | health `phone`, `media`, `clock`, `ancs`; `[ble]` | `src/ble/*`, `src/apple_*_service.cpp`, `src/current_time_service.cpp`, `src/media/AmsMediaSource.*` |
 | car value wrong / missing | live page `#live` (`/api/map?live=1`), `[car]`, `[can2]` | `src/vehicle/decode_defaults.inc` (factory rows), `CanDecode.*`, `Signals.*`, `Derived.*` (gear, consumption, range); ids in `docs/megane-can-ids.md`, `docs/signal-glossary.md`; car checklist `docs/car-test-can-signals.md` |
-| new signals not shown | saved map hides new factory rows | press **«Заводські прив'язки»** on the map page |
+| new signals not shown | saved map hides new factory rows | press **«Заводські прив'язки»** on the signals page (Авто — наживо) |
 | alert popup wrong / spam | `[alert]`; rules in `/api/settings` `alerts` | `src/vehicle/AlertRules.*` |
 | car CAN silent | `[can2]` autobaud, `ab=searching` | `src/bus/Mcp2518Source.*`, `Autobaud.*`, `src/app/CarTask.*` |
 | a setting does not apply / save | `POST /api/settings` answers 400 with key + reason | `src/cfg/SettingsRegistry.cpp` (every setting, its range and apply bit), `Config.cpp` (NVS) |

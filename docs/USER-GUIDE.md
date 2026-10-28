@@ -175,10 +175,11 @@ old one.
 
 ### After an update
 
-If the car page was ever saved (**Авто → RAV4 → ГУ**), the board keeps that
-saved list of signal bindings, and signals added by the update do not show.
-Press **Заводські прив'язки** once. It replaces your own bindings with the
-new factory list.
+If a signal's binding was ever saved, the board keeps that saved list of
+bindings, and signals added by the update do not show. Press
+**Заводські прив'язки** once, above the signals table (**Авто → Наживо**). It
+replaces your own bindings with the new factory list; the head-unit map
+(«Звідки») is not touched.
 
 ## The app on the head unit (MegaOpen Companion)
 

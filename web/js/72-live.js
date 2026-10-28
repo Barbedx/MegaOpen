@@ -22,11 +22,13 @@ SCR.live={title:'lv.title',hidden:true,async render(m){
  this.M=r.meta;this.C=cond.enum.map(o=>[o.v,o.name]);this.A=se.alerts||[];this.n=0;
  m.innerHTML=card(t('lv.signals'),row(t('lv.auto'),sw('#lvAuto',true,'data-nosave'),t('lv.autoSub'))+
   row(t('lv.only'),sw('#lvOnly',true,'data-nosave'))+row(t('lv.alerts'),`<span id="lvAl" class="muted">${DASH}</span>`,t('lv.alertsSub'))+
-  `<datalist id="idl"></datalist><div class="tw"><table><thead><tr><th>${t('lv.thSig')}</th><th>${t('lv.thNow')}</th><th>${t('lv.thAge')}</th><th>${t('lv.thSrc')}</th><th title="${esc(t('lv.checkedT'))}">✓</th><th></th></tr></thead><tbody id="lvT"></tbody></table></div>`,'lvCard','custom full')+
+  `<div class="fr"><button class="btn" type="button" id="lvReset">${t('ca.factory')}</button></div><datalist id="idl"></datalist><div class="tw"><table><thead><tr><th>${t('lv.thSig')}</th><th>${t('lv.thNow')}</th><th>${t('lv.thAge')}</th><th>${t('lv.thSrc')}</th><th title="${esc(t('lv.checkedT'))}">✓</th><th></th></tr></thead><tbody id="lvT"></tbody></table></div>`,'lvCard','custom full')+
  card(t('lv.alCard'),row('','',t('lv.alH'))+
   `<div class="tw"><table><thead><tr><th>${t('lv.thSig')}</th><th>${t('lv.thCond')}</th><th>${t('lv.thThr')}</th><th>${t('lv.thPause')}</th><th>${t('lv.thOn')}</th></tr></thead><tbody id="alT"></tbody></table></div>`+
   `<div class="fr"><button class="btn pri" type="button" id="alSave">${t('lv.alSave')}</button><button class="btn" type="button" id="alFac">${t('lv.alFactory')}</button></div>`,'alCard','custom');
  this.draw(r);this.drawAlerts();BIND.wire($('#lvT'));
+ /* заводські прив'язки сигналів (DecodeTable::factory): свої CAN-рядки й константи зникають */
+ $('#lvReset').onclick=e=>ask(e.target,t('ca.resetAsk'),()=>run(e.target,()=>API.post('/api/map',{reset:true}),t('ca.factoryDone')).then(async()=>this.draw(await API.get('/api/map?live=1'))));
  if(LIVE_OPEN){const id=LIVE_OPEN;LIVE_OPEN=null;const i=this.M.findIndex(x=>x[0]===id);
   if(i>=0){$('[data-f="lvOnly"]').checked=false;this.draw(this.last);await this.bind(i,id);const ed=$('#lvT tr.bindEd');if(ed)ed.scrollIntoView({block:'center'})}}
  $('[data-f="lvOnly"]').onchange=()=>this.draw(this.last);
