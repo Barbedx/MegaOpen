@@ -5,11 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.6.8] - 2026-10-28
+
 ### Added
 - «До ТО, км» (`service_calc`) to the km: the car's frame (0x715) says the km to the service only in steps of 150 km, cut down (27578 on the cluster reads 27450). When the step goes down the board knows the cluster is at its edge and counts the km the cluster's odometer adds from there; the edge is kept in NVS, so a reboot keeps it. Until the first step after a service: the step. The step itself stays as «До ТО, крок 150 км» (`service_km`).
 
 ### Fixed
 - An update could roll back at random with the log push on: each push took internal heap below the OTA trial's healthy line (20 kB) for a moment, and each dip started its 60 s again (on the bench: one image "never became healthy", another confirmed at 118 s of 180). The log push now waits until the trial has confirmed (`[push] held until the OTA trial confirms`); the lines wait in the spool and the flash.
+
+### Changed
+- The head-unit protocol is a module of its own (rules 1.7, slice 0; docs/design/rules.md): what goes out, what comes in (clock, requests, keys) and the track text all live in `Canbox::Protocol` (Raise 112 today). Nothing changes on the wire: all 24 messages byte-identical on the bench. The protocol's settings moved under `raise.*` (`raise.titleCmd`, `raise.artistCmd`), a new setting `huProtocol` chooses the protocol, and «Мапа» › «Поля ГУ» draws the protocol's settings from the settings registry.
 
 ## [1.6.7] - 2026-10-28
 
