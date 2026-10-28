@@ -111,7 +111,7 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
 
 ### Keys / input
 
-- **The left (bare) encoder has never run.** Wired on 32/33/36 with R1 2k on
+- **(Stale, DevKit era) The left (bare) encoder has never run.** Owner 2026-10-28: both encoders and the rings work in the car on the T-2CAN; kept here only as history. Wired on 32/33/36 with R1 2k on
   GPIO36; watch `/api/knobs/live` while it turns. Where: `knobs/KnobSource`.
 - **A refused web key goes unlogged when more than 4 are in flight.** The
   verdicts are matched to their tickets in `KeyVerdicts::SLOTS` = 4 slots; a
