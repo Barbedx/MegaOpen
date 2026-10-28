@@ -11,6 +11,9 @@
    колонки й умови — з CAT.settings. */
 /* група сигналу (meta[4]) — lv.grp.<n>; джерело — lv.src.<літера> і колір чипа */
 const LV_SRC={c:'ok',k:'warn',p:'warn',d:'ok',o:'off'};
+/* клас джерела (docs/design/rules.md, крок 1): CAN, перевірений чи ні; плата; стала (або закріплено); нема */
+const LV_CLS=['all','canOk','canHyp','board','const','none'];
+const lvCls=(src,ok)=>src==='c'?(ok?'canOk':'canHyp'):src==='d'?'board':src==='k'||src==='p'?'const':'none';
 /* meta: [name, unit, decimals, yes/no, group, min, max, label]; sigs: [value, ageMs, src, verified, confirm]
    confirm: 1 — гіпотеза на CAN, можна «✓ підтвердити»; 2 — підтверджено тут, можна «↺ скасувати».
    POST /api/map {confirm:{sig,on}}; «Заводські прив'язки» повертають гіпотези. Назва — k.sig, k.raise */
@@ -49,7 +52,8 @@ SCR.map={title:'map.title',hidden:true,async render(m){
  const groups=[['all',t('ca.all')],...[...new Set(CAT.raise.map(x=>x.group))].map(g=>[g,g])];
  m.innerHTML=`<div class="pad full">${seg('#mTab',[['sig',t('map.tSig')],['fields',t('map.tFields')],['alerts',t('map.tAlerts')]],this.tb)}</div>`+
  card(t('lv.signals'),row(t('lv.auto'),sw('#lvAuto',true,'data-nosave'),t('lv.autoSub'))+
-  row(t('lv.only'),sw('#lvOnly',true,'data-nosave'))+row(t('lv.alerts'),`<span id="lvAl" class="muted">${DASH}</span>`,t('lv.alertsSub'))+
+  row(t('lv.only'),sw('#lvOnly',true,'data-nosave'))+
+  `<div class="pad">${seg('#lvCls',LV_CLS.map(c=>[c,t('lv.cls.'+c)]),'all','wrap')}</div>`+row(t('lv.alerts'),`<span id="lvAl" class="muted">${DASH}</span>`,t('lv.alertsSub'))+
   `<div class="fr"><button class="btn" type="button" id="lvReset">${t('ca.factory')}</button></div><datalist id="idl"></datalist><div class="tw"><table><thead><tr><th>${t('lv.thSig')}</th><th>${t('lv.thNow')}</th><th>${t('lv.thAge')}</th><th>${t('lv.thSrc')}</th><th title="${esc(t('lv.checkedT'))}">✓</th><th></th></tr></thead><tbody id="lvT"></tbody></table></div>`,'lvCard','custom full')+
  card(t('ca.rav4'),
   row(t('ca.proto'),`<b>${esc(tHas('k.proto.'+CAT.proto)?t('k.proto.'+CAT.proto):CAT.proto||'')}</b>`,t('ca.protoSub'))+
@@ -67,6 +71,7 @@ SCR.map={title:'map.title',hidden:true,async render(m){
  /* заводські прив'язки сигналів (DecodeTable::factory): свої CAN-рядки й константи зникають */
  $('#lvReset').onclick=e=>ask(e.target,t('ca.resetAsk'),()=>run(e.target,()=>API.post('/api/map',{reset:true}),t('ca.factoryDone')).then(async()=>this.draw(await API.get('/api/map?live=1'))));
  $('[data-f="lvOnly"]').onchange=()=>this.draw(this.last);
+ $('[data-f="lvCls"]').addEventListener('change',()=>this.draw(this.last));
  $('#lvT').onclick=e=>{const c=e.target.closest('[data-conf]');
   if(c){const mm=this.M[+c.dataset.conf],on=c.dataset.on==='1';
    ask(c,lvName(mm)+'. '+(on?t('lv.confOn'):t('lv.confOff')),()=>run(c,()=>API.post('/api/map',{confirm:{sig:mm[0],on}}),on?t('lv.confirmed'):t('lv.hypothesis')).then(async()=>this.draw(await API.get('/api/map?live=1'))));return}
@@ -128,14 +133,17 @@ group(g){this.grp=g;$$('#map tr[data-id]').forEach(tr=>{const hide=g!=='all'&&tr
 setFl(hf){const rows=(hf&&hf.rows)||[];this.fl=Object.fromEntries(rows.map(x=>[x.id,x]));this.fs={};
  for(const f of rows){const s=fieldSig(f);if(s)(this.fs[s]=this.fs[s]||[]).push(f.id)}},
 draw(r){if(r)this.last=r;const tb=$('#lvT');if(!tb||!r||!r.sigs||$('.ask',tb)||$('.bindEd',tb))return;const only=$('[data-f="lvOnly"]').checked;let h='',g=-1;
- const idx=this.M.map((m,i)=>i).filter(i=>!only||r.sigs[i][0]!=null).sort((a,b)=>this.M[a][4]-this.M[b][4]||a-b);
+ const cs=$('[data-f="lvCls"]'),cl=cs?cs.dataset.v:'all',n={};
+ for(const x of r.sigs){const c=lvCls(x[2],x[3]);n[c]=(n[c]||0)+1}
+ if(cs)$$('button',cs).forEach(b=>{const c=b.dataset.val;b.textContent=t('lv.cls.'+c)+' · '+(c==='all'?r.sigs.length:(n[c]||0))});
+ const idx=this.M.map((m,i)=>i).filter(i=>(!only||r.sigs[i][0]!=null)&&(cl==='all'||lvCls(r.sigs[i][2],r.sigs[i][3])===cl)).sort((a,b)=>this.M[a][4]-this.M[b][4]||a-b);
  for(const i of idx){const m=this.M[i],[v,age,src,ok,cf]=r.sigs[i],fs=this.fs[m[0]];
   const vh=(ok?'✓':`<span class="muted" title="${esc(src==='d'?t('lv.computedT'):t('lv.uncheckedT'))}">?</span>`)+
    (cf===1?` <button class="btn sm" type="button" data-conf="${i}" data-on="1" title="${esc(t('lv.confirmT'))}">${t('lv.confirm')}</button>`:
     cf===2?` <button class="btn sm" type="button" data-conf="${i}" data-on="0" title="${esc(t('lv.undoT'))}">${t('lv.undo')}</button>`:'');
   if(m[4]!==g){g=m[4];h+=`<tr><th colspan="6">${esc(tHas('lv.grp.'+g)?t('lv.grp.'+g):'')}</th></tr>`}
-  const stale=src==='c'&&age!=null&&age>3000,sk=LV_SRC[src]?src:'o';
-  h+=`<tr${stale?' class="muted"':''}><td>${esc(lvName(m))} <small class="mono muted">${esc(m[0])}</small>${fs?`<small class="muted fmk">${t('map.toFld')} ${fs.map(f=>`<a href="#" data-fld="${f}">${esc(nameOf(CAT.raise,f))}</a>`).join(', ')}</small>`:''}</td><td class="num">${esc(lvVal(m,v))}</td><td class="num">${lvAge(age)}</td><td><button class="srcb" type="button" data-bind="${i}" title="${esc(t('lv.bindT'))}">${chipH(LV_SRC[sk],t('lv.src.'+sk))}</button></td><td style="white-space:nowrap">${vh}</td><td><button class="btn sm" type="button" data-add="${i}" title="${esc(t('lv.alertT'))}">🔔</button></td></tr>`}
+  const stale=src==='c'&&age!=null&&age>3000,sk=LV_SRC[src]?src:'o',hyp=src==='c'&&!ok;
+  h+=`<tr${stale?' class="muted"':''}><td>${esc(lvName(m))} <small class="mono muted">${esc(m[0])}</small>${fs?`<small class="muted fmk">${t('map.toFld')} ${fs.map(f=>`<a href="#" data-fld="${f}">${esc(nameOf(CAT.raise,f))}</a>`).join(', ')}</small>`:''}</td><td class="num">${esc(lvVal(m,v))}</td><td class="num">${lvAge(age)}</td><td><button class="srcb" type="button" data-bind="${i}" title="${esc(t('lv.bindT'))}">${chipH(hyp?'warn':LV_SRC[sk],hyp?t('lv.cls.canHyp'):t('lv.src.'+sk))}</button></td><td style="white-space:nowrap">${vh}</td><td><button class="btn sm" type="button" data-add="${i}" title="${esc(t('lv.alertT'))}">🔔</button></td></tr>`}
  tb.innerHTML=h||`<tr><td colspan="6" class="muted">${esc(t('lv.noValues'))}</td></tr>`;
  if(r.alertStats)$('#lvAl').textContent=r.alertStats.fired+' / '+r.alertStats.shown+' / '+r.alertStats.dropped},
 drawAlerts(){const so=[['','—'],...this.M.map(m=>[m[0],lvName(m)])],co=this.C.map(c=>[c[0],c[1]]);
