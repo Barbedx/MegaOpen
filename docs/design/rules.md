@@ -162,7 +162,7 @@ These override the sections above where they disagree.
 6. **Settings › Reminders and `/api/settings alerts` go** (migrated, no
    alias); the tab «Сповіщення» becomes «Правила».
 7. **The HU protocol is a module behind an interface** (slice 0), picked by the
-   setting `hu.protocol`; Raise/RAV4 is its first implementation. A protocol
+   setting `huProtocol`; Raise/RAV4 is its first implementation. A protocol
    described as data (frame templates) stays out of 1.7.
 8. **Field maps are kept per protocol**: switching protocol does not lose the
    other one's bindings (a few hundred bytes each in the file).
@@ -188,6 +188,36 @@ After slice 0 the rest of the firmware sees one interface, `Hu::Protocol`:
 `raise-rav4` implements it; the protocol is picked once at boot from
 `hu.protocol`. No behaviour change: host tests and the sim stay green, and the
 bench board sends the same bytes before and after.
+
+*As built (2026-10-28, master e48aa47..):* `Canbox::Protocol`
+(src/proto/canbox/Protocol.h) with `Emitter` (0a), `Decoder` + `HuInbound`
+(0b-1: ack, frames, clock, request, ack-in), key frames (0b-2) and the track
+text (0b-3, `RaiseText`, `HuInbound::text`). Raise 112 is
+src/proto/canbox/Raise112.cpp; the setting is `huProtocol`; its own settings
+are `raise.*`, now including `raise.titleCmd` / `raise.artistCmd`. No file
+outside src/proto/canbox includes a Raise header. Verified on the bench:
+the 24 messages byte for byte against v1.6.7-rc1, key frames, rc_smoke 56/0.
+Left for slice 5 (HU signals): the head unit's volume, source and keys as
+signals come through `HuInbound` too; the health word `hu_dialect_vw` and
+the map page's PRND sweep (0x7D 06) still name Raise.
+
+## Formulas (owner, 2026-10-28, later the same day)
+
+Computed signals should be editable formulas, "like lambdas in ESPHome". This
+reverses "Not in 1.7: expressions/math in rules". ESPHome's are C++ compiled
+at build time; here it is an on-device expression language:
+
+- parsed once on save into a small bytecode (refused with a code and a
+  position on a syntax error), evaluated only when an input changed (the
+  rules' changed bitmap); integers in the signals' scaled units, no floats;
+- one language everywhere: a user signal is a formula (`fuel_level * 100 / 60`),
+  a rule condition a boolean one (`speed > 10 && !lights_dipped`), an HU field
+  binding one (it replaces ×÷+);
+- state through functions, not loops: `min max abs clamp if delta rate
+  integral avg(x, n s) held(c, n s) lookup`;
+- factory formulas ship as rows like everything else. Which of `Derived.cpp`
+  moves (fuel_pct, range, average speed) and what stays C++ (gear matching,
+  the 0x551 counter) is the owner's call, asked 2026-10-28.
 
 ## Slice order (replaces the list above)
 
