@@ -86,6 +86,27 @@ line at boot and at the end of a drive; later a «де стоїть» signal for
 (home/garage zones). The log repository is private; a public build keeps
 `geo` off unless the user switches it on.
 
+## 5. The head unit's report
+
+What the 3D work on the DUDU7 needs to know (../dudu7-lab/unity/NOTES.md; today
+`test.bat info` gets it over adb from a laptop) and what a USB or display
+problem needs, collected by Companion with no adb and no root:
+
+| what | how |
+| --- | --- |
+| model, build (`ro.product.device`, `ro.build.display.id`), DUDUOS version, Android and SDK | `Build.*`, `getprop` |
+| screen: pixels, density, refresh | `WindowManager` metrics |
+| the launcher `com.dudu.autoui`: versionName, versionCode, path (its Unity 3D car) | `PackageManager` (a `<queries>` entry) |
+| WebView: package and version | `WebView.getCurrentWebViewPackage()` |
+| graphics: GL ES version, GPU and driver (renderer, vendor, version), Vulkan level | `ActivityManager.deviceConfigurationInfo`, an off-screen EGL context, `PackageManager` features |
+| RAM, CPU, ABIs | `ActivityManager`, `Build.SUPPORTED_ABIS` |
+| adb: `ro.adb.secure`, `ro.debuggable`, `service.adb.tcp.port` | `getprop` |
+| the launcher's OBB folder | readable only up to Android 10; said as "not readable" otherwise |
+
+It shows in «More» › diagnostics with a «Поділитись» button (Android's share
+sheet), and goes to the board once per app start (`B3 REPORT`), which puts it in
+the next status snapshot (`hu`), so it reaches the log repository like the rest.
+
 ## Slices
 
 1. **Media from the app**: Companion's listener + `B0 MEDIA`; `AppMediaSource`,
@@ -98,7 +119,8 @@ line at boot and at the end of a drive; later a «де стоїть» signal for
 5. **HID in the main image**: the composite descriptor, the `hid` destination
    for every key, `t2can_usbhid` deleted; the WebUSB decision.
 6. **Location** (`B2 GEO`, the log lines, the snapshot's `geo`).
-7. **Docs**: USER-GUIDE (the permissions, the screen, the key map), CHANGELOG.
+7. **The head unit's report** (the screen, the share sheet, `B3 REPORT`, the snapshot's `hu`).
+8. **Docs**: USER-GUIDE (the permissions, the screen, the key map), CHANGELOG.
 
 ## Depends on
 
