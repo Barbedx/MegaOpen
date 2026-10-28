@@ -61,6 +61,7 @@ req status GET /api/status
 if [ "$CODE" != 200 ]; then echo "FAIL  GET /api/status: got $CODE; is $BASE the board?"; exit 2; fi
 pass "GET /api/status (200)"
 FW=$(grep -o '"fw": *"[^"]*"' "$BODY" | head -1)
+UP0=$(grep -o '"uptimeMs": *[0-9]*' "$BODY" | head -1 | grep -o '[0-9]*$')
 BUILD=$(grep -o '"build": *"[^"]*"' "$BODY" | head -1)
 echo "      $FW $BUILD"
 case "$BUILD" in
@@ -207,6 +208,24 @@ else
         409) echo "NOTE  GitHub check refused (409): $(head -c 120 "$BODY" | tr '\n' ' ')" ;;
         *)   fail "POST /api/fw/check" "got $CODE" ;;
     esac
+fi
+
+# ---- the map routes: each copies the head-unit config, the deepest stacks on httpd ----
+# (1.6.2 and 1.6.3-rc1 overflowed httpd's stack here; a crash shows as the reboot below)
+for p in /api/map '/api/map?live=1&meta=1' '/api/map?sig=speed' /api/hu/fields /api/messages /api/health; do
+    req route GET "$p"
+    expect_code "GET $p" 200
+done
+
+# ---- no reboot during the run: a crash anywhere above shows here ----------------
+req status_end GET /api/status
+UP1=$(grep -o '"uptimeMs": *[0-9]*' "$BODY" | head -1 | grep -o '[0-9]*$')
+if [ "$SIM" = 1 ]; then
+    echo "SKIP  no reboot during the run (firmware only, --sim)"
+elif [ -n "${UP0:-}" ] && [ -n "${UP1:-}" ] && [ "$UP1" -gt "$UP0" ]; then
+    pass "no reboot during the run (uptime ${UP0} -> ${UP1} ms)"
+else
+    fail "no reboot during the run" "uptime ${UP0:-?} -> ${UP1:-?} ms (code $CODE): look for [crash] in /api/logs"
 fi
 
 echo "rc_smoke: $PASSES passed, $FAILS failed"

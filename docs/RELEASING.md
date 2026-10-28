@@ -18,7 +18,11 @@ release republishes that rc's exact files. The workflow is
    `megaopen-<env>-X.Y.Z.bin`, `-factory.bin` and `SHA256SUMS`.
 4. **OTA-verify** the rc's `megaopen-t2can-X.Y.Z.bin` on a real T-2CAN
    (Плата → Оновлення прошивки, the file) and wait for `[ota] CONFIRMED` in
-   the log (60 s healthy). A problem: fix, commit, `-rc2`.
+   the log (60 s healthy). Then `tools/rc_smoke.sh http://<board>` on it:
+   every route, the deep ones (the settings file, the map) included, and no
+   reboot during the run. CONFIRMED alone is not enough: 1.6.3-rc1 was
+   confirmed and its `GET /api/config` crashed the web server. A problem:
+   fix, commit, `-rc2`.
 5. **Tag the release** `vX.Y.Z` on the **same commit**, only after the rc's
    release exists: `git tag vX.Y.Z <commit> && git push origin vX.Y.Z`. It
    does not rebuild: it takes the newest `vX.Y.Z-rc*` release on that commit,
