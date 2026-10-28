@@ -2397,15 +2397,11 @@ void setup()
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
         cs.tap = carTap;
 #endif
-        // The decode map from the car file (none: the factory table), read
-        // into a table that lives for begin() only (2.4 kB, PSRAM).
-        Vehicle::DecodeTable* decode = (Vehicle::DecodeTable*)heap_caps_malloc(
-            sizeof(Vehicle::DecodeTable), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (decode) {
-            new (decode) Vehicle::DecodeTable();
-            CarStore::loadDecode(*decode, cs.decodeFrom);
-            cs.decode = decode;
-        }
+        // The decode map from the car file (none: the factory table), for
+        // begin() only: the car task copies it (its rows are in PSRAM).
+        Vehicle::DecodeTable decode;
+        CarStore::loadDecode(decode, cs.decodeFrom);
+        cs.decode = &decode;
         // The panel alert rules: NVS, else the low-fuel edge alone.
         cs.alerts.factory();
         const bool alertsNvs = g_cfg.loadAlerts(cs.alerts);
@@ -2430,7 +2426,6 @@ void setup()
         App::Car::begin(cs);
         App::Car::setReminderSpeeds(g_cfg.s().remindLightsKmh, g_cfg.s().remindBrakeKmh);
     App::Car::setGears(g_cfg.s().gearRatio);
-        heap_caps_free(decode);
         LOGI("cfg", "NVS: %d entries of 32 B free", g_cfg.nvsFreeEntries());
         App::Car::start();
 #if FEATURE_CAN2

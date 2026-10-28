@@ -13,17 +13,6 @@ namespace Vehicle
             return (r.flags & DF_EXT) ? (r.canId | 0x80000000u) : r.canId;
         }
 
-        // Insertion, so rows of one id keep their order (stable).
-        void sortRows(DecodeRow* r, uint8_t n)
-        {
-            for (uint8_t i = 1; i < n; ++i) {
-                const DecodeRow x = r[i];
-                uint8_t j = i;
-                while (j && key(r[j - 1]) > key(x)) { r[j] = r[j - 1]; --j; }
-                r[j] = x;
-            }
-        }
-
         uint8_t* put16(uint8_t* p, uint16_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); return p + 2; }
         uint8_t* put32(uint8_t* p, uint32_t v) { p = put16(p, (uint16_t)v); return put16(p, (uint16_t)(v >> 16)); }
         uint16_t get16(const uint8_t* p) { return (uint16_t)(p[0] | (p[1] << 8)); }
@@ -57,31 +46,41 @@ namespace Vehicle
 
     // ---- the table -------------------------------------------------------------
 
+    void DecodeTable::sortRows()
+    {
+        // Insertion, so rows of one id keep their order (stable).
+        for (uint16_t i = 1; i < row.size(); ++i) {
+            const DecodeRow x = row[i];
+            uint16_t j = i;
+            while (j && key(row[j - 1]) > key(x)) { row[j] = row[j - 1]; --j; }
+            row[j] = x;
+        }
+    }
+
     void DecodeTable::factory()
     {
-        uint8_t n = 0;
+        uint16_t n = 0;
         const DecodeRow* d = CanDecode::defaults(n);
-        nRows = n < MAX_ROWS ? n : MAX_ROWS;
-        for (uint8_t i = 0; i < nRows; ++i) row[i] = d[i];
-        nK = 0;
+        row.assign(d, n < MAX_ROWS ? n : MAX_ROWS);
+        k.clear();
     }
 
     int DecodeTable::rowOf(uint8_t sig) const
     {
-        for (uint8_t i = 0; i < nRows; ++i) if (row[i].sig == sig) return i;
+        for (uint16_t i = 0; i < row.size(); ++i) if (row[i].sig == sig) return i;
         return -1;
     }
 
     int DecodeTable::constOf(uint8_t sig) const
     {
-        for (uint8_t i = 0; i < nK; ++i) if (k[i].sig == sig) return i;
+        for (uint16_t i = 0; i < k.size(); ++i) if (k[i].sig == sig) return i;
         return -1;
     }
 
     bool DecodeTable::measured(uint8_t sig) const
     {
         bool any = false;
-        for (uint8_t i = 0; i < nRows; ++i) {
+        for (uint16_t i = 0; i < row.size(); ++i) {
             if (row[i].sig != sig) continue;
             if (row[i].flags & DF_HYPOTHESIS) return false;
             any = true;
@@ -91,13 +90,13 @@ namespace Vehicle
 
     bool DecodeTable::setMeasured(uint8_t sig, bool on)
     {
-        uint8_t nd = 0;
+        uint16_t nd = 0;
         const DecodeRow* d = CanDecode::defaults(nd);
         bool any = false;
-        for (uint8_t i = 0; i < nRows; ++i) {
+        for (uint16_t i = 0; i < row.size(); ++i) {
             if (row[i].sig != sig) continue;
             bool hyp = !on;
-            for (uint8_t j = 0; !on && j < nd; ++j)
+            for (uint16_t j = 0; !on && j < nd; ++j)
                 if (d[j].sig == sig && sameField(d[j], row[i])) { hyp = (d[j].flags & DF_HYPOTHESIS) != 0; break; }
             row[i].flags = hyp ? (uint8_t)(row[i].flags | DF_HYPOTHESIS) : (uint8_t)(row[i].flags & ~DF_HYPOTHESIS);
             any = true;
@@ -120,11 +119,11 @@ namespace Vehicle
                 // this request, or the factory's after a reset).
                 const DecodeRow* old = nullptr;
                 if (c.reset) {
-                    uint8_t nd = 0;
+                    uint16_t nd = 0;
                     const DecodeRow* d = CanDecode::defaults(nd);
-                    for (uint8_t j = 0; !old && j < nd; ++j) if (d[j].sig == e.sig) old = &d[j];
+                    for (uint16_t j = 0; !old && j < nd; ++j) if (d[j].sig == e.sig) old = &d[j];
                 } else if (rowOf(e.sig) >= 0) {
-                    old = &row[rowOf(e.sig)];
+                    old = &row[(uint16_t)rowOf(e.sig)];
                 }
                 DecodeRow r = e.row;
                 if (old) {
@@ -149,10 +148,10 @@ namespace Vehicle
 
     bool DecodeTable::factoryMeasured(uint8_t sig)
     {
-        uint8_t n = 0;
+        uint16_t n = 0;
         const DecodeRow* d = CanDecode::defaults(n);
         bool any = false;
-        for (uint8_t i = 0; i < n; ++i) {
+        for (uint16_t i = 0; i < n; ++i) {
             if (d[i].sig != sig) continue;
             if (d[i].flags & DF_HYPOTHESIS) return false;
             any = true;
@@ -171,46 +170,50 @@ namespace Vehicle
 
     void DecodeTable::unbind(uint8_t sig)
     {
-        uint8_t w = 0;
-        for (uint8_t i = 0; i < nRows; ++i) if (row[i].sig != sig) row[w++] = row[i];
-        nRows = w;
-        w = 0;
-        for (uint8_t i = 0; i < nK; ++i) if (k[i].sig != sig) k[w++] = k[i];
-        nK = w;
+        for (uint16_t i = row.size(); i-- > 0;) if (row[i].sig == sig) row.erase(i);
+        for (uint16_t i = k.size(); i-- > 0;)   if (k[i].sig == sig) k.erase(i);
+    }
+
+    bool DecodeTable::addRow(const DecodeRow& r)
+    {
+        if (row.size() >= MAX_ROWS || !row.push(r)) return false;
+        sortRows();
+        return true;
+    }
+
+    bool DecodeTable::addConst(uint8_t sig, int32_t value)
+    {
+        return k.size() < MAX_CONSTS && k.push(DecodeConst{sig, value});
     }
 
     bool DecodeTable::bindCan(uint8_t sig, const DecodeRow& r)
     {
         if (sig >= SIG_COUNT) return false;
-        uint8_t others = 0;
-        for (uint8_t i = 0; i < nRows; ++i) if (row[i].sig != sig) ++others;
+        uint16_t others = 0;
+        for (uint16_t i = 0; i < row.size(); ++i) if (row[i].sig != sig) ++others;
         if (others >= MAX_ROWS) return false;
         unbind(sig);
-        row[nRows] = r;
-        row[nRows].sig = sig;
-        ++nRows;
-        sortRows(row, nRows);
-        return true;
+        DecodeRow x = r;
+        x.sig = sig;
+        return addRow(x);
     }
 
     bool DecodeTable::bindConst(uint8_t sig, int32_t value)
     {
         if (sig >= SIG_COUNT) return false;
-        if (constOf(sig) < 0 && nK >= MAX_CONSTS) return false;
+        if (constOf(sig) < 0 && k.size() >= MAX_CONSTS) return false;
         unbind(sig);
-        k[nK].sig = sig;
-        k[nK].value = value;
-        ++nK;
-        return true;
+        return addConst(sig, value);
     }
 
     size_t DecodeTable::pack(uint8_t* out) const
     {
+        if (row.size() > LEGACY_ROWS || k.size() > LEGACY_CONSTS) return 0;
         uint8_t* p = out;
         *p++ = 1;
-        *p++ = nRows;
-        *p++ = nK;
-        for (uint8_t i = 0; i < nRows; ++i) {
+        *p++ = (uint8_t)row.size();
+        *p++ = (uint8_t)k.size();
+        for (uint16_t i = 0; i < row.size(); ++i) {
             const DecodeRow& r = row[i];
             p = put32(p, r.canId);
             *p++ = r.startByte; *p++ = r.numBytes; *p++ = r.shift;
@@ -221,7 +224,7 @@ namespace Vehicle
             *p++ = r.sig; *p++ = r.flags;
             p = put16(p, r.holdMs);
         }
-        for (uint8_t i = 0; i < nK; ++i) {
+        for (uint16_t i = 0; i < k.size(); ++i) {
             *p++ = k[i].sig;
             p = put32(p, (uint32_t)k[i].value);
         }
@@ -230,13 +233,13 @@ namespace Vehicle
 
     bool DecodeTable::unpack(const uint8_t* in, size_t n)
     {
-        nRows = 0;
-        nK = 0;
-        if (!in || n < 3 || in[0] != 1 || in[1] > MAX_ROWS || in[2] > MAX_CONSTS) return false;
+        row.clear();
+        k.clear();
+        if (!in || n < 3 || in[0] != 1 || in[1] > LEGACY_ROWS || in[2] > LEGACY_CONSTS) return false;
         if (n != 3 + (size_t)in[1] * ROW_BYTES + (size_t)in[2] * CONST_BYTES) return false;
         const uint8_t* p = in + 3;
         for (uint8_t i = 0; i < in[1]; ++i, p += ROW_BYTES) {
-            DecodeRow& r = row[i];
+            DecodeRow r;
             r.canId = get32(p);
             r.startByte = p[4]; r.numBytes = p[5]; r.shift = p[6];
             r.mask = get32(p + 7);
@@ -246,22 +249,22 @@ namespace Vehicle
             r.sig = p[19]; r.flags = p[20];
             r.holdMs = get16(p + 21);
             if (r.sig >= SIG_COUNT || r.numBytes < 1 || r.numBytes > 4 || r.startByte + r.numBytes > 8 ||
-                r.shift > 31 || !r.mask || !r.mul || !r.div)
+                r.shift > 31 || !r.mask || !r.mul || !r.div || !row.push(r)) {
+                row.clear();
                 return false;
+            }
         }
-        const uint8_t rows = in[1];
         for (uint8_t i = 0; i < in[2]; ++i, p += CONST_BYTES) {
             const uint8_t sig = p[0];
             const int32_t v = (int32_t)get32(p + 1);
-            if (sig >= SIG_COUNT || v < meta(sig).min || v > meta(sig).max) return false;
-            for (uint8_t j = 0; j < rows; ++j) if (row[j].sig == sig) return false;
-            for (uint8_t j = 0; j < i; ++j) if (k[j].sig == sig) return false;
-            k[i].sig = sig;
-            k[i].value = v;
+            if (sig >= SIG_COUNT || v < meta(sig).min || v > meta(sig).max || rowOf(sig) >= 0 || constOf(sig) >= 0 ||
+                !k.push(DecodeConst{sig, v})) {
+                row.clear();
+                k.clear();
+                return false;
+            }
         }
-        sortRows(row, rows);
-        nRows = rows;
-        nK = in[2];
+        sortRows();
         return true;
     }
 

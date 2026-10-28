@@ -87,15 +87,13 @@ namespace CarStore
             car["v"] = CarFile::VERSION;
             bool any = false;
             uint8_t* blob = (uint8_t*)heap_caps_malloc(Vehicle::DecodeTable::BLOB_MAX, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            Vehicle::DecodeTable* t = (Vehicle::DecodeTable*)heap_caps_malloc(sizeof(Vehicle::DecodeTable), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (blob && t) {
-                new (t) Vehicle::DecodeTable();
+            if (blob) {
+                Vehicle::DecodeTable t;   // its rows are in PSRAM (PsArray)
                 const size_t n = cfg.loadDecode(blob, Vehicle::DecodeTable::BLOB_MAX);
-                if (n && t->unpack(blob, n)) { CarFile::putDecode(car, *t); any = true; }
+                if (n && t.unpack(blob, n)) { CarFile::putDecode(car, t); any = true; }
                 else if (n) LOGW("car", "NVS decode (%u B) does not unpack: not carried over", (unsigned)n);
             }
             heap_caps_free(blob);
-            heap_caps_free(t);
             Canbox::FieldMap m;
             if (cfg.loadFieldMap(m) && m.count()) {
                 CarFile::putFields(car, Canbox::activeProtocol(), m);

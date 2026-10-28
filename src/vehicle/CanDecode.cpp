@@ -8,8 +8,8 @@ namespace Vehicle
         const DecodeRow kDefaults[] = {
 #include "decode_defaults.inc"
         };
-        constexpr uint8_t kDefaultCount = (uint8_t)(sizeof(kDefaults) / sizeof(kDefaults[0]));
-        static_assert(sizeof(DecodeRow) == 24, "DecodeRow grew: DecodeTable holds 2 x 96 of them");
+        constexpr uint16_t kDefaultCount = (uint16_t)(sizeof(kDefaults) / sizeof(kDefaults[0]));
+        static_assert(sizeof(DecodeRow) == 24, "DecodeRow grew: the staged table and CanDecode each hold a copy");
         static_assert(sizeof(kDefaults) / sizeof(kDefaults[0]) <= CanDecode::MAX_ROWS,
                       "decode_defaults.inc has more rows than CanDecode::MAX_ROWS");
 
@@ -19,7 +19,7 @@ namespace Vehicle
         inline uint32_t key(const DecodeRow& r) { return key(r.canId, (r.flags & DF_EXT) != 0); }
     }
 
-    const DecodeRow* CanDecode::defaults(uint8_t& n)
+    const DecodeRow* CanDecode::defaults(uint16_t& n)
     {
         n = kDefaultCount;
         return kDefaults;
@@ -30,10 +30,10 @@ namespace Vehicle
         return load(kDefaults, kDefaultCount);
     }
 
-    bool CanDecode::load(const DecodeRow* rows, uint8_t n)
+    bool CanDecode::load(const DecodeRow* rows, uint16_t n)
     {
         if (n > MAX_ROWS || (n && !rows)) return false;
-        for (uint8_t i = 0; i < n; ++i) {
+        for (uint16_t i = 0; i < n; ++i) {
             const DecodeRow& r = rows[i];
             if (r.sig >= SIG_COUNT) return false;
             if (r.numBytes < 1 || r.numBytes > 4 || r.startByte + r.numBytes > 8) return false;
@@ -42,18 +42,23 @@ namespace Vehicle
             // silently lose rows rather than fail.
             if (i && key(rows[i - 1]) > key(r)) return false;
         }
-        _r = rows;
+        if (!_rows.assign(rows, n) || !_st.resize(n)) {
+            _rows.clear();
+            _r = nullptr;
+            _n = 0;
+            return false;
+        }
+        _r = _rows.data();
         _n = n;
-        for (uint8_t i = 0; i < MAX_ROWS; ++i) { _until[i] = 0; _held[i] = 0; }
         return true;
     }
 
-    uint8_t CanDecode::lowerBound(uint32_t k) const
+    uint16_t CanDecode::lowerBound(uint32_t k) const
     {
-        uint8_t lo = 0, hi = _n;
+        uint16_t lo = 0, hi = _n;
         while (lo < hi) {
-            const uint8_t mid = (uint8_t)((lo + hi) / 2);
-            if (key(_r[mid]) < k) lo = (uint8_t)(mid + 1);
+            const uint16_t mid = (uint16_t)((lo + hi) / 2);
+            if (key(_r[mid]) < k) lo = (uint16_t)(mid + 1);
             else                  hi = mid;
         }
         return lo;
@@ -90,7 +95,7 @@ namespace Vehicle
     uint8_t CanDecode::apply(const Frame& f, State& s, uint32_t nowMs)
     {
         const uint32_t k = key(f.id, f.extended);
-        uint8_t i = lowerBound(k);
+        uint16_t i = lowerBound(k);
         uint8_t matched = 0;
         const uint8_t len = f.len > 8 ? 8 : f.len;
         for (; i < _n && key(_r[i]) == k; ++i) {
@@ -106,8 +111,8 @@ namespace Vehicle
 
             if (r.flags & DF_KEY) {
                 // A key is an edge, not a level: only a change is news.
-                if (v != _held[i]) {
-                    _held[i] = v;
+                if (v != _st[i].held) {
+                    _st[i].held = v;
                     if (_key) _key(r.sig, v, _keyCtx);
                 }
                 continue;
@@ -115,10 +120,10 @@ namespace Vehicle
             v = State::clamp(r.sig, v);
             if (r.flags & DF_LATCH) {
                 if (v != 0) {
-                    _held[i]  = v;
-                    _until[i] = nowMs + r.holdMs;
-                } else if ((int32_t)(_until[i] - nowMs) > 0) {
-                    v = _held[i];      // between two blinks: still on
+                    _st[i].held  = v;
+                    _st[i].until = nowMs + r.holdMs;
+                } else if ((int32_t)(_st[i].until - nowMs) > 0) {
+                    v = _st[i].held;      // between two blinks: still on
                 }
             }
             s.set(r.sig, v, nowMs);

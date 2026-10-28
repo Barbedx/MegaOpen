@@ -244,7 +244,7 @@ namespace App
             int                s_id = -1;
             std::atomic<uint32_t> s_cmdDrops{0};
             Snapshot<Stats>    s_stats;
-            // Two ~2.4 kB buffers, placed in begin(): PSRAM where there is some.
+            // Two tables placed in begin() (their rows are PsArrays, in PSRAM).
             Staged<Vehicle::DecodeTable, true> s_table;
             // The owner's: the tests running, and the constants it pinned.
             Tests              s_tests;
@@ -299,7 +299,7 @@ namespace App
             void pinConsts()
             {
                 const Vehicle::DecodeTable& t = s_table.live();
-                for (uint8_t i = 0; i < t.nK; ++i)
+                for (uint16_t i = 0; i < t.k.size(); ++i)
                     if (!testing(t.k[i].sig)) s_s.state->pin(t.k[i].sig, t.k[i].value);
             }
 
@@ -358,21 +358,20 @@ namespace App
             void applyTable()
             {
                 const Vehicle::DecodeTable& t = s_table.live();
-                if (!s_decode.load(t.row, t.nRows)) {
-                    // Never keep the old pointer: that buffer is the staging one now.
-                    s_decode.load(nullptr, 0);
+                if (!s_decode.load(t.row.data(), t.row.size())) {
+                    // load() refused: nothing decodes (it holds no rows then).
                     LOGI("car", "decode map REFUSED by CanDecode: no signals decoded");
                 }
                 // A derived signal with a row or a constant: the binding wins.
                 s_derived.clearBound();
-                for (uint8_t i = 0; i < t.nRows; ++i) s_derived.setBound(t.row[i].sig, true);
-                for (uint8_t i = 0; i < t.nK; ++i)    s_derived.setBound(t.k[i].sig, true);
+                for (uint16_t i = 0; i < t.row.size(); ++i) s_derived.setBound(t.row[i].sig, true);
+                for (uint16_t i = 0; i < t.k.size(); ++i)   s_derived.setBound(t.k[i].sig, true);
                 if (!s_s.state) { refreshVerified(); return; }
                 for (uint8_t i = 0; i < s_nConst; ++i)
                     if (t.constOf(s_constSig[i]) < 0 && !testing(s_constSig[i]))
                         s_s.state->unpin(s_constSig[i]);
-                s_nConst = t.nK;
-                for (uint8_t i = 0; i < t.nK; ++i) s_constSig[i] = t.k[i].sig;
+                s_nConst = (uint8_t)t.k.size();
+                for (uint16_t i = 0; i < t.k.size(); ++i) s_constSig[i] = t.k[i].sig;
                 pinConsts();
                 refreshVerified();
             }
@@ -443,7 +442,7 @@ namespace App
                 void* m = psram ? heap_caps_malloc(sizeof(Vehicle::DecodeTable), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
                                 : nullptr;
                 if (!m) m = heap_caps_malloc(sizeof(Vehicle::DecodeTable), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-                configASSERT(m);   // setup, ~2.4 kB: there is no running without it
+                configASSERT(m);   // setup: there is no running without it
                 return new (m) Vehicle::DecodeTable();
             }
 
@@ -460,7 +459,7 @@ namespace App
                 applyTable();
                 const Vehicle::DecodeTable& t = s_table.live();
                 LOGI("car", "decode map: %s, %u rows, %u constants, in %s", from ? fromName : "factory",
-                               (unsigned)t.nRows, (unsigned)t.nK, ps ? "PSRAM" : "DRAM");
+                               (unsigned)t.row.size(), (unsigned)t.k.size(), ps ? "PSRAM" : "DRAM");
             }
 
             void frame(const Frame& f, uint32_t now)

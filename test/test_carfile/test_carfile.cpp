@@ -33,7 +33,7 @@ void test_the_decode_table_round_trips_by_name()
     DecodeTable t;
     t.factory();
     TEST_ASSERT_TRUE(t.bindConst(SIG_BATT_V, 1250));
-    TEST_ASSERT_TRUE(t.nRows > 20);
+    TEST_ASSERT_TRUE(t.row.size() > 20);
     JsonDocument d;
     CarFile::putDecode(d.to<JsonObject>(), t);
     std::string text;
@@ -46,9 +46,9 @@ void test_the_decode_table_round_trips_by_name()
     uint16_t skipped = 9;
     TEST_ASSERT_NULL(CarFile::getDecode(back.as<JsonObjectConst>(), u, skipped));
     TEST_ASSERT_EQUAL_UINT16(0, skipped);
-    TEST_ASSERT_EQUAL_UINT8(t.nRows, u.nRows);
-    TEST_ASSERT_EQUAL_UINT8(t.nK, u.nK);
-    for (uint8_t i = 0; i < t.nRows; ++i) TEST_ASSERT_TRUE_MESSAGE(sameRow(t.row[i], u.row[i]), meta(t.row[i].sig).name);
+    TEST_ASSERT_EQUAL_UINT8(t.row.size(), u.row.size());
+    TEST_ASSERT_EQUAL_UINT8(t.k.size(), u.k.size());
+    for (uint8_t i = 0; i < t.row.size(); ++i) TEST_ASSERT_TRUE_MESSAGE(sameRow(t.row[i], u.row[i]), meta(t.row[i].sig).name);
     TEST_ASSERT_EQUAL_INT32(1250, u.k[u.constOf(SIG_BATT_V)].value);
 }
 
@@ -66,9 +66,9 @@ void test_an_unknown_name_is_skipped_not_guessed()
     uint16_t skipped = 0;
     TEST_ASSERT_NULL(CarFile::getDecode(d.as<JsonObjectConst>(), t, skipped));
     TEST_ASSERT_EQUAL_UINT16(2, skipped);
-    TEST_ASSERT_EQUAL_UINT8(1, t.nRows);
+    TEST_ASSERT_EQUAL_UINT8(1, t.row.size());
     TEST_ASSERT_EQUAL_UINT8(SIG_SPEED, t.row[0].sig);
-    TEST_ASSERT_EQUAL_UINT8(0, t.nK);
+    TEST_ASSERT_EQUAL_UINT8(0, t.k.size());
 }
 
 // A bad row refuses the whole table (nothing half-read), and says where.
@@ -81,7 +81,7 @@ void test_a_bad_row_refuses_the_table()
     DecodeTable t;
     uint16_t skipped = 0;
     TEST_ASSERT_EQUAL_STRING("can.byte: param", CarFile::getDecode(d.as<JsonObjectConst>(), t, skipped));
-    TEST_ASSERT_EQUAL_UINT8(0, t.nRows);
+    TEST_ASSERT_EQUAL_UINT8(0, t.row.size());
     // No decode at all: the caller's factory table.
     JsonDocument e;
     e.to<JsonObject>();
@@ -189,7 +189,7 @@ void test_the_old_nvs_blob_carries_into_the_file()
     DecodeTable w;
     uint16_t skipped = 0;
     TEST_ASSERT_NULL(CarFile::getDecode(d.as<JsonObjectConst>(), w, skipped));
-    TEST_ASSERT_EQUAL_UINT8(t.nRows, w.nRows);
+    TEST_ASSERT_EQUAL_UINT8(t.row.size(), w.row.size());
     TEST_ASSERT_EQUAL_INT32(1300, w.k[w.constOf(SIG_BATT_V)].value);
 }
 

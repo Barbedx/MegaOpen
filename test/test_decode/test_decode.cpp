@@ -151,7 +151,7 @@ void test_x84_rows_match_the_matrix_positions()
         {SIG_MIL, 0x715, 4, 0, 2},           {SIG_OIL_LEVEL, 0x715, 4, 2, 4},
         {SIG_FUEL_LEVEL_APV, 0x715, 5, 0, 7}, {SIG_SERVICE_KM, 0x715, 6, 0, 8},
     };
-    uint8_t n = 0;
+    uint16_t n = 0;
     const DecodeRow* rows = CanDecode::defaults(n);
     for (const Ddt& d : want) {
         const DecodeRow* r = nullptr;
@@ -517,7 +517,7 @@ static void writeForTheSimulator(const DecodeTable& t)
 {
     std::string j = "{\"rows\":[";
     char b[200];
-    for (uint8_t i = 0; i < t.nRows; ++i) {
+    for (uint8_t i = 0; i < t.row.size(); ++i) {
         j += std::string(i ? "," : "") + "{\"sig\":\"" + meta(t.row[i].sig).name + "\",\"can\":";
         DecodeJson::canJson(b, sizeof(b), t.row[i]);
         j += std::string(b) + "}";
@@ -550,24 +550,24 @@ void test_the_blob_round_trips_the_factory_table_and_constants()
 {
     static DecodeTable a, b;
     a.factory();
-    TEST_ASSERT_EQUAL_UINT8(63, a.nRows);
+    TEST_ASSERT_EQUAL_UINT8(63, a.row.size());
     writeForTheSimulator(a);
     TEST_ASSERT_TRUE(a.bindConst(SIG_KEY_ON, 1));
     TEST_ASSERT_TRUE(a.bindConst(SIG_OUT_TEMP, -12));
     static uint8_t blob[DecodeTable::BLOB_MAX];
     const size_t n = a.pack(blob);
-    TEST_ASSERT_EQUAL_UINT32(3 + (a.nRows) * DecodeTable::ROW_BYTES + 2 * DecodeTable::CONST_BYTES, n);
+    TEST_ASSERT_EQUAL_UINT32(3 + (a.row.size()) * DecodeTable::ROW_BYTES + 2 * DecodeTable::CONST_BYTES, n);
     TEST_ASSERT_TRUE(b.unpack(blob, n));
-    TEST_ASSERT_EQUAL_UINT8(a.nRows, b.nRows);
-    for (uint8_t i = 0; i < a.nRows; ++i) TEST_ASSERT_TRUE(sameRow(a.row[i], b.row[i]));
-    TEST_ASSERT_EQUAL_UINT8(2, b.nK);
+    TEST_ASSERT_EQUAL_UINT8(a.row.size(), b.row.size());
+    for (uint8_t i = 0; i < a.row.size(); ++i) TEST_ASSERT_TRUE(sameRow(a.row[i], b.row[i]));
+    TEST_ASSERT_EQUAL_UINT8(2, b.k.size());
     TEST_ASSERT_EQUAL_INT32(-12, b.k[b.constOf(SIG_OUT_TEMP)].value);
     // The indicator latch and the steering bias survive the trip.
     const int li = b.rowOf(SIG_IND_LEFT);
     TEST_ASSERT_TRUE(li >= 0 && (b.row[li].flags & DF_LATCH) && b.row[li].holdMs == 500);
     TEST_ASSERT_EQUAL_INT32(-32767, b.row[b.rowOf(SIG_STEERING)].add);
     CanDecode dec;
-    TEST_ASSERT_TRUE(dec.load(b.row, b.nRows));
+    TEST_ASSERT_TRUE(dec.load(b.row.data(), b.row.size()));
 }
 
 // The owner's ✓ on the live page: a hypothesis goes measured, survives the
@@ -606,10 +606,10 @@ void test_a_confirm_flips_the_flag_and_survives_the_blob()
 
 static bool sameTable(const DecodeTable& a, const DecodeTable& b)
 {
-    if (a.nRows != b.nRows || a.nK != b.nK) return false;
-    for (uint8_t i = 0; i < a.nRows; ++i)
+    if (a.row.size() != b.row.size() || a.k.size() != b.k.size()) return false;
+    for (uint8_t i = 0; i < a.row.size(); ++i)
         if (!sameRow(a.row[i], b.row[i]) || a.row[i].sig != b.row[i].sig || a.row[i].flags != b.row[i].flags) return false;
-    for (uint8_t i = 0; i < a.nK; ++i)
+    for (uint8_t i = 0; i < a.k.size(); ++i)
         if (a.k[i].sig != b.k[i].sig || a.k[i].value != b.k[i].value) return false;
     return true;
 }
@@ -629,11 +629,12 @@ void test_a_refused_map_change_leaves_the_table_untouched()
     TEST_ASSERT_EQUAL_STRING(DecodeTable::WHY_NO_CAN, t.apply(c, scratch));
     TEST_ASSERT_TRUE(sameTable(before, t));
 
-    // 17 constants: past the 16 cap, refused whole.
-    static DecodeEdit ed[17];
-    for (uint8_t i = 0; i < 17; ++i) ed[i] = DecodeEdit{(uint8_t)(SIG_AC_ON + i), SRC_CONST, 1, DecodeRow{}};
+    // 129 constants: past the 128 cap, refused whole.
+    static_assert(SIG_COUNT > DecodeTable::MAX_CONSTS, "129 distinct signals to pin");
+    static DecodeEdit ed[DecodeTable::MAX_CONSTS + 1];
+    for (uint8_t i = 0; i <= DecodeTable::MAX_CONSTS; ++i) ed[i] = DecodeEdit{i, SRC_CONST, meta(i).min, DecodeRow{}};
     DecodeChange full;
-    full.ed = ed; full.n = 17;
+    full.ed = ed; full.n = DecodeTable::MAX_CONSTS + 1;
     TEST_ASSERT_EQUAL_STRING(DecodeTable::WHY_CONSTS, t.apply(full, scratch));
     TEST_ASSERT_TRUE(sameTable(before, t));
 
@@ -662,7 +663,7 @@ void test_a_bad_blob_is_refused_whole()
     a.bindConst(SIG_RANGE, 420);
     const size_t n = a.pack(blob);
     TEST_ASSERT_FALSE(b.unpack(blob, n - 1));                  // short
-    TEST_ASSERT_EQUAL_UINT8(0, b.nRows);                        // and left empty
+    TEST_ASSERT_EQUAL_UINT8(0, b.row.size());                        // and left empty
     blob[0] = 2;  TEST_ASSERT_FALSE(b.unpack(blob, n)); blob[0] = 1;   // another layout
     blob[3 + 19] = SIG_COUNT;                                   // row 0's signal
     TEST_ASSERT_FALSE(b.unpack(blob, n));
@@ -678,42 +679,55 @@ void test_a_bad_blob_is_refused_whole()
     TEST_ASSERT_FALSE(b.unpack(nullptr, 0));
 }
 
-void test_the_caps_are_96_rows_and_16_constants()
+// Caps, not sizes: the table grows as a car needs (PsArray), up to a sanity
+// cap; the 1.6.x NVS blob kept its own 96/16 and is only ever read.
+void test_the_caps_are_512_rows_and_128_constants()
 {
     static DecodeTable t;
-    t.nRows = 0; t.nK = 0;
+    t.row.clear(); t.k.clear();
     DecodeRow r{};
-    r.numBytes = 1; r.mask = 0xFF; r.mul = 1; r.div = 1;
-    for (uint8_t i = 0; i < DecodeTable::MAX_ROWS; ++i) { r.canId = 0x200 + i; t.row[t.nRows++] = r; t.row[i].sig = SIG_RPM; }
+    r.numBytes = 1; r.mask = 0xFF; r.mul = 1; r.div = 1; r.sig = SIG_RPM;
+    for (uint16_t i = 0; i < DecodeTable::MAX_ROWS; ++i) { r.canId = 0x200 + i; TEST_ASSERT_TRUE(t.addRow(r)); }
     t.row[0].sig = SIG_BRAKE;
-    TEST_ASSERT_EQUAL_UINT8(96, DecodeTable::MAX_ROWS);
+    TEST_ASSERT_EQUAL_UINT16(512, DecodeTable::MAX_ROWS);
+    TEST_ASSERT_FALSE(t.addRow(r));                             // at the cap
     TEST_ASSERT_FALSE(t.bindCan(SIG_SPEED, r));                 // full: nothing moves
-    TEST_ASSERT_EQUAL_UINT8(DecodeTable::MAX_ROWS, t.nRows);
+    TEST_ASSERT_EQUAL_UINT16(DecodeTable::MAX_ROWS, t.row.size());
     TEST_ASSERT_TRUE(t.bindCan(SIG_BRAKE, r));                  // rebinding in place fits
-    for (uint8_t i = 0; i < DecodeTable::MAX_CONSTS; ++i) TEST_ASSERT_TRUE(t.bindConst((uint8_t)(SIG_AC_ON + i), 1));
-    TEST_ASSERT_EQUAL_UINT8(16, t.nK);
-    TEST_ASSERT_FALSE(t.bindConst(SIG_TPMS_FL, 1));
-    TEST_ASSERT_TRUE(t.bindConst(SIG_AC_ON, 0));                // replacing one fits
+    CanDecode dec;
+    TEST_ASSERT_TRUE(dec.load(t.row.data(), t.row.size()));     // CanDecode takes all 512
+    TEST_ASSERT_EQUAL_UINT16(512, dec.rows());
+    uint16_t nk = 0;
+    for (uint8_t s = 0; s < SIG_COUNT && nk < DecodeTable::MAX_CONSTS; ++s) {
+        if (s == SIG_RPM || s == SIG_BRAKE) continue;
+        TEST_ASSERT_TRUE(t.bindConst(s, meta(s).min));
+        ++nk;
+    }
+    TEST_ASSERT_EQUAL_UINT16(128, t.k.size());
+    uint8_t other = 0;
+    while (t.constOf(other) >= 0 || other == SIG_RPM || other == SIG_BRAKE) ++other;
+    TEST_ASSERT_FALSE(t.bindConst(other, meta(other).min));    // the 129th
+    TEST_ASSERT_TRUE(t.bindConst(t.k[0].sig, meta(t.k[0].sig).min));   // replacing one fits
+    // Past the old blob's caps, pack() writes nothing: the file is the format now.
     static uint8_t blob[DecodeTable::BLOB_MAX];
-    t.unbind(SIG_RPM);
-    TEST_ASSERT_TRUE(t.pack(blob) <= DecodeTable::BLOB_MAX);
+    TEST_ASSERT_EQUAL(0, t.pack(blob));
 }
 
 void test_binding_replaces_and_keeps_the_order()
 {
     static DecodeTable t;
     t.factory();
-    const uint8_t n = t.nRows;
+    const uint8_t n = t.row.size();
     DecodeRow r{};
     r.canId = 0x100; r.numBytes = 1; r.mask = 0xFF; r.mul = 1; r.div = 1;
     TEST_ASSERT_TRUE(t.bindCan(SIG_SPEED, r));                  // replaces 0x354
-    TEST_ASSERT_EQUAL_UINT8(n, t.nRows);
+    TEST_ASSERT_EQUAL_UINT8(n, t.row.size());
     TEST_ASSERT_EQUAL_UINT32(0x100, t.row[t.rowOf(SIG_SPEED)].canId);
     CanDecode dec;
-    TEST_ASSERT_TRUE(dec.load(t.row, t.nRows));                 // still sorted
+    TEST_ASSERT_TRUE(dec.load(t.row.data(), t.row.size()));                 // still sorted
     TEST_ASSERT_TRUE(t.bindConst(SIG_SPEED, 5000));             // can -> const
     TEST_ASSERT_EQUAL_INT(-1, t.rowOf(SIG_SPEED));
-    TEST_ASSERT_EQUAL_UINT8(n - 1, t.nRows);
+    TEST_ASSERT_EQUAL_UINT8(n - 1, t.row.size());
     t.unbind(SIG_SPEED);                                        // off
     TEST_ASSERT_EQUAL_INT(-1, t.constOf(SIG_SPEED));
 }
@@ -723,7 +737,7 @@ void test_the_can_object_reads_back_what_it_writes()
     static DecodeTable t;
     t.factory();
     char b[320];
-    for (uint8_t i = 0; i < t.nRows; ++i) {
+    for (uint8_t i = 0; i < t.row.size(); ++i) {
         DecodeJson::canJson(b, sizeof(b), t.row[i]);
         JsonDocument d;
         TEST_ASSERT_FALSE(deserializeJson(d, b));
@@ -773,7 +787,7 @@ void test_a_bound_row_decodes_into_state()
     TEST_ASSERT_NULL(DecodeJson::canFrom(d.as<JsonObjectConst>(), r));
     TEST_ASSERT_TRUE(t.bindCan(SIG_SPEED, r));
     CanDecode dec;
-    TEST_ASSERT_TRUE(dec.load(t.row, t.nRows));
+    TEST_ASSERT_TRUE(dec.load(t.row.data(), t.row.size()));
     State s;
     dec.apply(frame(0x5FD, {0x00, 0x34, 0x12}), s, 10);
     TEST_ASSERT_EQUAL_INT32(0x1234 * 10, s.get(SIG_SPEED));
@@ -1348,7 +1362,7 @@ int main(int, char**)
     RUN_TEST(test_a_confirm_flips_the_flag_and_survives_the_blob);
     RUN_TEST(test_a_refused_map_change_leaves_the_table_untouched);
     RUN_TEST(test_a_bad_blob_is_refused_whole);
-    RUN_TEST(test_the_caps_are_96_rows_and_16_constants);
+    RUN_TEST(test_the_caps_are_512_rows_and_128_constants);
     RUN_TEST(test_binding_replaces_and_keeps_the_order);
     RUN_TEST(test_the_can_object_reads_back_what_it_writes);
     RUN_TEST(test_a_bound_row_decodes_into_state);

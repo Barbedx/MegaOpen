@@ -10,17 +10,6 @@ namespace CarFile
         const char* nameOf(uint8_t sig) { return sig < Vehicle::SIG_COUNT ? Vehicle::meta(sig).name : ""; }
         uint8_t     sigOf(JsonVariantConst v) { return Vehicle::sigByName(v | ""); }
 
-        // Rows stay sorted by id (CanDecode::load needs it), equal ids in
-        // file order.
-        void sortRows(Vehicle::DecodeTable& t)
-        {
-            for (uint8_t i = 1; i < t.nRows; ++i) {
-                const Vehicle::DecodeRow r = t.row[i];
-                uint8_t j = i;
-                while (j && t.row[j - 1].canId > r.canId) { t.row[j] = t.row[j - 1]; --j; }
-                t.row[j] = r;
-            }
-        }
     }
 
     void putDecode(JsonObject car, const Vehicle::DecodeTable& t)
@@ -28,7 +17,7 @@ namespace CarFile
         JsonObject d = car["decode"].to<JsonObject>();
         JsonArray rows = d["rows"].to<JsonArray>();
         char b[256];
-        for (uint8_t i = 0; i < t.nRows; ++i) {
+        for (uint16_t i = 0; i < t.row.size(); ++i) {
             const Vehicle::DecodeRow& r = t.row[i];
             JsonObject o = rows.add<JsonObject>();
             o["sig"] = nameOf(r.sig);
@@ -38,7 +27,7 @@ namespace CarFile
             o["can"] = can.as<JsonObjectConst>();
         }
         JsonArray ks = d["consts"].to<JsonArray>();
-        for (uint8_t i = 0; i < t.nK; ++i) {
+        for (uint16_t i = 0; i < t.k.size(); ++i) {
             JsonObject o = ks.add<JsonObject>();
             o["sig"]   = nameOf(t.k[i].sig);
             o["value"] = t.k[i].value;
@@ -54,23 +43,25 @@ namespace CarFile
         for (JsonObjectConst o : d["rows"].as<JsonArrayConst>()) {
             const uint8_t sig = sigOf(o["sig"]);
             if (sig >= Vehicle::SIG_COUNT) { ++skipped; continue; }
-            if (t.nRows >= Vehicle::DecodeTable::MAX_ROWS) { t = Vehicle::DecodeTable{}; return Vehicle::DecodeTable::WHY_ROWS; }
             Vehicle::DecodeRow r{};
             if (const char* why = Vehicle::DecodeJson::canFrom(o["can"].as<JsonObjectConst>(), r)) {
                 t = Vehicle::DecodeTable{};
                 return why;
             }
             r.sig = sig;
-            t.row[t.nRows++] = r;
+            // Appended unsorted, sorted once at the end.
+            if (t.row.size() >= Vehicle::DecodeTable::MAX_ROWS || !t.row.push(r)) {
+                t = Vehicle::DecodeTable{};
+                return Vehicle::DecodeTable::WHY_ROWS;
+            }
         }
         for (JsonObjectConst o : d["consts"].as<JsonArrayConst>()) {
             const uint8_t sig = sigOf(o["sig"]);
             if (sig >= Vehicle::SIG_COUNT) { ++skipped; continue; }
             if (!o["value"].is<int32_t>()) { t = Vehicle::DecodeTable{}; return "decode.consts.value: param"; }
-            if (t.nK >= Vehicle::DecodeTable::MAX_CONSTS) { t = Vehicle::DecodeTable{}; return Vehicle::DecodeTable::WHY_CONSTS; }
-            t.k[t.nK++] = Vehicle::DecodeConst{sig, o["value"].as<int32_t>()};
+            if (!t.addConst(sig, o["value"].as<int32_t>())) { t = Vehicle::DecodeTable{}; return Vehicle::DecodeTable::WHY_CONSTS; }
         }
-        sortRows(t);
+        t.sortRows();
         return nullptr;
     }
 

@@ -1,4 +1,5 @@
 #pragma once
+#include "../utils/PsArray.h"
 #include <stdint.h>
 #include "../bus/Frame.h"
 #include "VehicleState.h"
@@ -60,21 +61,23 @@ namespace Vehicle
 
     class CanDecode {
     public:
-        // The user's map (DecodeTable) is capped at this too; the factory has 62.
-        static constexpr uint8_t MAX_ROWS = 96;
+        // A sanity cap, not a size: the user's map (DecodeTable) is capped at
+        // this too; the factory has 62.
+        static constexpr uint16_t MAX_ROWS = 512;
 
         // A DF_KEY row's value changed. Runs on the decoding task: post, never
         // block. No compiled row has the flag yet.
         using KeyFn = void (*)(uint8_t sig, int32_t value, void* ctx);
 
-        // The table is NOT copied: `rows` must outlive this object (the
-        // compiled defaults live in flash). It must be sorted by id; false,
+        // The rows are copied (PSRAM), so the caller's table may change or go
+        // the moment this returns. They must be sorted by id; false,
         // and nothing loaded, when it is not or holds more than MAX_ROWS rows,
-        // or a row names a signal or a width that does not exist.
-        bool load(const DecodeRow* rows, uint8_t n);
+        // a row names a signal or a width that does not exist, or there is no
+        // memory for the per-row state.
+        bool load(const DecodeRow* rows, uint16_t n);
         // decode_defaults.inc.
         bool loadDefaults();
-        static const DecodeRow* defaults(uint8_t& n);
+        static const DecodeRow* defaults(uint16_t& n);
 
         void onKey(KeyFn fn, void* ctx) { _key = fn; _keyCtx = ctx; }
 
@@ -84,8 +87,8 @@ namespace Vehicle
         // One row's value from a payload; false when the payload is too short.
         static bool extract(const DecodeRow& r, const uint8_t* data, uint8_t len, int32_t& out);
 
-        uint8_t          rows() const { return _n; }
-        const DecodeRow& row(uint8_t i) const { return _r[i < _n ? i : 0]; }
+        uint16_t         rows() const { return _n; }
+        const DecodeRow& row(uint16_t i) const { return _r[i < _n ? i : 0]; }
 
         // Since boot, the decoding task's own.
         uint32_t hits() const    { return _hits; }     // frames that matched a row
@@ -95,14 +98,15 @@ namespace Vehicle
 
     private:
         // The first row with this id, or _n.
-        uint8_t lowerBound(uint32_t id) const;
+        uint16_t lowerBound(uint32_t id) const;
 
-        const DecodeRow* _r = nullptr;
-        uint8_t  _n = 0;
+        PsArray<DecodeRow> _rows;      // load()'s copy
+        const DecodeRow* _r = nullptr; // _rows.data()
+        uint16_t _n = 0;
         // Per row, the decoding task's own: the latch deadline and its value,
-        // and a key row's last value.
-        uint32_t _until[MAX_ROWS] = {};
-        int32_t  _held[MAX_ROWS] = {};
+        // and a key row's last value. As long as the table (load).
+        struct RowState { uint32_t until; int32_t held; };
+        PsArray<RowState> _st;
         KeyFn    _key = nullptr;
         void*    _keyCtx = nullptr;
         uint32_t _hits = 0, _unknown = 0, _short = 0, _invalid = 0;

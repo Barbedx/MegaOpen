@@ -81,8 +81,8 @@ namespace
             how[s] = Vehicle::Derived::inputs(s, in) ? 'd' : 'o';
         }
         App::Car::decodeTable().read([&](const Vehicle::DecodeTable& t) {
-            for (uint8_t i = 0; i < t.nRows; ++i) if (t.row[i].sig < Vehicle::SIG_COUNT) how[t.row[i].sig] = 'c';
-            for (uint8_t i = 0; i < t.nK; ++i)    if (t.k[i].sig < Vehicle::SIG_COUNT) how[t.k[i].sig] = 'k';
+            for (uint16_t i = 0; i < t.row.size(); ++i) if (t.row[i].sig < Vehicle::SIG_COUNT) how[t.row[i].sig] = 'c';
+            for (uint16_t i = 0; i < t.k.size(); ++i)   if (t.k[i].sig < Vehicle::SIG_COUNT) how[t.k[i].sig] = 'k';
             for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s)
                 if (how[s] == 'c') conf[s] = t.measured(s) ? 2 : 1;
         });
@@ -167,8 +167,8 @@ void WebUi::routesMap()
             if (t.sig < Vehicle::SIG_COUNT)
                 App::Car::decodeTable().read([&](const Vehicle::DecodeTable& d) {
                     const int ri = d.rowOf(t.sig), ki = d.constOf(t.sig);
-                    if (ri >= 0)      { row = d.row[ri]; src = Vehicle::SRC_CAN; }
-                    else if (ki >= 0) { kv = d.k[ki].value; src = Vehicle::SRC_CONST; }
+                    if (ri >= 0)      { row = d.row[(uint16_t)ri]; src = Vehicle::SRC_CAN; }
+                    else if (ki >= 0) { kv = d.k[(uint16_t)ki].value; src = Vehicle::SRC_CONST; }
                 });
             const uint32_t left = t.sig < Vehicle::SIG_COUNT ? App::Car::testLeftMs(t.sig, now) : 0;
             const bool has = _state && t.sig < Vehicle::SIG_COUNT && _state->has(t.sig);
@@ -368,7 +368,7 @@ void WebUi::routesMap()
         // The map first, all or nothing (DecodeTable::apply builds it on a
         // copy): a refused request has changed nothing.
         if (reset || n || hasConf) {
-            // Static: 2.4 kB, and only this handler stages the map.
+            // Static: only this handler stages the map (its rows are in PSRAM).
             static Vehicle::DecodeTable scratch;
             Vehicle::DecodeChange c;
             c.reset = reset; c.ed = ed; c.n = n;
@@ -394,7 +394,7 @@ void WebUi::routesMap()
             if (!n && !hasConf) {
                 if (!CarStore::factoryDecode()) why = "file_failed";
             } else {
-                Scratch<Vehicle::DecodeTable> copy;   // 2.4 kB, not on httpd's stack
+                Scratch<Vehicle::DecodeTable> copy;
                 if (!copy) why = "no_memory";
                 else if (!App::Car::decodeTable().read([&](const Vehicle::DecodeTable& t) { *copy = t; }))
                     why = "busy";
@@ -512,7 +512,7 @@ void WebUi::mapToFile(ChunkOut& out)
 const char* WebUi::mapFromFile(JsonObjectConst file, bool dry, bool& changedMap, bool& changedHu)
 {
     changedMap = changedHu = false;
-    // Static: 2.4 kB, and only the config POST uses it (httpd is one task).
+    // Static: only the config POST uses it (httpd is one task).
     static Vehicle::DecodeTable table;
     if (!file["decode"].isNull()) {
         if (!file["decode"].is<JsonObjectConst>()) return "decode: not_object";
@@ -544,7 +544,7 @@ const char* WebUi::mapFromFile(JsonObjectConst file, bool dry, bool& changedMap,
     if (changedMap) {
         if (!App::Car::decodeTable().edit([&](Vehicle::DecodeTable& t) { t = table; })) return "busy";
         if (!CarStore::saveDecode(table)) return "file_failed";
-        LOGI("map", "set from a settings file: %u rows, %u constants", (unsigned)table.nRows, (unsigned)table.nK);
+        LOGI("map", "set from a settings file: %u rows, %u constants", (unsigned)table.row.size(), (unsigned)table.k.size());
     }
     if (changedHu) {
         // Send and the field map only: the protocol's tuning comes with the

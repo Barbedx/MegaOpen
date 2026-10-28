@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 #include "CanDecode.h"
 #include "../utils/UiList.h"
+#include "../utils/PsArray.h"
 
 // The user's decode map: what POST /api/map edits, what the car file keeps
 // (CarFile, by signal name), and what the car task loads into CanDecode
@@ -47,22 +48,23 @@ namespace Vehicle
     };
 
     struct DecodeTable {
-        static constexpr uint8_t MAX_ROWS   = CanDecode::MAX_ROWS;   // 96
-        static constexpr uint8_t MAX_CONSTS = 16;
+        // Sanity caps, not sizes: the arrays grow as a car needs (PsArray,
+        // in PSRAM). The factory has 62 rows.
+        static constexpr uint16_t MAX_ROWS   = CanDecode::MAX_ROWS;   // 512
+        static constexpr uint16_t MAX_CONSTS = 128;
 
-        // THE BLOB, version 1, little-endian:
+        // 1.6.x's NVS blob (read once by CarStore), version 1, little-endian:
         //   [1] version  [1] rows  [1] constants
         //   per row, 23 B: id u32, byte, len, shift, mask u32, mul i16, div i16,
         //                  add i32, sig, flags, holdMs u16
         //   per constant, 5 B: sig, value i32
         static constexpr uint8_t ROW_BYTES   = 23;
         static constexpr uint8_t CONST_BYTES = 5;
-        static constexpr size_t  BLOB_MAX    = 3 + MAX_ROWS * ROW_BYTES + MAX_CONSTS * CONST_BYTES;
+        static constexpr uint8_t LEGACY_ROWS = 96, LEGACY_CONSTS = 16;   // its caps
+        static constexpr size_t  BLOB_MAX    = 3 + LEGACY_ROWS * ROW_BYTES + LEGACY_CONSTS * CONST_BYTES;
 
-        DecodeRow   row[MAX_ROWS];
-        uint8_t     nRows = 0;
-        DecodeConst k[MAX_CONSTS];
-        uint8_t     nK = 0;
+        PsArray<DecodeRow>   row;   // sorted by id (CanDecode needs it)
+        PsArray<DecodeConst> k;
 
         // decode_defaults.inc, no constants.
         void factory();
@@ -80,11 +82,11 @@ namespace Vehicle
         bool setMeasured(uint8_t sig, bool on);
 
         // All or nothing: `c` is built on `scratch` (a copy of this, the
-        // caller's: 2.4 kB, not for the stack) and copied back only when
+        // caller's; its rows are in PSRAM) and copied back only when
         // every part fits. nullptr = applied; else one of the WHY_s, with
         // this untouched.
-        static constexpr const char* WHY_ROWS   = "map_full_rows 96";     // the map is full: 96 CAN rows
-        static constexpr const char* WHY_CONSTS = "map_full_consts 16";   // the map is full: 16 constants
+        static constexpr const char* WHY_ROWS   = "map_full_rows 512";     // the map is full: 512 CAN rows
+        static constexpr const char* WHY_CONSTS = "map_full_consts 128";   // the map is full: 128 constants
         static constexpr const char* WHY_NO_CAN = "confirm: no_can_row";   // the signal has no CAN row to confirm
         const char* apply(const DecodeChange& c, DecodeTable& scratch);
         // decode_defaults.inc binds `sig` and has measured it: a ✓ there is
@@ -98,10 +100,16 @@ namespace Vehicle
         bool bindCan(uint8_t sig, const DecodeRow& r);
         bool bindConst(uint8_t sig, int32_t value);
         void unbind(uint8_t sig);
+        // One more row (kept sorted) / constant, beside what binds its
+        // signal already (a signal may have several rows). False: at the cap
+        // or out of memory.
+        bool addRow(const DecodeRow& r);
+        bool addConst(uint8_t sig, int32_t value);
+        void sortRows();
 
-        // The blob's bytes (at most BLOB_MAX) / back. unpack() checks what
-        // CanDecode::load() would and the caps, and leaves the table empty
-        // when it refuses.
+        // The 1.6.x blob's bytes (at most BLOB_MAX; 0 past its caps) / back.
+        // unpack() checks what CanDecode::load() would and the caps, and
+        // leaves the table empty when it refuses.
         size_t pack(uint8_t* out) const;
         bool   unpack(const uint8_t* in, size_t n);
     };
