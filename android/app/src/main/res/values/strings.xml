@@ -95,6 +95,15 @@
     <string name="diag_usb_up">USB: firmware %1$s (%2$s)</string>
     <string name="diag_usb_failed">USB: failed, %1$s</string>
     <string name="diag_usb_stats">Frames in %1$d, out %2$d, bad bytes %3$d; requests %4$d, failed %5$d; the board\'s internet %6$d</string>
+    <string name="diag_usb_seen">USB devices the head unit sees</string>
+    <string name="diag_usb_seen_none">None. Plug the board, a phone or a flash drive into the same cable and port: if nothing shows up here, that port or cable carries no data.</string>
+    <string name="diag_usb_dev">%1$s (%2$s), classes %3$s</string>
+    <string name="diag_usb_dev_ours">The board: %1$s (%2$s), classes %3$s</string>
+    <string name="diag_usb_noname">no name</string>
+    <string name="diag_usb_rom">An ESP32-S3 on its built-in USB (303A:1001): the board is plugged in, but its firmware did not bring up its own USB.</string>
+    <string name="diag_usb_others">Devices are seen, the board is not. If they were in the same cable and port, the port works: suspect the board\'s cable, its power (the LED rings) or the board.</string>
+    <string name="diag_usb_came">%1$s plugged in: %2$s (%3$s)</string>
+    <string name="diag_usb_went">%1$s unplugged: %2$s (%3$s)</string>
     <string name="diag_last_error">Last error: %1$s</string>
     <string name="diag_about">MegaOpen Companion %1$s · github.com/%2$s</string>
 

@@ -87,6 +87,15 @@
     <string name="diag_usb_up">USB: прошивка %1$s (%2$s)</string>
     <string name="diag_usb_failed">USB: збій, %1$s</string>
     <string name="diag_usb_stats">Кадрів прийнято %1$d, надіслано %2$d, битих байтів %3$d; запитів %4$d, невдалих %5$d; інтернет плати %6$d</string>
+    <string name="diag_usb_seen">USB-пристрої, які бачить магнітола</string>
+    <string name="diag_usb_seen_none">Жодного. Встав плату, телефон або флешку в той самий кабель і порт: якщо тут нічого не з\'явиться, цей порт або кабель не передає даних.</string>
+    <string name="diag_usb_dev">%1$s (%2$s), класи %3$s</string>
+    <string name="diag_usb_dev_ours">Плата: %1$s (%2$s), класи %3$s</string>
+    <string name="diag_usb_noname">без назви</string>
+    <string name="diag_usb_rom">ESP32-S3 на своєму вбудованому USB (303A:1001): плата підключена, але її прошивка не підняла власний USB.</string>
+    <string name="diag_usb_others">Пристрої видно, плату ні. Якщо вони були в тому самому кабелі й порту, порт робочий: підозрюй кабель плати, її живлення (кільця) або саму плату.</string>
+    <string name="diag_usb_came">%1$s підключено: %2$s (%3$s)</string>
+    <string name="diag_usb_went">%1$s від\'єднано: %2$s (%3$s)</string>
     <string name="diag_last_error">Остання помилка: %1$s</string>
     <string name="diag_about">MegaOpen Компаньйон %1$s · github.com/%2$s</string>
 

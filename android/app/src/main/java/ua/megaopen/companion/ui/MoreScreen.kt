@@ -24,12 +24,16 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.launch
 import ua.megaopen.companion.AppGraph
 import ua.megaopen.companion.BuildConfig
 import ua.megaopen.companion.R
 import ua.megaopen.companion.board.Discovery
 import ua.megaopen.companion.link.UsbLink
+import ua.megaopen.companion.link.UsbSeen
 import ua.megaopen.companion.update.Releases
 
 @Composable
@@ -146,6 +150,31 @@ private fun DiagnosticsSection(graph: AppGraph) {
         Text(usbText)
         Note(stringResource(R.string.diag_usb_stats, st.rxFrames, st.txFrames, st.bad, st.requests, st.failures, st.netRequests))
         if (st.lastError.isNotEmpty()) Note(stringResource(R.string.diag_last_error, st.lastError))
+        UsbDevices(graph)
         Note(stringResource(R.string.diag_about, BuildConfig.VERSION_NAME, BuildConfig.RELEASES_REPO))
+    }
+}
+
+// Every USB device the head unit sees (UsbSeen), the board marked, and what
+// came and went: the board missing while a phone in the same cable and port
+// shows up says the port works and the board, its cable or its power does not.
+@Composable
+private fun UsbDevices(graph: AppGraph) {
+    val seen by graph.usbSeen.devices.collectAsStateWithLifecycle()
+    val log by graph.usbSeen.log.collectAsStateWithLifecycle()
+    val noName = stringResource(R.string.diag_usb_noname)
+    val label = { d: UsbSeen.Dev -> d.name.ifEmpty { noName } }
+    Text(stringResource(R.string.diag_usb_seen))
+    if (seen.isEmpty()) Note(stringResource(R.string.diag_usb_seen_none))
+    seen.forEach { d ->
+        Note(stringResource(if (d.ours) R.string.diag_usb_dev_ours else R.string.diag_usb_dev, label(d), d.id, d.classText))
+    }
+    when {
+        seen.any { it.rom } -> Note(stringResource(R.string.diag_usb_rom))
+        seen.isNotEmpty() && seen.none { it.ours } -> Note(stringResource(R.string.diag_usb_others))
+    }
+    val clock = remember { SimpleDateFormat("HH:mm:ss", Locale.ROOT) }
+    log.asReversed().forEach { e ->
+        Note(stringResource(if (e.came) R.string.diag_usb_came else R.string.diag_usb_went, clock.format(Date(e.atMs)), label(e.dev), e.dev.id))
     }
 }

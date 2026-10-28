@@ -9,11 +9,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.combine
@@ -36,7 +38,9 @@ class CompanionService : LifecycleService() {
     // Unplugged: Android says so here, the link closes at once.
     private val detach = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action == UsbManager.ACTION_USB_DEVICE_DETACHED) graph.usb.close()
+            if (intent.action != UsbManager.ACTION_USB_DEVICE_DETACHED) return
+            graph.usb.close()
+            IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)?.let { graph.usbSeen.detached(it) }
         }
     }
 
@@ -52,6 +56,7 @@ class CompanionService : LifecycleService() {
             ContextCompat.RECEIVER_EXPORTED)
 
         graph.connection.start()
+        graph.usbSeen.start()
         reminders = Reminders(this, lifecycleScope, graph.settings, graph.connection) { text -> speak(text) }
         lifecycleScope.launch {
             graph.connection.alerts.collect { a ->
