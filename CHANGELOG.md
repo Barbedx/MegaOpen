@@ -15,6 +15,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Changed
 - The head-unit protocol is a module of its own (rules 1.7, slice 0; docs/design/rules.md): what goes out, what comes in (clock, requests, keys) and the track text all live in `Canbox::Protocol` (Raise 112 today). Nothing changes on the wire: all 24 messages byte-identical on the bench. The protocol's settings moved under `raise.*` (`raise.titleCmd`, `raise.artistCmd`), a new setting `huProtocol` chooses the protocol, and «Мапа» › «Поля ГУ» draws the protocol's settings from the settings registry.
+- The two «закріпити команду назви/виконавця» rows left «Сервіс»: they are `raise.titleCmd` / `raise.artistCmd` on «Мапа» › «Поля ГУ». A 1.6.7 settings file still imports; its `huTitleCmd` / `huArtistCmd` are skipped (a pinned command is not carried over, the board learns it again), `hu.units` comes back through `raise.fuelUnit` / `raise.tripUnit`.
+- The Raise settings are stored in a new layout (34 B; the old one still reads). An update that rolls back to 1.6.7 or older reads them as invalid and starts from the Raise defaults: units, the 0x28 form and the steering would need setting again then.
+- 1.6.1's migration of the old head-unit experiment switches (`huExp`, a file's `hu.exp`) is gone.
 
 ## [1.6.7] - 2026-10-28
 
