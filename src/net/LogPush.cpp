@@ -685,8 +685,10 @@ namespace LogPush
             uint32_t ms = 0, dummy = 0;
             const int st = putFile(repo, tok, rel, msg, buf, n, 0, err, ms);
             heap_caps_free(buf);
+            // Tried: the next one in SNAP_MS either way, so a snapshot GitHub
+            // keeps refusing never stands in front of the log parts.
+            s_snapAt = millis() | 1;
             if (st == 201 || st == 200 || st == 422) {   // 422: this minute's is there already
-                s_snapAt = millis() | 1;
                 sentPast(st, n);
                 LOGI("push", "%s/%s: %u bytes in %u ms", s_dev, rel, (unsigned)n, (unsigned)ms);
             } else {

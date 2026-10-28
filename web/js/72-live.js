@@ -67,7 +67,8 @@ drawAlerts(){const so=[['','—'],...this.M.map(m=>[m[0],lvName(m)])],co=this.C.
 async bind(i,id){const open=$(`#lvT tr.bindEd[data-for="${id}"]`);if(open){open.remove();return}
  const r=((await API.get('/api/map?sig='+encodeURIComponent(id))).rows||[])[0];
  /* після запиту: таблиця могла перемалюватися (тік кожні 2 с) — рядок шукаємо знову */
- const b=$(`#lvT [data-bind="${i}"]`),tr=b&&b.closest('tr');if(!r||!tr||$('#lvT tr.bindEd'))return;
+ const b=$(`#lvT [data-bind="${i}"]`),tr=b&&b.closest('tr');if(!r||!tr)return;
+ $$('#lvT tr.bindEd').forEach(x=>x.remove());delete BIND.learn[id];
  tr.insertAdjacentHTML('afterend',bindEd(r,6));BIND.vis($(`#lvT tr.bindEd[data-for="${id}"]`));if(has('vehicle'))BIND.ids()},
 readAlerts(){return $$('#alT tr').map(tr=>{const g=f=>val($(`[data-f="${f}"]`,tr));return [g('sig')||'',g('cond')||'rises',g('thr')??0,g('cd')??0,!!g('on')]})},
 async tick(){const a=$('[data-f="lvAuto"]');if(!a||!a.checked||this.n++%2)return;const r=await API.get('/api/map?live=1');this.draw(r)}};

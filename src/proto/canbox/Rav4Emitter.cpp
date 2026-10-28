@@ -112,13 +112,14 @@ namespace Canbox
         if (bits & 0x80) return false;
         const uint8_t at = (bits >> 5) & 3;
         if ((bits & 16) && (at == 3 || (at == 1 && (bits & 2)) || (at != 1 && (bits & 4)))) return false;
+        bool fit = true;   // a full map refuses a rule: then the switches stay in NVS
         auto own = [&](uint8_t f) {
             FieldRule r; r.field = f; r.kind = FK_SIGNAL; r.src = f;
-            if (!m.find(f)) m.set(r);
+            if (!m.find(f)) fit &= m.set(r);
         };
         auto from = [&](uint8_t f, uint8_t src, int16_t div) {
             FieldRule r; r.field = f; r.kind = FK_SIGNAL; r.src = src; r.div = div;
-            if (!m.find(f)) m.set(r);
+            if (!m.find(f)) fit &= m.set(r);
         };
         if (bits & 1) own(SIG_ENG_TEMP);
         if (bits & 2) own(SIG_FUEL_PCT);
@@ -130,7 +131,7 @@ namespace Canbox
         }
         if (bits & 16)   // volts x100 -> x10, rounded
             from(at == 0 ? SIG_RANGE : at == 1 ? SIG_FUEL_PCT : SIG_FUEL_AVG, SIG_BATT_V, 10);
-        return true;
+        return fit;
     }
 
     // ---- Tuning persistence -------------------------------------------------

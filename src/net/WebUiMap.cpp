@@ -306,8 +306,12 @@ void WebUi::routesMap()
                 ru.add = row["add"] | 0;
             } else return r->reply(400, "text/plain", "param from");
             if (ru.kind == Canbox::FK_SIGNAL && !ru.div) return r->reply(400, "text/plain", "param div");
-            if (!m.set(ru)) return r->reply(400, "text/plain", "rows_max 32");
+            if (!m.set(ru)) return r->reply(400, "text/plain", "rows_max 29");
         }
+        // The protocol's defaults go into the same 32-rule map as the owner's
+        // (withDefaults): room for both, or a rule would be dropped silently.
+        if (m.count() > Canbox::FieldMap::MAX - Canbox::activeProtocol().defaults().count())
+            return r->reply(400, "text/plain", "rows_max 29");
         const bool staged = App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& c) { c.fields = m; });
         if (!staged) return r->reply(503, "text/plain", "busy");
         const bool saved = _cfg->saveFieldMap(m);
@@ -543,7 +547,7 @@ void WebUi::mapToFile(ChunkOut& out)
     if (cBox && App::Hu::emitterCfg().peek(*cBox)) {
         const App::Hu::EmitterCfg& c = *cBox;
         char b[120];
-        out.put(b, fit(snprintf(b, sizeof(b), ",\"hu\":{\"send\":%s,\"units\":{\"fuel\":%u,\"trip\":%u},\"fields\":\"",
+        out.put(b, fit(snprintf(b, sizeof(b), ",\"hu\":{\"send\":%s,\"units\":{\"fuel\":%u,\"trip\":%u}",
                                 c.enabled ? "true" : "false", (unsigned)c.tuning.fuelUnit,
                                 (unsigned)c.tuning.tripUnit), sizeof(b)));
         // The field map, packed (FieldMap::pack) and base64, like the decode
@@ -555,9 +559,13 @@ void WebUi::mapToFile(ChunkOut& out)
         Scratch<Fm> fm;
         size_t fo = 0;
         const size_t fn = fm ? c.fields.pack(fm->blob, sizeof(fm->blob)) : 0;
-        if (fn && mbedtls_base64_encode((unsigned char*)fm->b64, sizeof(fm->b64), &fo, fm->blob, fn) == 0)
+        // No memory: the key is left out (an import keeps its map), never "".
+        if (fn && mbedtls_base64_encode((unsigned char*)fm->b64, sizeof(fm->b64), &fo, fm->blob, fn) == 0) {
+            out.put(",\"fields\":\"");
             out.put(fm->b64, fo);
-        out.put("\"}");
+            out.put("\"");
+        }
+        out.put("}");
     }
 }
 

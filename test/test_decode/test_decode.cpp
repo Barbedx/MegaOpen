@@ -997,9 +997,41 @@ void test_alert_cells_check_their_ranges_and_round_trip()
     TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
     for (uint8_t r = 0; r < AlertRules::ROWS; ++r)
         for (uint8_t c = 0; c < AlertRules::COLS; ++c) TEST_ASSERT_EQUAL_INT32(a.get(r, c), b.get(r, c));
-    blob[0] = 2;
+    blob[0] = 3;
     TEST_ASSERT_FALSE(b.fromBlob(blob, sizeof(blob)));
     TEST_ASSERT_FALSE(b.fromBlob(blob, sizeof(blob) - 1));
+}
+
+// An empty row is saved as SIG_SAVED_NONE, not SIG_COUNT: SIG_COUNT moves with
+// every appended signal, and 1.6.3 read 1.6.2's empty rows as fuel_pct.
+void test_alert_empty_rows_survive_a_new_signal()
+{
+    AlertRules a;                                  // all rows empty
+    a.set(0, AlertRules::C_SIG, SIG_BATT_V);
+    uint8_t blob[AlertRules::BLOB_BYTES];
+    a.toBlob(blob);
+    TEST_ASSERT_EQUAL_HEX8(2, blob[0]);
+    TEST_ASSERT_EQUAL_HEX8(SIG_BATT_V, blob[1]);
+    TEST_ASSERT_EQUAL_HEX8(SIG_SAVED_NONE, blob[1 + AlertRules::ROW_BYTES]);
+    AlertRules b;
+    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
+    TEST_ASSERT_EQUAL_UINT8(SIG_BATT_V, b.r[0].sig);
+    TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, b.r[1].sig);
+    // A 1.6.2 blob (v1): its empty rows are 1.6.2's SIG_COUNT (= SIG_FUEL_PCT),
+    // a 1.6.3 one SIG_FUEL_PCT + 1: both come back empty, real ids stay.
+    blob[0] = 1;
+    blob[1 + AlertRules::ROW_BYTES] = SIG_FUEL_PCT;
+    blob[1 + 2 * AlertRules::ROW_BYTES] = SIG_FUEL_PCT + 1;
+    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
+    TEST_ASSERT_EQUAL_UINT8(SIG_BATT_V, b.r[0].sig);
+    TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, b.r[1].sig);
+    TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, b.r[2].sig);
+    TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, b.r[3].sig);   // SIG_SAVED_NONE in a v1 blob: past the list
+    // The car screen's slots go through the same pair.
+    TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, sigFromSaved(SIG_FUEL_PCT, true));
+    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_PCT, sigFromSaved(SIG_FUEL_PCT, false));
+    TEST_ASSERT_EQUAL_UINT8(SIG_ENG_TEMP, sigFromSaved(SIG_ENG_TEMP, true));
+    TEST_ASSERT_EQUAL_UINT8(SIG_SAVED_NONE, sigToSaved(SIG_COUNT));
 }
 
 void test_alert_low_fuel_edge_fires_once_and_waits_for_the_glass()
@@ -1262,6 +1294,7 @@ int main(int, char**)
     RUN_TEST(test_reminder_speeds_are_settable);
     RUN_TEST(test_a_bound_derived_signal_is_left_to_its_binding);
     RUN_TEST(test_alert_cells_check_their_ranges_and_round_trip);
+    RUN_TEST(test_alert_empty_rows_survive_a_new_signal);
     RUN_TEST(test_alert_low_fuel_edge_fires_once_and_waits_for_the_glass);
     RUN_TEST(test_alert_already_on_at_first_sight_counts_as_rising);
     RUN_TEST(test_alert_pending_is_dropped_when_its_condition_clears);

@@ -60,8 +60,10 @@ namespace Cfg
         {
             static const char* const kSig[3] = {"carSig0", "carSig1", "carSig2"};
             for (uint8_t i = 0; i < 3; ++i) {
-                const uint8_t v = _p.isKey(kSig[i]) ? _p.getUChar(kSig[i], _s.carSig[i]) : _s.carSig[i];
-                _s.carSig[i] = v <= Vehicle::SIG_COUNT ? v : (uint8_t)Vehicle::SIG_COUNT;
+                // "carSigV" 2: an empty slot saved as SIG_SAVED_NONE; without
+                // it, the saving build's SIG_COUNT (Signals.h).
+                const bool legacy = !_p.isKey("carSigV");
+                if (_p.isKey(kSig[i])) _s.carSig[i] = Vehicle::sigFromSaved(_p.getUChar(kSig[i], 0), legacy);
             }
         }
         {
@@ -187,9 +189,10 @@ namespace Cfg
         _p.putBool  ("autoTime", _s.autoTime);
         _p.putBool  ("mediaScr", _s.mediaScreen);
         _p.putBool  ("carScr",   _s.carScreen);
-        _p.putUChar ("carSig0",  _s.carSig[0]);
-        _p.putUChar ("carSig1",  _s.carSig[1]);
-        _p.putUChar ("carSig2",  _s.carSig[2]);
+        _p.putUChar ("carSig0",  Vehicle::sigToSaved(_s.carSig[0]));
+        _p.putUChar ("carSig1",  Vehicle::sigToSaved(_s.carSig[1]));
+        _p.putUChar ("carSig2",  Vehicle::sigToSaved(_s.carSig[2]));
+        _p.putUChar ("carSigV",  2);
         _p.putUChar ("carPre",   _s.carPreset);
 
         _p.putBool  ("ancsPop", _s.ancsPopup);

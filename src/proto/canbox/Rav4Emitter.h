@@ -183,8 +183,8 @@ namespace Canbox
         const FieldMap& effective() const { return _map; }      // what is sent
         // The old experiment switches (NVS "huExp", settings files before
         // 1.6.2) as rules, added to `m` where it has none for that field: the
-        // one-time migration. False when a bit has no field (0x80) or two
-        // fill one field.
+        // one-time migration. False when a bit has no field (0x80), two fill
+        // one field, or `m` has no room left.
         static bool experimentsToRules(uint8_t bits, FieldMap& m);
 
         Rav4Emitter();

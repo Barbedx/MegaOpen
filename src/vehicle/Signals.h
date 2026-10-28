@@ -248,6 +248,26 @@ namespace Vehicle
         SIG_COUNT
     };
 
+    // "No signal" as it is SAVED (the alert blob, the car screen's NVS keys).
+    // In RAM an empty row is SIG_COUNT, but SIG_COUNT moves each time a
+    // signal is appended, so a saved SIG_COUNT read by a newer build is that
+    // build's new signal: 1.6.3's empty alert rows and car-screen slots came
+    // back as fuel_pct. Saved, an empty row is SIG_SAVED_NONE.
+    constexpr uint8_t SIG_SAVED_NONE = 0xFF;
+    // What builds up to 1.6.3 saved for an empty row: their SIG_COUNT, which
+    // was SIG_FUEL_PCT (up to 1.6.2) or SIG_FUEL_PCT + 1 (1.6.3). An older
+    // record's value at or past this is read as empty (a fuel_pct chosen on
+    // 1.6.3 alone is lost with it).
+    constexpr uint8_t SIG_LEGACY_EMPTY_FROM = SIG_FUEL_PCT;
+    // A saved id to RAM's: empty -> SIG_COUNT. `legacy`: a record from before
+    // SIG_SAVED_NONE.
+    constexpr uint8_t sigFromSaved(uint8_t v, bool legacy)
+    {
+        return legacy ? (v >= SIG_LEGACY_EMPTY_FROM ? (uint8_t)SIG_COUNT : v)
+                      : (v < SIG_COUNT ? v : (uint8_t)SIG_COUNT);
+    }
+    constexpr uint8_t sigToSaved(uint8_t s) { return s < SIG_COUNT ? s : SIG_SAVED_NONE; }
+
     struct Meta {
         const char* name;
         const char* unit;

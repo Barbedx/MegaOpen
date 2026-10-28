@@ -1531,6 +1531,9 @@ static void addressText(char* head, size_t hn, char* body, size_t bn)
 // its TLS handshake.
 static size_t logPushSnapshot(char* out, size_t cap)
 {
+    // dispatch() holds the settings lock around every route; the builders
+    // read Strings in Settings (bleMode), so this takes it too (recursive).
+    Cfg::Config::Guard g(g_cfg);
     JsonDocument d(&PsramJson::instance());
     d["uptimeMs"] = millis();
     g_web.statusJson(d["status"].to<JsonObject>());
@@ -1974,8 +1977,7 @@ void setup()
             const bool saved = ok && g_cfg.saveFieldMap(ec.fields);
             if (saved) g_cfg.clearHuExp();
             LOGW("hu", "experiments 0x%02X -> field map: %s", (unsigned)bits,
-                 !ok ? "not convertible, dropped" : saved ? "saved" : "NOT saved, again next boot");
-            if (!ok) g_cfg.clearHuExp();
+                 !ok ? "not convertible, kept for the next boot" : saved ? "saved" : "NOT saved, again next boot");
         }
         if (ec.fields.count())
             LOGI("hu", "field map: %u rule(s) from NVS", (unsigned)ec.fields.count());

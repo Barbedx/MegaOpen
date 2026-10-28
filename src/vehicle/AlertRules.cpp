@@ -73,9 +73,9 @@ namespace Vehicle
     size_t AlertRules::toBlob(uint8_t* out) const
     {
         uint8_t* p = out;
-        *p++ = 1;
+        *p++ = 2;   // 2: an empty row is SIG_SAVED_NONE (1: the saving build's SIG_COUNT)
         for (const AlertRule& x : r) {
-            *p++ = x.sig;
+            *p++ = sigToSaved(x.sig);
             *p++ = x.cond;
             const uint32_t t = (uint32_t)x.thr;
             *p++ = (uint8_t)t; *p++ = (uint8_t)(t >> 8); *p++ = (uint8_t)(t >> 16); *p++ = (uint8_t)(t >> 24);
@@ -87,20 +87,20 @@ namespace Vehicle
 
     bool AlertRules::fromBlob(const uint8_t* in, size_t n)
     {
-        if (!in || n != BLOB_BYTES || in[0] != 1) return false;
+        if (!in || n != BLOB_BYTES || (in[0] != 1 && in[0] != 2)) return false;
+        const bool legacy = in[0] == 1;
         AlertRule t[ROWS];
         const uint8_t* p = in + 1;
         for (uint8_t i = 0; i < ROWS; ++i, p += ROW_BYTES) {
             AlertRule& x = t[i];
-            x.sig = p[0];
+            // A newer image's signal past this build's list empties that row
+            // rather than refusing the table.
+            x.sig = sigFromSaved(p[0], legacy);
             x.cond = p[1];
             x.thr = (int32_t)((uint32_t)p[2] | ((uint32_t)p[3] << 8) | ((uint32_t)p[4] << 16) | ((uint32_t)p[5] << 24));
             x.cooldownS = (uint16_t)(p[6] | (p[7] << 8));
             if (x.cooldownS < ALERT_COOLDOWN_MIN_S) x.cooldownS = ALERT_COOLDOWN_MIN_S;   // an older blob
             x.on = p[8] != 0;
-            // A signal index past this build's list (a newer image's blob)
-            // empties that row rather than refusing the table.
-            if (x.sig > SIG_COUNT) x.sig = SIG_COUNT;
             if (x.cond >= AC_COUNT || p[8] > 1) return false;
         }
         for (uint8_t i = 0; i < ROWS; ++i) r[i] = t[i];
