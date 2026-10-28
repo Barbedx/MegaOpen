@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- Formulas («Мапа» › «Формули», rules 1.7 slices 2-3): a signal can be computed from others by a formula typed on the page, `fuel_level * 100 / 60`, `held(speed > 5, 3)`, checked as you type (what is wrong and where). A new name is a signal of your own (group «Свої», its unit and decimals), usable anywhere a signal is: the car screen, another formula, the head unit's fields. A built-in's name computes that signal. The language: + - * / %, comparisons, and/or/not, min max abs clamp if has round lookup age, and over time delta changed rises falls rate integral avg held. In the car file and the settings file. `POST /api/expr` checks and evaluates one on the car now.
+
+### Changed
+- `fuel_pct` and `range_calc` are factory formulas now, not C++, and can be edited or put back («Заводські формули»). The range rounds to the nearest km (277.8 -> 278; it was cut down to 277). The average speed, trip, gear and the 0x551 consumption stay in the board's own math.
+- The car screen's three rows are saved by the signal's name, not its number (they move when signals are added); the old keys are read once.
+- A settings file may be up to 64 kB (was 16 kB); the CAN rows in it leave out keys at their default, half the size.
+
 ### Fixed
 - The USB link could lock up for good in the car ("USB: failed, write", no log push for 12 min, boot 192): when the app went without an unplug, the board waited 3 s for every frame it still had for it (alerts, responses) and did not read the next app's HELLO meanwhile, whose write timed out. Frames for an app gone quiet (no frame in 3 s) are now dropped at once, a host writing to the board is read first, and alerts wait for a live app. `/api/status` `usb` counts what the host did (`mounts`, `unmounts`, `suspends`, `resumes`) and the frames dropped; the log says each bus reset or suspend. Companion tries the USB again twice, 2 s apart, before it looks for the board on WiFi.
 
