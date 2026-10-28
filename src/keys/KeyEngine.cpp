@@ -14,7 +14,7 @@ namespace Keys
     {
         if (!s) return false;
         if (_sinkCount >= MAX_SINKS) {
-            LOGW("KEY", "sink chain full (%u): '%s' gets no keys - raise MAX_SINKS",
+            LOGW("key", "sink chain full (%u): '%s' gets no keys - raise MAX_SINKS",
                  (unsigned)MAX_SINKS, s->id());
             return false;
         }

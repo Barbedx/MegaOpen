@@ -104,7 +104,7 @@ namespace Bluetooth
         AppleNotificationService::Detach();
         CurrentTimeService::StopTimeService();
         StatusText = HasBond() ? "Waiting for phone" : "Pair from iPhone";
-        LOGI("BT", "AMS peer lost — caches detached");
+        LOGI("bt", "AMS peer lost — caches detached");
     }
 
     void ServicePending()
@@ -179,7 +179,7 @@ namespace Bluetooth
         {
             if (millis() - target->connectedMs > SECURE_WAIT_MS)
             {
-                LOGW("BT", "h=%u never encrypted after %us — not the phone",
+                LOGW("bt", "h=%u never encrypted after %us — not the phone",
                      (unsigned)h, (unsigned)(SECURE_WAIT_MS / 1000));
                 target->role = Ble::PeerRole::NotAms;
                 target->clientBound = false;
@@ -191,7 +191,7 @@ namespace Bluetooth
             {
                 lastSecureAttempt = millis();
                 target->secureTries++;
-                LOGI("BT", "Initiating pairing (try %u) — accept the prompt on your iPhone",
+                LOGI("bt", "Initiating pairing (try %u) — accept the prompt on your iPhone",
                      (unsigned)target->secureTries);
                 Client->secureConnection(/*async=*/true);
             }
@@ -204,7 +204,7 @@ namespace Bluetooth
 
         if (!AmsUp && expired)
         {
-            LOGI("BT", "h=%u exposed no AMS %us after encrypting — marking not-ams",
+            LOGI("bt", "h=%u exposed no AMS %us after encrypting — marking not-ams",
                  (unsigned)h, (unsigned)(SETUP_DEADLINE_MS / 1000));
             target->role        = Ble::PeerRole::NotAms;
             target->clientBound = false;
@@ -234,7 +234,7 @@ namespace Bluetooth
             Connected = true;
             BleHub::classifyAsAms(h); // AMS present == this is the phone; remember it
             StatusText = "Connected";
-            LOGI("BT", "AMS started");
+            LOGI("bt", "AMS started");
         }
         if (!BleHub::peers().byHandle(h))
         {
@@ -245,13 +245,13 @@ namespace Bluetooth
         if (AmsUp && !AncsUp && AppleNotificationService::StartNotificationService(Client))
         {
             AncsUp = true;
-            LOGI("BT", "ANCS started");
+            LOGI("bt", "ANCS started");
         }
 #endif
         if (AmsUp && !CtsUp && startCTS(Client))
         {
             CtsUp = true;
-            LOGI("BT", "CTS started");
+            LOGI("bt", "CTS started");
         }
     }
 
@@ -277,24 +277,24 @@ namespace Bluetooth
         // ble_gap_unpair() and can leave bonds behind. A leftover bond the phone
         // has forgotten shows as "pairs, then unpairs itself".
         const int before = NimBLEDevice::getNumBonds();
-        LOGI("BT", "Clearing all bonds (%d stored; this also drops the head unit's bond)...",
+        LOGI("bt", "Clearing all bonds (%d stored; this also drops the head unit's bond)...",
              before);
         const bool ok = NimBLEDevice::deleteAllBonds();
         int after = NimBLEDevice::getNumBonds();
         if (!ok || after > 0)
         {
             // ble_store_clear() wipes the whole security store at once.
-            LOGW("BT", "deleteAllBonds returned %s and left %d bond(s) — "
+            LOGW("bt", "deleteAllBonds returned %s and left %d bond(s) — "
                        "clearing the security store directly",
                  ok ? "true" : "FALSE", after);
             ble_store_clear();
             after = NimBLEDevice::getNumBonds();
         }
         if (after > 0)
-            LOGW("BT", "STILL %d bond(s) after clearing — the phone will meet a key "
+            LOGW("bt", "STILL %d bond(s) after clearing — the phone will meet a key "
                        "it does not have; expect pair-then-drop", after);
         else
-            LOGI("BT", "bonds %d -> 0", before);
+            LOGI("bt", "bonds %d -> 0", before);
         // Remembered roles outlive bonds; a wrong one (phone recorded as head
         // unit) is never re-probed, so clear them too.
         BleHub::ForgetKnownRoles();
@@ -307,7 +307,7 @@ namespace Bluetooth
                 p->clientBound = false;
         peerLost();
         StatusText = "Pair from iPhone";
-        LOGI("BT", "Bonds cleared. Also 'Forget this device' on the iPhone, then re-pair.");
+        LOGI("bt", "Bonds cleared. Also 'Forget this device' on the iPhone, then re-pair.");
     }
 
     const char *GetStatusText() { return StatusText; }

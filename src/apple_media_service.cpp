@@ -193,14 +193,14 @@ namespace AppleMediaService
 
     if (!client->isConnected())
     {
-      LOGE("AMS", "client not connected");
+      LOGE("ams", "client not connected");
       return false;
     }
 
     auto music_service = client->getService(APPLE_SERVICE_UUID);
     if (!music_service)
     {
-      LOGE("AMS", "Apple music service not found");
+      LOGE("ams", "Apple music service not found");
       return false;
     }
 
@@ -208,23 +208,23 @@ namespace AppleMediaService
     remote_command_characteristic = music_service->getCharacteristic(APPLE_REMOTE_COMMAND_UUID);
     if (!remote_command_characteristic)
     {
-      LOGE("AMS", "Apple remote command characteristic not found");
+      LOGE("ams", "Apple remote command characteristic not found");
       return false;
     }
     gNoResponse = remote_command_characteristic->canWriteNoResponse();
-    LOGI("AMS", "remote cmd: write %s (props write=%d nores=%d)",
+    LOGI("ams", "remote cmd: write %s (props write=%d nores=%d)",
          gNoResponse ? "without response" : "with response",
          (int)remote_command_characteristic->canWrite(), (int)gNoResponse);
 
     // Optional here: without it a long value stays cut, AMS still works.
     entity_attribute_characteristic = music_service->getCharacteristic(APPLE_ENTITY_ATTRIBUTE_UUID);
     if (!entity_attribute_characteristic)
-      LOGW("AMS", "entity attribute characteristic not found: long titles stay cut");
+      LOGW("ams", "entity attribute characteristic not found: long titles stay cut");
 
     auto entity_update = music_service->getCharacteristic(APPLE_ENTITY_UPDATE_UUID);
     if (!entity_update)
     {
-      LOGE("AMS", "Apple entity update characteristic not found");
+      LOGE("ams", "Apple entity update characteristic not found");
       Detach();
       return false;
     }
@@ -233,7 +233,7 @@ namespace AppleMediaService
                              {
                                if (length < 3)
                                {
-                                 LOGW("AMS", "entity_update notification less than 3 bytes, ignoring.");
+                                 LOGW("ams", "entity_update notification less than 3 bytes, ignoring.");
                                  return;
                                }
                                const uint8_t entity_id = data[0];
@@ -241,7 +241,7 @@ namespace AppleMediaService
                                const uint8_t flags = data[2];
                                std::string value(reinterpret_cast<char *>(data) + 3, length - 3);
 
-                               LOGD("AMS", "entity update. id: %i, attribute: %i, flags: %i, value: %s", entity_id, attribute_id, flags, value.c_str());
+                               LOGD("ams", "entity update. id: %i, attribute: %i, flags: %i, value: %s", entity_id, attribute_id, flags, value.c_str());
                                // Cut to the notification's size: shown as it is
                                // for now, the whole value is read by Process().
                                if ((flags & EntityUpdateFlagTruncated) && entity_id == EntityIDTrack && attribute_id < 8)
@@ -302,16 +302,16 @@ namespace AppleMediaService
     if (applied)
     {
       gRetried.fetch_and((uint8_t)~bit, std::memory_order_relaxed);
-      LOGI("AMS", "track attribute %u read whole: %u bytes", (unsigned)id, (unsigned)whole.size());
+      LOGI("ams", "track attribute %u read whole: %u bytes", (unsigned)id, (unsigned)whole.size());
     }
     else if (!(gRetried.fetch_or(bit, std::memory_order_relaxed) & bit))
     {
       gTruncated.fetch_or(bit, std::memory_order_relaxed);
-      LOGW("AMS", "track attribute %u: %s (%u bytes), once more", (unsigned)id,
+      LOGW("ams", "track attribute %u: %s (%u bytes), once more", (unsigned)id,
            selected ? "read short or empty" : "select write failed", (unsigned)whole.size());
     }
     else
-      LOGW("AMS", "track attribute %u: read failed again, the cut value stays", (unsigned)id);
+      LOGW("ams", "track attribute %u: read failed again, the cut value stays", (unsigned)id);
     return true;
   }
 
@@ -322,19 +322,19 @@ namespace AppleMediaService
       bool ok = remote_command_characteristic->writeValue(&commandID, sizeof(commandID), !gNoResponse);
       // Per write at DBG: a volume press is several; the key worker logs
       // the burst ([ble] vol).
-      if (ok) LOGD("AMS", "remote cmd id=%u write -> ok", commandID);
-      else    LOGW("AMS", "remote cmd id=%u write -> FAIL", commandID);
+      if (ok) LOGD("ams", "remote cmd id=%u write -> ok", commandID);
+      else    LOGW("ams", "remote cmd id=%u write -> FAIL", commandID);
       return ok;
     }
     else
     {
-      LOGE("AMS", "remote command characteristic is not initialized!");
+      LOGE("ams", "remote command characteristic is not initialized!");
       return false;
     }
   }
   void MediaInformation::dump() const
   {
-    LOGD("AMS",
+    LOGD("ams",
          "player: %s | playback state: %i, rate: %f, elapsed: %f, volume: %f | "
          "queue index: %i, count: %i, shuffle: %i, repeat: %i | "
          "artist: %s | album: %s | title: %s | duration: %f",

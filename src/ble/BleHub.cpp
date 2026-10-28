@@ -75,14 +75,14 @@ namespace BleHub
                 strncpy(gAmsAddr, gPendingAms, 17);
                 gAmsAddr[17] = 0;
                 p.putString("ams_addr", gAmsAddr);
-                LOGI("BLE", "remembered ams_addr = %s", gAmsAddr);
+                LOGI("ble", "remembered ams_addr = %s", gAmsAddr);
             }
             if (wantHid)
             {
                 strncpy(gHidAddr, gPendingHid, 17);
                 gHidAddr[17] = 0;
                 p.putString("hid_addr", gHidAddr);
-                LOGI("BLE", "remembered hid_addr = %s", gHidAddr);
+                LOGI("ble", "remembered hid_addr = %s", gHidAddr);
             }
             p.end();
             gPendingAms[0] = gPendingHid[0] = 0;
@@ -134,7 +134,7 @@ namespace BleHub
                     const size_t nameLen = strlen(gName);
                     const size_t total = 3 + (nameLen ? 2 + nameLen : 0) + sizeof(sol);
                     if (total > 31) {
-                        LOGW("BLE", "adv payload %u > 31 bytes with name '%s' — "
+                        LOGW("ble", "adv payload %u > 31 bytes with name '%s' — "
                                     "dropping the name to keep the AMS solicitation",
                              (unsigned)total, gName);
                         NimBLEAdvertisementData bare;
@@ -142,12 +142,12 @@ namespace BleHub
                         bare.addData(sol, sizeof(sol));
                         advData = bare;
                     } else {
-                        LOGI("BLE", "adv payload %u/31 bytes (name '%s', %u spare)",
+                        LOGI("ble", "adv payload %u/31 bytes (name '%s', %u spare)",
                              (unsigned)total, gName, (unsigned)(31 - total));
                         // Only 27 bytes ("MCD1") is proven to pair iPhones; at 31/31
                         // ("MegaOpen") none ever paired. Long names go in the scan response.
                         if (total > 27)
-                            LOGW("BLE", "adv payload %u/31 leaves only %u spare — the "
+                            LOGW("ble", "adv payload %u/31 leaves only %u spare — the "
                                         "only iPhone-pairing config ever proven used 27 "
                                         "(a 4-char name). Shorten it.",
                                  (unsigned)total, (unsigned)(31 - total));
@@ -173,7 +173,7 @@ namespace BleHub
             }
 
             adv->start();
-            LOGI("BLE", "advertising '%s' profile=%s", gName,
+            LOGI("ble", "advertising '%s' profile=%s", gName,
                  profile == AdvProfile::Dual ? "dual" : (profile == AdvProfile::HidOnly ? "hid" : "ams"));
         }
 
@@ -220,7 +220,7 @@ namespace BleHub
 
                 if (gPeers.count() >= maxPeers())
                 {
-                    LOGW("BLE", "mode allows %u peer(s), disconnecting h=%u",
+                    LOGW("ble", "mode allows %u peer(s), disconnecting h=%u",
                          (unsigned)maxPeers(), (unsigned)h);
                     s->disconnect(h);
                     return;
@@ -228,7 +228,7 @@ namespace BleHub
                 Ble::Peer *p = gPeers.add(h, otaBuf, idBuf);
                 if (!p)
                 {
-                    LOGW("BLE", "peer table full, disconnecting h=%u", (unsigned)h);
+                    LOGW("ble", "peer table full, disconnecting h=%u", (unsigned)h);
                     s->disconnect(h);
                     return;
                 }
@@ -244,7 +244,7 @@ namespace BleHub
                 else if (Ble::addrEq(p->idAddr, gHidAddr))
                     p->role = Ble::PeerRole::Hid;
 
-                LOGI("BLE", "connected h=%u %s id=%s role=%s enc=%d bonds=%d",
+                LOGI("ble", "connected h=%u %s id=%s role=%s enc=%d bonds=%d",
                      (unsigned)h, p->addr, p->idAddr, Ble::roleName(p->role),
                      (int)p->encrypted, NimBLEDevice::getNumBonds());
 
@@ -264,7 +264,7 @@ namespace BleHub
                 const Ble::PeerRole role = p ? p->role : Ble::PeerRole::Unknown;
                 const bool wasClientBound = p && p->clientBound;
 
-                LOGI("BLE", "disconnected h=%u role=%s reason=%d (0x%X = %s) bonds=%d",
+                LOGI("ble", "disconnected h=%u role=%s reason=%d (0x%X = %s) bonds=%d",
                      (unsigned)h, Ble::roleName(role), reason, reason, reasonText(reason),
                      NimBLEDevice::getNumBonds());
 
@@ -274,7 +274,7 @@ namespace BleHub
                 {
                     const int sta = WiFi.softAPgetStationNum();
                     if (sta > 0)
-                        LOGW("BLE", "%d client(s) on the AP while this link was "
+                        LOGW("ble", "%d client(s) on the AP while this link was "
                                     "setting up — that is the most likely reason it "
                                     "timed out. Disconnect them and retry.", sta);
                 }
@@ -301,7 +301,7 @@ namespace BleHub
                         stageKnownAddr(gPendingHid, gHidAddr, p->idAddr);
                     // No Ams branch: auth precedes AMS discovery; classifyAsAms() stages it.
                 }
-                LOGI("BLE", "auth complete h=%u bonded=%d enc=%d auth=%d bonds=%d",
+                LOGI("ble", "auth complete h=%u bonded=%d enc=%d auth=%d bonds=%d",
                      (unsigned)h, connInfo.isBonded(), connInfo.isEncrypted(),
                      connInfo.isAuthenticated(), NimBLEDevice::getNumBonds());
 
@@ -314,7 +314,7 @@ namespace BleHub
                     {
                         gServer->updateConnParams(h, 24, 40, 4, 600);
                         q->paramsRelaxed = true;
-                        LOGI("BLE", "h=%u encrypted — relaxed to 30-50ms latency 4, 6s supervision",
+                        LOGI("ble", "h=%u encrypted — relaxed to 30-50ms latency 4, 6s supervision",
                              (unsigned)h);
                     }
             }
@@ -348,7 +348,7 @@ namespace BleHub
                 q->role = Ble::PeerRole::Unknown;
                 q->hidSubscribed = false;
             }
-        LOGI("BLE", "forgot remembered ams/hid addresses — peers will be re-probed");
+        LOGI("ble", "forgot remembered ams/hid addresses — peers will be re-probed");
     }
 
     NimBLEClient *bindAmsClient(Ble::Peer &p)
@@ -373,7 +373,7 @@ namespace BleHub
         if (!c)
             return nullptr;
         p.clientBound = true;
-        LOGI("BLE", "AMS client bound to h=%u %s", (unsigned)p.handle, p.addr);
+        LOGI("ble", "AMS client bound to h=%u %s", (unsigned)p.handle, p.addr);
         return c;
     }
 
@@ -389,7 +389,7 @@ namespace BleHub
         // AMS (SETUP_DEADLINE_MS in bluetooth.cpp -> NotAms) decides the role.
         if (p->clientBound)
         {
-            LOGI("BLE", "h=%u subscribed to HID while its AMS probe is live — "
+            LOGI("ble", "h=%u subscribed to HID while its AMS probe is live — "
                         "keeping the probe; AMS presence decides what this is",
                  (unsigned)handle);
         }
@@ -403,7 +403,7 @@ namespace BleHub
         {
             // Probe not started yet: on reconnect iOS subscribes within ms,
             // before ServiceAms()'s 800 ms tick. Leave the role undecided.
-            LOGI("BLE", "h=%u subscribed to HID before its AMS probe started — "
+            LOGI("ble", "h=%u subscribed to HID before its AMS probe started — "
                         "role undecided; AMS presence decides what this is",
                  (unsigned)handle);
         }
@@ -437,7 +437,7 @@ namespace BleHub
         strncpy(gFullName, (fullName && *fullName) ? fullName : gName, sizeof(gFullName) - 1);
         loadKnownAddrs();
 
-        LOGI("BLE", "Begin mode=%s name=%s (known ams=%s hid=%s)",
+        LOGI("ble", "Begin mode=%s name=%s (known ams=%s hid=%s)",
              m == Mode::Both ? "both" : (m == Mode::Keyboard ? "keyboard" : "ams"),
              gName, gAmsAddr[0] ? gAmsAddr : "-", gHidAddr[0] ? gHidAddr : "-");
 
@@ -449,9 +449,9 @@ namespace BleHub
         {
             const esp_err_t e = esp_coex_preference_set(ESP_COEX_PREFER_BT);
             if (e == ESP_OK)
-                LOGI("BLE", "coexistence preference set to BT");
+                LOGI("ble", "coexistence preference set to BT");
             else
-                LOGW("BLE", "coexistence preference NOT set (err %d) — WiFi keeps "
+                LOGW("ble", "coexistence preference NOT set (err %d) — WiFi keeps "
                             "priority on the shared radio; expect pairing to be "
                             "fragile while a client is on the AP", (int)e);
         }
@@ -475,7 +475,7 @@ namespace BleHub
         gServer->start();
 
         applyAdvertising(profileForMode());
-        LOGI("BLE", "Begin finished (bonds stored: %d)", NimBLEDevice::getNumBonds());
+        LOGI("ble", "Begin finished (bonds stored: %d)", NimBLEDevice::getNumBonds());
     }
 
     void Service()

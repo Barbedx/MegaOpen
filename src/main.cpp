@@ -2162,7 +2162,7 @@ void setup()
     panel.begin();
     memMark("display.begin");
 
-    LOGI("MegaOpen", "display=%s funcreg=%s\n",
+    LOGI("boot", "display=%s funcreg=%s\n",
                   dt.c_str(), g_cfg.s().funcReg ? "on" : "off");
 #endif
 
@@ -2244,7 +2244,7 @@ void setup()
                             vTaskDelete(nullptr);
                         },
                         "bt_begin", 16384, nullptr, 1, nullptr);
-            LOGI("MegaOpen", "BLE mode=%s\n", bm.c_str());
+            LOGI("boot", "BLE mode=%s\n", bm.c_str());
         }
 
         // Warn when the media screen is on but no AMS role will feed it.
@@ -2254,7 +2254,7 @@ void setup()
         const bool mediaAuto = false;
 #endif
         if (mediaAuto && !(bleOn && BleHub::amsActive(mode)))
-            LOGI("MegaOpen", "media screen is ON but bleMode=%s has no AMS "
+            LOGI("boot", "media screen is ON but bleMode=%s has no AMS "
                           "role — rows will stay empty until it is 'ams' or 'both'\n",
                           bm.c_str());
     }

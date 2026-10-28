@@ -56,7 +56,7 @@ namespace CurrentTimeService
             CurrentTime time;
             if( length < 9 )
             {
-                LOGW( "CTS", "time data length too short" );
+                LOGW( "cts", "time data length too short" );
                 return time;
             }
             time.mYear = data[ 0 ] | ( data[ 1 ] << 8 );
@@ -73,7 +73,7 @@ namespace CurrentTimeService
 
     void CurrentTime::Dump() const
     {
-        LOGD("CTS", "%hhu/%hhu/%hu %hhu:%hhu:%hhu.%f", mMonth, mDay, mYear, mHours, mMinutes, mSeconds, mSecondsFraction);
+        LOGD("cts", "%hhu/%hhu/%hu %hhu:%hhu:%hhu.%f", mMonth, mDay, mYear, mHours, mMinutes, mSeconds, mSecondsFraction);
     }
 
     time_t CurrentTime::ToTimeT() const
@@ -110,26 +110,26 @@ namespace CurrentTimeService
     {
         assert( client != nullptr );
 
-        LOGI( "CTS", "Starting Time Service" );
+        LOGI( "cts", "Starting Time Service" );
 
 
         if( !client->isConnected() )
         {
-            LOGE( "CTS", "client not connected" );
+            LOGE( "cts", "client not connected" );
             return false;
         }
 
         auto time_service = client->getService( CURRENT_TIME_SERVICE_UUID );
         if( !time_service )
         {
-            LOGE( "CTS", "time service not found" );
+            LOGE( "cts", "time service not found" );
             return false;
         }
 
         auto current_time_characteristic = time_service->getCharacteristic( CURRENT_TIME_UUID );
         if( !current_time_characteristic )
         {
-            LOGE( "CTS", "current time characteristic not found" );
+            LOGE( "cts", "current time characteristic not found" );
             return false;
         }
 
@@ -137,7 +137,7 @@ namespace CurrentTimeService
         current_time_characteristic->subscribe(true,
             []( BLERemoteCharacteristic* characteristic, uint8_t* data, size_t length, bool is_notify ) {
                 // TODO: notify the application, if interested.
-                LOGI( "CTS", "Current time has been edited." );
+                LOGI( "cts", "Current time has been edited." );
                 auto time = ParseCurrentTime( data, length );
                 time.Dump();
             } );
@@ -152,7 +152,7 @@ namespace CurrentTimeService
         }
 
         gCurrentTimeCharacteristic = current_time_characteristic;
-        LOGI( "CTS", "Current Time Service started" );
+        LOGI( "cts", "Current Time Service started" );
 
         return true;
     }

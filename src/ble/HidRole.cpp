@@ -48,10 +48,10 @@ namespace Hid
                 const uint16_t h = connInfo.getConnHandle();
                 if (subValue == 0)
                 {
-                    LOGI("HID", "unsubscribed h=%u", (unsigned)h);
+                    LOGI("hid", "unsubscribed h=%u", (unsigned)h);
                     return;
                 }
-                LOGI("HID", "input report subscribed by h=%u — classifying as head unit", (unsigned)h);
+                LOGI("hid", "input report subscribed by h=%u — classifying as head unit", (unsigned)h);
                 BleHub::classifyAsHid(h, connInfo.getIdAddress().toString().c_str());
             }
         };
@@ -76,7 +76,7 @@ namespace Hid
 
         // No startServices(): BleHub calls NimBLEServer::start() after all roles.
         gBuilt = true;
-        LOGI("HID", "service tree built");
+        LOGI("hid", "service tree built");
     }
 
     bool built() { return gBuilt; }
@@ -96,7 +96,7 @@ namespace Hid
     {
         if (!connected())
         {
-            LOGW("HID", "press 0x%04X dropped — head unit not connected", usageCode);
+            LOGW("hid", "press 0x%04X dropped — head unit not connected", usageCode);
             return false;
         }
         // A press still in flight: send its release first so codes don't merge.
