@@ -5,6 +5,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.6.9] - 2026-10-29
+
 ### Added
 - Formulas («Мапа» › «Формули», rules 1.7 slices 2-3): a signal can be computed from others by a formula typed on the page, `fuel_level * 100 / 60`, `held(speed > 5, 3)`, checked as you type (what is wrong and where). A new name is a signal of your own (group «Свої», its unit and decimals), usable anywhere a signal is: the car screen, another formula, the head unit's fields. A built-in's name computes that signal. The language: + - * / %, comparisons, and/or/not, min max abs clamp if has round lookup age, and over time delta changed rises falls rate integral avg held. In the car file and the settings file. `POST /api/expr` checks and evaluates one on the car now.
 
