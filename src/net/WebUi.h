@@ -359,10 +359,11 @@ private:
     void routesDiag();           // WebUiMap.cpp, /api/diag
 #endif
     // The CAN map and the head-unit emitter in the settings file (WebUiMap.cpp):
-    // `decode` (the NVS table, base64) and `hu`. mapFromFile checks both and,
+    // `decode` and `hu`, the car file's own shape (CarFile, by signal name).
+    // mapFromFile checks both and,
     // unless dry, applies and saves them; nullptr or a refusal code.
     void mapToFile(ChunkOut& out);
-    const char* mapFromFile(JsonVariantConst decode, JsonVariantConst hu, bool dry, bool& changedMap,
+    const char* mapFromFile(JsonObjectConst file, bool dry, bool& changedMap,
                             bool& changedHu);
     void routesMacros();         // WebUiMacro.cpp
 #if FEATURE_RESISTIVE_KEYS

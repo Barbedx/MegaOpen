@@ -274,13 +274,18 @@ namespace Vehicle
             const bool ext = (r.flags & DF_EXT) != 0;
             const int n = snprintf(b, cap,
                                    "{\"id\":\"0x%0*lX\",\"byte\":%u,\"len\":%u,\"shift\":%u,\"mask\":\"%lX\","
-                                   "\"mul\":%d,\"div\":%d,\"add\":%ld,\"le\":%s,\"signed\":%s,\"hyp\":%s}",
+                                   "\"mul\":%d,\"div\":%d,\"add\":%ld,\"le\":%s,\"signed\":%s,\"hyp\":%s,"
+                                   "\"latch\":%s,\"key\":%s,\"state2\":%u,\"holdMs\":%u}",
                                    ext ? 8 : 3, (unsigned long)r.canId, (unsigned)r.startByte,
                                    (unsigned)r.numBytes, (unsigned)r.shift, (unsigned long)r.mask,
                                    (int)r.mul, (int)(r.div ? r.div : 1), (long)r.add,
                                    (r.flags & DF_LE) ? "true" : "false",
                                    (r.flags & DF_SIGNED) ? "true" : "false",
-                                   (r.flags & DF_HYPOTHESIS) ? "true" : "false");
+                                   (r.flags & DF_HYPOTHESIS) ? "true" : "false",
+                                   (r.flags & DF_LATCH) ? "true" : "false",
+                                   (r.flags & DF_KEY) ? "true" : "false",
+                                   !(r.flags & DF_STATE2) ? 0u : (r.flags & DF_STATE2_INV) ? 2u : 1u,
+                                   (unsigned)r.holdMs);
             return n < 0 ? 0 : (size_t)n < cap ? n : (int)cap - 1;
         }
 
@@ -310,6 +315,16 @@ namespace Vehicle
             if (o["le"] | false)     r.flags |= DF_LE;
             if (o["signed"] | false) r.flags |= DF_SIGNED;
             if (o["hyp"] | false)    r.flags |= DF_HYPOTHESIS;
+            if (o["latch"] | false)  r.flags |= DF_LATCH;
+            if (o["key"] | false)    r.flags |= DF_KEY;
+            // state2: 0 none, 1 a Renault 2-bit state, 2 the same with 00 = yes.
+            int32_t st2 = 0;
+            if (!intOf(o, "state2", 0, 0, 2, st2)) return "can.state2: param";   // 0, 1 or 2
+            if (st2)                 r.flags |= DF_STATE2;
+            if (st2 == 2)            r.flags |= DF_STATE2_INV;
+            int32_t hold = 0;
+            if (!intOf(o, "holdMs", 0, 0, 65535, hold)) return "can.holdMs: param";   // 0..65535 ms
+            r.holdMs = (uint16_t)hold;
             if (id > 0x7FF)          r.flags |= DF_EXT;
             return nullptr;
         }

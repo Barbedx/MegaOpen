@@ -946,14 +946,14 @@ void WebUi::routes()
         // The CAN map and the head-unit emitter are checked before anything
         // is applied, like the rest; applied after the settings.
         bool mapIn = false, huIn = false;
-        if (const char* why = mapFromFile(d["decode"], d["hu"], true, mapIn, huIn))
+        if (const char* why = mapFromFile(d.as<JsonObjectConst>(), true, mapIn, huIn))
             return r->reply(400, "text/plain", why);
         String out;
         const char* type = "text/plain";
         const int st = settingsPost(d["settings"].as<JsonObjectConst>(), dry, true, out, type, &kerr);
         if (st != 200) return r->reply(st, type, out.c_str());
         if (!dry && (mapIn || huIn))
-            if (const char* why = mapFromFile(d["decode"], d["hu"], false, mapIn, huIn))
+            if (const char* why = mapFromFile(d.as<JsonObjectConst>(), false, mapIn, huIn))
                 return r->reply(500, "text/plain", why);
 #if FEATURE_DISPLAY_CAN
         if (!dry && picIn) {

@@ -5,9 +5,10 @@
 #include "CanDecode.h"
 #include "../utils/UiList.h"
 
-// The user's decode map: what POST /api/map edits, what NVS keeps (the blob
-// `decode`, Config::saveDecode), and what the car task loads into CanDecode
-// (staged, no reboot). Portable and native-tested (test_decode).
+// The user's decode map: what POST /api/map edits, what the car file keeps
+// (CarFile, by signal name), and what the car task loads into CanDecode
+// (staged, no reboot). Portable and native-tested (test_decode). pack/unpack
+// are 1.6.x's NVS blob: CarStore reads it once, to carry it into the file.
 //
 // A signal is bound one of three ways:
 //   can    one or more CanDecode rows (the extraction in CanDecode.h);
@@ -109,11 +110,13 @@ namespace Vehicle
     namespace DecodeJson
     {
         // {"id":"0x354","byte":0,"len":2,"shift":0,"mask":"FFFF","mul":1,
-        //  "div":1,"add":0,"le":false,"signed":false,"hyp":true}; the length
-        // written. `hyp`: not measured in the car (DF_HYPOTHESIS).
+        //  "div":1,"add":0,"le":false,"signed":false,"hyp":true,"latch":false,
+        //  "key":false,"state2":0,"holdMs":0}: the whole row but its signal;
+        // the length written. `hyp`: not measured in the car (DF_HYPOTHESIS);
+        // state2 0 none, 1 DF_STATE2, 2 with DF_STATE2_INV.
         int canJson(char* b, size_t cap, const DecodeRow& r);
-        // The same keys back into `r` (canId..flags; sig and holdMs are the
-        // caller's). An absent `hyp` is false. nullptr = ok, else why.
+        // The same keys back into `r` (all but sig, the caller's). An absent
+        // flag is off, an absent holdMs 0. nullptr = ok, else why.
         const char* canFrom(JsonObjectConst o, DecodeRow& r);
     }
 }

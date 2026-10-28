@@ -54,10 +54,10 @@ namespace App
             // Every frame, on the car task, after the decode: main.cpp's frame
             // ring, its counter and the web's raw stream. Must not block.
             void (*tap)(const Frame& f) = nullptr;
-            // The decode map as NVS holds it (Config::loadDecode); none, or one
-            // that does not unpack, is the factory table.
-            const uint8_t*       decodeBlob = nullptr;
-            size_t               decodeLen = 0;
+            // The decode map as the car file holds it (CarStore::loadDecode),
+            // copied; null = the factory table. `decodeFrom` says which, for the log.
+            const Vehicle::DecodeTable* decode = nullptr;
+            const char*                 decodeFrom = "factory";
             // The panel alert rules (NVS "alerts", else factory: the low-fuel
             // edge). Copied.
             Vehicle::AlertRules  alerts;
@@ -102,7 +102,7 @@ namespace App
 
         // ---- the decode map ------------------------------------------------------
         // httpd edits it (stage/edit); the car task applies it.
-        // Persisting it is the caller's (pack() and Config::saveDecode).
+        // Persisting it is the caller's (CarStore::saveDecode).
         Staged<Vehicle::DecodeTable, true>& decodeTable();
 
         // ---- the panel alert rules ---------------------------------------------------

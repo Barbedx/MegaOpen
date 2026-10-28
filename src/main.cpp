@@ -12,6 +12,7 @@
 #include "sinks/UartTx.h"
 #include "display/PanelBusWatch.h"
 #include "proto/canbox/Protocol.h"
+#include "cfg/CarStore.h"
 // Knob codes: the second byte is a detent count, not a press state — no release.
 #include "vehicle/VehicleState.h"
 #include "net/WebUi.h"
@@ -1863,7 +1864,7 @@ void setup()
 
     g_cfg.begin();
     // The head-unit protocol, before anything reads Canbox::activeProtocol()
-    // (the settings registry, the hu task, the web).
+    // (the settings registry, the hu task, the web, the car file).
     {
         const int hp = Canbox::Protocols::find(g_cfg.s().huProtocol.c_str());
         Canbox::Protocols::select(hp < 0 ? 0 : (uint8_t)hp);
@@ -1871,6 +1872,10 @@ void setup()
             LOGW("hu", "protocol \"%s\" is not in this image: %s", g_cfg.s().huProtocol.c_str(),
                  Canbox::activeProtocol().id());
     }
+    // The car's configuration (/cfg/car.json; built once from 1.6.x's NVS).
+    // After the protocol (its field map is the protocol's) and the flash
+    // log (which mounts LittleFS).
+    CarStore::begin(g_cfg);
     // The log's own settings, saved (docs/design/logging.md).
     {
         const Cfg::Settings& s = g_cfg.s();
@@ -1989,9 +1994,9 @@ void setup()
         proto.initConfig(ec);
         g_cfg.loadTuning(proto, ec.tuning);
         ec.enabled = g_cfg.loadHuSend() && g_cfg.s().uartEnabled;
-        g_cfg.loadFieldMap(ec.fields);
+        CarStore::loadFields(proto, ec.fields);
         if (ec.fields.count())
-            LOGI("hu", "field map: %u rule(s) from NVS", (unsigned)ec.fields.count());
+            LOGI("hu", "field map: %u rule(s) from the car file", (unsigned)ec.fields.count());
         // Emitter and decoder, once, in internal RAM: the hu task's 2 ms pass.
         void* mem = heap_caps_aligned_alloc(8, proto.emitterSize(), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
         if (mem) g_emitter = proto.makeEmitter(mem);
@@ -2392,11 +2397,15 @@ void setup()
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
         cs.tap = carTap;
 #endif
-        // The user's decode map from NVS (none: the factory table), read into
-        // a buffer that lives for begin() only.
-        uint8_t* blob = (uint8_t*)malloc(Vehicle::DecodeTable::BLOB_MAX);
-        cs.decodeBlob = blob;
-        cs.decodeLen  = blob ? g_cfg.loadDecode(blob, Vehicle::DecodeTable::BLOB_MAX) : 0;
+        // The decode map from the car file (none: the factory table), read
+        // into a table that lives for begin() only (2.4 kB, PSRAM).
+        Vehicle::DecodeTable* decode = (Vehicle::DecodeTable*)heap_caps_malloc(
+            sizeof(Vehicle::DecodeTable), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (decode) {
+            new (decode) Vehicle::DecodeTable();
+            CarStore::loadDecode(*decode, cs.decodeFrom);
+            cs.decode = decode;
+        }
         // The panel alert rules: NVS, else the low-fuel edge alone.
         cs.alerts.factory();
         const bool alertsNvs = g_cfg.loadAlerts(cs.alerts);
@@ -2421,7 +2430,7 @@ void setup()
         App::Car::begin(cs);
         App::Car::setReminderSpeeds(g_cfg.s().remindLightsKmh, g_cfg.s().remindBrakeKmh);
     App::Car::setGears(g_cfg.s().gearRatio);
-        free(blob);
+        heap_caps_free(decode);
         LOGI("cfg", "NVS: %d entries of 32 B free", g_cfg.nvsFreeEntries());
         App::Car::start();
 #if FEATURE_CAN2

@@ -133,6 +133,7 @@
  "e.held_no_wire": "A held knob has no head unit code",
  "e.no_custom_pic": "Draw your picture first",
  "e.nvs_failed": "Not saved to flash: works until the next restart",
+ "e.file_failed": "not saved to the car file: applies until a restart",
  "e.no_msg_data": "No data for this message yet: pin its signals",
  "e.row_no_effect": "This row does nothing",
  "e.res_no_legs": "Those pins aren't fitted",

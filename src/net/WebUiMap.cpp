@@ -7,6 +7,9 @@
 #include "../app/HuTask.h"
 #include "../app/CarDiag.h"
 #include "../proto/canbox/Protocol.h"
+#include "../cfg/CarFile.h"
+#include "../cfg/CarStore.h"
+#include "../utils/PsramJson.h"
 #include "../proto/canbox/FieldView.h"
 #include "../proto/canbox/Protocol.h"
 #include "../vehicle/DecodeTable.h"
@@ -143,7 +146,7 @@ void WebUi::routesMap()
         const uint8_t oneSig = one.length() ? Vehicle::sigByName(one.c_str()) : Vehicle::SIG_COUNT;
         if (one.length() && oneSig >= Vehicle::SIG_COUNT) return r->reply(404, "text/plain", "not_found");
         ChunkOut out(r);
-        char b[200], v[16], k[16];
+        char b[320], v[16], k[16];
         out.put(b, fit(snprintf(b, sizeof(b), "{\"send\":%s,\"uart\":%s,\"rows\":[",
                             cfg.enabled ? "true" : "false", _cfg->s().uartEnabled ? "true" : "false"), sizeof(b)));
         const Canbox::Protocol& P = Canbox::activeProtocol();
@@ -238,14 +241,9 @@ void WebUi::routesMap()
         const Canbox::FieldView fv(*_state, eff.get());
         ChunkOut out(r);
         char b[220], v[16];
-        auto rule = [&](const Canbox::FieldRule* ru, uint8_t field) {
+        auto rule = [&](const Canbox::FieldRule* ru, uint8_t) {
             if (!ru) { out.put("null"); return; }
-            static const char* const FROM[] = {"", "sig", "k", "off"};
-            const bool own = ru->kind == Canbox::FK_SIGNAL && ru->src == field;
-            out.put(b, fit(snprintf(b, sizeof(b), "{\"from\":\"%s\",\"src\":\"%s\",\"mul\":%d,\"div\":%d,\"add\":%ld}",
-                                own ? "own" : FROM[ru->kind <= 3 ? ru->kind : 0],
-                                ru->kind == Canbox::FK_SIGNAL && ru->src < Vehicle::SIG_COUNT ? Vehicle::meta(ru->src).name : "",
-                                (int)ru->mul, (int)ru->div, (long)ru->add), sizeof(b)));
+            out.put(b, (size_t)CarFile::ruleJson(b, sizeof(b), *ru));
         };
         out.put(b, fit(snprintf(b, sizeof(b), "{\"proto\":\"%s\",\"rows\":[", P.id()), sizeof(b)));
         bool first = true;
@@ -280,22 +278,14 @@ void WebUi::routesMap()
             const int ti = P.findField(row["id"] | "");
             if (ti < 0) return r->reply(400, "text/plain", "param id");
             const uint8_t field = P.field((uint8_t)ti).sig;
-            const char* from = row["from"] | "auto";
-            if (!strcmp(from, "auto")) { m.clear(field); continue; }
             Canbox::FieldRule ru;
-            ru.field = field;
-            if (!strcmp(from, "off")) ru.kind = Canbox::FK_OFF;
-            else if (!strcmp(from, "k")) { ru.kind = Canbox::FK_CONST; ru.add = row["add"] | 0; }
-            else if (!strcmp(from, "own")) { ru.kind = Canbox::FK_SIGNAL; ru.src = field; }
-            else if (!strcmp(from, "sig")) {
-                ru.kind = Canbox::FK_SIGNAL;
-                ru.src = Vehicle::sigByName(row["src"] | "");
-                if (ru.src >= Vehicle::SIG_COUNT) return r->reply(400, "text/plain", "param src");
-                ru.mul = (int16_t)(row["mul"] | 1);
-                ru.div = (int16_t)(row["div"] | 1);
-                ru.add = row["add"] | 0;
-            } else return r->reply(400, "text/plain", "param from");
-            if (ru.kind == Canbox::FK_SIGNAL && !ru.div) return r->reply(400, "text/plain", "param div");
+            bool clear = false;
+            if (const char* why = CarFile::ruleFrom(row, field, ru, clear)) {
+                char w[48];
+                snprintf(w, sizeof(w), "param %.*s", (int)(strchr(why, ':') ? strchr(why, ':') - why : strlen(why)), why);
+                return r->reply(400, "text/plain", w);
+            }
+            if (clear) { m.clear(field); continue; }
             if (!m.set(ru)) return r->reply(400, "text/plain", "rows_max 29");
         }
         // The protocol's defaults go into the same 32-rule map as the owner's
@@ -304,7 +294,7 @@ void WebUi::routesMap()
             return r->reply(400, "text/plain", "rows_max 29");
         const bool staged = App::Hu::emitterCfg().edit([&](Canbox::HuConfig& c) { c.fields = m; });
         if (!staged) return r->reply(503, "text/plain", "busy");
-        const bool saved = _cfg->saveFieldMap(m);
+        const bool saved = CarStore::saveFields(Canbox::activeProtocol(), m);
         LOGI("hu", "field map: %u rule(s)%s", (unsigned)m.count(), saved ? "" : ", NOT saved");
         return r->reply(200, "application/json", saved ? "{\"ok\":true}" : "{\"ok\":true,\"saved\":false}");
     });
@@ -397,28 +387,27 @@ void WebUi::routesMap()
         }
 
         if (reset || n || hasConf) {
-            // NVS: the newest table, packed under the staging mutex (the car
-            // task only try-takes it), written after. Factory alone = no blob.
+            // The car file: the newest table, copied under the staging mutex
+            // (the car task only try-takes it), written after. Factory alone =
+            // no `decode` in the file.
             const char* why = nullptr;
             if (!n && !hasConf) {
-                if (!_cfg->eraseDecode()) why = "nvs_failed";
+                if (!CarStore::factoryDecode()) why = "file_failed";
             } else {
-                uint8_t* blob = (uint8_t*)malloc(Vehicle::DecodeTable::BLOB_MAX);
-                size_t len = 0;
-                if (!blob) why = "no_memory";
-                else if (!App::Car::decodeTable().read([&](const Vehicle::DecodeTable& t) { len = t.pack(blob); }))
+                Scratch<Vehicle::DecodeTable> copy;   // 2.4 kB, not on httpd's stack
+                if (!copy) why = "no_memory";
+                else if (!App::Car::decodeTable().read([&](const Vehicle::DecodeTable& t) { *copy = t; }))
                     why = "busy";
-                else if (!_cfg->saveDecode(blob, len)) why = "nvs_failed";
-                free(blob);
+                else if (!CarStore::saveDecode(*copy)) why = "file_failed";
             }
             if (hasConf)
                 LOGI("map", "%s %s", Vehicle::meta(confSig).name,
                                confOn ? "confirmed in the car (measured)" : "back to a hypothesis");
             if (reset || n)
                 LOGI("map", "%s: %u field(s)%s%s", reset ? "back to factory" : "saved", (unsigned)n,
-                               why ? ", NOT in NVS: " : "", why ? why : "");
+                               why ? ", NOT in the car file: " : "", why ? why : "");
             else if (why)
-                LOGI("map", "NOT in NVS: %s", why);
+                LOGI("map", "NOT in the car file: %s", why);
             if (why) return bad(r, 500, nullptr, why);   // applied until the next boot only
         }
 
@@ -494,86 +483,59 @@ void WebUi::routesMap()
 // ---------------------------------------------------------------------------
 // The map in the settings file (GET/POST /api/config, WebUi.cpp)
 // ---------------------------------------------------------------------------
-// `decode`: the decode table exactly as NVS keeps it (DecodeTable::pack: the
-// bindings, the constants, the owner's ✓), base64. `hu`: the head-unit
-// emitter, as POST /api/map takes it. A file without them leaves both alone.
+// `decode` and `hu` as the car file holds them (CarFile: the bindings, the
+// constants, the owner's ✓, the field map, all by signal name), plus hu.send.
+// A file without them leaves both alone. A 1.6.x file's base64 `decode` is
+// refused (decode: not_object): its rows are signal indexes, not names.
 
 void WebUi::mapToFile(ChunkOut& out)
 {
-    uint8_t* blob = (uint8_t*)heap_caps_malloc_prefer(Vehicle::DecodeTable::BLOB_MAX, 2,
-                                                      MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT,
-                                                      MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    const size_t b64cap = 4 * ((Vehicle::DecodeTable::BLOB_MAX + 2) / 3) + 1;
-    char* b64 = blob ? (char*)heap_caps_malloc_prefer(b64cap, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT,
-                                                      MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT)
-                     : nullptr;
-    size_t len = 0, olen = 0;
-    if (b64 && App::Car::decodeTable().read([&](const Vehicle::DecodeTable& t) { len = t.pack(blob); }) &&
-        mbedtls_base64_encode((unsigned char*)b64, b64cap, &olen, blob, len) == 0) {
-        out.put(",\"decode\":\"");
-        out.put(b64, olen);
-        out.put("\"");
+    // The car file's own shape (CarFile): rows by signal name. ~20 kB of
+    // document, in PSRAM, per request.
+    Scratch<Vehicle::DecodeTable> t;
+    Scratch<Canbox::HuConfig> c;
+    if (!t || !c) return;   // no memory: the keys are left out (an import keeps its own)
+    const bool haveT = App::Car::decodeTable().read([&](const Vehicle::DecodeTable& x) { *t = x; });
+    const bool haveC = App::Hu::emitterCfg().peek(*c);
+    JsonDocument car(&PsramJson::instance());
+    JsonObject o = car.to<JsonObject>();
+    if (haveT) CarFile::putDecode(o, *t);
+    if (haveC) {
+        CarFile::putFields(o, Canbox::activeProtocol(), c->fields);
+        o["hu"]["send"] = c->enabled;
     }
-    heap_caps_free(b64);
-    heap_caps_free(blob);
-
-    Scratch<Canbox::HuConfig> cBox;   // not on httpd's stack (see the routes)
-    if (cBox && App::Hu::emitterCfg().peek(*cBox)) {
-        const Canbox::HuConfig& c = *cBox;
-        char b[120];
-        out.put(b, fit(snprintf(b, sizeof(b), ",\"hu\":{\"send\":%s", c.enabled ? "true" : "false"), sizeof(b)));
-        // The field map, packed (FieldMap::pack) and base64, like the decode
-        // table: ~830 B of buffers, per request (Scratch), not on httpd's stack.
-        struct Fm {
-            uint8_t blob[Canbox::FieldMap::BLOB_MAX];
-            char    b64[4 * ((Canbox::FieldMap::BLOB_MAX + 2) / 3) + 1];
-        };
-        Scratch<Fm> fm;
-        size_t fo = 0;
-        const size_t fn = fm ? c.fields.pack(fm->blob, sizeof(fm->blob)) : 0;
-        // No memory: the key is left out (an import keeps its map), never "".
-        if (fn && mbedtls_base64_encode((unsigned char*)fm->b64, sizeof(fm->b64), &fo, fm->blob, fn) == 0) {
-            out.put(",\"fields\":\"");
-            out.put(fm->b64, fo);
-            out.put("\"");
-        }
-        out.put("}");
-    }
+    String s;
+    if (haveT) { s = ",\"decode\":"; serializeJson(o["decode"], s); out.put(s.c_str(), s.length()); }
+    if (haveC) { s = ",\"hu\":";     serializeJson(o["hu"], s);     out.put(s.c_str(), s.length()); }
 }
 
-const char* WebUi::mapFromFile(JsonVariantConst decode, JsonVariantConst hu, bool dry, bool& changedMap,
-                               bool& changedHu)
+const char* WebUi::mapFromFile(JsonObjectConst file, bool dry, bool& changedMap, bool& changedHu)
 {
     changedMap = changedHu = false;
-    // Static: 2.4 kB each, and only the config POST uses them (httpd is one task).
+    // Static: 2.4 kB, and only the config POST uses it (httpd is one task).
     static Vehicle::DecodeTable table;
-    static uint8_t blob[Vehicle::DecodeTable::BLOB_MAX];
-    size_t len = 0;
-    if (!decode.isNull()) {
-        const char* s = decode.as<const char*>();
-        if (!s) return "decode: not_text";
-        if (mbedtls_base64_decode(blob, sizeof(blob), &len, (const unsigned char*)s, strlen(s)) != 0)
-            return "decode: bad_base64";
-        if (!table.unpack(blob, len)) return "decode: bad_table";
+    if (!file["decode"].isNull()) {
+        if (!file["decode"].is<JsonObjectConst>()) return "decode: not_object";
+        uint16_t skipped = 0;
+        if (const char* why = CarFile::getDecode(file, table, skipped)) return why;
+        if (skipped) LOGW("map", "settings file: %u decode row(s) name a signal this firmware does not know: skipped",
+                          (unsigned)skipped);
         changedMap = true;
     }
 
     Scratch<Canbox::HuConfig> cBox;   // not on httpd's stack (see the routes)
     if (!cBox) return "no_memory";
     Canbox::HuConfig& c = *cBox;
-    if (!hu.isNull()) {
-        if (!hu.is<JsonObjectConst>()) return "hu: not_object";
+    JsonObjectConst hu = file["hu"].as<JsonObjectConst>();
+    if (!file["hu"].isNull()) {
+        if (hu.isNull()) return "hu: not_object";
         if (!App::Hu::emitterCfg().peek(c)) return "busy";
         if (hu["send"].is<bool>()) c.enabled = hu["send"].as<bool>() && _cfg->s().uartEnabled;
-        if (!hu["fields"].isNull()) {
-            const char* f = hu["fields"].as<const char*>();
-            struct Blob { uint8_t b[Canbox::FieldMap::BLOB_MAX]; };
-            Scratch<Blob> fm;   // not on httpd's stack
-            if (!fm) return "no_memory";
-            size_t fn = 0;
-            if (!f || mbedtls_base64_decode(fm->b, sizeof(fm->b), &fn, (const unsigned char*)f, strlen(f)) != 0 ||
-                !c.fields.unpack(fm->b, fn))   // unpack leaves the map as it was on a bad blob
-                return "hu: fields";
+        // The active protocol's map, if the file has one; another
+        // protocol's entry is not this board's to apply.
+        if (!hu[Canbox::activeProtocol().id()].isNull()) {
+            uint16_t skipped = 0;
+            if (const char* why = CarFile::getFields(file, Canbox::activeProtocol(), c.fields, skipped)) return why;
         }
         changedHu = true;
     }
@@ -581,8 +543,8 @@ const char* WebUi::mapFromFile(JsonVariantConst decode, JsonVariantConst hu, boo
 
     if (changedMap) {
         if (!App::Car::decodeTable().edit([&](Vehicle::DecodeTable& t) { t = table; })) return "busy";
-        if (!_cfg->saveDecode(blob, len)) return "nvs_failed";
-        LOGI("map", "set from a settings file: %u bytes", (unsigned)len);
+        if (!CarStore::saveDecode(table)) return "file_failed";
+        LOGI("map", "set from a settings file: %u rows, %u constants", (unsigned)table.nRows, (unsigned)table.nK);
     }
     if (changedHu) {
         // Send and the field map only: the protocol's tuning comes with the
@@ -590,7 +552,7 @@ const char* WebUi::mapFromFile(JsonVariantConst decode, JsonVariantConst hu, boo
         if (!App::Hu::emitterCfg().edit([&](Canbox::HuConfig& e) { e.enabled = c.enabled; e.fields = c.fields; }))
             return "busy";
         _cfg->saveHuSend(c.enabled);
-        if (!_cfg->saveFieldMap(c.fields)) return "nvs_failed";
+        if (!CarStore::saveFields(Canbox::activeProtocol(), c.fields)) return "file_failed";
         LOGI("map", "head unit set from a settings file: send %s, %u field rule(s)", c.enabled ? "on" : "off",
                        (unsigned)c.fields.count());
     }

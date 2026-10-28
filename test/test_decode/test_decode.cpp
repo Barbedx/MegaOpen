@@ -722,19 +722,21 @@ void test_the_can_object_reads_back_what_it_writes()
 {
     static DecodeTable t;
     t.factory();
-    char b[200];
+    char b[320];
     for (uint8_t i = 0; i < t.nRows; ++i) {
         DecodeJson::canJson(b, sizeof(b), t.row[i]);
         JsonDocument d;
         TEST_ASSERT_FALSE(deserializeJson(d, b));
         DecodeRow r{};
         TEST_ASSERT_NULL(DecodeJson::canFrom(d.as<JsonObjectConst>(), r));
-        // The page edits the extraction and the hypothesis mark; latch and key
-        // are the row's own (WebUiMap keeps them from the old row).
+        // The whole row but its signal: the car file keeps it this way. (A
+        // page edit still takes latch, key and state2 from the old row:
+        // DecodeTable::apply.)
         const DecodeRow& o = t.row[i];
-        TEST_ASSERT_TRUE(r.canId == o.canId && r.startByte == o.startByte && r.numBytes == o.numBytes &&
-                         r.shift == o.shift && r.mask == o.mask && r.mul == o.mul && r.div == o.div &&
-                         r.add == o.add && r.flags == (o.flags & (DF_LE | DF_SIGNED | DF_EXT | DF_HYPOTHESIS)));
+        TEST_ASSERT_TRUE_MESSAGE(r.canId == o.canId && r.startByte == o.startByte && r.numBytes == o.numBytes &&
+                                 r.shift == o.shift && r.mask == o.mask && r.mul == o.mul && r.div == o.div &&
+                                 r.add == o.add && r.flags == o.flags && r.holdMs == o.holdMs,
+                                 meta(o.sig).name);
     }
     const char* bad[] = {
         "{\"id\":\"zz\",\"byte\":0,\"mask\":\"FF\"}",

@@ -447,21 +447,19 @@ namespace App
                 return new (m) Vehicle::DecodeTable();
             }
 
-            // The NVS blob, else the factory table. Setup only.
-            void loadTable(const uint8_t* blob, size_t n)
+            // The car file's table, else the factory's. Setup only.
+            void loadTable(const Vehicle::DecodeTable* from, const char* fromName)
             {
                 const bool ps = psramFound();
                 s_table.place(newTable(ps), newTable(ps));
-                bool fromNvs = false;
                 s_table.edit([&](Vehicle::DecodeTable& t) {
-                    fromNvs = n && t.unpack(blob, n);
-                    if (!fromNvs) t.factory();
+                    if (from) t = *from;
+                    else      t.factory();
                 });
                 s_table.applyIfDirty();
                 applyTable();
                 const Vehicle::DecodeTable& t = s_table.live();
-                LOGI("car", "decode map: %s, %u rows, %u constants, in %s", fromNvs ? "NVS" :
-                               n ? "factory (the NVS blob did NOT unpack)" : "factory",
+                LOGI("car", "decode map: %s, %u rows, %u constants, in %s", from ? fromName : "factory",
                                (unsigned)t.nRows, (unsigned)t.nK, ps ? "PSRAM" : "DRAM");
             }
 
@@ -616,7 +614,7 @@ namespace App
             s_s = s;
             if (s_s.n > MAX_SOURCES) s_s.n = MAX_SOURCES;
             s_cmd = xQueueCreateStatic(CMD_DEPTH, sizeof(Cmd), s_cmdStore, &s_cmdBuf);
-            loadTable(s.decodeBlob, s.decodeLen);
+            loadTable(s.decode, s.decodeFrom);
             s_alerts.init(s.alerts);
             if (s_s.sniffer) {
                 // Off where the capture recorder is the tool (T-2CAN): a busy car

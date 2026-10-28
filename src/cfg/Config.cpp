@@ -303,11 +303,6 @@ namespace Cfg
             p.tuningFromBlob(t, blob, (uint8_t)n);
     }
 
-    bool Config::saveDecode(const uint8_t* b, size_t n)
-    {
-        return _p.putBytes("decode", b, n) == n;
-    }
-
     size_t Config::loadDecode(uint8_t* b, size_t cap)
     {
         // isKey first: getBytes on an absent key prints an IDF error per boot.
@@ -322,16 +317,16 @@ namespace Cfg
         return !_p.isKey("decode") || _p.remove("decode");
     }
 
-    bool Config::saveFieldMap(const Canbox::FieldMap& m)
+    bool Config::eraseFieldMap()
     {
-        uint8_t blob[Canbox::FieldMap::BLOB_MAX];
-        const size_t n = m.pack(blob, sizeof(blob));
-        return n && _p.putBytes("huFmap", blob, n) == n;
+        return !_p.isKey("huFmap") || _p.remove("huFmap");
     }
 
     bool Config::loadFieldMap(Canbox::FieldMap& m)
     {
         uint8_t blob[Canbox::FieldMap::BLOB_MAX];
+        // isKey first: getBytes on an absent key prints an IDF error.
+        if (!_p.isKey("huFmap")) return false;
         const size_t n = _p.getBytes("huFmap", blob, sizeof(blob));
         return n && m.unpack(blob, n);
     }

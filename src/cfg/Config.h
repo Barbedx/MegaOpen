@@ -54,13 +54,14 @@ namespace Cfg
         // and steering were checked in the car).
         void saveHuSend(bool on) { _p.putBool("huSend", on); }
         bool loadHuSend()        { return _p.getBool("huSend", false); }
-        // The head-unit field map (Canbox::FieldMap), one blob.
-        bool    saveFieldMap(const Canbox::FieldMap& m);
+        // 1.6.x's NVS tables, read once by CarStore (/cfg/car.json is their
+        // home now) and erased when the file is written: the head-unit field
+        // map (key huFmap) and the decode map (key decode, DecodeTable::pack).
         bool    loadFieldMap(Canbox::FieldMap& m);
+        bool    eraseFieldMap();
         // The user's decode map (Vehicle::DecodeTable::pack), key "decode".
         // load: its length, 0 when there is none or it does not fit `cap`.
         // erase: back to factory (decode_defaults.inc). False: not written.
-        bool   saveDecode(const uint8_t* b, size_t n);
         size_t loadDecode(uint8_t* b, size_t cap);
         bool   eraseDecode();
         // The panel alert rules (Vehicle::AlertRules::toBlob), key "alerts".
