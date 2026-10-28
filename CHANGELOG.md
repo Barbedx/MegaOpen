@@ -7,14 +7,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [1.6.4] - 2026-10-28
 
-### Fixed
-- After the update to 1.6.3, empty alert rows and an empty car-screen slot came back as `fuel_pct` (Бак, %), and the live page could not add a rule («all 16»). An empty row was saved as the build's signal count, which moves each time a signal is appended; 1.6.3 appended `fuel_pct`. Saved, an empty row is now a fixed 0xFF (the alert table's format 2, `carSigV` for the car screen); a table or slot saved by 1.6.3 or before reads its old marker, and a `fuel_pct` there, as empty. Checked on the bench: saved on 1.6.2, wrong on 1.6.3, right on this build.
-- A status snapshot GitHub keeps refusing no longer stands in front of the log parts: the next one waits 10 min either way.
-- The head-unit field map takes at most 29 rules of the owner's (`rows_max 29`): the protocol's defaults share the 32-rule map, and the last rules were dropped silently. The 1.6.1 switches' migration keeps them in NVS if the map is full.
-- A settings file exported when the board had no memory for the field map left `"fields":""`, which its own import refused; the key is left out now.
-- The status snapshot reads the settings under their lock, as the web routes do.
-- Signals page: a second source chip closes the open editor and opens its own (it did nothing); «Запам'ятати» starts over each time an editor opens.
-
 ### Added
 - A status snapshot to GitHub: `/api/status` and `/api/health` as one JSON (`{uptimeMs, status, health}`), `boot-N/status-MMMM.json` (uptime minutes) right after the boot's first push and every 10 min, for tools to read without regexes (docs/design/logging.md §5).
 
@@ -24,6 +16,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - The head-unit protocol is one interface (`Canbox::FieldProtocol`, step 5 of docs/design/hu-mapping.md): its fields and their defaults; the field map, `/api/hu/fields`, `/api/map` and the catalog (`proto`) read the active one, and the page shows «Протокол ГУ: Raise 112 (Toyota RAV4)». A stub protocol in the host tests runs the map unchanged.
 
 ### Fixed
+- After the update to 1.6.3, empty alert rows and an empty car-screen slot came back as `fuel_pct` (Бак, %), and the live page could not add a rule («all 16»). An empty row was saved as the build's signal count, which moves each time a signal is appended; 1.6.3 appended `fuel_pct`. Saved, an empty row is now a fixed 0xFF (the alert table's format 2, `carSigV` for the car screen); a table or slot saved by 1.6.3 or before reads its old marker, and a `fuel_pct` there, as empty. Checked on the bench: saved on 1.6.2, wrong on 1.6.3, right on this build.
+- A status snapshot GitHub keeps refusing no longer stands in front of the log parts: the next one waits 10 min either way.
+- The head-unit field map takes at most 29 rules of the owner's (`rows_max 29`): the protocol's defaults share the 32-rule map, and the last rules were dropped silently. The 1.6.1 switches' migration keeps them in NVS if the map is full.
+- A settings file exported when the board had no memory for the field map left `"fields":""`, which its own import refused; the key is left out now.
+- The status snapshot reads the settings under their lock, as the web routes do.
+- Signals page: a second source chip closes the open editor and opens its own (it did nothing); «Запам'ятати» starts over each time an editor opens.
 - A coredump pushed to GitHub could not be decoded when the redaction had blanked a secret in it (`Invalid core dump CRC`): its CRC-32 is written again over the redacted bytes. Checked on the bench's redacted dump of boot 122 (re-sealed offline, then decoded).
 
 ## [1.6.3] - 2026-10-28
