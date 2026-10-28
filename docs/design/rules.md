@@ -221,6 +221,42 @@ at build time; here it is an on-device expression language:
   place; gear matching (a table search) and the 0x551 consumption counter
   (wrap-around integration) stay C++ and keep feeding signals.
 
+## Slice 4 in detail (2026-10-29)
+
+After slice 3 a rule is only what happens: the state is the formulas'. So two
+pieces of the first sketch go, because a formula already does them:
+
+- **No "set a user signal" action.** A state a rule would keep is a formula
+  (`parked_dark = held(speed < 1 && !lights_dipped, 60)`), visible, live and
+  in one place.
+- **No ELSE.** "When it clears" is a second rule on `!(...)`, or `falls(...)`.
+
+A rule:
+
+| field | |
+| --- | --- |
+| name, on | |
+| trigger | **signal**: a boolean formula; it fires on false -> true (true when first seen counts: the lamp lit at ignition), re-arms when false. **gesture**: MacroEngine's combo / N taps / hold, swallowing the presses or not |
+| only if | a boolean formula, for a gesture (a signal rule writes it into its trigger) |
+| pause | at least this long between two firings (5 s at the least) |
+| actions | up to 3, in order: popup (text with `{signal}`), panel text (3 rows), pane scene, key action, key code, raw HU frame, HU message (by name) |
+
+Running: signal rules on the car task after the formulas, re-evaluated when
+an input changed (or a timed one on the tick); gesture rules on the keys task
+(MacroEngine detects, the rule table feeds it). Every action goes through one
+executor that posts to the task owning it (EffectRoute): nothing runs a
+foreign task's code. A popup keeps today's queue (one pending, never over a
+menu, dropped if its rule no longer holds by the time the glass is free).
+
+Migration, once, into the car file's `rules`: each of the 16 NVS alert rows
+becomes a signal rule (`fuel_low` rises -> `rises(fuel_low)`; `speed` above
+100 -> `speed > 100`; changes -> `changed(x)`), keeping its pause and on; the
+hysteresis band goes (the pause bounds a value hovering at the threshold);
+the 8 NVS macros become gesture rules. Then `AlertRules`, `AlertEval`,
+`/api/settings alerts`, the NVS keys and the macro page go; «Сповіщення»
+becomes «Правила». Caps: 128 rules (a PsArray), the gesture ones also
+bounded by what the keys task scans per event (32).
+
 ## Slice order (replaces the lists above, 2026-10-28)
 
 0. HU protocol module. **Done** (master b55e239).
