@@ -309,7 +309,7 @@ void WebUi::routesKnobs()
         const bool save = d["save"] | true;
         if (save) {
             _cfg->saveKnobs(c);
-            LogBus::printf("[knobs] saved: enc=%s/%s pot=%s led=%s x%u+%u feet, cap %u mA",
+            LOGI("knobs", "saved: enc=%s/%s pot=%s led=%s x%u+%u feet, cap %u mA",
                            c.enc[ENC_RIGHT].enabled ? "on" : "off",
                            c.enc[ENC_LEFT].enabled ? "on" : "off", potModeName(c.potMode),
                            c.ledEnabled ? "on" : "off",

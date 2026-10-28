@@ -33,7 +33,7 @@ namespace Knobs
         // [mem] marks, serial only: begin() measured 9.5 kB, more than the task
         // and queue explain.
         auto mem = [](const char* what) {
-            LogBus::printf("[mem] knobs.%-6s free=%6u\n", what, (unsigned)ESP.getFreeHeap());
+            LOGI("mem", "knobs.%-6s free=%6u\n", what, (unsigned)ESP.getFreeHeap());
         };
         mem("start");
         _lock = xSemaphoreCreateMutex();
@@ -50,13 +50,13 @@ namespace Knobs
             // A stuck bus must not cost a line per failed transfer either.
             esp_log_level_set("i2c", ESP_LOG_NONE);
             if (!_i2cOk)
-                LogBus::printf("[knobs] I2C on SDA=GPIO%d SCL=GPIO%d did not start: knobs off",
+                LOGI("knobs", "I2C on SDA=GPIO%d SCL=GPIO%d did not start: knobs off",
                                (int)Board::PIN_I2C_SDA, (int)Board::PIN_I2C_SCL);
             else if (findExpander())
-                LogBus::printf("[knobs] PCF8574 at 0x%02X on SDA=GPIO%d SCL=GPIO%d", _expAddr,
+                LOGI("knobs", "PCF8574 at 0x%02X on SDA=GPIO%d SCL=GPIO%d", _expAddr,
                                (int)Board::PIN_I2C_SDA, (int)Board::PIN_I2C_SCL);
             else
-                LogBus::printf("[knobs] NO PCF8574 on SDA=GPIO%d SCL=GPIO%d (0x20-27, 0x38-3F)%s; "
+                LOGI("knobs", "NO PCF8574 on SDA=GPIO%d SCL=GPIO%d (0x20-27, 0x38-3F)%s; "
                                "searching in the background", (int)Board::PIN_I2C_SDA,
                                (int)Board::PIN_I2C_SCL, _busStuck ? ", BUS STUCK LOW" : "");
         } else {
@@ -224,7 +224,7 @@ namespace Knobs
             // History from before the outage is not a turn or a press now.
             _src.reseed();
             if (logDue(nowMs)) {
-                LogBus::printf("[knobs] PCF8574 found at 0x%02X (%u failed reads since boot, %u lines held back)",
+                LOGI("knobs", "PCF8574 found at 0x%02X (%u failed reads since boot, %u lines held back)",
                                a, (unsigned)_expErrors, (unsigned)_logSkipped);
                 _logSkipped = 0;
             }
@@ -233,7 +233,7 @@ namespace Knobs
         if (r < 0) {
             // Stuck low: abandon this sweep and wait longer each time.
             if (!_busStuck && logDue(nowMs))
-                LogBus::printf("[knobs] I2C bus stuck (SDA/SCL held low?); retrying in %u ms",
+                LOGI("knobs", "I2C bus stuck (SDA/SCL held low?); retrying in %u ms",
                                (unsigned)_expBackoffMs);
             _busStuck = true;
             _probeIdx = 0;
@@ -262,7 +262,7 @@ namespace Knobs
                 // up one missed quarter step).
                 if (++_expMiss >= EXP_MISS_MAX) {
                     if (logDue(nowMs)) {
-                        LogBus::printf("[knobs] PCF8574 0x%02X not answering (%u failed reads); searching",
+                        LOGI("knobs", "PCF8574 0x%02X not answering (%u failed reads); searching",
                                        _expAddr, (unsigned)_expErrors);
                     }
                     _expAddr = 0;

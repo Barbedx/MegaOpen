@@ -373,7 +373,7 @@ namespace UsbLink
                 const bool m = tud_vendor_n_mounted(ITF);
                 if (m != s_mounted) {
                     s_mounted = m;
-                    LogBus::printf("[usb] link %s", m ? "up: a host configured the device" : "down");
+                    LOGI("usb", "link %s", m ? "up: a host configured the device" : "down");
                     if (!m) unplugged();
                 }
                 if (m) {

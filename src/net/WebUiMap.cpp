@@ -317,14 +317,14 @@ void WebUi::routesMap()
             if (hasExp) {
                 _cfg->saveHuExp((uint8_t)exp);
                 static const char* const kAt[] = {"0x21", "0x7D 04", "0x23", "?"};
-                LogBus::printf("[map] head-unit experiments: coolant %s, fuel in 7D04 %s, computed %s, selector %s, battery %s",
+                LOGI("map", "head-unit experiments: coolant %s, fuel in 7D04 %s, computed %s, selector %s, battery %s",
                                exp & Canbox::Rav4Emitter::EXP_COOLANT ? "on" : "off",
                                exp & Canbox::Rav4Emitter::EXP_FUEL_7D04 ? "on" : "off",
                                exp & Canbox::Rav4Emitter::EXP_COMPUTED ? "on" : "off",
                                exp & Canbox::Rav4Emitter::EXP_GEAR ? "on" : "off",
                                exp & Canbox::Rav4Emitter::EXP_BATT ? kAt[(exp >> 5) & 3] : "off");
             }
-            if (hasSend) LogBus::printf("[map] send to the head unit %s", send ? "on" : "off");
+            if (hasSend) LOGI("map", "send to the head unit %s", send ? "on" : "off");
         }
 
         if (reset || n || hasConf) {
@@ -343,13 +343,13 @@ void WebUi::routesMap()
                 free(blob);
             }
             if (hasConf)
-                LogBus::printf("[map] %s %s", Vehicle::meta(confSig).name,
+                LOGI("map", "%s %s", Vehicle::meta(confSig).name,
                                confOn ? "confirmed in the car (measured)" : "back to a hypothesis");
             if (reset || n)
-                LogBus::printf("[map] %s: %u field(s)%s%s", reset ? "back to factory" : "saved", (unsigned)n,
+                LOGI("map", "%s: %u field(s)%s%s", reset ? "back to factory" : "saved", (unsigned)n,
                                why ? ", NOT in NVS: " : "", why ? why : "");
             else if (why)
-                LogBus::printf("[map] NOT in NVS: %s", why);
+                LOGI("map", "NOT in NVS: %s", why);
             if (why) return bad(r, 500, nullptr, why);   // applied until the next boot only
         }
 
@@ -410,7 +410,7 @@ void WebUi::routesMap()
         if (App::Hu::preview(t.msg, frame, len))
             for (unsigned i = 0, o = 0; i < len; ++i) o += (unsigned)snprintf(hex + o, sizeof(hex) - o, i ? " %02X" : "%02X", frame[i]);
         char vs[16];
-        LogBus::printf("[map] test %s = %s -> %s", id, RT::fmt(vs, sizeof(vs), v, t.dec), hex);
+        LOGI("map", "test %s = %s -> %s", id, RT::fmt(vs, sizeof(vs), v, t.dec), hex);
         char b[sizeof(hex) + 24];
         snprintf(b, sizeof(b), "{\"ok\":true,\"bytes\":\"%s\"}", hex);
         return r->reply(200, "application/json", b);
@@ -494,14 +494,14 @@ const char* WebUi::mapFromFile(JsonVariantConst decode, JsonVariantConst hu, boo
     if (changedMap) {
         if (!App::Car::decodeTable().edit([&](Vehicle::DecodeTable& t) { t = table; })) return "busy";
         if (!_cfg->saveDecode(blob, len)) return "nvs_failed";
-        LogBus::printf("[map] set from a settings file: %u bytes", (unsigned)len);
+        LOGI("map", "set from a settings file: %u bytes", (unsigned)len);
     }
     if (changedHu) {
         if (!App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& e) { e = c; })) return "busy";
         _cfg->saveTuning(c.tuning);
         _cfg->saveHuSend(c.enabled);
         _cfg->saveHuExp(c.exp);
-        LogBus::printf("[map] head unit set from a settings file: send %s, exp %u", c.enabled ? "on" : "off",
+        LOGI("map", "head unit set from a settings file: send %s, exp %u", c.enabled ? "on" : "off",
                        (unsigned)c.exp);
     }
     return nullptr;

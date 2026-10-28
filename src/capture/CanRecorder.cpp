@@ -232,10 +232,10 @@ namespace Capture
                 const FileRec f = g_files[v];
                 if (!deleteLocked((uint16_t)v)) { g_err = "cap_delete"; return false; }
                 if (f.prot)
-                    LogBus::printf("[cap] deleted PROTECTED %04lu (session %04lu): nothing unprotected left",
+                    LOGI("cap", "deleted PROTECTED %04lu (session %04lu): nothing unprotected left",
                                    (unsigned long)f.num, (unsigned long)f.session);
                 else
-                    LogBus::printf("[cap] ring: deleted %04lu (%lu kB)", (unsigned long)f.num,
+                    LOGI("cap", "ring: deleted %04lu (%lu kB)", (unsigned long)f.num,
                                    (unsigned long)(f.size / 1024));
             }
         }
@@ -305,7 +305,7 @@ namespace Capture
             }
             // A number is never reused while a file with it can exist.
             if (g_next <= maxNum) g_next = maxNum + 1;
-            if (emptied) LogBus::printf("[cap] removed %u empty capture file(s)", (unsigned)emptied);
+            if (emptied) LOGI("cap", "removed %u empty capture file(s)", (unsigned)emptied);
         }
 
         // ---- the writer ---------------------------------------------------------------
@@ -334,7 +334,7 @@ namespace Capture
                     if (v < 0) { g_err = "cap_files"; return false; }   // file table full
                     const FileRec f = g_files[v];
                     if (!deleteLocked((uint16_t)v)) { g_err = "cap_files"; return false; }
-                    LogBus::printf("[cap] %u files: deleted %s%04lu", (unsigned)MAX_FILES,
+                    LOGI("cap", "%u files: deleted %s%04lu", (unsigned)MAX_FILES,
                                    f.prot ? "PROTECTED " : "", (unsigned long)f.num);
                 }
             }
@@ -376,7 +376,7 @@ namespace Capture
                 g_curNum = num;
                 if (g_sessionProt) setProtLocked(g_session, true);
             }
-            LogBus::printf("[cap] file %04lu opened (session %04lu part %u)", (unsigned long)num,
+            LOGI("cap", "file %04lu opened (session %04lu part %u)", (unsigned long)num,
                            (unsigned long)g_session, (unsigned)g_part);
             return true;
         }
@@ -387,7 +387,7 @@ namespace Capture
             if (!g_chunkLen || !g_file) return;
             if (!makeRoom((uint32_t)g_chunkLen)) {
                 if (!g_noRoomLogged) {
-                    LogBus::printf("[cap] chunk dropped: %s", (const char*)g_err);
+                    LOGI("cap", "chunk dropped: %s", (const char*)g_err);
                     g_noRoomLogged = true;
                 }
                 // The header stays at the front of an empty file.
@@ -503,7 +503,7 @@ namespace Capture
             g_sessionProt = true;
             Lock l;
             setProtLocked(g_session, true);
-            LogBus::printf("[cap] session %04lu protected (marker)", (unsigned long)g_session);
+            LOGI("cap", "session %04lu protected (marker)", (unsigned long)g_session);
         }
 
         uint32_t formatLocked()
@@ -541,7 +541,7 @@ namespace Capture
                     drainAll();
                     if (g_active) {
                         endSession();
-                        LogBus::line("[cap] stopped");
+                        LOGI("cap", "stopped");
                     }
                 }
                 if (cmd & CMD_FORMAT) {
@@ -553,12 +553,12 @@ namespace Capture
                     { Lock l; n = formatLocked(); }
                     g_formatCount = n;
                     g_err = "";
-                    LogBus::printf("[cap] capture area formatted: %lu file(s) deleted", (unsigned long)n);
+                    LOGI("cap", "capture area formatted: %lu file(s) deleted", (unsigned long)n);
                     if (was) beginSession();
                 }
                 if ((cmd & CMD_START) && !g_active) {
                     beginSession();
-                    LogBus::printf("[cap] recording (%s)", g_mode == MODE_FULL ? "full" : "change-only");
+                    LOGI("cap", "recording (%s)", g_mode == MODE_FULL ? "full" : "change-only");
                 }
                 if ((cmd & CMD_MODE) && g_modeReq != g_mode) {
                     drainAll();
@@ -630,7 +630,7 @@ namespace Capture
         g_modeReq = g_mode;
         if (!LogFile::fsMounted()) {
             g_err = "cap_no_fs";   // littlefs not mounted
-            LogBus::line("[cap] off: littlefs not mounted");
+            LOGI("cap", "off: littlefs not mounted");
             return;
         }
 
@@ -647,7 +647,7 @@ namespace Capture
             heap_caps_free(g_files);
             g_ring = nullptr; g_chunk = nullptr; g_table = nullptr; g_files = nullptr;
             g_err = "no_memory";   // for the ring
-            LogBus::line("[cap] off: no memory for the ring");
+            LOGI("cap", "off: no memory for the ring");
             return;
         }
         g_cap = (uint32_t)(ringBytes / sizeof(Slot));
@@ -669,7 +669,7 @@ namespace Capture
 
         uint32_t capB, nF;
         { Lock l; capB = capBytesLocked(); nF = g_nFiles; }
-        LogBus::printf("[cap] ready: ring %u kB (%s, %lu slots), %lu file(s) %lu kB of %lu kB budget, next %04lu, %s, autostart %s",
+        LOGI("cap", "ready: ring %u kB (%s, %lu slots), %lu file(s) %lu kB of %lu kB budget, next %04lu, %s, autostart %s",
                        (unsigned)(ringBytes / 1024), ps ? "psram" : "internal", (unsigned long)g_cap,
                        (unsigned long)nF, (unsigned long)(capB / 1024), (unsigned long)(budgetBytes() / 1024),
                        (unsigned long)g_next, g_mode == MODE_FULL ? "full" : "change-only",
@@ -728,7 +728,7 @@ namespace Capture
         }
         portEXIT_CRITICAL(&g_mux);
         if (g_task) xTaskNotifyGive(g_task);
-        LogBus::printf("[cap] mark #%u \"%s\"%s file=%04lu", (unsigned)no, t,
+        LOGI("cap", "mark #%u \"%s\"%s file=%04lu", (unsigned)no, t,
                        stored ? "" : (g_rec ? " NOT RECORDED (ring full)" : " (not recording)"),
                        (unsigned long)g_curNum);
     }
@@ -857,7 +857,7 @@ namespace Capture
         if (i < 0) return Res::NOT_FOUND;
         if (!deletable(g_files[i])) return Res::BUSY;
         if (!deleteLocked((uint16_t)i)) return Res::FAILED;
-        LogBus::printf("[cap] deleted %04lu (web)", (unsigned long)num);
+        LOGI("cap", "deleted %04lu (web)", (unsigned long)num);
         return Res::OK;
     }
 
@@ -868,7 +868,7 @@ namespace Capture
         Lock l;
         for (int i = (int)g_nFiles - 1; i >= 0; --i)
             if (!g_files[i].prot && deletable(g_files[i]) && deleteLocked((uint16_t)i)) ++n;
-        LogBus::printf("[cap] deleted %lu unprotected file(s) (web)", (unsigned long)n);
+        LOGI("cap", "deleted %lu unprotected file(s) (web)", (unsigned long)n);
         return n;
     }
 
@@ -882,7 +882,7 @@ namespace Capture
         setProtLocked(session, on);
         // The live session: new parts follow, and a later marker re-protects.
         if (session == g_session) g_sessionProt = on;
-        LogBus::printf("[cap] session %04lu %s (web)", (unsigned long)session, on ? "protected" : "unprotected");
+        LOGI("cap", "session %04lu %s (web)", (unsigned long)session, on ? "protected" : "unprotected");
         return Res::OK;
     }
 

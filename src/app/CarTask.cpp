@@ -124,7 +124,7 @@ namespace App
                 portENTER_CRITICAL(&s_gearMux);
                 memcpy(g, s_gearSet, sizeof(g));
                 portEXIT_CRITICAL(&s_gearMux);
-                LogBus::printf("[gear] steady ratios seen (km/h per 1000 rpm x10, clutch up):%s; table %u %u %u %u %u %u",
+                LOGI("gear", "steady ratios seen (km/h per 1000 rpm x10, clutch up):%s; table %u %u %u %u %u %u",
                                found ? out : " none yet", g[0], g[1], g[2], g[3], g[4], g[5]);
             }
 
@@ -149,7 +149,7 @@ namespace App
                 if (km && !s_s.state->has(Vehicle::SIG_ODOMETER)) s_s.state->set(Vehicle::SIG_ODOMETER, km, now);
                 if (kmC && !s_s.state->has(Vehicle::SIG_ODO_CLUSTER)) s_s.state->set(Vehicle::SIG_ODO_CLUSTER, kmC, now);
                 if (km || kmC)
-                    LogBus::printf("[car] odometer from NVS: %ld km (cluster %ld km), until the car sends it",
+                    LOGI("car", "odometer from NVS: %ld km (cluster %ld km), until the car sends it",
                                    (long)km, (long)kmC);
             }
 
@@ -178,7 +178,7 @@ namespace App
                 const int32_t v = st->get(SIG_SPEED), rpm = st->has(SIG_RPM) ? st->get(SIG_RPM) : 0;
                 if (v == 0 && rpm == 0) return;
                 auto g = [&](uint8_t s) -> long { return st->has(s) ? (long)st->get(s) : -9; };
-                LogBus::printf("[drive] %ld.%02ld km/h %ld rpm ratio %ld gear %ld clutch %ld N %ld R %ld "
+                LOGI("drive", "%ld.%02ld km/h %ld rpm ratio %ld gear %ld clutch %ld N %ld R %ld "
                                "lights pos/dip/main %ld/%ld/%ld handbrake %ld; no_lights %ld handbrake_moving %ld; "
                                "odometer %ld (age %ld s), cluster %ld; fuel %ld L (apv %ld) low %ld",
                                (long)(v / 100), (long)(v % 100), (long)rpm, g(SIG_GEAR_RATIO), g(SIG_GEAR),
@@ -321,7 +321,7 @@ namespace App
                 if (!s_decode.load(t.row, t.nRows)) {
                     // Never keep the old pointer: that buffer is the staging one now.
                     s_decode.load(nullptr, 0);
-                    LogBus::line("[car] decode map REFUSED by CanDecode: no signals decoded");
+                    LOGI("car", "decode map REFUSED by CanDecode: no signals decoded");
                 }
                 // A derived signal with a row or a constant: the binding wins.
                 s_derived.clearBound();
@@ -354,7 +354,7 @@ namespace App
                     Vehicle::AlertEval::text(text, sizeof(text), f.sig, f.value, Vehicle::verified(f.sig));
                     if (s_s.alert) s_s.alert("Car alert", text);
                     ++s_shown;
-                    LogBus::printf("[alert] rule %u: %s", (unsigned)(f.row + 1), text);
+                    LOGI("alert", "rule %u: %s", (unsigned)(f.row + 1), text);
                     AlertEntry e;
                     e.ms = now;
                     e.sig = f.sig;
@@ -420,7 +420,7 @@ namespace App
                 s_table.applyIfDirty();
                 applyTable();
                 const Vehicle::DecodeTable& t = s_table.live();
-                LogBus::printf("[car] decode map: %s, %u rows, %u constants, in %s", fromNvs ? "NVS" :
+                LOGI("car", "decode map: %s, %u rows, %u constants, in %s", fromNvs ? "NVS" :
                                n ? "factory (the NVS blob did NOT unpack)" : "factory",
                                (unsigned)t.nRows, (unsigned)t.nK, ps ? "PSRAM" : "DRAM");
             }
@@ -487,7 +487,7 @@ namespace App
                                   s_s.src[i]->name(), (unsigned long)st.frames,
                                   (unsigned long)st.dropped);
                 }
-                LogBus::printf("[car] fps=%lu frames=%lu drainMax=%lu decode=%lu/%lu short=%lu "
+                LOGI("car", "fps=%lu frames=%lu drainMax=%lu decode=%lu/%lu short=%lu "
                                "busyMax=%luus cmdDrops=%lu src %s",
                                (unsigned long)s_fps, (unsigned long)s_frames,
                                (unsigned long)s_drainMax, (unsigned long)s_decode.hits(),
@@ -598,7 +598,7 @@ namespace App
             spec.critical = true;
             spec.idOut    = &s_id;
             s_task = spawn(spec);
-            LogBus::printf("[car] task: %u source(s), %u decode rows", (unsigned)s_s.n,
+            LOGI("car", "task: %u source(s), %u decode rows", (unsigned)s_s.n,
                            (unsigned)s_decode.rows());
         }
 
@@ -685,7 +685,7 @@ namespace App
             e.seq = ++s_logSeq;
             s_log[(e.seq - 1) % ALERT_LOG] = e;
             portEXIT_CRITICAL(&s_logMux);
-            LogBus::printf("[alert] test for the apps: %s", e.text);
+            LOGI("alert", "test for the apps: %s", e.text);
         }
 
         uint8_t alertsSince(uint32_t since, AlertEntry* out, uint8_t cap, uint32_t& last)

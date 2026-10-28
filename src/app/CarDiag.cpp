@@ -108,20 +108,20 @@ namespace App
                         if (st == S::Ok) {
                             s_inSes = true;
                             s_tpAt = now;
-                            LogBus::line("[diag] session 10 C0: open (50 C0); tester present every 2 s");
+                            LOGI("diag", "session 10 C0: open (50 C0); tester present every 2 s");
                         } else {
                             s_sesRefused = true;
-                            LogBus::printf("W [diag] session 10 C0: %s; polling goes on without it", why);
+                            LOGW("diag", "session 10 C0: %s; polling goes on without it", why);
                         }
                     } else if (what == Pend::Tester) {
                         if (st == S::Ok) s_tpAt = now;
                         else {
                             s_inSes = false;
-                            LogBus::printf("W [diag] tester present 3E 01: %s; the session is gone, opened again "
+                            LOGW("diag", "tester present 3E 01: %s; the session is gone, opened again "
                                            "before the next read", why);
                         }
                     } else {
-                        LogBus::printf("[diag] session closed (10 81): %s", why);
+                        LOGI("diag", "session closed (10 81): %s", why);
                     }
                     s_ex.clear();
                     return;
@@ -155,7 +155,7 @@ namespace App
                         s_nextAt = now + BACKOFF_MS;
                         s_timeoutsInRow = 0;
                         s_backoff = true;
-                        LogBus::printf("[diag] climate: no answer 3 times, next try in %u s",
+                        LOGI("diag", "climate: no answer 3 times, next try in %u s",
                                        (unsigned)(BACKOFF_MS / 1000));
                     }
                 } else if (st == S::Negative) {
@@ -167,16 +167,16 @@ namespace App
                 // failure, says everything; a good poll only once a minute.
                 if (s_probing || !good || s_summaryAt == 0 || (uint32_t)(now - s_summaryAt) >= SUMMARY_MS) {
                     if (good)
-                        LogBus::printf("[diag] climate 21C1: cabin %d.%d C, evaporator %d.%d C, sun %u W/m2, "
+                        LOGI("diag", "climate 21C1: cabin %d.%d C, evaporator %d.%d C, sun %u W/m2, "
                                        "outside %d C, coolant %d C, battery %u.%02u V; reply %s",
                                        cv.cabinX10 / 10, abs(cv.cabinX10 % 10), cv.evapX10 / 10, abs(cv.evapX10 % 10),
                                        (unsigned)cv.sunWm2, cv.outsideC, cv.coolantC, (unsigned)(cv.battX100 / 100),
                                        (unsigned)(cv.battX100 % 100), b);
                     else if (st == S::Negative)
-                        LogBus::printf("W [diag] climate 21C1 refused: 7F 21 %02X%s; polling stopped", s_ex.nrc(),
+                        LOGW("diag", "climate 21C1 refused: 7F 21 %02X%s; polling stopped", s_ex.nrc(),
                                        s_ex.nrc() == 0x80 || s_ex.nrc() == 0x7F ? " (not in this session)" : "");
                     else
-                        LogBus::printf("W [diag] climate 21C1: %s%s%s", Diag::Exchange::statusId(st),
+                        LOGW("diag", "climate 21C1: %s%s%s", Diag::Exchange::statusId(st),
                                        s_ex.replyLen() ? "; reply " : "", s_ex.replyLen() ? b : "");
                     if (!s_probing) s_summaryAt = now;
                 }
@@ -207,11 +207,11 @@ namespace App
                     if (s_ex.status() == S::Waiting) return false;      // a poll first
                     s_sweepReq.store(false);
                     if (!s_anyFrame || (uint32_t)(now - s_lastFrameMs) >= BUS_QUIET_MS) {
-                        LogBus::line("W [diag] sweep: the car bus is quiet (ignition off?), nothing sent");
+                        LOGW("diag", "sweep: the car bus is quiet (ignition off?), nothing sent");
                         return false;
                     }
                     if (!bus.transmitting() && !bus.setTransmit(true, now)) {
-                        LogBus::line("W [diag] sweep: the controller would not transmit (rate not locked), nothing sent");
+                        LOGW("diag", "sweep: the controller would not transmit (rate not locked), nothing sent");
                         return false;
                     }
                     s_ex.clear();
@@ -221,7 +221,7 @@ namespace App
                     s_sweepAt = now + SWEEP_GAP_MS;
                     s_sweepIds0 = s_busIds;
                     s_sweepIdsMin = s_busIds;
-                    LogBus::printf("[diag] sweep: %u steps to 0x744; bus before: %u fps, %u ids", (unsigned)SWEEP_N,
+                    LOGI("diag", "sweep: %u steps to 0x744; bus before: %u fps, %u ids", (unsigned)SWEEP_N,
                                    (unsigned)s_busFps, (unsigned)s_busIds);
                     publish(now, "sweep");
                     return true;
@@ -230,12 +230,12 @@ namespace App
                 if (!s_sweepSent) {
                     if ((int32_t)(now - s_sweepAt) < 0) return true;
                     if (bus.txFault()) {
-                        LogBus::printf("W [diag] sweep: bus fault before step %d, stopped (bus %u fps, %u ids)",
+                        LOGW("diag", "sweep: bus fault before step %d, stopped (bus %u fps, %u ids)",
                                        s_sweep + 1, (unsigned)s_busFps, (unsigned)s_busIds);
                         s_sweep = -1;
                         return true;
                     }
-                    LogBus::printf("[diag] sweep %d/%u: %s; bus %u fps, %u ids", s_sweep + 1, (unsigned)SWEEP_N, st.what,
+                    LOGI("diag", "sweep %d/%u: %s; bus %u fps, %u ids", s_sweep + 1, (unsigned)SWEEP_N, st.what,
                                    (unsigned)s_busFps, (unsigned)s_busIds);
                     s_ex.start(st.req, 2, now);
                     s_sweepSent = true;
@@ -249,21 +249,24 @@ namespace App
                 hex(b, sizeof(b), s_ex.reply(), s_ex.replyLen() < 24 ? s_ex.replyLen() : 24);
                 const S r = s_ex.status();
                 if (r == S::Negative)
-                    LogBus::printf("W [diag] sweep %d/%u: %02X %02X -> 7F %02X %02X (refused)", s_sweep + 1,
+                    LOGW("diag", "sweep %d/%u: %02X %02X -> 7F %02X %02X (refused)", s_sweep + 1,
                                    (unsigned)SWEEP_N, st.req[0], st.req[1], st.req[0], s_ex.nrc());
                 else
-                    LogBus::printf("%s[diag] sweep %d/%u: %02X %02X -> %s%s%s", r == S::Ok ? "" : "W ", s_sweep + 1,
+                    if (r == S::Ok) LOGI("diag", "sweep %d/%u: %02X %02X -> %s%s%s", s_sweep + 1,
+                                   (unsigned)SWEEP_N, st.req[0], st.req[1], Diag::Exchange::statusId(r),
+                                   s_ex.replyLen() ? ", reply " : "", s_ex.replyLen() ? b : "");
+                else            LOGW("diag", "sweep %d/%u: %02X %02X -> %s%s%s", s_sweep + 1,
                                    (unsigned)SWEEP_N, st.req[0], st.req[1], Diag::Exchange::statusId(r),
                                    s_ex.replyLen() ? ", reply " : "", s_ex.replyLen() ? b : "");
                 Diag::Clim2190 d90;
                 if (r == S::Ok && Diag::decode2190(s_ex.reply(), s_ex.replyLen(), d90))
-                    LogBus::printf("[diag] sweep: 2190 setpoint %u.%u C, blower %u, distribution %u, recirc %u, "
+                    LOGI("diag", "sweep: 2190 setpoint %u.%u C, blower %u, distribution %u, recirc %u, "
                                    "A/C %u (raw codes, Clim_X84_SERIE)", (unsigned)(d90.setX10 / 10),
                                    (unsigned)(d90.setX10 % 10), (unsigned)d90.blower, (unsigned)d90.dist,
                                    (unsigned)d90.recirc, (unsigned)d90.ac);
                 Diag::ClimValues cv;
                 if (r == S::Ok && Diag::decode21C1(s_ex.reply(), s_ex.replyLen(), cv)) {
-                    LogBus::printf("[diag] sweep: cabin %d.%d C, sun %u W/m2", cv.cabinX10 / 10, abs(cv.cabinX10 % 10),
+                    LOGI("diag", "sweep: cabin %d.%d C, sun %u W/m2", cv.cabinX10 / 10, abs(cv.cabinX10 % 10),
                                    (unsigned)cv.sunWm2);
                     if (s_state) {
                         s_state->set(Vehicle::SIG_CABIN_TEMP, cv.cabinX10, now);
@@ -282,7 +285,7 @@ namespace App
                 s_sweepSent = false;
                 s_sweepAt = now + SWEEP_GAP_MS;
                 if (s_sweep >= SWEEP_N) {
-                    LogBus::printf("[diag] sweep done; bus now %u fps, %u ids (before %u, lowest during %u)",
+                    LOGI("diag", "sweep done; bus now %u fps, %u ids (before %u, lowest during %u)",
                                    (unsigned)s_busFps, (unsigned)s_busIds, (unsigned)s_sweepIds0,
                                    (unsigned)s_sweepIdsMin);
                     s_sweep = -1;
@@ -310,7 +313,7 @@ namespace App
         {
             s_state = state;
             load();
-            LogBus::printf("[diag] climate read %s, every %u s%s", s_on.load() ? "ON" : "off",
+            LOGI("diag", "climate read %s, every %u s%s", s_on.load() ? "ON" : "off",
                            (unsigned)s_interval.load(), s_session.load() ? ", in a 10 C0 session" : "");
         }
 
@@ -430,7 +433,7 @@ namespace App
             s_interval.store(intervalS);
             s_on.store(on);
             s_gen.fetch_add(1, std::memory_order_release);
-            LogBus::printf("[diag] climate read %s, every %u s", on ? "ON" : "off", (unsigned)intervalS);
+            LOGI("diag", "climate read %s, every %u s", on ? "ON" : "off", (unsigned)intervalS);
             return nullptr;
         }
 
@@ -442,7 +445,7 @@ namespace App
             p.end();
             s_session.store(on);
             s_gen.fetch_add(1, std::memory_order_release);
-            LogBus::printf("[diag] polling in a 10 C0 session: %s", on ? "ON" : "off");
+            LOGI("diag", "polling in a 10 C0 session: %s", on ? "ON" : "off");
             return nullptr;
         }
 

@@ -144,17 +144,17 @@ bool Mcp2518Source::begin()
     _ab.begin(_manual, _saved, now);
     const bool ok = start(_ab.rate(), now);
     if (_manual)
-        LogBus::printf("[can2] MCP2518FD listen-only at %uk, set by hand; cs=GPIO%d int=GPIO%d%s",
+        LOGI("can2", "MCP2518FD listen-only at %uk, set by hand; cs=GPIO%d int=GPIO%d%s",
                        kbps(_manual), (int)Board::PIN_CAN2_CS, (int)Board::PIN_CAN2_INT,
                        ok ? "" : " - begin FAILED");
     else
-        LogBus::printf("[can2] MCP2518FD listen-only, finding the rate: %uk first (%s); "
+        LOGI("can2", "MCP2518FD listen-only, finding the rate: %uk first (%s); "
                        "cs=GPIO%d int=GPIO%d%s",
                        kbps(_ab.rate()), _saved ? "saved" : "default",
                        (int)Board::PIN_CAN2_CS, (int)Board::PIN_CAN2_INT,
                        ok ? "" : " - begin FAILED");
     if (!ok) {
-        LogBus::printf("[can2] begin err=0x%lX (no chip, or a 2515 board?); retrying every %u s",
+        LOGI("can2", "begin err=0x%lX (no chip, or a 2515 board?); retrying every %u s",
                        (unsigned long)_beginErr, (unsigned)(RETRY_MS / 1000));
         _retryAtMs = now + RETRY_MS;
     }
@@ -175,7 +175,7 @@ void Mcp2518Source::service(uint32_t nowMs)
         const bool passiveOrOff = (trec & (TREC_TXBP | TREC_TXBO)) != 0;
         if (!_live || tec >= 96 || passiveOrOff) {
             _txFault = true;
-            LogBus::printf("W [can2] diagnostic read stopped: %s (tec=%u trec=0x%08lX); listen-only",
+            LOGW("can2", "diagnostic read stopped: %s (tec=%u trec=0x%08lX); listen-only",
                            !_live ? "controller down" : passiveOrOff ? "error passive / bus off" : "transmit errors",
                            (unsigned)tec, (unsigned long)trec);
             _tx = false;
@@ -190,7 +190,7 @@ void Mcp2518Source::service(uint32_t nowMs)
         _manual = Bus::Autobaud::valid(req) ? req : 0;
         _ab.begin(_manual, _saved, nowMs);
         const bool ok = start(_ab.rate(), nowMs);
-        LogBus::printf("[can2] rate %s: listening at %uk%s",
+        LOGI("can2", "rate %s: listening at %uk%s",
                        _manual ? "set by hand" : "back to auto", kbps(_ab.rate()),
                        ok ? "" : " - begin FAILED");
         if (!ok) _retryAtMs = nowMs + RETRY_MS;
@@ -226,20 +226,20 @@ void Mcp2518Source::service(uint32_t nowMs)
         const uint32_t cyclesWas = _ab.cycles();
         switch (_ab.observe(nowMs, _rateFrames, errors)) {
             case Bus::Autobaud::Step::Lock:
-                LogBus::printf("[can2] bus found: %uk, %lu clean frames, listen-only",
+                LOGI("can2", "bus found: %uk, %lu clean frames, listen-only",
                                kbps(was), (unsigned long)_rateFrames);
                 break;
             case Bus::Autobaud::Step::Next:
                 // Only the first round is told rate by rate; after that the
                 // search goes round quietly and says so every 10 minutes.
                 if (errors && cyclesWas == 0)
-                    LogBus::printf("[can2] %uk: errors (bdiag1=0x%08lX) after %lu frames - "
+                    LOGI("can2", "%uk: errors (bdiag1=0x%08lX) after %lu frames - "
                                    "not this rate", kbps(was), (unsigned long)_bdiag1,
                                    (unsigned long)_rateFrames);
                 if (_ab.cycles() != cyclesWas &&
                     (_ab.cycles() == 1 || (uint32_t)(nowMs - _quietLogAtMs) >= QUIET_LOG_MS)) {
                     _quietLogAtMs = nowMs;
-                    LogBus::printf("[can2] no clean frames at 500k/250k/125k/1M (round %lu, "
+                    LOGI("can2", "no clean frames at 500k/250k/125k/1M (round %lu, "
                                    "%lu rejected for errors); still listening",
                                    (unsigned long)_ab.cycles(), (unsigned long)_ab.rejected());
                 }
@@ -356,7 +356,7 @@ bool Mcp2518Source::setTransmit(bool on, uint32_t nowMs)
     _tx = on;
     const bool ok = start(_ab.rate(), nowMs);
     _txCheckAtMs = nowMs;
-    LogBus::printf("[can2] %s at %uk%s", on ? "normal mode (diagnostic read)" : "back to listen-only",
+    LOGI("can2", "%s at %uk%s", on ? "normal mode (diagnostic read)" : "back to listen-only",
                    kbps(_ab.rate()), ok ? "" : " - begin FAILED");
     if (!ok) {
         _tx = false;

@@ -199,6 +199,24 @@ for rel in ['src/net/WebUi.cpp', 'src/net/WebUiMacro.cpp', 'src/net/WebUiRes.cpp
     check(rel, src, r'\btwai_\w+\s*\(', 'httpd never calls the TWAI driver: Diag::CanBench')
     check(rel, src, r'\b_disp\b', 'httpd reads the panel\'s snapshot (_panel), never the library')
 
+# ---- the log: one leveled API (docs/design/logging.md) ---------------------------
+# Every line goes through LOGE..LOGT: a level and a tag, gated before it is
+# formatted. LogBus is the bus under it. LogBus::line stays only where a line is
+# built in pieces, until the status providers (step 3) and the head-unit UART in
+# the capture (step 4) replace those builders.
+RAW_LINE_ALLOWED = {'src/main.cpp', 'src/app/Housekeeping.cpp', 'src/capture/CanRecorder.cpp'}
+for dirpath, _, files in os.walk(os.path.join(ROOT, 'src')):
+    for fn in files:
+        if not fn.endswith(('.cpp', '.h')):
+            continue
+        rel = os.path.relpath(os.path.join(dirpath, fn), ROOT).replace(os.sep, '/')
+        if rel.startswith('src/utils/Log'):
+            continue
+        src = strip_comments(read(rel))
+        check(rel, src, r'\bLogBus::printf\s*\(', 'log through LOGE..LOGT (a level and a tag), not LogBus::printf')
+        if rel not in RAW_LINE_ALLOWED:
+            check(rel, src, r'\bLogBus::line\s*\(', 'log through LOGE..LOGT (a level and a tag), not LogBus::line')
+
 # ---- CAN A: listen-only, but for the climate read ---------------------------------
 # The car bus is written in one place: Mcp2518Source puts the chip in normal mode
 # and sends, and only CarDiag (through Diag::Exchange's allowlist) asks it to.

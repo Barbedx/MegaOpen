@@ -224,14 +224,14 @@ namespace MegaOpen
             // out, but a refusal of it will not be logged. Said so, rather
             // than lost quietly.
             else if (unwatched)
-                LogBus::printf("[disp] key: %u in flight, this one's verdict is not watched (a refusal goes unlogged)",
+                LOGI("disp", "key: %u in flight, this one's verdict is not watched (a refusal goes unlogged)",
                                (unsigned)KeyVerdicts::SLOTS + 1);
         } else {
             _refused.fetch_add(1, std::memory_order_relaxed);
             // The ui task says what matters about its own, rate-limited:
             // logging each refused repaint here would flood the log.
             if (!r.quiet)
-                LogBus::printf("[disp] %s -> %s", opName(r.op), affa::resultName(s.result));
+                LOGI("disp", "%s -> %s", opName(r.op), affa::resultName(s.result));
         }
         return s;
     }
@@ -247,7 +247,7 @@ namespace MegaOpen
     void PanelOps::logKey(affa::Result r)
     {
         if (r != affa::Result::Ok)
-            LogBus::printf("[disp] %s -> %s", opName(Op::Key), affa::resultName(r));
+            LOGI("disp", "%s -> %s", opName(Op::Key), affa::resultName(r));
     }
 
     affa::Submitted PanelOps::render(const Req& r)

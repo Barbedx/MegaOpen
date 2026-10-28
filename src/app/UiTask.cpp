@@ -573,20 +573,20 @@ namespace App
                     if (g_clockHhmm[0]) g_clockPending = true;
                     const uint32_t own = n < s_ownResyncs ? n : s_ownResyncs;
                     s_ownResyncs -= own;
-                    if (n > own) LogBus::printf("[disp] resync: FSMs reset, queue cleared (requested)");
+                    if (n > own) LOGI("disp", "resync: FSMs reset, queue cleared (requested)");
                 }
 
                 const bool listenOnly = Diag::CanBench::listenOnly();
                 // Re-arm the bring-up probe when listen-only is switched off.
                 if (s_wasListenOnly && !listenOnly) {
                     s_tries = 0; s_ok = false; s_nextTryMs = now + 500;
-                    LogBus::printf("[disp] transmit enabled — retrying registration");
+                    LOGI("disp", "transmit enabled — retrying registration");
                 }
                 s_wasListenOnly = listenOnly;
 
                 if (ps.synced != s_wasSynced) {
                     s_wasSynced = ps.synced;
-                    LogBus::printf("[disp] sync %s", s_wasSynced ? "ESTABLISHED" : "lost");
+                    LOGI("disp", "sync %s", s_wasSynced ? "ESTABLISHED" : "lost");
                     if (s_wasSynced) { s_tries = 0; s_ok = false; s_nextTryMs = now + 200; }
                 }
 
@@ -597,7 +597,7 @@ namespace App
                     static uint8_t s_phase = 0;
                     static bool s_phaseSeen = false;
                     if (!s_phaseSeen || ps.phase != s_phase) {
-                        LogBus::printf("[disp] phase %s -> %s",
+                        LOGI("disp", "phase %s -> %s",
                                        s_phaseSeen ? affa::phaseName((affa::Phase)s_phase) : "(boot)",
                                        affa::phaseName((affa::Phase)ps.phase));
                         s_phase = ps.phase;
@@ -610,7 +610,7 @@ namespace App
                     static uint32_t s_lostSeen = 0;
                     if (ps.sessionsLost != s_lostSeen) {
                         s_lostSeen = ps.sessionsLost;
-                        LogBus::printf("[disp] session lost (#%u): %s", (unsigned)ps.sessionsLost,
+                        LOGI("disp", "session lost (#%u): %s", (unsigned)ps.sessionsLost,
                                        affa::lossReasonName((affa::LossReason)ps.lastLoss));
                     }
                 }
@@ -622,13 +622,13 @@ namespace App
                     if (!ps.registered) {
                         ++g_resyncs;
                         g_lastResyncMs = now;
-                        LogBus::printf("[disp] REGISTRATION LOST (#%u) — re-arming", (unsigned)g_resyncs);
+                        LOGI("disp", "REGISTRATION LOST (#%u) — re-arming", (unsigned)g_resyncs);
                         // Re-owe the clock (the library restores power itself).
                         if (g_clockHhmm[0]) g_clockPending = true;
                         // The queue was cancelled: the credited rows never landed.
                         g_media3.invalidate();
                     } else {
-                        LogBus::printf("[disp] registered again after %u ms",
+                        LOGI("disp", "registered again after %u ms",
                                        (unsigned)(now - g_lastResyncMs));
                     }
                 }
@@ -648,7 +648,7 @@ namespace App
                             s_postedThisPass = true;
                         }
                         if (g_clockHhmm[0]) g_clockPending = true;
-                        LogBus::printf("[disp] resync: FSMs reset, queue cleared (unregistered 30 s)");
+                        LOGI("disp", "resync: FSMs reset, queue cleared (unregistered 30 s)");
                     }
                 }
             }
@@ -696,7 +696,7 @@ namespace App
                             if (res != affa::Result::Aborted &&
                                 (uint32_t)(now - s_lastComplaintMs) >= 5000) {
                                 s_lastComplaintMs = now;
-                                LogBus::printf("[media] repaint %s: %s",
+                                LOGI("media", "repaint %s: %s",
                                                synth ? "refused" : "failed",
                                                affa::resultName(res));
                             }
@@ -728,11 +728,11 @@ namespace App
                         if (id == s_probeReq) s_probeReq = NO_TICKET;
                         // Acceptance is what the probe asks about.
                         const bool accepted = !synth || ok;
-                        LogBus::printf("[disp] try %u setText(\"SUCCESS\") -> %s%s", s_tries,
+                        LOGI("disp", "try %u setText(\"SUCCESS\") -> %s%s", s_tries,
                                        affa::resultName(res), synth ? " (refused)" : "");
                         if (accepted && res != affa::Result::Timeout && !s_ok) {
                             s_ok = true;
-                            LogBus::printf("[disp] REGISTERED AND TEXT ACCEPTED");
+                            LOGI("disp", "REGISTERED AND TEXT ACCEPTED");
                         }
                         break;
                     }
@@ -1107,7 +1107,7 @@ namespace App
                         // is not drawn inside the media screen). Same string, so they agree.
                         g_media3.setClock(g_clockHhmm);
                         clockFrom(ClockSrc::Cts, (uint16_t)(t.tm_hour << 8 | t.tm_min));
-                        LogBus::printf("[clock] from phone %02d:%02d", t.tm_hour, t.tm_min);
+                        LOGI("clock", "from phone %02d:%02d", t.tm_hour, t.tm_min);
                     }
                 }
             }
@@ -1138,7 +1138,7 @@ namespace App
             // waits for it now); waits = requests still owed a verdict.
             void logWindow()
             {
-                LogBus::printf("[ui] busyMax=%uus mediaBusy=%u completions=%u stray=%u timeouts=%u "
+                LOGI("ui", "busyMax=%uus mediaBusy=%u completions=%u stray=%u timeouts=%u "
                                "uiqDrops=%u waits=%u panes=%u/%u",
                                (unsigned)s_busyWinUs, (unsigned)s_mediaLockMisses,
                                (unsigned)s_completions, (unsigned)s_stray,

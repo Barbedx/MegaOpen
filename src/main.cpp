@@ -296,7 +296,7 @@ static void fileSink(const char* line, int len, uint32_t ms)
 // goes to /log/0.log first. Not run on a panic or a power cut.
 static void logShutdown()
 {
-    LogBus::line("[log] rebooting: log flushed");
+    LOGI("log", "rebooting: log flushed");
 #if FEATURE_CAPTURE
     // The capture's last chunk first: it is the one a drive was recorded for.
     Capture::flush(500);
@@ -305,16 +305,6 @@ static void logShutdown()
 }
 #endif
 
-// Formatted line into the LogBus: never blocks the caller.
-static void logf(const char* fmt, ...)
-{
-    char b[LogBus::MAX_LINE];
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(b, sizeof(b), fmt, ap);
-    va_end(ap);
-    LogBus::line(b);
-}
 
 // Task handles for the [stk] stack high-water line, which runs on net_svc
 // and so must name the loop's own handle rather than ask for "this task".
@@ -331,7 +321,7 @@ static void memMark(const char* what)
 {
     static uint32_t s_last = 0;
     const uint32_t now = ESP.getFreeHeap();
-    logf("[mem] %-12s free=%6u big=%6u %+d", what, (unsigned)now,
+    LOGI("mem", "%-12s free=%6u big=%6u %+d", what, (unsigned)now,
          (unsigned)ESP.getMaxAllocHeap(), s_last ? (int)now - (int)s_last : 0);
     s_last = now;
 }
@@ -602,7 +592,7 @@ static void onAncsNotification(const AppleNotificationService::NotificationInfo&
     ++g_ancsCount;
 
     // Always logged, in raw UTF-8.
-    LogBus::printf("[ancs] %s | %s: %s",
+    LOGI("ancs", "%s | %s: %s",
                 AppleNotificationService::CategoryName(n.categoryId),
                 n.title.c_str(), n.message.c_str());
 
@@ -859,7 +849,7 @@ static void huDrainSerial()
     const uint32_t count = g_huCount;
     // Report frames lost when the console falls behind the ring.
     if (count - g_huPrinted > kHuRingLen) {
-        LogBus::printf("[hu] ... %u frames lost (console behind the ring)",
+        LOGI("hu", "... %u frames lost (console behind the ring)",
                        (unsigned)(count - g_huPrinted - kHuRingLen));
         g_huPrinted = count - kHuRingLen;
     }
@@ -1049,7 +1039,7 @@ static void onKeyEvent(const Keys::Event& e, void*)
     }
     // Through the LogBus: this runs inline in every dispatch, and the LogBus
     // copies and returns.
-    // A small buffer, not logf()'s 320 bytes: the keys task's stack is 3 kB.
+    // A small buffer, not a 320-byte log line: the keys task's stack is 3 kB.
     char b[48];
     if (enc && s_encFolded) {
         snprintf(b, sizeof(b), "%s%s %u +%u", KEV, Keys::name(e.action), (unsigned)e.state,
@@ -1101,7 +1091,7 @@ static void macroRows(const char* arg, char* a, char* b, char* c, size_t cap)
 static void macroFire(const Keys::Macro& m, void*)
 {
     const char* label = m.name[0] ? m.name : Keys::effectName(m.effect);
-    LogBus::printf("[macro] %s", label);
+    LOGI("macro", "%s", label);
 
     // By route: Keys::effectRoute() is the table test_macro checks, so where
     // each effect is performed is decided there, not only here.
@@ -1133,9 +1123,9 @@ static void macroFire(const Keys::Macro& m, void*)
             // The hu task's vehicle lane: an arbitrary frame is not a key, and
             // must not go in front of the next ack.
             if (!len)
-                LogBus::line("[macro] payload too long");
+                LOGI("macro", "payload too long");
             else if (!App::Hu::post(App::Hu::Kind::Raw, frame, len))
-                LogBus::line("[macro] uart queue full");
+                LOGI("macro", "uart queue full");
             break;
         }
         case Keys::EffectRoute::Hu:
@@ -1164,7 +1154,7 @@ static void macroFire(const Keys::Macro& m, void*)
 #else
         case Keys::EffectRoute::Panel:
         case Keys::EffectRoute::Pane:
-            LogBus::line("[macro] this build has no panel - see FEATURE_DISPLAY_CAN");
+            LOGI("macro", "this build has no panel - see FEATURE_DISPLAY_CAN");
             break;
 #endif
         default:
@@ -1231,7 +1221,7 @@ static void affaTraceDrain()
     }
     const uint32_t count = g_affaTraceCount;
     if (count - g_affaTracePrinted > 64) {
-        logf("[affa] ... %u frames lost\n",
+        LOGI("affa", "... %u frames lost\n",
                       (unsigned)(count - g_affaTracePrinted - 64));
         g_affaTracePrinted = count - 64;
     }
@@ -1266,7 +1256,7 @@ static void onHuClock(const uint8_t* payload, uint8_t len)
 #if FEATURE_DISPLAY_CAN
     App::Ui::postHuClock(hm);
 #endif
-    LogBus::printf("[hu] clock from head unit: %02u:%02u",
+    LOGI("hu", "clock from head unit: %02u:%02u",
                    (unsigned)payload[0], (unsigned)payload[1]);
 }
 
@@ -1314,7 +1304,7 @@ static void onHuFrame(uint8_t cmd, const uint8_t* payload, uint8_t len, void*)
     // reply lane, ahead of queued telemetry.
     if (cmd == 0x90 && len >= 1) {
         const bool sent = App::Hu::sendByCmd(payload[0]);
-        LogBus::printf("[hu] 0x90: head unit asked for %02X -> %s", payload[0],
+        LOGI("hu", "0x90: head unit asked for %02X -> %s", payload[0],
                        sent ? "sent" : "nothing to say");
     }
 }
@@ -1478,7 +1468,7 @@ static void keysApply()
             // The page checked the rung against the staged map; this is the
             // map that is live now, which can only differ by a racing edit.
             if (!g_resSink.learnAction((Keys::Action)q.action, q.ms, now))
-                LogBus::printf("[res] learn %s: no rung now - the map changed",
+                LOGI("res", "learn %s: no rung now - the map changed",
                                Keys::name((Keys::Action)q.action));
         } else {
             g_resSink.learnAssert(q.ch, q.mask, q.ms, now);
@@ -1610,7 +1600,7 @@ static void hkWifi(uint32_t now)
     char head[40], body[40];
     addressText(head, sizeof(head), body, sizeof(body));
     App::Ui::queueNotice(head, body);
-    logf("[wifi] on the panel: %s / %s\n", head, body);
+    LOGI("wifi", "on the panel: %s / %s\n", head, body);
 #endif
 }
 
@@ -1624,7 +1614,7 @@ static void hkBeat(uint32_t now)
     // [stk] is a subset of [task] now. Kept until Step 6 retires it, so old
     // logs and new ones still compare line for line.
     const TaskHandle_t net = App::Housekeeping::task();
-    logf("[stk] loop=%u net=%u ble=%u knobs=%u",
+    LOGI("stk", "loop=%u net=%u ble=%u knobs=%u",
          g_loopTask ? (unsigned)uxTaskGetStackHighWaterMark(g_loopTask) : 0u,
          net ? (unsigned)uxTaskGetStackHighWaterMark(net) : 0u,
          g_bleTask ? (unsigned)uxTaskGetStackHighWaterMark(g_bleTask) : 0u,
@@ -1643,7 +1633,7 @@ static void hkBeat(uint32_t now)
     {
         const Mcp2518Source::Status c = Mcp2518Source::instance().status().read();
         static const char* const kAb[] = {"searching", "locked", "manual"};
-        logf("[can2] live=%u ab=%s bps=%lu fps=%lu frames=%lu hwOvf=%lu ringPeak=%lu/256 "
+        LOGI("can2", "live=%u ab=%s bps=%lu fps=%lu frames=%lu hwOvf=%lu ringPeak=%lu/256 "
              "fd=%lu rtr=%lu intKicks=%lu maskMaxUs=%lu rec=%lu tec=%lu flags=0x%02lX "
              "bdiag1=0x%08lX restarts=%lu rounds=%lu rejected=%lu err=0x%lX",
              (unsigned)c.live, kAb[c.state <= 2 ? c.state : 0], (unsigned long)c.bps,
@@ -1658,7 +1648,7 @@ static void hkBeat(uint32_t now)
         // task never waits for a flash write, and the next boot tries it first.
         if (c.detected && c.detected != g_cfg.s().can2Detected) {
             g_cfg.saveCan2Detected(c.detected);
-            logf("[can2] %lu saved: tried first at the next boot", (unsigned long)c.detected);
+            LOGI("can2", "%lu saved: tried first at the next boot", (unsigned long)c.detected);
         }
     }
 #endif
@@ -1668,7 +1658,7 @@ static void hkBeat(uint32_t now)
     // stale = waited over 300 ms; coal = volume presses folded into one
     // pending count; nolink = owed with no phone connected; vol = AMS
     // commands a volume press sends (measured, sinks/AmsVolumeStep.h).
-    logf("[ble] keys q=%u ams=%u fail=%u hid=%u stale=%u coal=%u nolink=%u vol=%u",
+    LOGI("ble", "keys q=%u ams=%u fail=%u hid=%u stale=%u coal=%u nolink=%u vol=%u",
          (unsigned)Sinks::BleKeyQueue::dropped(), (unsigned)g_bleKeys.amsWrites(),
          (unsigned)g_bleKeys.amsFailed(),
          (unsigned)g_bleKeys.hidPresses(), (unsigned)g_bleKeys.stale(),
@@ -1678,11 +1668,11 @@ static void hkBeat(uint32_t now)
 #if FEATURE_DISPLAY_CAN || FEATURE_BLE
     // lockMiss = head-unit frames that found a reader holding the media
     // mutex and were applied a pass later; lost = of those, stash overflow.
-    logf("[media] hu frames=%u text=%u lockMiss=%u lost=%u",
+    LOGI("media", "hu frames=%u text=%u lockMiss=%u lost=%u",
          (unsigned)g_hu.frames(), (unsigned)g_hu.textFrames(),
          (unsigned)g_hu.lockMisses(), (unsigned)g_hu.stashDropped());
 #endif
-    logf("[hb] up=%02u:%02u:%02u heap=%u min=%u big=%u canrx=%u keys=%u tx=%u/%u",
+    LOGI("hb", "up=%02u:%02u:%02u heap=%u min=%u big=%u canrx=%u keys=%u tx=%u/%u",
          (unsigned)(s / 3600), (unsigned)((s / 60) % 60), (unsigned)(s % 60),
          (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(),
          (unsigned)ESP.getMaxAllocHeap(),
@@ -1701,19 +1691,19 @@ static void hkBeat(uint32_t now)
 static void hkBeatSlow(uint32_t)
 {
     if (g_wifi.connecting()) {
-        logf("[net] joining \"%s\"", g_wifi.curSsid().c_str());
+        LOGI("net", "joining \"%s\"", g_wifi.curSsid().c_str());
     } else if (g_wifi.isSta()) {
         // A String whose allocation failed has a NULL buffer; strlen(NULL)
         // in vsnprintf reboots. Print "?" instead.
         auto nn = [](const char* s) { return s ? s : "?"; };
-        logf("[net] STA ssid=\"%s\" rssi=%d bssid=%s ip=%s gw=%s mask=%s %s",
+        LOGI("net", "STA ssid=\"%s\" rssi=%d bssid=%s ip=%s gw=%s mask=%s %s",
              nn(WiFi.SSID().c_str()), (int)WiFi.RSSI(), nn(WiFi.BSSIDstr().c_str()),
              nn(WiFi.localIP().toString().c_str()),
              nn(WiFi.gatewayIP().toString().c_str()),
              nn(WiFi.subnetMask().toString().c_str()),
              g_wifi.mdnsHost().length() ? nn(g_wifi.mdnsHost().c_str()) : "(no mdns)");
     } else {
-        logf("[net] AP \"%s\" ip=%s %s", g_wifi.apSsid().c_str(),
+        LOGI("net", "AP \"%s\" ip=%s %s", g_wifi.apSsid().c_str(),
              g_wifi.ip().c_str(),
              g_wifi.mdnsHost().length() ? g_wifi.mdnsHost().c_str() : "(no mdns)");
     }
@@ -1810,7 +1800,7 @@ static void logBootReason()
     // key=value, one line, the build first: the flash log keeps a file per
     // boot, and this is the line that says which image wrote it and why the
     // board came up. psram=0 on a board that should have it is a wrong image.
-    logf("[boot] build=%s fw=" MEGAOPEN_VERSION " board=%s reason=%s boots=%u crashes=%u psram=%u",
+    LOGI("boot", "build=%s fw=" MEGAOPEN_VERSION " board=%s reason=%s boots=%u crashes=%u psram=%u",
          MegaOpen::buildId(), Board::NAME, why, (unsigned)boots, (unsigned)crashes,
          (unsigned)ESP.getPsramSize());
     logCrash(boots - 1);
@@ -1846,10 +1836,10 @@ void setup()
         LogPush::View v;
         LogPush::view(v);
         if (push)
-            logf("[push] spool %u kB in PSRAM; %s, repo %s, device %s", (unsigned)(v.spoolBytes / 1024),
+            LOGI("push", "spool %u kB in PSRAM; %s, repo %s, device %s", (unsigned)(v.spoolBytes / 1024),
                  v.on ? (v.hasToken ? "on" : "on, no token") : "off", v.repo, v.device);
         else
-            logf("[push] no memory for the spool: log push off this boot");
+            LOGI("push", "no memory for the spool: log push off this boot");
     }
 #endif
     // Below the loop task (raised in setup()'s tail), on the core WiFi lives on.
@@ -1873,16 +1863,16 @@ void setup()
     App::Tasks::setHandle(g_logbusTaskId, LogBus::task());
     LogBus::onWake([](uint32_t busyUs) { App::Tasks::beat(g_logbusTaskId, busyUs); });
     logBootReason();
-    logf("[log] ring %d B in %s%s", LogBus::ringSize(), LogBus::ringInPsram() ? "PSRAM" : "internal RAM",
+    LOGI("log", "ring %d B in %s%s", LogBus::ringSize(), LogBus::ringInPsram() ? "PSRAM" : "internal RAM",
          ringGrown ? "" : " (the boot ring: no memory for a bigger one)");
 #if FEATURE_LOGFS
     if (logfs)
-        logf("[log] flash log /log/0.log (previous boot: /log/1.log), %u/%u kB used; "
+        LOGI("log", "flash log /log/0.log (previous boot: /log/1.log), %u/%u kB used; "
              "written every %u kB, on warnings and before a reboot",
              (unsigned)(LogFile::usedBytes() / 1024), (unsigned)(LogFile::totalBytes() / 1024),
              (unsigned)(LogFile::FLUSH_BYTES / 1024));
     else
-        logf("[log] flash log FAILED: %s; RAM and serial only", LogFile::mountError());
+        LOGI("log", "flash log FAILED: %s; RAM and serial only", LogFile::mountError());
 #endif
 
     memMark("boot");
@@ -1901,7 +1891,7 @@ void setup()
         Log::setSinkLevel(Log::SINK_PUSH, (LogLevel)s.logPush);
         Log::setSinkLevel(Log::SINK_SERIAL, (LogLevel)s.logSerial);
         if (s.logLevel != 2 || s.logTags.length())
-            logf("[log] level %s%s%s", Log::levelName(Log::level()), s.logTags.length() ? ", per tag: " : "",
+            LOGI("log", "level %s%s%s", Log::levelName(Log::level()), s.logTags.length() ? ", per tag: " : "",
                  s.logTags.c_str());
     }
     g_cfg.loadKeyMap(g_map);
@@ -1937,7 +1927,7 @@ void setup()
         m.knobsSet = [](const Knobs::Config& c) { g_knobs.setConfig(c); g_cfg.saveKnobs(c); };
 #endif
         m.stageUi = [](const Cfg::Settings& s) {
-            if (!App::Ui::stageFrom(s)) logf("[menu] ui settings busy: shown after the next change");
+            if (!App::Ui::stageFrom(s)) LOGI("menu", "ui settings busy: shown after the next change");
         };
         m.stageMedia = [](const Cfg::Settings& s) {
             g_media.setMode(MediaRouter::modeFromStr(s.mediaSource.c_str()));
@@ -1948,7 +1938,7 @@ void setup()
             char head[40], body[40];
             addressText(head, sizeof(head), body, sizeof(body));
             App::Ui::queueNotice(head, body);
-            logf("[menu] address on the panel: %s / %s\n", head, body);
+            LOGI("menu", "address on the panel: %s / %s\n", head, body);
         };
         App::PanelMenu::begin(m);
     }
@@ -2024,7 +2014,7 @@ void setup()
     g_usbKeys.begin();
     g_usbKeys.setClasses(g_cfg.s().routeUsb);
     g_engine.addSink(&g_usbKeys);
-    logf("[usb] HID consumer control on the native USB, classes=0x%02X",
+    LOGI("usb", "HID consumer control on the native USB, classes=0x%02X",
          (unsigned)g_usbKeys.classes());
 #endif
 #if FEATURE_RESISTIVE_KEYS
@@ -2039,13 +2029,13 @@ void setup()
     {
         // Printed every boot: legs and rung values live in NVS.
         char b[96];
-        int n = snprintf(b, sizeof(b), "[res] ch0 legs=%u ch1 legs=%u drive=%s%s ohms:",
+        int n = snprintf(b, sizeof(b), "ch0 legs=%u ch1 legs=%u drive=%s%s ohms:",
                          (unsigned)Board::RES_LEGS_CH0, (unsigned)Board::RES_LEGS_CH1,
                          g_resMap.activeHigh() ? "mosfet" : "gpio",
                          g_cfg.s().resEnabled ? "" : " (DISABLED)");
         for (uint8_t i = 0; i < Board::RES_LEGS_CH0 && n < (int)sizeof(b) - 8; ++i)
             n += snprintf(b + n, sizeof(b) - n, " %u", (unsigned)g_resMap.ladder(0).ohmsFor((uint8_t)(1u << i)));
-        logf("%s", b);
+        LOGI("res", "%s", b);
     }
 #endif
     g_engine.onEvent(onKeyEvent, nullptr);
@@ -2068,7 +2058,7 @@ void setup()
         uint8_t on = 0;
         for (uint8_t i = 0; i < Keys::MacroEngine::count(); ++i)
             if (g_macros.at(i).enabled && g_macros.at(i).valid()) ++on;
-        logf("[macro] %u of %u active", (unsigned)on, (unsigned)Keys::MacroEngine::count());
+        LOGI("macro", "%u of %u active", (unsigned)on, (unsigned)Keys::MacroEngine::count());
     }
 
 #if FEATURE_KNOBS
@@ -2090,7 +2080,7 @@ void setup()
         }, nullptr);
         memMark("knobs");
         // Printed every boot: pins and enable state.
-        logf("[knobs] S1=GPIO%d S2=GPIO%d KEY=GPIO%d pot=GPIO%d led=GPIO%d  enc=%s pot=%s led=%s x%u+%u feet cap=%umA",
+        LOGI("knobs", "S1=GPIO%d S2=GPIO%d KEY=GPIO%d pot=GPIO%d led=GPIO%d  enc=%s pot=%s led=%s x%u+%u feet cap=%umA",
              (int)Board::PIN_KNOB_S1, (int)Board::PIN_KNOB_S2, (int)Board::PIN_KNOB_KEY,
              (int)Board::PIN_KNOB_POT, (int)Board::PIN_KNOB_LED,
              kc.enc[Knobs::ENC_RIGHT].enabled ? "on" : "OFF", Knobs::potModeName(kc.potMode),
@@ -2118,7 +2108,7 @@ void setup()
 #if !FEATURE_BLE
         // No radio in this image, and `ams` is the stored default: force `hu`.
         if (m == MediaRouter::Mode::Ams) {
-            LogBus::line("media source: NVS says 'ams', but this build has no radio "
+            LOGW("media", "source: NVS says 'ams', but this build has no radio "
                          "— forcing 'hu'");
             m = MediaRouter::Mode::Hu;
         }
@@ -2128,7 +2118,7 @@ void setup()
 #endif
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-    logf("[can] rx=GPIO%d tx=GPIO%d", (int)Board::PIN_CAN_RX, (int)Board::PIN_CAN_TX);
+    LOGI("can", "rx=GPIO%d tx=GPIO%d", (int)Board::PIN_CAN_RX, (int)Board::PIN_CAN_TX);
 #endif
 
 #if FEATURE_VEHICLE_CAN && !FEATURE_DISPLAY_CAN
@@ -2144,11 +2134,11 @@ void setup()
         g_affaLog.begin([](const char* line) { LogBus::line(line); });
         affa::setLogSink(&g_affaLog);
         if (!g_twai.begin(cfg))
-            logf("[can] vehicle: TwaiLink::begin FAILED — no controller (it keeps trying)");
+            LOGI("can", "vehicle: TwaiLink::begin FAILED — no controller (it keeps trying)");
     }
-    logf("[can] vehicle: listen-only, never transmits, never ACKs, "
+    LOGI("can", "vehicle: listen-only, never transmits, never ACKs, "
          "cannot go bus-off. No display on this bus.");
-    logf("[can] no termination resistor needed here — an OBD tap is not a "
+    LOGI("can", "no termination resistor needed here — an OBD tap is not a "
          "two-node stub");
 #endif
 
@@ -2191,9 +2181,8 @@ void setup()
         cfg.tx = (gpio_num_t)Board::PIN_CAN_TX;
         cfg.rx = (gpio_num_t)Board::PIN_CAN_RX;
         const bool ok = g_twai.begin(cfg);
-        logf(ok ? "[can] display: TwaiLink @500k normal, rxq=%u"
-                : "[can] display: TwaiLink::begin FAILED — no controller (it keeps trying)",
-             (unsigned)cfg.rxQueue);
+        if (ok) LOGI("can", "display: TwaiLink @500k normal, rxq=%u", (unsigned)cfg.rxQueue);
+        else    LOGE("can", "display: TwaiLink::begin FAILED - no controller (it keeps trying)");
     }
     memMark("can+display");
     // Listen before talking, when we register: the TX gate stays shut until
@@ -2218,13 +2207,13 @@ void setup()
 
     // Every AFFA frame to USB serial, gated on log level TRC.
     g_twai.onRaw(affaTap, nullptr);
-    logf("[affa] frame trace follows the log level - raise it to TRC (logLevel: the Service page or the panel menu); it will slow the loop");
+    LOGI("affa", "frame trace follows the log level - raise it to TRC (logLevel: the Service page or the panel menu); it will slow the loop");
 
     // begin() transmits nothing; the first heartbeat leaves on the first poll().
     panel.begin();
     memMark("display.begin");
 
-    logf("[MegaOpen] display=%s funcreg=%s\n",
+    LOGI("MegaOpen", "display=%s funcreg=%s\n",
                   dt.c_str(), g_cfg.s().funcReg ? "on" : "off");
 #endif
 
@@ -2244,7 +2233,7 @@ void setup()
     // Before any key can be posted, BLE on or not: a proxy with no ble_svc
     // behind it drops and counts.
     if (!Sinks::BleKeyQueue::begin())
-        logf("[ble] KEY QUEUE FAILED TO ALLOCATE - phone and BLE keyboard keys are dead");
+        LOGI("ble", "KEY QUEUE FAILED TO ALLOCATE - phone and BLE keyboard keys are dead");
     {
         const String& bm = g_cfg.s().bleMode;
         // Off = BleHub not started (saves ~40 KB of host state).
@@ -2306,7 +2295,7 @@ void setup()
                             vTaskDelete(nullptr);
                         },
                         "bt_begin", 16384, nullptr, 1, nullptr);
-            logf("[MegaOpen] BLE mode=%s\n", bm.c_str());
+            LOGI("MegaOpen", "BLE mode=%s\n", bm.c_str());
         }
 
         // Warn when the media screen is on but no AMS role will feed it.
@@ -2316,7 +2305,7 @@ void setup()
         const bool mediaAuto = false;
 #endif
         if (mediaAuto && !(bleOn && BleHub::amsActive(mode)))
-            logf("[MegaOpen] media screen is ON but bleMode=%s has no AMS "
+            LOGI("MegaOpen", "media screen is ON but bleMode=%s has no AMS "
                           "role — rows will stay empty until it is 'ams' or 'both'\n",
                           bm.c_str());
     }
@@ -2406,7 +2395,7 @@ void setup()
         const bool alertsNvs = g_cfg.loadAlerts(cs.alerts);
         uint8_t alertsOn = 0;
         for (const Vehicle::AlertRule& r : cs.alerts.r) alertsOn += r.on && r.sig < Vehicle::SIG_COUNT;
-        logf("[alert] %u rule(s) on, from %s", (unsigned)alertsOn, alertsNvs ? "NVS" : "factory");
+        LOGI("alert", "%u rule(s) on, from %s", (unsigned)alertsOn, alertsNvs ? "NVS" : "factory");
 #if FEATURE_DISPLAY_CAN
         // As a phone notification is drawn, but only while nothing holds the
         // glass: an alert never covers a menu (CarTask waits, newest wins).
@@ -2426,7 +2415,7 @@ void setup()
         App::Car::setReminderSpeeds(g_cfg.s().remindLightsKmh, g_cfg.s().remindBrakeKmh);
     App::Car::setGears(g_cfg.s().gearRatio);
         free(blob);
-        logf("[cfg] NVS: %d entries of 32 B free", g_cfg.nvsFreeEntries());
+        LOGI("cfg", "NVS: %d entries of 32 B free", g_cfg.nvsFreeEntries());
         App::Car::start();
 #if FEATURE_CAN2
         // INT notifies the car task from here on; until now it only set a flag,
@@ -2506,14 +2495,14 @@ void setup()
     const String staSsid = [] { Cfg::Config::Guard g(g_cfg); return g_cfg.s().ssid; }();
     if (g_wifi.connecting())
         // WiFi no longer blocks setup(); the outcome is logged by [wifi] lines.
-        logf("[MegaOpen " MEGAOPEN_VERSION "] up, WiFi joining in the background, uart=%u baud\n",
+        LOGI("boot", "MegaOpen " MEGAOPEN_VERSION " up, WiFi joining in the background, uart=%u baud",
                       (unsigned)g_cfg.s().uartBaud);
     else if (g_wifi.isSta())
-        logf("[MegaOpen " MEGAOPEN_VERSION "] up, STA \"%s\", http://%s/  http://%s/  uart=%u baud\n",
+        LOGI("boot", "MegaOpen " MEGAOPEN_VERSION " up, STA \"%s\", http://%s/  http://%s/  uart=%u baud",
                       staSsid.c_str(), g_wifi.ip().c_str(), mdns,
                       (unsigned)g_cfg.s().uartBaud);
     else
-        logf("[MegaOpen " MEGAOPEN_VERSION "] up, AP \"%s\", http://%s/  http://%s/  uart=%u baud\n",
+        LOGI("boot", "MegaOpen " MEGAOPEN_VERSION " up, AP \"%s\", http://%s/  http://%s/  uart=%u baud",
                       g_wifi.apSsid().c_str(),
                       g_wifi.ip().c_str(), mdns, (unsigned)g_cfg.s().uartBaud);
 
@@ -2618,7 +2607,7 @@ static void logLoopWindow(uint32_t now)
     const Diag::CanStatus st = Diag::CanBench::status();
     if (st.installed) {
         static const char* const kState[] = {"stopped", "running", "bus-off", "recovering"};
-        logf("[can] state=%s txerr=%u rxerr=%u txfail=%u rxmiss=%u buserr=%u "
+        LOGI("can", "state=%s txerr=%u rxerr=%u txfail=%u rxmiss=%u buserr=%u "
              "arblost=%u txq=%u rxq=%u",
              kState[st.state <= 3 ? st.state : 0],
              (unsigned)st.tec, (unsigned)st.rec,
@@ -2642,7 +2631,7 @@ static void logLoopWindow(uint32_t now)
                         if (g_lastFrames[j].id == g_lastFrames[i].id) ++n;
                     if (n > best) { best = n; top = g_lastFrames[i].id; }
                 }
-                logf("[can] FLOOD: %u frames/s dropped, queue cannot keep up. "
+                LOGI("can", "FLOOD: %u frames/s dropped, queue cannot keep up. "
                      "%u of the last 24 are id %03X -- a node repeating one frame "
                      "is a node nobody is ACKing: check termination (60R across "
                      "CANH/CANL) and the transceiver's 3V3 under load",
@@ -2653,7 +2642,7 @@ static void logLoopWindow(uint32_t now)
         // Reported only: the driver's owner recovers it (the display's poll()
         // with a panel, carLinkPump() on the car's bus).
         if (st.state == TWAI_STATE_BUS_OFF || st.state == TWAI_STATE_STOPPED)
-            logf("[can] %s (the driver's owner recovers it)", kState[st.state]);
+            LOGI("can", "%s (the driver's owner recovers it)", kState[st.state]);
     }
 #endif
 #if FEATURE_DISPLAY_CAN
@@ -2661,14 +2650,14 @@ static void logLoopWindow(uint32_t now)
 #endif
     // The L2 baseline (flash erases freezing both cores): read it during a
     // log rotate. at= is the uptime of the worst gap in this window.
-    logf("[stall] loopGapMax=%u us at=%u ms", (unsigned)g_stallWinMaxUs,
+    LOGI("stall", "loopGapMax=%u us at=%u ms", (unsigned)g_stallWinMaxUs,
          (unsigned)g_stallWinAtMs);
     g_stallWinMaxUs = 0;
     g_stallWinAtMs = 0;
     // Slowest loop pass and its worst section: this window's maximum. Keys no
     // longer wait for it. The media source's mutex is the ui task's to wait
     // for now: its misses are in [ui] mediaBusy.
-    logf("[loop] max=%u ms (%s %u ms)", (unsigned)(g_loopWinMaxUs / 1000),
+    LOGI("loop", "max=%u ms (%s %u ms)", (unsigned)(g_loopWinMaxUs / 1000),
          g_loopWinWhere, (unsigned)(g_loopWinWhereUs / 1000));
     g_loopWinMaxUs = 0; g_loopWinWhere = "-"; g_loopWinWhereUs = 0;
 }
@@ -2716,7 +2705,7 @@ static void panelWatchStep(uint32_t now)
         static bool s_told = false;
         if (!s_told && g_panelWatch.foreignMaster(now)) {
             s_told = true;
-            LogBus::printf("[panel] another bus master on the panel bus (sync 0x%03X): FuncsReg off, "
+            LOGI("panel", "another bus master on the panel bus (sync 0x%03X): FuncsReg off, "
                            "MegaOpen draws over it", (unsigned)g_panelWatch.masterId());
         }
         return;
@@ -2729,7 +2718,7 @@ static void panelWatchStep(uint32_t now)
         g_twai.setTxEnabled(false);
         g_twai.abortTx();       // frames already in the driver's queue too
         const bool lo = g_twai.setListenOnly(true);
-        LogBus::printf("[panel] another bus master on the panel bus (sync 0x%03X): MegaOpen is silent "
+        LOGI("panel", "another bus master on the panel bus (sync 0x%03X): MegaOpen is silent "
                        "(passive, TX off, listen-only%s) until it has been quiet %u s",
                        (unsigned)g_panelWatch.masterId(), lo ? "" : " FAILED",
                        (unsigned)(MegaOpen::PanelBusWatch::REARM_MS / 1000));
@@ -2741,7 +2730,7 @@ static void panelWatchStep(uint32_t now)
         s_silent = false;
         g_twai.setListenOnly(false);
         App::Panel::lib().setPassive(!g_cfg.s().funcReg);
-        LogBus::line("[panel] no other bus master for a while: the panel stack listens, then talks again");
+        LOGI("panel", "no other bus master for a while: the panel stack listens, then talks again");
     }
     // Ours to open and to close: a single foreign sync shuts the gate again
     // for LISTEN_MS, before a second one would make it a master.
@@ -2768,7 +2757,7 @@ void loop()
             // Named on the spot, like a slow pass: the window max says how bad,
             // this says when, next to whatever else was logged at that moment.
             if (gapUs / 1000 > STALL_MS)
-                logf("[stall] loop did not run for %u ms", (unsigned)(gapUs / 1000));
+                LOGI("stall", "loop did not run for %u ms", (unsigned)(gapUs / 1000));
         }
     }
     g_passAtUs = g_lapAtUs = micros();
@@ -2833,7 +2822,7 @@ void loop()
             g_loopWinWhereUs = g_passWorstUs;
         }
         if (passUs / 1000 > STALL_MS)
-            logf("[loop] STALL %u ms, %u ms of it in %s", (unsigned)(passUs / 1000),
+            LOGI("loop", "STALL %u ms, %u ms of it in %s", (unsigned)(passUs / 1000),
                  (unsigned)(g_passWorstUs / 1000), g_passWorst);
         App::Tasks::beat(g_loopTaskId, passUs);
     }

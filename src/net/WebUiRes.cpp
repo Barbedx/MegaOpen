@@ -243,7 +243,7 @@ void WebUi::routesRes()
         App::KeyBus::kick();
         _cfg->saveResMap(saved);
         _cfg->save();
-        LogBus::printf("res: %s drive=%s spin=%u pulse=%u gap=%u",
+        LOGI("res", "%s drive=%s spin=%u pulse=%u gap=%u",
                     _cfg->s().resEnabled ? "on" : "off",
                     saved.activeHigh() ? "mosfet" : "gpio",
                     (unsigned)saved.spin(), (unsigned)t.pulseMs, (unsigned)t.gapMs);
@@ -301,7 +301,7 @@ void WebUi::routesRes()
         // Fewer rungs than buttons is normal on a one-leg channel; report it.
         o["placed"] = placed;
         String out; serializeJson(o, out);
-        LogBus::printf("res: auto-assign ch%u placed %u of %u",
+        LOGI("res", "auto-assign ch%u placed %u of %u",
                     (unsigned)ch, (unsigned)placed, (unsigned)n);
         return replyJson(r, out);
     });
@@ -337,7 +337,7 @@ void WebUi::routesRes()
             q.op = App::KeysTask::ResLearn::Op::Action;
             q.action = (uint8_t)a;
             _st.resLearn(q);
-            LogBus::printf("res: holding %s for %u ms — choose the function on the "
+            LOGI("res", "holding %s for %u ms — choose the function on the "
                         "head unit FIRST, then press this", Keys::name(a), (unsigned)q.ms);
             return r->reply(200, "application/json", "{\"ok\":true}");
         }
@@ -352,7 +352,7 @@ void WebUi::routesRes()
         q.ch = ch;
         q.mask = mask;
         _st.resLearn(q);
-        LogBus::printf("res: holding ch%u mask 0x%02X (%u ohm) for %u ms",
+        LOGI("res", "holding ch%u mask 0x%02X (%u ohm) for %u ms",
                     (unsigned)ch, (unsigned)mask, (unsigned)ohms, (unsigned)q.ms);
         return r->reply(200, "application/json", "{\"ok\":true}");
     });

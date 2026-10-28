@@ -78,8 +78,8 @@ namespace App
                 static bool s_wasAlive = true;
                 if (alive != s_wasAlive) {
                     s_wasAlive = alive;
-                    if (!alive) LogBus::printf("[task] %s has not run for over 2 s", late ? late : "?");
-                    else        LogBus::printf("[task] every critical task is running again");
+                    if (!alive) LOGI("task", "%s has not run for over 2 s", late ? late : "?");
+                    else        LOGI("task", "every critical task is running again");
                 }
                 const bool wifi = s_h.wifiSeen ? s_h.wifiSeen() : true;
                 return wifi && alive && ESP.getFreeHeap() > OtaTrial::HEALTH_HEAP_MIN;
@@ -100,7 +100,7 @@ namespace App
                     if ((uint32_t)(now - beatAt) >= BEAT_MS) {
                         beatAt = now;
                         // `big` = largest free block (fragmentation).
-                        LogBus::printf("[win] min=%u dma=%u big=%u  (10 s window, %u ms samples)",
+                        LOGI("win", "min=%u dma=%u big=%u  (10 s window, %u ms samples)",
                                        (unsigned)s_heapWinMin, (unsigned)s_dmaWinMin,
                                        (unsigned)s_bigWinMin, (unsigned)PASS_MS);
                         s_heapWinMin = s_dmaWinMin = s_bigWinMin = 0xFFFFFFFFu;

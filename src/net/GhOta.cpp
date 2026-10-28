@@ -118,7 +118,7 @@ namespace GhOta
             s_v.phase = Phase::Failed;
             snprintf(s_v.err, sizeof(s_v.err), "%s", code);
             portEXIT_CRITICAL(&s_mux);
-            LogBus::printf("[ota] github: %s%s%s", code, *d ? ": " : "", d);
+            LOGI("ota", "github: %s%s%s", code, *d ? ": " : "", d);
         }
 
         // mbedTLS itself goes to PSRAM for the job (TlsJob::InPsram).
@@ -204,7 +204,7 @@ namespace GhOta
                     const bool got = esp_http_client_get_url(c, u, URL_MAX) == ESP_OK;
                     char h[48];
                     hostOf(got ? u : "", h, sizeof(h));
-                    LogBus::printf("[ota] github: %d -> %s (%u bytes)", st, h, got ? (unsigned)strlen(u) : 0u);
+                    LOGI("ota", "github: %d -> %s (%u bytes)", st, h, got ? (unsigned)strlen(u) : 0u);
                     const bool ok = got && GhRelease::trustedUrl(u);
                     heap_caps_free(u);
                     if (!ok) { fail("gh_host", "redirect to %s refused: not GitHub over https", got ? h : "?"); break; }
@@ -255,7 +255,7 @@ namespace GhOta
             const int st = head.status;
             if (st == 200) {
                 len = head.len;
-                LogBus::printf("[ota] github: through the app on USB (%s)", h[0] ? h : "?");
+                LOGI("ota", "github: through the app on USB (%s)", h[0] ? h : "?");
                 return Src{nullptr, true};
             }
             UsbLink::netClose();
@@ -346,7 +346,7 @@ namespace GhOta
             const bool newer = GhRelease::newer(r.ver, MEGAOPEN_VERSION, installed);
             s_rel = r;
             setPhase(newer ? Phase::Available : Phase::Current);
-            LogBus::printf("[ota] github: %s %s, this %s (installed as %s): %s", pre ? "newest" : "latest",
+            LOGI("ota", "github: %s %s, this %s (installed as %s): %s", pre ? "newest" : "latest",
                            r.tag, MEGAOPEN_VERSION, installed[0] ? installed : "?",
                            newer ? "update available" : "up to date");
         }
@@ -405,7 +405,7 @@ namespace GhOta
             s_v.size  = (uint32_t)len;
             s_v.got   = 0;
             portEXIT_CRITICAL(&s_mux);
-            LogBus::printf("[ota] github: downloading %s (%u bytes)", s_rel.asset, (unsigned)len);
+            LOGI("ota", "github: downloading %s (%u bytes)", s_rel.asset, (unsigned)len);
 
             mbedtls_md_context_t md;
             mbedtls_md_init(&md);
@@ -449,7 +449,7 @@ namespace GhOta
                     s_v.stepMs[step]  = now - stepAt;
                     if (low < s_v.heapMin) s_v.heapMin = low;
                     portEXIT_CRITICAL(&s_mux);
-                    LogBus::printf("[ota] github: %u%%, internal heap now %u, low %u%s (largest block %u), %u ms",
+                    LOGI("ota", "github: %u%%, internal heap now %u, low %u%s (largest block %u), %u ms",
                                    (unsigned)(step + 1) * 10, (unsigned)h, (unsigned)low,
                                    sys < sysLow ? " system" : "", (unsigned)stepBig,
                                    (unsigned)(now - stepAt));
@@ -498,7 +498,7 @@ namespace GhOta
             s_v.phase     = Phase::Written;
             s_v.stackFree = stackFree;
             portEXIT_CRITICAL(&s_mux);
-            LogBus::printf("[ota] github: %s written, SHA-256 matches; internal heap min %u of %u; "
+            LOGI("ota", "github: %s written, SHA-256 matches; internal heap min %u of %u; "
                            "stack %u of %u unused; reboot when parked or from the page",
                            s_rel.tag, (unsigned)s_v.heapMin, (unsigned)s_v.heapStart,
                            (unsigned)stackFree, (unsigned)App::Plan::GHOTA_STACK);
@@ -519,7 +519,7 @@ namespace GhOta
                 else vTaskDelay(pdMS_TO_TICKS(WAIT_POLL_MS));
             }
             setPhase(Phase::Rebooting);
-            LogBus::printf("[ota] github: rebooting into the trial (%s)", why);
+            LOGI("ota", "github: rebooting into the trial (%s)", why);
             vTaskDelay(pdMS_TO_TICKS(PAGE_SEES_REBOOT_MS));   // the page's next poll shows it
             LogBus::flushAndWait(300);
             ESP.restart();
@@ -544,7 +544,7 @@ namespace GhOta
             if (v.phase == Phase::Written) waitAndReboot();
             // ESP-IDF counts the high-water mark in bytes.
             const uint32_t stackFree = uxTaskGetStackHighWaterMark(nullptr);
-            LogBus::printf("[ota] github: %s done; internal heap %u, task created %u, running %u, "
+            LOGI("ota", "github: %s done; internal heap %u, task created %u, running %u, "
                            "client %u, after TLS %u, min %u (TLS in %s); stack %u of %u unused",
                            job == Job::Check ? "check" : "install", (unsigned)s_v.heapStart,
                            (unsigned)s_v.heapCreated, (unsigned)s_v.heapTask,
@@ -658,7 +658,7 @@ namespace GhOta
             s_v.size = 0;
         }
         portEXIT_CRITICAL(&s_mux);
-        LogBus::printf("[ota] github: channel %s", on ? "test (rc included)" : "stable");
+        LOGI("ota", "github: channel %s", on ? "test (rc included)" : "stable");
         return nullptr;
     }
 
@@ -671,7 +671,7 @@ namespace GhOta
                 return "fw_upload";   // an upload from the page is running
             Update.abort();
             s_local = false;
-            LogBus::line("[ota] github: cleared a local upload session left open");
+            LOGI("ota", "github: cleared a local upload session left open");
         }
         return start(Job::Install);
     }
@@ -716,14 +716,14 @@ namespace GhOta
             if (s_wdtOff) return;
             s_wdtOff = true;
             disableCore0WDT();
-            LogBus::line("[ota] page upload: core 0 idle watchdog off until it ends");
+            LOGI("ota", "page upload: core 0 idle watchdog off until it ends");
         }
         void wdtOn()
         {
             if (!s_wdtOff) return;
             s_wdtOff = false;
             enableCore0WDT();
-            LogBus::line("[ota] page upload over: core 0 idle watchdog back on");
+            LOGI("ota", "page upload over: core 0 idle watchdog back on");
         }
     }
 

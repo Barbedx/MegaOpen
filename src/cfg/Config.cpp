@@ -119,7 +119,7 @@ namespace Cfg
         _verWas = v;
         _ver = v;
         // Printed every boot so "did the migration run" is always answerable.
-        LogBus::printf("[cfg] schema v%u (current v%u)%s\n", (unsigned)v,
+        LOGI("cfg", "schema v%u (current v%u)%s\n", (unsigned)v,
                       (unsigned)kCurrent, v >= kCurrent ? " — nothing to do" : " — migrating");
         if (v >= kCurrent) return;
 
@@ -144,7 +144,7 @@ namespace Cfg
         // in the return value.
         const size_t wrote = _p.putUChar("cfgVer", kCurrent);
         _ver = wrote ? kCurrent : v;
-        if (!wrote) LogBus::line("[cfg] SCHEMA WRITE FAILED — migration will re-run");
+        if (!wrote) LOGI("cfg", "SCHEMA WRITE FAILED — migration will re-run");
     }
 
     void Config::save()

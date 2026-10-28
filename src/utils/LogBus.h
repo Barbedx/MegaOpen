@@ -71,3 +71,7 @@ namespace LogBus
     // task; holds the ring's lock only for short steps, never for the caller.
     int read(Cursor& c, char* buf, uint32_t& ms, uint32_t& lost);
 }
+
+// The leveled API (LOGE..LOGT) for every file that logs: LogBus is the bus
+// under it, not a second way to write a line (docs/design/logging.md).
+#include "Log.h"

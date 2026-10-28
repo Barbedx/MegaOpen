@@ -25,7 +25,7 @@ namespace App
                                  st == ESP_OTA_IMG_PENDING_VERIFY;
             s_v.begin(pending);
             if (pending)
-                LogBus::printf("[ota] on trial: confirmed after %us healthy, rolled back after %us",
+                LOGI("ota", "on trial: confirmed after %us healthy, rolled back after %us",
                                (unsigned)(OtaVerdict::CONFIRM_MS / 1000),
                                (unsigned)(OtaVerdict::TRIAL_MS / 1000));
         }
@@ -37,11 +37,11 @@ namespace App
             switch (s_v.tick(nowMs, healthy)) {
                 case OtaVerdict::Act::Confirm:
                     esp_ota_mark_app_valid_cancel_rollback();
-                    LogBus::printf("[ota] CONFIRMED (healthy %us)",
+                    LOGI("ota", "CONFIRMED (healthy %us)",
                                    (unsigned)(OtaVerdict::CONFIRM_MS / 1000));
                     break;
                 case OtaVerdict::Act::Revert:
-                    LogBus::line("[ota] never became healthy - rolling back");
+                    LOGI("ota", "never became healthy - rolling back");
                     // The line has to reach the flash log before the reboot.
                     LogBus::flushAndWait(300);
                     esp_ota_mark_app_invalid_rollback_and_reboot();

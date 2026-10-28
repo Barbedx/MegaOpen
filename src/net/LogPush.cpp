@@ -192,7 +192,7 @@ namespace LogPush
             const bool ok = UsbLink::netOpen("PUT", url, hdr, (const uint8_t*)body, len, TIMEOUT_MS, head, why);
             memset(auth, 0, sizeof(auth));
             if (!ok) {
-                LogBus::printf("[push] through the app on USB: %s", why);
+                LOGI("push", "through the app on USB: %s", why);
                 err = ESP_FAIL;
                 return -1;
             }
@@ -257,10 +257,10 @@ namespace LogPush
             portEXIT_CRITICAL(&s_mux);
             setErr(stop ? State::Stopped : State::Waiting, code, st);
             if (st < 0)
-                LogBus::printf("[push] no answer (%s) after %u ms; retry in %u s", esp_err_to_name(err),
+                LOGI("push", "no answer (%s) after %u ms; retry in %u s", esp_err_to_name(err),
                                (unsigned)ms, (unsigned)(s_backoff / 1000));
             else
-                LogBus::printf("[push] GitHub said %d (%s)%s", st, code,
+                LOGI("push", "GitHub said %d (%s)%s", st, code,
                                stop ? ": stopped until the settings change" : "");
         }
 
@@ -406,7 +406,7 @@ namespace LogPush
             }
             s_fnum = -1;
             for (int i = 0; i < s_pastN; ++i)
-                LogBus::printf("[push] boot %u: not all pushed, sending from flash (from %u ms, %d file(s))",
+                LOGI("push", "boot %u: not all pushed, sending from flash (from %u ms, %d file(s))",
                                (unsigned)s_past[i].boot, (unsigned)s_past[i].fromMs,
                                s_past[i].first - s_past[i].last + 1);
         }
@@ -477,7 +477,7 @@ namespace LogPush
             if (got != n || !data) {
                 if (data) heap_caps_free(data);
                 LittleFS.remove(path);
-                LogBus::printf("[push] %s: unreadable, removed", path);
+                LOGI("push", "%s: unreadable, removed", path);
                 return false;
             }
             redact(data, n, tok);
@@ -491,7 +491,7 @@ namespace LogPush
             if (st == 201 || st == 200 || st == 422) {   // 422: sent before, the reply was lost
                 LittleFS.remove(path);
                 sentPast(st, n);
-                LogBus::printf("[push] %s/%s: %u bytes in %u ms", s_dev, rel, (unsigned)n, (unsigned)ms);
+                LOGI("push", "%s/%s: %u bytes in %u ms", s_dev, rel, (unsigned)n, (unsigned)ms);
             } else {
                 failed(st, err, ms, &dummy);
             }
@@ -509,7 +509,7 @@ namespace LogPush
                 if (s_pastFile < g.last) { pastDone(g.boot); continue; }
                 const int now = s_pastFile + (int)(LogFile::rotations() - s_rotAtScan);
                 if (now >= LogFile::FILES || !loadFile(now)) {   // rotated away meanwhile
-                    LogBus::printf("[push] boot %u: /log file gone before it was sent", (unsigned)g.boot);
+                    LOGI("push", "boot %u: /log file gone before it was sent", (unsigned)g.boot);
                     pastDone(g.boot);
                     continue;
                 }
@@ -545,7 +545,7 @@ namespace LogPush
                     s_pastOff = off;
                     if (fileDone) { --s_pastFile; s_pastOff = 0; }
                     sentPast(st, n);
-                    LogBus::printf("[push] %s/%s: %u bytes in %u ms", s_dev, rel, (unsigned)n, (unsigned)ms);
+                    LOGI("push", "%s/%s: %u bytes in %u ms", s_dev, rel, (unsigned)n, (unsigned)ms);
                 } else {
                     failed(st, err, ms, &s_pastPart);
                 }
@@ -606,7 +606,7 @@ namespace LogPush
             Capture::endRead(f->num);
             if (!data || got != want) {
                 if (data) heap_caps_free(data);
-                LogBus::printf("[push] cap %04u: read failed at %u, skipped", (unsigned)f->num, (unsigned)s_coff);
+                LOGI("push", "cap %04u: read failed at %u, skipped", (unsigned)f->num, (unsigned)s_coff);
                 s_coff = f->size;
                 return false;
             }
@@ -629,7 +629,7 @@ namespace LogPush
                 p.putUInt("cused", s_cused);
                 p.end();
                 sentPast(st, want);
-                LogBus::printf("[push] %s/%s: %u bytes in %u ms; today %u kB of %u MB", s_dev, rel,
+                LOGI("push", "%s/%s: %u bytes in %u ms; today %u kB of %u MB", s_dev, rel,
                                (unsigned)want, (unsigned)ms, (unsigned)(s_cused / 1024), (unsigned)s_canMB);
             } else {
                 failed(st, err, ms, &dummy);
@@ -728,7 +728,7 @@ namespace LogPush
                 // With the CAN recording on, the jobs in between send it.
                 s_nextAt = millis() + (queued >= BACKLOG_BYTES || s_can ? DRAIN_MS : PERIOD_MS);
                 portEXIT_CRITICAL(&s_mux);
-                LogBus::printf("[push] %s/%s: %u bytes in %u ms%s; %u queued; "
+                LOGI("push", "%s/%s: %u bytes in %u ms%s; %u queued; "
                                "internal heap %u, stack %u of %u unused",
                                dev, rel, (unsigned)n, (unsigned)ms,
                                lost ? " (after a lost stretch)" : "", (unsigned)queued, (unsigned)heapNow(),
@@ -819,7 +819,7 @@ namespace LogPush
                 s_canStarted = true;
                 if (!cs.recording) {
                     Capture::start();
-                    LogBus::line("[push] CAN to GitHub is on: recording started");
+                    LOGI("push", "CAN to GitHub is on: recording started");
                 }
             }
         }
@@ -930,7 +930,7 @@ namespace LogPush
         s_backoff = 0;
         s_nextSet = false;
         portEXIT_CRITICAL(&s_mux);
-        LogBus::printf("[push] settings saved: %s, repo %s, token %s", s_on ? "on" : "off", s_repo,
+        LOGI("push", "settings saved: %s, repo %s, token %s", s_on ? "on" : "off", s_repo,
                        s_tok[0] ? "set" : "none");
         return nullptr;
     }
@@ -956,7 +956,7 @@ namespace LogPush
         p.end();
         load();
         s_canStarted = false;
-        LogBus::printf("[push] CAN to GitHub: %s, %u MB a day", s_can ? "on" : "off", (unsigned)s_canMB);
+        LOGI("push", "CAN to GitHub: %s, %u MB a day", s_can ? "on" : "off", (unsigned)s_canMB);
         return nullptr;
     }
 

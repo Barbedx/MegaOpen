@@ -40,11 +40,11 @@ void WifiManager::begin(Cfg::Config& cfg)
     // Disconnect reason tells coexistence (200) from router (8) from bad key (15).
     // Serial only: this runs on the WiFi event task.
     WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t info) {
-        LogBus::printf("[wifi] STA disconnected reason=%u heap=%u\n",
+        LOGI("wifi", "STA disconnected reason=%u heap=%u\n",
                       (unsigned)info.wifi_sta_disconnected.reason, (unsigned)ESP.getFreeHeap());
     }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
     WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t) {
-        LogBus::printf("[wifi] STA got IP heap=%u\n", (unsigned)ESP.getFreeHeap());
+        LOGI("wifi", "STA got IP heap=%u\n", (unsigned)ESP.getFreeHeap());
     }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
 
     start(millis());
@@ -71,7 +71,7 @@ void WifiManager::start(uint32_t nowMs)
             useNet(has1 ? 0 : 1);
             startJoin(nowMs, CONNECT_TIMEOUT_MS);
         }
-        LogBus::printf("[wifi] %s: %s, AP if nothing joins in %u s\n", _bootMs ? "start" : "boot",
+        LOGI("wifi", "%s: %s, AP if nothing joins in %u s\n", _bootMs ? "start" : "boot",
                       _phase == Phase::Scanning ? "scanning" : "joining",
                       (unsigned)(CONNECT_TIMEOUT_MS / 1000));
     } else {
@@ -100,7 +100,7 @@ bool WifiManager::linkPolicy(uint32_t nowMs)
             _off = true;
             _sta = false;
             _staDownAt = 0;
-            LogBus::printf("[wifi] off: the app is on USB (heap %u -> %u)", (unsigned)before,
+            LOGI("wifi", "off: the app is on USB (heap %u -> %u)", (unsigned)before,
                            (unsigned)ESP.getFreeHeap());
             // Not on into the rest of loop(): with _sta false it is the AP's
             // retry, which would join again at once.
@@ -110,7 +110,7 @@ bool WifiManager::linkPolicy(uint32_t nowMs)
     }
     if (!want || (!link && (uint32_t)(nowMs - _linkGoneAt) >= ON_AFTER_MS)) {
         _off = false;
-        LogBus::printf("[wifi] on again: %s", want ? "no app on USB" : "«WiFi off on USB» was switched off");
+        LOGI("wifi", "on again: %s", want ? "no app on USB" : "«WiFi off on USB» was switched off");
         _lastRetry = nowMs;
         start(nowMs);
         return false;
@@ -137,7 +137,7 @@ void WifiManager::pickFromScan(int n)
     }
     WiFi.scanDelete();
     useNet(see1 || !see2 ? 0 : 1);
-    LogBus::printf("[wifi] pick \"%s\" (home %s, second %s)\n", _curSsid.c_str(),
+    LOGI("wifi", "pick \"%s\" (home %s, second %s)\n", _curSsid.c_str(),
                   see1 ? "seen" : "absent", see2 ? "seen" : "absent");
 }
 
@@ -230,14 +230,14 @@ void WifiManager::loop(uint32_t nowMs)
             _phase = Phase::Idle;
             _sta = true;
             _staDownAt = 0;
-            LogBus::printf("[wifi] joined \"%s\" ip=%s\n", _curSsid.c_str(),
+            LOGI("wifi", "joined \"%s\" ip=%s\n", _curSsid.c_str(),
                           WiFi.localIP().toString().c_str());
             startMdns();
         } else if ((int32_t)(nowMs - _deadline) >= 0) {
             // Plain AP again; the failed attempt cycled the radio through STA.
             _phase = Phase::Idle;
             _lastRetry = nowMs;
-            LogBus::printf("[wifi] \"%s\" did not join; AP\n", _curSsid.c_str());
+            LOGI("wifi", "\"%s\" did not join; AP\n", _curSsid.c_str());
             startAp();
             startMdns();
         }
@@ -250,7 +250,7 @@ void WifiManager::loop(uint32_t nowMs)
             _mdnsUp = false;
             if (!_staDownAt) _staDownAt = nowMs ? nowMs : 1;
             if ((uint32_t)(nowMs - _staDownAt) > STA_LOST_TO_AP_MS) {
-                LogBus::printf("[wifi] \"%s\" gone %u s; AP\n", _curSsid.c_str(),
+                LOGI("wifi", "\"%s\" gone %u s; AP\n", _curSsid.c_str(),
                               (unsigned)(STA_LOST_TO_AP_MS / 1000));
                 _staDownAt = 0;
                 _lastRetry = nowMs;

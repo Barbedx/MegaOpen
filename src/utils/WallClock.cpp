@@ -34,8 +34,8 @@ namespace WallClock
         gmtime_r(&tv.tv_sec, &t);
         char s[24];
         strftime(s, sizeof(s), "%Y-%m-%d %H:%M:%S", &t);
-        if (was) LogBus::printf("[time] %s UTC from the app (%s), was %lld s off", s, via, (long long)(off / 1000));
-        else     LogBus::printf("[time] %s UTC from the app (%s)", s, via);
+        if (was) LOGI("time", "%s UTC from the app (%s), was %lld s off", s, via, (long long)(off / 1000));
+        else     LOGI("time", "%s UTC from the app (%s)", s, via);
         return true;
     }
 }

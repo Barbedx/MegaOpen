@@ -194,7 +194,7 @@ void WebUi::begin(Cfg::Config& cfg, KeyEngine& engine, KeyMap& map,
 
     // [mem] marks per step of begin() (serial only; memMark is in main.cpp).
     auto mem = [](const char* what) {
-        LogBus::printf("[mem] web.%-8s free=%6u big=%6u\n", what,
+        LOGI("mem", "web.%-8s free=%6u big=%6u\n", what,
                       (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
     };
     mem("start");
@@ -228,7 +228,7 @@ void WebUi::begin(Cfg::Config& cfg, KeyEngine& engine, KeyMap& map,
 #endif
     mem("ota");
     if (_routesLost)
-        LogBus::printf("[web] %u route(s) did not fit the table — raise ROUTE_MAX\n", _routesLost);
+        LOGI("web", "%u route(s) did not fit the table — raise ROUTE_MAX\n", _routesLost);
 }
 
 // PsychicHttpServer keeps its endpoints protected; a pointer to that member,
@@ -292,7 +292,7 @@ static void huntCheck(const char* when, const char* path)
     static char msg[112];
     snprintf(msg, sizeof(msg), "HEAP_HUNT corrupt %s %s (req %u, last %s, up %u ms)", when, path,
              (unsigned)s_huntReqs, s_huntLast, (unsigned)millis());
-    LogBus::printf("[heap] %s", msg);
+    LOGI("heap", "%s", msg);
     LogBus::flushAndWait(500);
     esp_system_abort(msg);
 }
@@ -303,7 +303,7 @@ static void huntTask(void*)
 void WebUi::startHeapHunt()
 {
     xTaskCreatePinnedToCore(huntTask, "heaphunt", 3072, nullptr, 1, nullptr, 1);
-    LogBus::printf("[heap] HEAP_HUNT on: integrity walk per request and every 100 ms");
+    LOGI("heap", "HEAP_HUNT on: integrity walk per request and every 100 ms");
 }
 #endif
 
@@ -320,7 +320,7 @@ esp_err_t WebUi::dispatch(PsychicRequest* r)
     // Before any route: the Host, and the header on a change (RequestGate.h).
     const RequestGate::Why why = gateWhy(r);
     if (why != RequestGate::Why::Ok) {
-        LogBus::printf("[web] refused %s %s: %s", http_method_str(m), path.c_str(),
+        LOGI("web", "refused %s %s: %s", http_method_str(m), path.c_str(),
                        why == RequestGate::Why::Host ? "host" : "no X-MegaOpen");
         if (why == RequestGate::Why::Host) {
             // Say where it IS reachable: the address this request came in on.
@@ -532,7 +532,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
             uint8_t on = 0;
             for (const Vehicle::AlertRule& x : al.r) on += x.on;
             alSaved = _cfg->saveAlerts(al);
-            LogBus::printf("[alert] rules saved: %u on%s", (unsigned)on, alSaved ? "" : ", NOT in NVS");
+            LOGI("alert", "rules saved: %u on%s", (unsigned)on, alSaved ? "" : ", NOT in NVS");
         }
 
         // What the head-unit text learner had, so only a real change resets it.
@@ -554,10 +554,10 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
                 c.tuning = hu.tuning;
                 memcpy(c.msgOn, hu.msgOn, sizeof(c.msgOn));
             });
-            if (huBusy) LogBus::line("settings: the head-unit emitter was busy, its part not applied");
+            if (huBusy) LOGW("cfg", "settings: the head-unit emitter was busy, its part not applied");
             else if (memcmp(&hu.tuning, &huWas, sizeof(huWas))) {
                 _cfg->saveTuning(hu.tuning);
-                LogBus::line("canbox tuning saved (survives a power cycle)");
+                LOGI("cfg", "canbox tuning saved (survives a power cycle)");
             }
         }
 
@@ -579,8 +579,8 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
                         k.pulseMs = pulse; k.uartOn = on; k.resOn = resOn;
                         k.uartCls = u; k.amsCls = a; k.hidCls = h; k.resCls = rs; k.usbCls = us;
                     }))
-                    LogBus::line("settings: the keys task's routing was busy, applied at the next change");
-                LogBus::printf("routing: uart=0x%02X ams=0x%02X hid=0x%02X res=0x%02X usb=0x%02X",
+                    LOGW("cfg", "settings: the keys task's routing was busy, applied at the next change");
+                LOGI("key", "routing: uart=0x%02X ams=0x%02X hid=0x%02X res=0x%02X usb=0x%02X",
                                u, a, h, rs, us);
             }
 #if FEATURE_RESISTIVE_KEYS
@@ -593,7 +593,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
 #if FEATURE_DISPLAY_CAN
         // The screen, the pane and the key popup, live.
         if ((ap & Cfg::AP_UI) && !App::Ui::stageFrom(s))
-            LogBus::line("settings: the screen's were busy, applied at the next change");
+            LOGW("cfg", "settings: the screen's were busy, applied at the next change");
 
         // Where the now-playing text comes from: live, so sources can be
         // compared with the panel in view. Setting a command byte forgets
@@ -623,7 +623,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         if (apPass.length()) { restart = restart || apPass != s.apPass; s.apPass = apPass; }
 
         _cfg->save();
-        LogBus::printf("settings saved: %u value(s)%s%s", (unsigned)rd.n, file ? " from a file" : "",
+        LOGI("cfg", "settings saved: %u value(s)%s%s", (unsigned)rd.n, file ? " from a file" : "",
                        restart ? ", pending reboot" : "");
         // A file reports a part that did not take as part of a 200, so its
         // caller still applies the knobs and the page says exactly what
@@ -815,7 +815,7 @@ void WebUi::routes()
         App::KeyBus::kick();
         _cfg->saveKeyMap(saved.map);
         _cfg->save();
-        LogBus::line("keymap saved");
+        LOGI("cfg", "keymap saved");
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
 
@@ -826,7 +826,7 @@ void WebUi::routes()
             return r->reply(503, "text/plain", "busy");
         App::KeyBus::kick();
         _cfg->saveKeyMap(saved.map);
-        LogBus::line("keymap reset to Megane defaults");
+        LOGI("cfg", "keymap reset to Megane defaults");
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
 #endif
@@ -958,7 +958,7 @@ void WebUi::routes()
         else if (knobs) {
             _knobs->setConfig(kc);
             _cfg->saveKnobs(kc);
-            LogBus::line("[knobs] set from a settings file");
+            LOGI("knobs", "set from a settings file");
         }
 #endif
         out = "";
@@ -977,7 +977,7 @@ void WebUi::routes()
     });
 
     route("/api/reboot", HTTP_POST, [](PsychicRequest* r) {
-        LogBus::line("[sys] reboot requested from the web");
+        LOGI("sys", "reboot requested from the web");
         return replyAndRestart(r, "{\"ok\":true}");
     });
 
@@ -1271,7 +1271,7 @@ void WebUi::routes()
             _cfg->save();
         }
         if (has2) _wifi->setNet2(s2, p2);   // the same rule for an empty password
-        LogBus::line(changed ? "wifi saved, pending reboot" : "wifi saved");
+        LOGI("wifi", "%s", changed ? "saved, pending reboot" : "saved");
         return r->reply(200, "application/json", changed ? "{\"ok\":true,\"pendingReboot\":true}"
                                                          : "{\"ok\":true}");
     });
@@ -1317,7 +1317,7 @@ void WebUi::routes()
         if (paramStr(r, "confirm") != "factory")
             return r->reply(400, "application/json",
                             "{\"ok\":false,\"error\":\"confirm factory\"}");
-        LogBus::line("[cfg] FACTORY RESET — NVS wiped, rebooting into AP mode");
+        LOGI("cfg", "FACTORY RESET — NVS wiped, rebooting into AP mode");
         _cfg->factoryReset();
         return replyAndRestart(r, "{\"ok\":true,\"note\":\"AP mode after reboot\"}");
     });
@@ -1369,7 +1369,7 @@ void WebUi::routesDisplay()
         if (!_ops) return r->reply(503, "text/plain", "not_built display");
         if (!r->hasParam("text")) return r->reply(400, "text/plain", "param text");
         const String t = r->getParam("text")->value();
-        LogBus::printf("display text: %s", t.c_str());
+        LOGD("disp", "text: %s", t.c_str());
         return posted(r, _ops->postText(t.c_str()));
     });
 
@@ -1555,7 +1555,7 @@ void WebUi::routesDisplay()
     route("/api/display/resync", HTTP_POST, [this](PsychicRequest* r) {
         if (!_ops) return r->reply(503, "text/plain", "not_built display");
         if (!_ops->postResync()) return r->reply(503, "text/plain", "queue_full");
-        LogBus::line("resync requested");
+        LOGI("hu", "resync requested");
         return r->reply(200, "application/json",
                         "{\"ok\":true,\"note\":\"handshake restarting; watch registered\"}");
     });
@@ -1656,7 +1656,7 @@ void WebUi::routesAffaMap()
         if (!ok) return r->reply(503, "text/plain", "busy");
         App::KeyBus::kick();
         _cfg->saveAffaMap(saved);
-        LogBus::printf("stalk mapping saved (%u rows)", (unsigned)n);
+        LOGI("cfg", "stalk mapping saved (%u rows)", (unsigned)n);
         JsonDocument res; res["ok"] = true; res["applied"] = n;
         String out; serializeJson(res, out);
         return replyJson(r, out);
@@ -1669,7 +1669,7 @@ void WebUi::routesAffaMap()
             return r->reply(503, "text/plain", "busy");
         App::KeyBus::kick();
         _cfg->saveAffaMap(saved);
-        LogBus::line("stalk mapping reset to defaults");
+        LOGI("cfg", "stalk mapping reset to defaults");
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
 }
@@ -1886,7 +1886,7 @@ void WebUi::routesMedia()
     route("/api/ble/unbond", HTTP_POST, [this](PsychicRequest* r) {
         if (!_bleUnbond) return r->reply(503, "text/plain", "not_built ble");
         _bleUnbond();
-        LogBus::line("BLE: all bonds cleared — now Forget This Device on the phone too");
+        LOGI("ble", "all bonds cleared — now Forget This Device on the phone too");
         return r->reply(200, "application/json",
                         "{\"ok\":true,\"note\":\"forget it on the phone as well\"}");
     });
@@ -2187,7 +2187,7 @@ void WebUi::routesCan()
         if (!_sniffer) return r->reply(503, "text/plain", "not_built can");
         // Applied by the panel task, which owns the table, before its next frame.
         _sniffer->requestBaseline();
-        LogBus::line("can baseline marked — now do the thing you want to find");
+        LOGI("can", "baseline marked — now do the thing you want to find");
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
 
@@ -2204,7 +2204,7 @@ void WebUi::routesCan()
         if (!_sniffer) return r->reply(503, "text/plain", "not_built can");
         const bool on = paramStr(r, "on") == "1";
         _sniffer->setEnabled(on);
-        LogBus::printf("can sniffer %s", on ? "on" : "off");
+        LOGI("can", "sniffer %s", on ? "on" : "off");
         return r->reply(200, "application/json", on ? "{\"ok\":true,\"sniff\":true}"
                                                     : "{\"ok\":true,\"sniff\":false}");
     });
@@ -2261,7 +2261,7 @@ void WebUi::routesCan2()
         _cfg->s().can2Bitrate = bps;
         _cfg->save();
         _can2Rate(bps);
-        LogBus::printf("can2: rate %s", bps ? "set by hand" : "back to auto");
+        LOGI("can2", "rate %s", bps ? "set by hand" : "back to auto");
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
 }
@@ -2365,7 +2365,7 @@ void WebUi::routesCanbox()
             return r->reply(503, "text/plain", "queue_full");
 
         String hex; appendHex(hex, frame, flen);
-        LogBus::printf("raw tx: %s", hex.c_str());
+        LOGI("hu", "raw tx: %s", hex.c_str());
         JsonDocument d; d["ok"] = true; d["queued"] = true; d["bytes"] = hex;
         String out; serializeJson(d, out);
         if (!out.c_str()) return r->reply(503, "text/plain", "no_memory");

@@ -220,7 +220,7 @@ namespace App
             {
                 const uint8_t h = s_cHead.load(std::memory_order_relaxed);
                 if ((uint8_t)(h - s_cTail.load(std::memory_order_acquire)) >= COMMITS) {
-                    LogBus::line("[menu] commit queue full: change dropped");
+                    LOGI("menu", "commit queue full: change dropped");
                     // The copy already shows it: read the stored values back.
                     s_applied.store(true, std::memory_order_release);
                     return;
@@ -234,7 +234,7 @@ namespace App
                 s_menu.close();
                 moveMode(Mode::Open, Mode::Closed);
                 s_d.ops->postClear();
-                LogBus::printf("[menu] closed%s", why);
+                LOGI("menu", "closed%s", why);
             }
 
             void onCommand(uint8_t k, uint32_t now)
@@ -245,7 +245,7 @@ namespace App
                     s_d.ops->postPower(true);
                     // The media screen, the pane and the clock come back.
                     s_d.ops->postClear();
-                    LogBus::line("[menu] panel on");
+                    LOGI("menu", "panel on");
                     return;
                 }
                 if (k == K_OPEN) {
@@ -255,7 +255,7 @@ namespace App
                     s_menu.open();
                     s_dirty = true;
                     s_refreshAtMs = now + REFRESH_MS;
-                    LogBus::line("[menu] open");
+                    LOGI("menu", "open");
                     return;
                 }
                 if (!s_menu.isOpen()) return;
@@ -294,10 +294,10 @@ namespace App
                         // meantime wins, and the panel stays on.
                         if (moveMode(Mode::Open, Mode::PanelOff)) {
                             s_d.ops->postPower(false);
-                            LogBus::line("[menu] panel off: a knob press switches it on");
+                            LOGI("menu", "panel off: a knob press switches it on");
                         } else {
                             s_d.ops->postClear();
-                            LogBus::line("[menu] closed before power off: the panel stays on");
+                            LOGI("menu", "closed before power off: the panel stays on");
                         }
                         break;
                 }
@@ -416,7 +416,7 @@ namespace App
                 Cfg::Model m{&s_d.cfg->s(), haveK ? &kc : nullptr};
                 uint8_t ap = 0;
                 if (!Cfg::Registry::set(m, e, c.value, &ap)) {
-                    LogBus::printf("[menu] %s = %ld refused", e.id, (long)c.value);
+                    LOGI("menu", "%s = %ld refused", e.id, (long)c.value);
                 } else {
                     if ((ap & Cfg::AP_KNOBS) && s_d.knobsSet) s_d.knobsSet(kc);
                     if ((ap & Cfg::AP_UI) && s_d.stageUi) s_d.stageUi(s_d.cfg->s());
@@ -425,7 +425,7 @@ namespace App
                     else s_d.cfg->touch();          // volatile or knobs only: no save, still news
                     char v[24];
                     Cfg::Registry::formatValue(e, c.value, v, sizeof(v));
-                    LogBus::printf("[menu] %s = %s%s", e.id, v, (ap & Cfg::AP_REBOOT) ? " (after a reboot)" : "");
+                    LOGI("menu", "%s = %s%s", e.id, v, (ap & Cfg::AP_REBOOT) ? " (after a reboot)" : "");
                 }
                 // Stored (or refused): the ui task re-reads its copies once the
                 // queue is through. The slot is freed last, so "queued" covers

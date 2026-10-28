@@ -33,7 +33,7 @@ namespace App
             {
                 // tapBy = the tap-lane drops by origin (srcId 0 matrix, 1 matrix
                 // encoder, 3 panel, 4 knobs): which producer outran the lane.
-                LogBus::printf("[key] n=%u p50=%uus p99=%uus max=%uus wireMax=%uus pollGapMax=%uus "
+                LOGI("key", "n=%u p50=%uus p99=%uus max=%uus wireMax=%uus pollGapMax=%uus "
                                "drops(tap/rel/web)=%u/%u/%u tapBy(mtx/enc/panel/knob)=%u/%u/%u/%u "
                                "stuckSynth=%u held=%u",
                                (unsigned)s_src.count(), (unsigned)s_src.p50(), (unsigned)s_src.p99(),

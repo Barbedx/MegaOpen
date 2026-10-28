@@ -169,7 +169,7 @@ namespace App
             // dropped = renders the library's ring refused; yielded = repaints
             // a person's screen overtook; reinstalls = TWAI driver installs
             // after the first (bus-off or a deaf controller, the library's).
-            LogBus::printf("[panel] foreignPolls=%u pollLateMax=%uus polls=%u queued=%u "
+            LOGI("panel", "foreignPolls=%u pollLateMax=%uus polls=%u queued=%u "
                            "posted=%u dropped=%u delivered=%u superseded=%u failed=%u "
                            "failStreak=%u txGated=%u gates=%u reinstalls=%u yielded=%u",
                            (unsigned)p.foreignPolls, (unsigned)p.pollLateMaxUs,

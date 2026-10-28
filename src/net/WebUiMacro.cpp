@@ -206,7 +206,7 @@ void WebUi::routesMacros()
         if (!ok) return r->reply(503, "text/plain", "busy");
         App::KeyBus::kick();
         _cfg->saveMacroBlob(blob);
-        LogBus::printf("macros saved — %u active", (unsigned)on);
+        LOGI("macro", "saved — %u active", (unsigned)on);
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
 

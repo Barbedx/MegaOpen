@@ -78,7 +78,7 @@ namespace Log
 
     void write(LogLevel lvl, const char *cat, const char *fmt, ...)
     {
-        char line[200];
+        char line[LogBus::MAX_LINE];
         int p = snprintf(line, sizeof(line), "%c [%s] ", LVL_CH[(uint8_t)lvl], cat ? cat : "");
         if (p < 0)
             return;
@@ -97,7 +97,7 @@ namespace Log
         int8_t slot = -1;
         if (!on(lvl, cat, slot))
             return;
-        char line[200];
+        char line[LogBus::MAX_LINE];
         int p = snprintf(line, sizeof(line), "%c [%s] ", LVL_CH[(uint8_t)lvl], cat ? cat : "");
         if (p < 0)
             return;
@@ -116,7 +116,7 @@ namespace Log
     {
         if ((uint8_t)LogLevel::INF > (uint8_t)g_level)
             return;
-        char line[200];
+        char line[LogBus::MAX_LINE];
         va_list ap;
         va_start(ap, fmt);
         vsnprintf(line, sizeof(line), fmt, ap);
