@@ -1539,8 +1539,15 @@ static void hkWifi(uint32_t now)
     g_wifi.loop(now);
 #if FEATURE_LOG_PUSH
     // Online: on WiFi with internet, or an app on the USB link that offers its own.
-    LogPush::tick(now, (g_wifi.isSta() && !g_wifi.connecting() && WiFi.status() == WL_CONNECTED)
-                       || UsbLink::netAvailable());
+    // Not on an OTA trial: a push takes internal heap down to a few kB, under
+    // the trial's healthy line (OtaTrial::HEALTH_HEAP_MIN), and each dip starts
+    // its 60 s again, so a good image rolled back. The lines wait in the spool
+    // and the flash, and go once the trial has confirmed.
+    const bool trial = App::OtaTrial::onTrial();
+    static bool s_trialSaid = false;
+    if (trial && !s_trialSaid) { s_trialSaid = true; LOGI("push", "held until the OTA trial confirms"); }
+    LogPush::tick(now, !trial && ((g_wifi.isSta() && !g_wifi.connecting() && WiFi.status() == WL_CONNECTED)
+                                  || UsbLink::netAvailable()));
 #endif
 #if FEATURE_DISPLAY_CAN
     static IpNotice s_notice;
