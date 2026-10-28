@@ -141,6 +141,11 @@ namespace App
         // holder of a core-1 lock can be preempted by WiFi, lwIP and NimBLE.
         constexpr UBaseType_t HTTPD_PRIO = 2;
         constexpr int         HTTPD_CORE = 0;
+        // Every route runs on it. HTTPD_DEFAULT_CONFIG's 4096 left 256 B after
+        // a settings-file import (POST /api/config, the deepest route) on the
+        // T-2CAN (1.6.3, [stk] httpd=), less than one interrupt frame; 1.6.2's
+        // larger head-unit config on that stack overflowed it.
+        constexpr uint32_t    HTTPD_STACK = stack(6144, 4096);
 
         // The car task (src/app/CarTask.h): the vehicle sources, the MCP2518FD's
         // SPI, the decode into State, the sniffer and the capture hook. 4:

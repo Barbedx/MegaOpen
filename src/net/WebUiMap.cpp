@@ -527,12 +527,17 @@ void WebUi::mapToFile(ChunkOut& out)
         out.put(b, fit(snprintf(b, sizeof(b), ",\"hu\":{\"send\":%s,\"units\":{\"fuel\":%u,\"trip\":%u},\"fields\":\"",
                                 c.enabled ? "true" : "false", (unsigned)c.tuning.fuelUnit,
                                 (unsigned)c.tuning.tripUnit), sizeof(b)));
-        // The field map, packed (FieldMap::pack) and base64, like the decode table.
-        uint8_t fm[Canbox::FieldMap::BLOB_MAX];
-        char fb[4 * ((sizeof(fm) + 2) / 3) + 1];
+        // The field map, packed (FieldMap::pack) and base64, like the decode
+        // table: ~830 B of buffers, per request (Scratch), not on httpd's stack.
+        struct Fm {
+            uint8_t blob[Canbox::FieldMap::BLOB_MAX];
+            char    b64[4 * ((Canbox::FieldMap::BLOB_MAX + 2) / 3) + 1];
+        };
+        Scratch<Fm> fm;
         size_t fo = 0;
-        const size_t fn = c.fields.pack(fm, sizeof(fm));
-        if (fn && mbedtls_base64_encode((unsigned char*)fb, sizeof(fb), &fo, fm, fn) == 0) out.put(fb, fo);
+        const size_t fn = fm ? c.fields.pack(fm->blob, sizeof(fm->blob)) : 0;
+        if (fn && mbedtls_base64_encode((unsigned char*)fm->b64, sizeof(fm->b64), &fo, fm->blob, fn) == 0)
+            out.put(fm->b64, fo);
         out.put("\"}");
     }
 }
@@ -572,10 +577,12 @@ const char* WebUi::mapFromFile(JsonVariantConst decode, JsonVariantConst hu, boo
         c.tuning.tripUnit = (uint8_t)trip;
         if (!hu["fields"].isNull()) {
             const char* f = hu["fields"].as<const char*>();
-            uint8_t fm[Canbox::FieldMap::BLOB_MAX];
+            struct Blob { uint8_t b[Canbox::FieldMap::BLOB_MAX]; };
+            Scratch<Blob> fm;   // not on httpd's stack
+            if (!fm) return "no_memory";
             size_t fn = 0;
-            if (!f || mbedtls_base64_decode(fm, sizeof(fm), &fn, (const unsigned char*)f, strlen(f)) != 0 ||
-                !c.fields.unpack(fm, fn))   // unpack leaves the map as it was on a bad blob
+            if (!f || mbedtls_base64_decode(fm->b, sizeof(fm->b), &fn, (const unsigned char*)f, strlen(f)) != 0 ||
+                !c.fields.unpack(fm->b, fn))   // unpack leaves the map as it was on a bad blob
                 return "hu: fields";
         }
         // A file from 1.6.1 or before: its experiment switches, as rules.

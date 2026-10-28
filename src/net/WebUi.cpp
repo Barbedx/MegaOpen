@@ -186,6 +186,7 @@ void WebUi::begin(Cfg::Config& cfg, KeyEngine& engine, KeyMap& map,
     // all above it, and nothing on the key path is there.
     _server.config.task_priority = App::Plan::HTTPD_PRIO;
     _server.config.core_id       = App::core(App::Plan::HTTPD_CORE);
+    _server.config.stack_size    = App::Plan::HTTPD_STACK;
 
     // A phone that stops reading holds httpd in send() for this long, not the
     // default 5 s. Seconds.
@@ -410,9 +411,10 @@ void WebUi::settingsOut(JsonObject d, bool forFile)
     // The newest rules, applied or not (the car task owns them).
     Vehicle::AlertRules al;
     Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
-    // The emitter's, likewise (the hu task owns it).
-    static App::Hu::EmitterCfg hu;
-    const bool huOk = _emitter && App::Hu::emitterCfg().peek(hu);
+    // The emitter's, likewise (the hu task owns it). Per request (Scratch):
+    // ~450 B with the field map, neither on httpd's stack nor static.
+    Scratch<App::Hu::EmitterCfg> huBox;
+    App::Hu::EmitterCfg* hu = _emitter && huBox && App::Hu::emitterCfg().peek(*huBox) ? huBox.get() : nullptr;
 #if FEATURE_CAPTURE
     Capture::Settings cs = Capture::settings();
     Capture::Settings* csp = &cs;
@@ -423,9 +425,9 @@ void WebUi::settingsOut(JsonObject d, bool forFile)
     Knobs::Config kc;
     if (_knobs) kc = _knobs->config();
     const Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp,
-                       huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
+                       hu ? &hu->tuning : nullptr, hu ? hu->msgOn : nullptr};
 #else
-    const Cfg::Model m{&s, nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
+    const Cfg::Model m{&s, nullptr, alp, csp, hu ? &hu->tuning : nullptr, hu ? hu->msgOn : nullptr};
 #endif
     Cfg::SettingsJson::write(m, d, forFile);
 }
@@ -447,10 +449,13 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         // The alert rules and the emitter's settings are edited on copies of
         // what their tasks hold now (rows and cells not sent keep their
         // values); a copy goes back only when something in it changed.
-        // Static: httpd serves one request at a time.
+        // Static: httpd serves one request at a time. The emitter's (~450 B
+        // with the field map) per request instead (Scratch).
         static Vehicle::AlertRules al;
         Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
-        static App::Hu::EmitterCfg hu;
+        Scratch<App::Hu::EmitterCfg> huBox;
+        if (!huBox) { out = "no_memory"; return 503; }
+        App::Hu::EmitterCfg& hu = *huBox;
         const bool huOk = _emitter && App::Hu::emitterCfg().peek(hu);
         static Canbox::Tuning huWas;
         huWas = hu.tuning;

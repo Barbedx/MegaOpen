@@ -13,7 +13,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - `[stk]` also shows `httpd`, the web server's stack left.
 
 ### Fixed
-- A crash of the web server (`task=httpd`, a stack overflow): the head unit's settings, now with the field map, were copied onto httpd's 4 kB stack by every map route; they are per-request (PSRAM) now. 1.6.2 has half of it (the map page's field column). After the map routes, httpd keeps 764 B free on the bench.
+- A crash of the web server (`task=httpd`, a stack overflow, two coredumps on the bench): the head unit's settings, now with the field map, were copied onto httpd's 4 kB stack by every map route and the settings file, and the file's field-map buffers sat there too; they are per-request (PSRAM) now. And httpd has 6 kB (`HTTPD_STACK`, TaskPlan.h): a settings-file import, the deepest route, left 256 B of the 4 kB, and in 1.6.2 it overflows. With 6 kB, 2.3 kB stay free after every map and settings route; about 1.7 kB less heap.
 
 ## [1.6.2] - 2026-10-28
 
