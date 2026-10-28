@@ -112,6 +112,7 @@ static Sinks::UsbHidKeySink g_usbKeys;
 // Portable: its UTF-16 decoder also serves the exchange log in every build.
 #include "media/HuMediaSource.h"
 #include <ArduinoJson.h>
+#include "utils/PsramJson.h"
 #include "app/OtaTrial.h"
 #include "link/UsbLink.h"
 
@@ -1523,6 +1524,22 @@ static void addressText(char* head, size_t hn, char* body, size_t bn)
     }
 }
 #endif
+#if FEATURE_LOG_PUSH
+// The status snapshot LogPush sends to GitHub every LogPush::SNAP_MS:
+// /api/status and /api/health in one object, for tools rather than regexes
+// (docs/design/logging.md §5). On the push task; the pools in PSRAM, beside
+// its TLS handshake.
+static size_t logPushSnapshot(char* out, size_t cap)
+{
+    JsonDocument d(&PsramJson::instance());
+    d["uptimeMs"] = millis();
+    g_web.statusJson(d["status"].to<JsonObject>());
+    g_web.healthJson(d["health"].to<JsonObject>());
+    const size_t n = serializeJson(d, out, cap);
+    return n < cap ? n : 0;
+}
+#endif
+
 static void hkWifi(uint32_t now)
 {
     g_wifi.loop(now);
@@ -1784,6 +1801,7 @@ void setup()
 #if FEATURE_LOG_PUSH
     const bool push = LogPush::begin();
     if (push) LogBus::addSink(pushSink);
+    LogPush::setSnapshot(logPushSnapshot);
     {
         LogPush::View v;
         LogPush::view(v);

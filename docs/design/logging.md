@@ -129,8 +129,15 @@ line from its own counters (only it owns them; a provider called from the
 logger's task would read them across tasks), through `LOGS(tag, ...)`, which asks
 `Log::statusOn(tag)`: due every window at DBG, else once per `logStatus`
 interval. A task with several lines per window (`[task]`) asks once and writes
-them all. The combined `[status]` line and the JSON snapshots stay to do
-(queue: status JSON to GitHub).
+them all. The combined `[status]` line stays to do.
+
+**As built (status JSON, 2026-10-28):** no providers for it either. The
+snapshot is what the page reads: `GET /api/status` and `GET /api/health` in
+one object (`WebUi::statusJson` / `healthJson`, the routes' own builders),
+`{uptimeMs, status, health}`, sent by LogPush as
+`boot-N/status-MMMM.json` (uptime minutes) right after the boot's first push
+and then every 10 min (`LogPush::SNAP_MS`). Its JSON pools are in PSRAM
+(`utils/PsramJson.h`), beside the TLS job.
 
 **What each level carries after slice 2** (the rules for converting a call):
 

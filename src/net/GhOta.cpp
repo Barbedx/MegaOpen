@@ -1,4 +1,5 @@
 #include "GhOta.h"
+#include "../utils/PsramJson.h"
 #if FEATURE_GH_OTA
 #include <Arduino.h>
 #include <ArduinoJson.h>
@@ -129,12 +130,7 @@ namespace GhOta
         constexpr uint32_t CAP_IN = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
         void* psMalloc(size_t n) { return heap_caps_malloc_prefer(n, 2, CAP_PS, CAP_IN); }
 
-        struct PsramJson final : ArduinoJson::Allocator {
-            void* allocate(size_t n) override { return psMalloc(n); }
-            void  deallocate(void* p) override { heap_caps_free(p); }
-            void* reallocate(void* p, size_t n) override { return heap_caps_realloc_prefer(p, n, 2, CAP_PS, CAP_IN); }
-        };
-        PsramJson s_json;
+        PsramJson& s_json = PsramJson::instance();   // the JSON pools (utils/PsramJson.h)
 
         // Internal heap at the points of a job, for the log: what the task, the
         // client and the handshake each cost.

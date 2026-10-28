@@ -53,6 +53,14 @@ namespace LogPush
     // any answer resets it. WifiManager reads it to spot a link that is
     // "connected" and carries nothing.
     uint32_t wifiNoAnswer();
+    // The status snapshot (docs/design/logging.md §5): `fn` writes JSON into
+    // out (cap bytes) and returns its length, 0 for none. Sent as
+    // boot-N/status-MMMM.json (uptime minutes) after the boot's first log
+    // part, then every SNAP_MS. Called on the push task.
+    using SnapshotFn = size_t (*)(char* out, size_t cap);
+    void setSnapshot(SnapshotFn fn);
+    constexpr uint32_t SNAP_MS  = 10UL * 60 * 1000;
+    constexpr size_t   SNAP_MAX = 12 * 1024;
 
     enum class State : uint8_t {
         Off,        // switched off, or no token

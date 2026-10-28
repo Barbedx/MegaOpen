@@ -319,6 +319,11 @@ public:
     void attachMacros(Keys::MacroEngine* m) { _macros = m; }
 
     PsychicHttpServer& server() { return _server; }
+    // GET /api/status and /api/health, into `d`: the routes, and the status
+    // snapshot LogPush sends to GitHub (logPushSnapshot in main.cpp). Reads
+    // the same copies the routes read; safe beside httpd.
+    void statusJson(JsonObject d);
+    void healthJson(JsonObject d);
 
     // /api/display's body.
     void fillDisplay(JsonObject d);

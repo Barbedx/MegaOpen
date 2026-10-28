@@ -89,6 +89,8 @@ namespace LogPush
         bool     s_canStarted = false;  // the recorder was started for it this boot
         uint32_t s_spoolAt = 0;         // millis() of the last spool push
         std::atomic<uint32_t> s_noAnswer{0};   // wifiNoAnswer()
+        SnapshotFn s_snapFn = nullptr;
+        uint32_t s_snapAt = 0;          // millis() of the last snapshot sent, 0 none
 
         bool ready() { return s_buf && s_on && s_tok[0] && s_repo[0]; }
 
@@ -665,6 +667,34 @@ namespace LogPush
         }
 #endif
 
+        // The status snapshot, when one is due: true when it was tried (one
+        // file a job, like the other steps).
+        bool snapStep(const char* repo, const char* tok)
+        {
+            if (!s_snapFn || !s_okAt) return false;   // after this boot's first log part
+            if (s_snapAt && millis() - s_snapAt < SNAP_MS) return false;
+            char* buf = (char*)psMalloc(SNAP_MAX);
+            if (!buf) return false;
+            const size_t n = s_snapFn(buf, SNAP_MAX);
+            if (!n || n >= SNAP_MAX) { heap_caps_free(buf); s_snapAt = millis() | 1; return false; }
+            const unsigned min = (unsigned)(millis() / 60000);
+            char msg[64], rel[40];
+            snprintf(msg, sizeof(msg), "%s boot %u status at %u min (" MEGAOPEN_VERSION ")", s_dev, (unsigned)s_boot, min);
+            snprintf(rel, sizeof(rel), "boot-%05u/status-%04u.json", (unsigned)s_boot, min);
+            esp_err_t err = ESP_OK;
+            uint32_t ms = 0, dummy = 0;
+            const int st = putFile(repo, tok, rel, msg, buf, n, 0, err, ms);
+            heap_caps_free(buf);
+            if (st == 201 || st == 200 || st == 422) {   // 422: this minute's is there already
+                s_snapAt = millis() | 1;
+                sentPast(st, n);
+                LOGI("push", "%s/%s: %u bytes in %u ms", s_dev, rel, (unsigned)n, (unsigned)ms);
+            } else {
+                failed(st, err, ms, &dummy);
+            }
+            return true;
+        }
+
         void runPush()
         {
             char tok[TOKEN_MAX + 1], repo[REPO_MAX + 1], dev[16];
@@ -688,6 +718,7 @@ namespace LogPush
                 return;
             }
 #endif
+            if (snapStep(repo, tok)) { memset(tok, 0, sizeof(tok)); return; }
 #if FEATURE_CAPTURE
             // The log every PERIOD_MS; the CAN recording in between.
             if (s_can && s_spoolAt && millis() - s_spoolAt < PERIOD_MS) {
@@ -895,6 +926,7 @@ namespace LogPush
         }
     }
 
+    void setSnapshot(SnapshotFn fn) { s_snapFn = fn; }
     uint32_t wifiNoAnswer() { return s_noAnswer; }
 
     const char* stateId(State s)

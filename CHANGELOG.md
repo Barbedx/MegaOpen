@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- A status snapshot to GitHub: `/api/status` and `/api/health` as one JSON (`{uptimeMs, status, health}`), `boot-N/status-MMMM.json` (uptime minutes) right after the boot's first push and every 10 min, for tools to read without regexes (docs/design/logging.md §5).
+
 ### Changed
 - Where a car signal comes from (a CAN row, a constant, nothing) is edited in one place, the signals table (Авто — наживо): its source chip opens the editor, «Запам'ятати / показати зміни» included, for every signal, not only the ~60 a head-unit field has (`POST /api/map` takes any signal's name; `GET /api/map?sig=<name>` gives one signal's binding). The head-unit map's editor keeps «Звідки» only; under «свій сигнал» it says where that signal comes from, with «змінити в таблиці сигналів», which opens it there (step 4 of docs/design/hu-mapping.md, first half).
 - «Заводські прив'язки» (the signals' factory bindings) moved from the head-unit card to the signals table, the page where bindings are edited; it leaves the head-unit field map alone.
