@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Fixed
+- The USB link could lock up for good in the car ("USB: failed, write", no log push for 12 min, boot 192): when the app went without an unplug, the board waited 3 s for every frame it still had for it (alerts, responses) and did not read the next app's HELLO meanwhile, whose write timed out. Frames for an app gone quiet (no frame in 3 s) are now dropped at once, a host writing to the board is read first, and alerts wait for a live app. `/api/status` `usb` counts what the host did (`mounts`, `unmounts`, `suspends`, `resumes`) and the frames dropped; the log says each bus reset or suspend. Companion tries the USB again twice, 2 s apart, before it looks for the board on WiFi.
+
 ### Changed
 - The car's tables live in a file, `/cfg/car.json` in LittleFS, not in NVS (rules 1.7, slice 1a): the CAN decode map (rows and constants) and the head-unit field map, every signal by NAME, so a firmware that adds or reorders signals reads the same file and a name it does not know is skipped, never taken for another signal. The first boot builds the file from 1.6.x's NVS; the NVS copies are erased only on a later boot that is not on an OTA trial, so a rollback during the trial still finds them. Going back to an older firmware after that starts from the factory map (measured on the bench, 1a → 1.6.8: `[car] decode map: factory, 63 rows, 0 constants` and no field rules).
 - A settings file carries the map the same way (`decode` and `hu` as objects by name). A 1.6.x file's base64 `decode` / `hu.fields` is refused (`decode: not_object`); its other settings still import.

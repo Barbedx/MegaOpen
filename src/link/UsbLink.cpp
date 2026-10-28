@@ -4,6 +4,7 @@
 #include <ArduinoJson.h>
 #include <string.h>
 #include "esp32-hal-tinyusb.h"
+#include "USB.h"
 #include "lwip/sockets.h"
 #include "freertos/stream_buffer.h"
 #include "LinkFrame.h"
@@ -45,6 +46,15 @@ namespace UsbLink
         // up half-written costs the app its response. An unplug is seen at once
         // (tud_vendor_n_mounted), so this only bounds a host that hangs.
         constexpr uint32_t TX_GIVE_UP_MS = 3000;
+        // ...but an app that has gone quiet (no frame in ALIVE_MS: it died, or
+        // was closed, with the cable still in) reads nothing. Waiting the full
+        // 3 s a frame for it kept this task from reading the next app's HELLO,
+        // whose write then timed out: the car's "USB: failed, write" (boot 192,
+        // 2026-10-28). Its frames wait this long, then are dropped.
+        constexpr uint32_t TX_GONE_MS = 20;
+        // While the host is writing to us and not reading: its frames (a new
+        // app's HELLO) come first.
+        constexpr uint32_t TX_RX_WAITING_MS = 500;
         constexpr uint32_t EVENT_MS = 200;
 
         struct Chan {
@@ -70,6 +80,9 @@ namespace UsbLink
         volatile uint32_t s_lastRx = 0;
         volatile bool     s_anyRx = false;
         Stats             s_st;
+
+        // The app sent a frame lately (it pings every second).
+        bool hostLive() { return s_anyRx && millis() - s_lastRx < ALIVE_MS; }
 
         // ---- the app's internet: one transfer at a time -------------------
         // The requester (GhOta's or LogPush's task) fills the request and sets
@@ -105,6 +118,7 @@ namespace UsbLink
             if (!n) return false;
             size_t at = 0;
             uint32_t since = millis();
+            const uint32_t giveUp = hostLive() ? TX_GIVE_UP_MS : TX_GONE_MS;
             while (at < n) {
                 if (!tud_vendor_n_mounted(ITF)) return false;
                 const uint32_t room = tud_vendor_n_write_available(ITF);
@@ -112,7 +126,12 @@ namespace UsbLink
                     tud_vendor_n_write_flush(ITF);
                     const uint32_t w = millis() - since;
                     if (w > s_st.txWaitMax) s_st.txWaitMax = w;
-                    if (w > TX_GIVE_UP_MS) { if (at) ++s_st.cut; return false; }
+                    const bool talking = tud_vendor_n_available(ITF) > 0 && w > TX_RX_WAITING_MS;
+                    if (w > giveUp || talking) {
+                        if (at) ++s_st.cut;
+                        else    ++s_st.dropped;
+                        return false;
+                    }
                     vTaskDelay(1);
                     continue;
                 }
@@ -331,7 +350,8 @@ namespace UsbLink
 
         void events(uint32_t now)
         {
-            if (!s_hello || now - s_evAt < EVENT_MS) return;
+            // An app gone quiet: the alerts wait (s_evSeq stays) for it or the next HELLO.
+            if (!s_hello || !hostLive() || now - s_evAt < EVENT_MS) return;
             s_evAt = now;
             static App::Car::AlertEntry list[App::Car::ALERT_LOG];
             uint32_t last = 0;
@@ -410,6 +430,17 @@ namespace UsbLink
         spec.core  = App::Plan::USBLINK_CORE;
         spec.idOut = &s_id;
         s_task = App::spawn(spec);
+        // What the host does to the bus, for a link that drops: the core's
+        // event loop calls this (tud_mount/umount/suspend/resume_cb).
+        USB.onEvent([](void*, esp_event_base_t, int32_t id, void*) {
+            switch (id) {
+                case ARDUINO_USB_STARTED_EVENT: ++s_st.mounts;   break;
+                case ARDUINO_USB_STOPPED_EVENT: ++s_st.unmounts; LOGI("usb", "host: bus reset or unplugged"); break;
+                case ARDUINO_USB_SUSPEND_EVENT: ++s_st.suspends; LOGI("usb", "host: bus suspended"); break;
+                case ARDUINO_USB_RESUME_EVENT:  ++s_st.resumes;  LOGI("usb", "host: bus resumed"); break;
+                default: break;
+            }
+        });
     }
 
     bool alive()

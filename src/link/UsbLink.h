@@ -26,6 +26,10 @@ namespace UsbLink
         // The longest single wait, ms: for room in the USB FIFO, connect(),
         // a socket send(). And frames given up half-written.
         uint32_t txWaitMax = 0, connectMax = 0, sockSendMax = 0, cut = 0;
+        // Frames not sent because the app had gone quiet (no frame in
+        // ALIVE_MS); what the host did to the bus (configured, reset or
+        // unplugged, suspended, resumed).
+        uint32_t dropped = 0, mounts = 0, unmounts = 0, suspends = 0, resumes = 0;
     };
 
     // ---- the app's internet ------------------------------------------------

@@ -2351,6 +2351,11 @@ void WebUi::statusJson(JsonObject d)
             o["connectMax"]  = u.connectMax;
             o["sockSendMax"] = u.sockSendMax;
             o["cut"]         = u.cut;
+            o["dropped"]     = u.dropped;
+            o["mounts"]      = u.mounts;
+            o["unmounts"]    = u.unmounts;
+            o["suspends"]    = u.suspends;
+            o["resumes"]     = u.resumes;
         }
 #endif
 }

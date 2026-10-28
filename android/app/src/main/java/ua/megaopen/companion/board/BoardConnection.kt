@@ -75,9 +75,12 @@ class BoardConnection(ctx: Context, private val scope: CoroutineScope,
         var lastUp = 0L
         var fails = 0
         var fw = ""
+        var usbTries = 0
         while (scope.isActive) {
             // ---- USB first
-            if (usb.up || (usb.device() != null && usb.connect())) {
+            val plugged = usb.device() != null
+            if (usb.up || (plugged && usb.connect())) {
+                usbTries = 0
                 val hello = (usb.state.value as? UsbLink.State.Up)?.hello
                 val name = hello?.optString("name").orEmpty().ifEmpty { "MegaOpen" }
                 if (_board.value !is UsbBoard) _board.value = UsbBoard(usb, name, hello?.optString("fw").orEmpty())
@@ -86,6 +89,14 @@ class BoardConnection(ctx: Context, private val scope: CoroutineScope,
                 delay(1_000)
                 continue
             }
+            // Plugged in but not answering: a passing hold (the head unit's own
+            // USB scanner takes the interface for a moment, the board is busy)
+            // clears in a second or two; try again before the WiFi search.
+            if (plugged && ++usbTries <= USB_QUICK_TRIES) {
+                delay(2_000)
+                continue
+            }
+            usbTries = 0
             // ---- WiFi
             val typed = settings.values.value.host
             if (typed.isNotEmpty() && typed != host) { host = typed; since = -1 }
@@ -156,6 +167,8 @@ class BoardConnection(ctx: Context, private val scope: CoroutineScope,
 
     private companion object {
         const val POLL_MS = 1_500L
+        /** USB attempts 2 s apart while the board is plugged in, before a round on WiFi. */
+        const val USB_QUICK_TRIES = 3
         /** An alert older than this (we were away) is not said. */
         const val STALE_MS = 30_000L
     }
