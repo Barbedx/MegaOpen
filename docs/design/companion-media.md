@@ -75,6 +75,17 @@ as in the car. Each press shows a line: key → which destinations took it
 up on it too (live, from the `[key]` path), so the page also checks the panel's
 wiring. In the simulator the mock answers the same.
 
+## 4. Where the car is
+
+The owner, reading a drive's logs: which boot was where? The head unit has a
+GPS; the board has none. Companion sends the location (`B2 GEO`, app → board:
+lat, lon, accuracy, speed, heading, time; once a minute and on a stop/start,
+not per fix) when the user allows location for the app. The board puts it
+in the `[drive]` line, the 10-minute status snapshot (`geo`) and a `[geo]`
+line at boot and at the end of a drive; later a «де стоїть» signal for rules
+(home/garage zones). The log repository is private; a public build keeps
+`geo` off unless the user switches it on.
+
 ## Slices
 
 1. **Media from the app**: Companion's listener + `B0 MEDIA`; `AppMediaSource`,
@@ -86,7 +97,8 @@ wiring. In the simulator the mock answers the same.
 4. **Keys to the app**: `A1 KEY`, the `app` destination, Companion's action map.
 5. **HID in the main image**: the composite descriptor, the `hid` destination
    for every key, `t2can_usbhid` deleted; the WebUSB decision.
-6. **Docs**: USER-GUIDE (the permission, the screen, the key map), CHANGELOG.
+6. **Location** (`B2 GEO`, the log lines, the snapshot's `geo`).
+7. **Docs**: USER-GUIDE (the permissions, the screen, the key map), CHANGELOG.
 
 ## Depends on
 
