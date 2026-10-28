@@ -2402,6 +2402,13 @@ void setup()
         Vehicle::DecodeTable decode;
         CarStore::loadDecode(decode, cs.decodeFrom);
         cs.decode = &decode;
+        // The formulas (none in the file: the factory's, fuel_pct and range_calc).
+        Vehicle::FormulaSet formulas;
+        CarStore::loadFormulas(formulas);
+        cs.formulas = &formulas;
+        // Once the user signals have their names: the car screen's rows,
+        // saved by name, find them.
+        cs.signalsRenamed = [] { g_cfg.resolveCarSigs(); };
         // The panel alert rules: NVS, else the low-fuel edge alone.
         cs.alerts.factory();
         const bool alertsNvs = g_cfg.loadAlerts(cs.alerts);

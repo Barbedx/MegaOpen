@@ -2,6 +2,7 @@
 #include "../vehicle/DecodeTable.h"
 #include "../proto/canbox/FieldMap.h"
 #include "../proto/canbox/Protocol.h"
+#include "../vehicle/Formulas.h"
 
 namespace Cfg { class Config; }
 
@@ -35,4 +36,10 @@ namespace CarStore
     // Back to the factory table: the file's `decode` is dropped.
     bool factoryDecode();
     bool saveFields(const Canbox::Protocol& p, const Canbox::FieldMap& m);
+
+    // The formulas; none in the file = the factory set (FormulaSet::factory).
+    void loadFormulas(Vehicle::FormulaSet& set);
+    bool saveFormulas(const Vehicle::FormulaSet& set);
+    // Back to the factory set: the file's `formulas` is dropped.
+    bool factoryFormulas();
 }

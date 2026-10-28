@@ -12,14 +12,16 @@
 //   fuel        0x551's wrapping counter (80 mm³ a count) gives L/h; the
 //               distance is speed integrated over time; litres over km give
 //               L/100km, now (a window of >= WINDOW_MS) and since boot.
-//   range       fuel_level over the average, once AVG_MIN_KM have been driven.
 //   service     km to the service to the km: 0x715 gives it in steps of
 //               SERVICE_STEP (cut down); when the step goes down the cluster
 //               is at the old step's edge, and the km odo_cluster counts from
 //               there come off it. Until a step is seen: the step.
 //
 // Nothing here goes to the head unit: these are new signals, not range,
-// fuel_inst or fuel_avg (the Raise ones).
+// fuel_inst or fuel_avg (the Raise ones). What reads as one formula left for
+// the factory's formulas (Formulas.h: fuel_pct, range_calc); what stays is
+// state a formula cannot see (the counter's wrap, mm and ms since boot, the
+// service step's edge, the gear table).
 namespace Vehicle
 {
     class Derived {
@@ -37,7 +39,6 @@ namespace Vehicle
         // crawling round the threshold does not flicker.
         static constexpr uint8_t  LIGHTS_KMH = 10, BRAKE_KMH = 5;
         static constexpr uint8_t  BAND_PCT   = 12;      // a gear matches within ±12 %
-        static constexpr int32_t  TANK_L     = 60;      // the Mégane II's tank: fuel_pct
         static constexpr int32_t  SERVICE_STEP = 150;   // km a 0x715 service step (decode_defaults.inc)
 
         // km/h per 1000 rpm x10, 1st..6th; 0 = no such gear. The defaults are
@@ -96,12 +97,11 @@ namespace Vehicle
         void gear(State& s, uint32_t now);
         void fuel(State& s, uint32_t now);
         void safety(State& s, uint32_t now);
-        void tank(State& s, uint32_t now);
         void svc(State& s, uint32_t now);
 
         Gears    _g;
         int32_t  _lightsOn = LIGHTS_KMH * 100, _brakeOn = BRAKE_KMH * 100;   // km/h x100
-        uint32_t _speedTs = 0, _rpmTs = 0, _cntTs = 0, _levelTs = 0, _svcTs = 0, _odoTs = 0;
+        uint32_t _speedTs = 0, _rpmTs = 0, _cntTs = 0, _svcTs = 0, _odoTs = 0;
         Service  _svc;
         int32_t  _svcPrev = INT32_MIN;   // the last step seen this boot
         uint8_t  _cnt = 0;

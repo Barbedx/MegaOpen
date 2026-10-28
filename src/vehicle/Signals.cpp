@@ -1,6 +1,10 @@
 #include "Signals.h"
 #include <atomic>
+#include <stdlib.h>
 #include <string.h>
+#ifndef NATIVE
+#include <esp_heap_caps.h>
+#endif
 
 namespace Vehicle
 {
@@ -203,7 +207,8 @@ namespace Vehicle
     static const Meta kUnknown = {"?", "", 0, 0, 0, false, GRP_COUNT};
 
     // The user slots, twice: readers use the live one, the writer fills the
-    // other and swaps.
+    // other and swaps. In PSRAM (~7.7 kB), made by the first write: until
+    // then every slot is free.
     namespace
     {
         struct UserSlot {
@@ -211,8 +216,25 @@ namespace Vehicle
             char unit[USER_UNIT + 1];
             Meta m;
         };
-        UserSlot g_user[2][USER_SIGNALS];
+        typedef UserSlot UserTable[USER_SIGNALS];
+        std::atomic<UserTable*> g_user{nullptr};   // two tables
         std::atomic<uint8_t> g_live{0};
+
+        UserTable* userTables()
+        {
+            UserTable* t = g_user.load(std::memory_order_acquire);
+            if (t) return t;
+            const size_t n = 2 * sizeof(UserTable);
+#ifdef NATIVE
+            void* m = calloc(1, n);
+#else
+            void* m = heap_caps_calloc(1, n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (!m) m = heap_caps_calloc(1, n, MALLOC_CAP_8BIT);
+#endif
+            t = static_cast<UserTable*>(m);
+            g_user.store(t, std::memory_order_release);
+            return t;
+        }
         const Meta kFreeUser = {"", "", 0, 0, 0, false, GRP_USER};
     }
 
@@ -220,7 +242,9 @@ namespace Vehicle
     {
         if (s < SIG_USER_0) return kMeta[s];
         if (s < SIG_COUNT) {
-            const UserSlot& u = g_user[g_live.load(std::memory_order_acquire)][s - SIG_USER_0];
+            UserTable* t = g_user.load(std::memory_order_acquire);
+            if (!t) return kFreeUser;
+            const UserSlot& u = t[g_live.load(std::memory_order_acquire)][s - SIG_USER_0];
             // Never written yet (zeroed): a free slot.
             return u.m.name ? u.m : kFreeUser;
         }
@@ -231,9 +255,11 @@ namespace Vehicle
 
     void setUserSignals(const UserDef* defs)
     {
+        UserTable* t = userTables();
+        if (!t) return;   // no memory: the slots stay as they were
         const uint8_t w = (uint8_t)(1 - g_live.load(std::memory_order_relaxed));
         for (uint8_t i = 0; i < USER_SIGNALS; ++i) {
-            UserSlot& u = g_user[w][i];
+            UserSlot& u = t[w][i];
             const UserDef& d = defs[i];
             const bool on = d.name && d.name[0];
             strncpy(u.name, on ? d.name : "", USER_NAME);

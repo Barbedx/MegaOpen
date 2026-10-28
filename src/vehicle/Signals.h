@@ -220,7 +220,7 @@ namespace Vehicle
         SIG_FUEL_RATE,         // L/h x10
         SIG_CONS_INST,         // L/100km x10, while rolling
         SIG_CONS_AVG,          // L/100km x10, since boot
-        SIG_RANGE_CALC,        // km, fuel_level over cons_avg
+        SIG_RANGE_CALC,        // km, fuel_level over cons_avg (a factory formula, Formulas.h)
         SIG_TRIP_FUEL,         // L x100, since boot
         SIG_TRIP_KM,           // km x10, since boot
         // A head-unit probe, not a car value: 0x7D 06 D2's low nibble, set by
@@ -242,8 +242,8 @@ namespace Vehicle
         // handbrake up. Yes/no, for the panel alerts.
         SIG_DRIVE_NO_LIGHTS,
         SIG_DRIVE_HANDBRAKE,
-        // The tank in per cent x10 (Vehicle::Derived): fuel_level over
-        // Derived::TANK_L. Last, so the saved map's indices hold.
+        // The tank in per cent x10: the factory formula fuel_level * 100 / 60
+        // (Formulas.h; the Mégane II's tank is 60 L).
         SIG_FUEL_PCT,
         // km to the service to the km (Vehicle::Derived): service_km is 0x715's
         // step of 150 km; this one counts the km down from the step's edge.

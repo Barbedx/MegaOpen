@@ -1,4 +1,5 @@
 #include "CarFile.h"
+#include <initializer_list>
 #include <stdio.h>
 #include <string.h>
 #include "../vehicle/Signals.h"
@@ -24,7 +25,14 @@ namespace CarFile
             Vehicle::DecodeJson::canJson(b, sizeof(b), r);
             JsonDocument can;
             deserializeJson(can, b);
-            o["can"] = can.as<JsonObjectConst>();
+            // In the file, a key at the value canFrom() takes for a missing
+            // one is left out: half the bytes, the same row back.
+            JsonObject c = can.as<JsonObject>();
+            for (const char* k : {"le", "signed", "hyp", "latch", "key"}) if (!(c[k] | false)) c.remove(k);
+            for (const char* k : {"shift", "add", "state2", "holdMs"}) if ((c[k] | 0) == 0) c.remove(k);
+            for (const char* k : {"mul", "div"}) if ((c[k] | 1) == 1) c.remove(k);
+            if ((c["len"] | 1) == 1) c.remove("len");
+            o["can"] = c;
         }
         JsonArray ks = d["consts"].to<JsonArray>();
         for (uint16_t i = 0; i < t.k.size(); ++i) {
@@ -62,6 +70,55 @@ namespace CarFile
             if (!t.addConst(sig, o["value"].as<int32_t>())) { t = Vehicle::DecodeTable{}; return Vehicle::DecodeTable::WHY_CONSTS; }
         }
         t.sortRows();
+        return nullptr;
+    }
+
+    void formulaRowTo(JsonObject o, const Vehicle::FormulaRow& r)
+    {
+        o["name"] = r.name;
+        o["f"]    = r.src;
+        o["unit"] = r.unit;
+        o["dec"]  = r.decimals;
+        o["bool"] = r.boolean;
+        o["on"]   = r.on;
+    }
+
+    const char* formulaRowFrom(JsonObjectConst o, Vehicle::FormulaRow& r)
+    {
+        r = Vehicle::FormulaRow{};
+        const char* name = o["name"] | "";
+        const char* f = o["f"] | "";
+        const char* unit = o["unit"] | "";
+        if (strlen(name) > Vehicle::USER_NAME) return "name: formula_name";
+        if (strlen(f) > Expr::Program::MAX_SRC) return "f: expr_long";
+        if (strlen(unit) > Vehicle::USER_UNIT) return "unit: param";
+        const int dec = o["dec"] | 0;
+        if (dec < 0 || dec > 3) return "dec: param";
+        strncpy(r.name, name, Vehicle::USER_NAME);
+        strncpy(r.src, f, Expr::Program::MAX_SRC);
+        strncpy(r.unit, unit, Vehicle::USER_UNIT);
+        r.decimals = (uint8_t)dec;
+        r.boolean = o["bool"] | false;
+        r.on = o["on"] | true;
+        return nullptr;
+    }
+
+    void putFormulas(JsonObject car, const Vehicle::FormulaSet& set)
+    {
+        JsonArray a = car["formulas"].to<JsonArray>();
+        for (uint16_t i = 0; i < set.rows.size(); ++i) formulaRowTo(a.add<JsonObject>(), set.rows[i]);
+    }
+
+    const char* getFormulas(JsonObjectConst car, Vehicle::FormulaSet& set)
+    {
+        set.rows.clear();
+        if (!car["formulas"].is<JsonArrayConst>()) return "formulas: missing";
+        for (JsonObjectConst o : car["formulas"].as<JsonArrayConst>()) {
+            if (set.rows.size() >= Vehicle::FormulaSet::MAX_ROWS) { set.rows.clear(); return "formulas: formula_rows"; }
+            Vehicle::FormulaRow r;
+            if (const char* why = formulaRowFrom(o, r)) { set.rows.clear(); return why; }
+            if (!set.rows.push(r)) { set.rows.clear(); return "no_memory"; }
+        }
         return nullptr;
     }
 

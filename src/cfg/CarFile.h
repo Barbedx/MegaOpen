@@ -5,6 +5,7 @@
 #include "../vehicle/DecodeTable.h"
 #include "../proto/canbox/FieldMap.h"
 #include "../proto/canbox/Protocol.h"
+#include "../vehicle/Formulas.h"
 
 // The car's configuration as one JSON document (docs/design/rules.md, slice 1):
 // what /cfg/car.json in LittleFS holds (CarStore) and what a settings file
@@ -17,7 +18,9 @@
 //    "decode":{"rows":[{"sig":"speed","can":{...DecodeJson::canJson...}}],
 //              "consts":[{"sig":"batt_v","value":1250}]},
 //    "hu":{"raise112":{"fields":[{"field":"range","from":"sig","src":"range_calc",
-//                                 "mul":1,"div":1,"add":0}]}}}
+//                                 "mul":1,"div":1,"add":0}]}},
+//    "formulas":[{"name":"fuel_pct","f":"fuel_level * 100 / 60","unit":"",
+//                 "dec":0,"bool":false,"on":true}]}
 //
 // No `decode`: the factory table (decode_defaults.inc). Field maps are kept
 // per protocol: another protocol's entry is left as it is.
@@ -38,6 +41,15 @@ namespace CarFile
     // Absent: an empty map. nullptr = read (unknown fields or sources skipped
     // and counted); else why, `m` empty.
     const char* getFields(JsonObjectConst car, const Canbox::Protocol& p, Canbox::FieldMap& m, uint16_t& skipped);
+
+    // ---- the formulas (Vehicle::FormulaSet) --------------------------------------
+    void putFormulas(JsonObject car, const Vehicle::FormulaSet& set);
+    // `car["formulas"]`, as written; checked by the caller (Formulas::check).
+    // nullptr = read; "formulas: missing" = none (the caller's factory set).
+    const char* getFormulas(JsonObjectConst car, Vehicle::FormulaSet& set);
+    // One row both ways, for /api/formulas too.
+    void        formulaRowTo(JsonObject o, const Vehicle::FormulaRow& r);
+    const char* formulaRowFrom(JsonObjectConst o, Vehicle::FormulaRow& r);
 
     // ---- one field rule, as /api/hu/fields and the file write it ----------------
     // {"from":"own"|"sig"|"k"|"off","src","mul","div","add"}; the length written.

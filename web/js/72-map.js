@@ -10,10 +10,11 @@
    рядок = [сигнал, умова, поріг, пауза, увімк], уся таблиця з 16 рядків;
    колонки й умови — з CAT.settings. */
 /* група сигналу (meta[4]) — lv.grp.<n>; джерело — lv.src.<літера> і колір чипа */
-const LV_SRC={c:'ok',k:'warn',p:'warn',d:'ok',o:'off'};
+const LV_SRC={c:'ok',k:'warn',p:'warn',d:'ok',f:'ok',o:'off'};
 /* клас джерела (docs/design/rules.md, крок 1): CAN, перевірений чи ні; плата; стала (або закріплено); нема */
-const LV_CLS=['all','canOk','canHyp','board','const','none'];
-const lvCls=(src,ok)=>src==='c'?(ok?'canOk':'canHyp'):src==='d'?'board':src==='k'||src==='p'?'const':'none';
+const LV_CLS=['all','canOk','canHyp','board','user','const','none'];
+/* формула: свій сигнал (група GRP_USER, meta[4] === 12) — «Свої», вбудований — «Плата» */
+const lvCls=(src,ok,m)=>src==='c'?(ok?'canOk':'canHyp'):src==='f'?(m&&m[4]===12?'user':'board'):src==='d'?'board':src==='k'||src==='p'?'const':'none';
 /* meta: [name, unit, decimals, yes/no, group, min, max, label]; sigs: [value, ageMs, src, verified, confirm]
    confirm: 1 — гіпотеза на CAN, можна «✓ підтвердити»; 2 — підтверджено тут, можна «↺ скасувати».
    POST /api/map {confirm:{sig,on}}; «Заводські прив'язки» повертають гіпотези. Назва — k.sig, k.raise */
@@ -42,15 +43,19 @@ const mapEd=(r,sigs)=>{const ru=r.rule||{from:'auto',src:'',mul:1,div:1,add:0},c
 /* рядок на 2 с підсвічено (.hl), прокручено до середини */
 const hlRow=tr=>{if(!tr)return;tr.scrollIntoView({block:'center'});tr.classList.add('hl');setTimeout(()=>tr.classList.remove('hl'),2000)};
 /* вкладка -> її картка; картки прямо в #main (широкий екран: .full на всю ширину, не в колонки) */
-const MAP_TABS={sig:'lvCard',fields:'cMap',alerts:'alCard'};
+const MAP_TABS={sig:'lvCard',fields:'cMap',formulas:'fmCard',alerts:'alCard'};
 SCR.map={title:'map.title',hidden:true,async render(m){
- const[r,se,mp,hf]=await Promise.all([API.get('/api/map?meta=1&live=1'),API.get('/api/settings'),API.get('/api/map'),API.get('/api/hu/fields').catch(()=>null)]);
+ const[r,se,mp,hf,fm]=await Promise.all([API.get('/api/map?meta=1&live=1'),API.get('/api/settings'),API.get('/api/map'),API.get('/api/hu/fields').catch(()=>null),API.get('/api/formulas').catch(()=>null)]);
+ this.F=(fm&&fm.rows)||[];
  const al=(CAT.settings||[]).find(f=>f.id==='alerts')||{cols:[]},cond=al.cols.find(c=>c.id==='cond')||{enum:[]};
  this.M=r.meta;this.C=cond.enum.map(o=>[o.v,o.name]);this.A=se.alerts||[];this.n=0;this.grp='all';this.mp=mp;this.sw=null;this.last=null;this.setFl(hf);
  const tab=location.hash.split(':')[1]||'';this.tb=MAP_TABS[tab]?tab:'sig';
  /* фільтр за групою: значення — 'all' або назва групи, як у data-g рядка */
  const groups=[['all',t('ca.all')],...[...new Set(CAT.raise.map(x=>x.group))].map(g=>[g,g])];
- m.innerHTML=`<div class="pad full">${seg('#mTab',[['sig',t('map.tSig')],['fields',t('map.tFields')],['alerts',t('map.tAlerts')]],this.tb)}</div>`+
+ m.innerHTML=`<div class="pad full">${seg('#mTab',[['sig',t('map.tSig')],['fields',t('map.tFields')],['formulas',t('map.tFormulas')],['alerts',t('map.tAlerts')]],this.tb)}</div>`+
+ card(t('fm.card'),row('','',t('fm.h'))+
+  `<div class="tw"><table class="fmt"><thead><tr><th>${t('fm.thName')}</th><th>${t('fm.thF')}</th><th>${t('fm.thUnit')}</th><th>${t('fm.thDec')}</th><th>${t('fm.thBool')}</th><th>${t('fm.thOn')}</th><th>${t('fm.thNow')}</th><th></th></tr></thead><tbody id="fmT"></tbody></table></div>`+
+  `<div class="fr"><button class="btn" type="button" id="fmAdd">${t('fm.add')}</button><button class="btn pri" type="button" id="fmSave">${t('fm.save')}</button><button class="btn" type="button" id="fmFac">${t('fm.factory')}</button></div>`,'fmCard','custom full')+
  card(t('lv.signals'),row(t('lv.auto'),sw('#lvAuto',true,'data-nosave'),t('lv.autoSub'))+
   row(t('lv.only'),sw('#lvOnly',true,'data-nosave'))+
   `<div class="pad">${seg('#lvCls',LV_CLS.map(c=>[c,t('lv.cls.'+c)]),'all','wrap')}</div>`+row(t('lv.alerts'),`<span id="lvAl" class="muted">${DASH}</span>`,t('lv.alertsSub'))+
@@ -65,7 +70,14 @@ SCR.map={title:'map.title',hidden:true,async render(m){
  card(t('lv.alCard'),row('','',t('lv.alH'))+
   `<div class="tw"><table><thead><tr><th>${t('lv.thSig')}</th><th>${t('lv.thCond')}</th><th>${t('lv.thThr')}</th><th>${t('lv.thPause')}</th><th>${t('lv.thOn')}</th></tr></thead><tbody id="alT"></tbody></table></div>`+
   `<div class="fr"><button class="btn pri" type="button" id="alSave">${t('lv.alSave')}</button><button class="btn" type="button" id="alFac">${t('lv.alFactory')}</button></div>`,'alCard','custom full');
- this.go(this.tb);this.draw(r);this.drawAlerts();BIND.wire($('#lvT'));
+ this.go(this.tb);this.draw(r);this.drawAlerts();this.drawFormulas();BIND.wire($('#lvT'));
+ // Формули
+ $('#fmAdd').onclick=()=>{this.F=this.readFormulas();this.F.push({name:'',f:'',unit:'',dec:0,bool:false,on:true,v:null});this.drawFormulas();const n=$$('#fmT [data-f="name"]').pop();if(n)n.focus()};
+ $('#fmT').addEventListener('click',e=>{const d=e.target.closest('[data-del]');if(!d)return;this.F=this.readFormulas();this.F.splice(+d.dataset.del,1);this.drawFormulas()});
+ /* жива перевірка формули: /api/expr рахує її на даних авто зараз; нове ім'я з цієї таблиці відоме після «Зберегти» */
+ $('#fmT').addEventListener('input',e=>{const f=e.target.closest('[data-f="f"]');if(!f)return;clearTimeout(f._t);f._t=setTimeout(()=>this.checkFormula(f),400)});
+ $('#fmSave').onclick=e=>run(e.target,async()=>{await API.post('/api/formulas',{rows:this.readFormulas().map(({v,...x})=>x)});await this.reloadFormulas()},t('fm.saved'));
+ $('#fmFac').onclick=e=>ask(e.target,t('fm.factoryAsk'),()=>run(e.target,async()=>{await API.post('/api/formulas',{reset:true});await this.reloadFormulas()},t('fm.factoryDone')));
  $('[data-f="mTab"]').addEventListener('change',e=>this.go(e.currentTarget.dataset.v));
  // Сигнали
  /* заводські прив'язки сигналів (DecodeTable::factory): свої CAN-рядки й константи зникають */
@@ -136,9 +148,9 @@ draw(r){if(r)this.last=r;const tb=$('#lvT');if(!tb||!r||!r.sigs||$('.ask',tb)||$
  const cs=$('[data-f="lvCls"]'),cl=cs?cs.dataset.v:'all',n={};
  /* вільний слот свого сигналу (ім'я "") не існує: його не видно й не лічать */
  const live=this.M.map((m,i)=>i).filter(i=>this.M[i][0]);
- for(const i of live){const x=r.sigs[i],c=lvCls(x[2],x[3]);n[c]=(n[c]||0)+1}
+ for(const i of live){const x=r.sigs[i],c=lvCls(x[2],x[3],this.M[i]);n[c]=(n[c]||0)+1}
  if(cs)$$('button',cs).forEach(b=>{const c=b.dataset.val;b.textContent=t('lv.cls.'+c)+' · '+(c==='all'?live.length:(n[c]||0))});
- const idx=live.filter(i=>(!only||r.sigs[i][0]!=null)&&(cl==='all'||lvCls(r.sigs[i][2],r.sigs[i][3])===cl)).sort((a,b)=>this.M[a][4]-this.M[b][4]||a-b);
+ const idx=live.filter(i=>(!only||r.sigs[i][0]!=null)&&(cl==='all'||lvCls(r.sigs[i][2],r.sigs[i][3],this.M[i])===cl)).sort((a,b)=>this.M[a][4]-this.M[b][4]||a-b);
  for(const i of idx){const m=this.M[i],[v,age,src,ok,cf]=r.sigs[i],fs=this.fs[m[0]];
   const vh=(ok?'✓':`<span class="muted" title="${esc(src==='d'?t('lv.computedT'):t('lv.uncheckedT'))}">?</span>`)+
    (cf===1?` <button class="btn sm" type="button" data-conf="${i}" data-on="1" title="${esc(t('lv.confirmT'))}">${t('lv.confirm')}</button>`:
@@ -150,6 +162,21 @@ draw(r){if(r)this.last=r;const tb=$('#lvT');if(!tb||!r||!r.sigs||$('.ask',tb)||$
  if(r.alertStats)$('#lvAl').textContent=r.alertStats.fired+' / '+r.alertStats.shown+' / '+r.alertStats.dropped},
 drawAlerts(){const so=[['','—'],...this.M.map(m=>[m[0],lvName(m)])],co=this.C.map(c=>[c[0],c[1]]);
  $('#alT').innerHTML=this.A.map((a,i)=>`<tr data-r="${i}"><td>${sel('#sig',so,a[0],'data-str')}</td><td>${sel('#cond',co,a[1],'data-str')}</td><td>${num('#thr',a[2],'step="any" style="width:6em"')}</td><td>${num('#cd',a[3],'min="5" max="65535" style="width:5em"')}</td><td>${sw('#on',a[4])}</td></tr>`).join('')},
+/* формули: рядок = [ім'я, формула, одиниця, знаки, так/ні, увімк., значення зараз] */
+drawFormulas(){const tb=$('#fmT');if(!tb)return;
+ tb.innerHTML=this.F.length?this.F.map((x,i)=>`<tr data-r="${i}"><td>${txt('#name',x.name,'my_signal','in code','text','maxlength="23" autocapitalize="off" spellcheck="false"')}</td>`+
+  `<td>${txt('#f',x.f,'fuel_level * 100 / 60','in code','text','maxlength="255" autocapitalize="off" spellcheck="false" list="fmNames"')}<small class="muted" data-chk></small></td>`+
+  `<td>${txt('#unit',x.unit,'','in','text','maxlength="11" style="width:5em"')}</td><td>${sel('#dec',[0,1,2,3],x.dec||0)}</td><td>${sw('#bool',!!x.bool)}</td><td>${sw('#on',x.on!==false)}</td>`+
+  `<td class="num">${x.v==null?DASH:esc(String(x.v))}</td><td><button class="btn sm" type="button" data-del="${i}" title="${esc(t('fm.del'))}">✕</button></td></tr>`).join('')
+  :`<tr><td colspan="8" class="muted">${esc(t('fm.none'))}</td></tr>`;
+ if(!$('#fmNames'))tb.insertAdjacentHTML('afterend',`<datalist id="fmNames">${this.M.filter(m=>m[0]).map(m=>`<option value="${esc(m[0])}">`).join('')}</datalist>`)},
+readFormulas(){return $$('#fmT tr[data-r]').map(tr=>{const g=f=>val($(`[data-f="${f}"]`,tr));const was=this.F[+tr.dataset.r]||{};
+ return {name:(g('name')||'').trim(),f:(g('f')||'').trim(),unit:(g('unit')||'').trim(),dec:+g('dec')||0,bool:!!g('bool'),on:!!g('on'),v:was.v??null}})},
+async reloadFormulas(){const fm=await API.get('/api/formulas');this.F=fm.rows||[];this.drawFormulas()},
+async checkFormula(el){const out=$('[data-chk]',el.closest('td'));if(!out)return;const f=el.value.trim();if(!f){out.textContent='';return}
+ try{const r=await API.post('/api/expr',{f});if(el.value.trim()!==f)return;
+  out.textContent=r.ok?'= '+(r.v==null?t('fm.noValue'):r.v):'✗ '+t('e.'+r.code)+' · '+t('fm.at',r.pos+1)}
+ catch(e){out.textContent='✗ '+errT(e)}},
 /* прив'язка одного сигналу: рядок під ним, з GET /api/map?sig= */
 async bind(i,id){const open=$(`#lvT tr.bindEd[data-for="${id}"]`);if(open){open.remove();return}
  const r=((await API.get('/api/map?sig='+encodeURIComponent(id))).rows||[])[0];

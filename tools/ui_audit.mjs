@@ -29,7 +29,7 @@ mkdirSync(out, { recursive: true });
 // Where each build env is looked at. Every tab on the car build; the direct
 // build's own screens (matrix, KEY1/KEY2) on Кнопки and Плата.
 const PAGES = [
-  ...['home', 'screen', 'keys', 'car', 'map', 'map:fields', 'map:alerts', 'board', 'service'].map(t => ['t2can', t]),
+  ...['home', 'screen', 'keys', 'car', 'map', 'map:fields', 'map:formulas', 'map:alerts', 'board', 'service'].map(t => ['t2can', t]),
   ['direct', 'keys'], ['direct', 'board'],
 ];
 const SIZES = [[390, 844], [360, 740]];

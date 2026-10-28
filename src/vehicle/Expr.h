@@ -114,6 +114,10 @@ namespace Expr
         friend struct Parser;
     };
 
+    // A word the language takes (true, false, and, or, not, a function's
+    // name): no signal may be called that.
+    bool reserved(const char* name, size_t len);
+
     // A formula's value as a condition: NONE and 0 do not hold.
     inline bool holds(Num v) { return v != NONE && v != 0; }
     // To and from a signal's own integer (decimals `dec`), rounded.

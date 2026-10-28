@@ -177,6 +177,36 @@ namespace CarStore
         return ok;
     }
 
+    void loadFormulas(Vehicle::FormulaSet& set)
+    {
+        const char* why = "formulas: missing";
+        if (g_ready && g_lock.take(LOCK_WAIT_MS)) {
+            why = CarFile::getFormulas(g_doc->as<JsonObjectConst>(), set);
+            g_lock.give();
+        }
+        if (!why) return;
+        if (strcmp(why, "formulas: missing")) LOGW("car", "formulas in %s refused (%s): factory", PATH, why);
+        set.factory();
+    }
+
+    bool saveFormulas(const Vehicle::FormulaSet& set)
+    {
+        if (!g_ready || !g_lock.take(LOCK_WAIT_MS)) return false;
+        CarFile::putFormulas(g_doc->as<JsonObject>(), set);
+        const bool ok = write();
+        g_lock.give();
+        return ok;
+    }
+
+    bool factoryFormulas()
+    {
+        if (!g_ready || !g_lock.take(LOCK_WAIT_MS)) return false;
+        g_doc->remove("formulas");
+        const bool ok = write();
+        g_lock.give();
+        return ok;
+    }
+
     bool saveFields(const Canbox::Protocol& p, const Canbox::FieldMap& m)
     {
         if (!g_ready || !g_lock.take(LOCK_WAIT_MS)) return false;

@@ -9,10 +9,8 @@ namespace Vehicle
         const uint8_t kRatio[] = {SIG_SPEED, SIG_RPM};
         const uint8_t kRate[]  = {SIG_FUEL_COUNTER};
         const uint8_t kCons[]  = {SIG_FUEL_COUNTER, SIG_SPEED};
-        const uint8_t kRange[] = {SIG_FUEL_COUNTER, SIG_SPEED, SIG_FUEL_LEVEL};
         const uint8_t kNoLights[]  = {SIG_SPEED, SIG_LIGHT_DIPPED, SIG_LIGHT_MAIN};
         const uint8_t kHandbrake[] = {SIG_SPEED, SIG_HANDBRAKE};
-        const uint8_t kTank[]  = {SIG_FUEL_LEVEL};
         const uint8_t kService[] = {SIG_SERVICE_KM, SIG_ODO_CLUSTER};
 
         template <size_t N>
@@ -37,10 +35,8 @@ namespace Vehicle
             case SIG_TRIP_KM:
             case SIG_AVG_SPEED:
             case SIG_TRIP_ELAPSED: return give(kCons, list);
-            case SIG_RANGE_CALC: return give(kRange, list);
             case SIG_DRIVE_NO_LIGHTS: return give(kNoLights, list);
             case SIG_DRIVE_HANDBRAKE: return give(kHandbrake, list);
-            case SIG_FUEL_PCT:   return give(kTank, list);
             case SIG_SERVICE_CALC: return give(kService, list);
             default:             list = nullptr; return 0;
         }
@@ -85,10 +81,6 @@ namespace Vehicle
             _cntTs = s.stamp(SIG_FUEL_COUNTER);
             fuel(s, now);
         }
-        if (s.stamp(SIG_FUEL_LEVEL) != _levelTs) {
-            _levelTs = s.stamp(SIG_FUEL_LEVEL);
-            tank(s, now);
-        }
         if (s.stamp(SIG_SERVICE_KM) != _svcTs || s.stamp(SIG_ODO_CLUSTER) != _odoTs) {
             _svcTs = s.stamp(SIG_SERVICE_KM);
             _odoTs = s.stamp(SIG_ODO_CLUSTER);
@@ -120,13 +112,6 @@ namespace Vehicle
             if (v > step + SERVICE_STEP - 1) v = step + SERVICE_STEP - 1;
         }
         put(s, SIG_SERVICE_CALC, v, now);
-    }
-
-    // Litres over the tank, per cent x10, cut down (31 L of 60: 516 = 51.6 %).
-    void Derived::tank(State& s, uint32_t now)
-    {
-        if (!s.has(SIG_FUEL_LEVEL)) return;
-        put(s, SIG_FUEL_PCT, (int64_t)s.get(SIG_FUEL_LEVEL) * 1000 / TANK_L, now);
     }
 
     void Derived::gear(State& s, uint32_t now)
@@ -186,7 +171,6 @@ namespace Vehicle
         if (km10 < AVG_MIN_KM || !_totMm) return;
         const int64_t avg = (int64_t)(_totCounts * 80000 / _totMm);
         put(s, SIG_CONS_AVG, avg, now);
-        if (avg > 0 && s.has(SIG_FUEL_LEVEL)) put(s, SIG_RANGE_CALC, (int64_t)s.get(SIG_FUEL_LEVEL) * 1000 / avg, now);
     }
 }
 

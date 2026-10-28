@@ -7,6 +7,7 @@
 #include "../vehicle/CanSniffer.h"
 #include "../vehicle/DecodeTable.h"
 #include "../vehicle/AlertRules.h"
+#include "../vehicle/Formulas.h"
 #include "../utils/Staged.h"
 
 // The car task (docs/design/event-tasks.md, Step 5). Priority 4 on core 0 for
@@ -58,6 +59,12 @@ namespace App
             // copied; null = the factory table. `decodeFrom` says which, for the log.
             const Vehicle::DecodeTable* decode = nullptr;
             const char*                 decodeFrom = "factory";
+            // The formulas as the car file holds them (CarStore::loadFormulas),
+            // copied; null = the factory's.
+            const Vehicle::FormulaSet*  formulas = nullptr;
+            // After a set of formulas is applied (the user signals renamed): on
+            // the car task, must not block (main: the car screen's names).
+            void (*signalsRenamed)() = nullptr;
             // The panel alert rules (NVS "alerts", else factory: the low-fuel
             // edge). Copied.
             Vehicle::AlertRules  alerts;
@@ -104,6 +111,15 @@ namespace App
         // httpd edits it (stage/edit); the car task applies it.
         // Persisting it is the caller's (CarStore::saveDecode).
         Staged<Vehicle::DecodeTable, true>& decodeTable();
+
+        // ---- the formulas (Vehicle::Formulas) -----------------------------------------
+        // httpd stages a set (checked first: Formulas::check) and persists it
+        // (CarStore::saveFormulas); the car task applies it between two passes
+        // and runs it after each pass's frames, the timed rows every FORMULA_TICK_MS.
+        constexpr uint32_t FORMULA_TICK_MS = 100;
+        Staged<Vehicle::FormulaSet>& formulaSet();
+        // Which signals a formula feeds now: any task (a copy).
+        Expr::SigSet formulaTargets();
 
         // ---- the panel alert rules ---------------------------------------------------
         // httpd edits (and persists, Config::saveAlerts); the car task applies

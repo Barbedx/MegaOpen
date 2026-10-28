@@ -228,6 +228,12 @@ namespace App
                                st->has(SIG_ODOMETER) ? (long)(st->ageMs(SIG_ODOMETER, millis()) / 1000) : -1L,
                                g(SIG_ODO_CLUSTER), g(SIG_FUEL_LEVEL), g(SIG_FUEL_LEVEL_APV), g(SIG_FUEL_LOW));
             }
+            // The formulas: httpd stages a set, this task applies and runs it.
+            Staged<Vehicle::FormulaSet> s_formulaSet;
+            Vehicle::Formulas           s_formulas;
+            Snapshot<Expr::SigSet>      s_targetsPub;
+            uint32_t                    s_formulaTick = 0;
+            Expr::SigSet                s_changed;
             // The panel alert rules: httpd stages, this task applies and evaluates.
             Staged<Vehicle::AlertRules> s_alerts;
             Vehicle::AlertEval s_eval;
@@ -274,6 +280,60 @@ namespace App
                     else   ok = ok && t.measured(s);
                     Vehicle::setVerified(s, ok);
                 }
+                // A formula's target, not fed by a row: as good as its inputs
+                // (twice, so a formula over a formula settles).
+                for (int round = 0; round < 2; ++round)
+                    for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) {
+                        Expr::SigSet in;
+                        if (t.rowOf(s) >= 0 || t.constOf(s) >= 0 || !s_formulas.inputsOf(s, in)) continue;
+                        bool ok = !pinned(s);
+                        for (uint8_t i = 0; ok && i < Vehicle::SIG_COUNT; ++i)
+                            if (in.has(i)) ok = Vehicle::verified(i);
+                        Vehicle::setVerified(s, ok);
+                    }
+            }
+
+            // Who feeds what: a CAN row or a constant first, then a formula,
+            // then Derived's math; each stands down for the one before it.
+            void rebind()
+            {
+                const Vehicle::DecodeTable& t = s_table.live();
+                Expr::SigSet table;
+                for (uint16_t i = 0; i < t.row.size(); ++i) table.set(t.row[i].sig);
+                for (uint16_t i = 0; i < t.k.size(); ++i)   table.set(t.k[i].sig);
+                s_formulas.setBound(table);
+                s_derived.clearBound();
+                const Expr::SigSet& f = s_formulas.targets();
+                for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s)
+                    if (table.has(s) || f.has(s)) s_derived.setBound(s, true);
+            }
+
+            void applyFormulas()
+            {
+                Vehicle::FormulaProblem p;
+                if (!s_formulas.apply(s_formulaSet.live(), p))
+                    LOGW("car", "formula row %u: %s at %u, that row is off", (unsigned)(p.row + 1),
+                         p.e.code ? p.e.code : "?", (unsigned)p.e.pos);
+                s_targetsPub.publish(s_formulas.targets());
+                rebind();
+                refreshVerified();
+                // Every row starts afresh: what it reads counts as changed.
+                for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) s_changed.set(s);
+                if (s_s.signalsRenamed) s_s.signalsRenamed();
+                LOGI("car", "formulas: %u row(s) running", (unsigned)s_formulas.rows());
+            }
+
+            // After a pass's frames: what changed, through the formulas.
+            void runFormulas(uint32_t now)
+            {
+                if (!s_s.state) return;
+                Expr::SigSet ch;
+                s_s.state->takeChanged(ch);
+                for (int i = 0; i < 8; ++i) s_changed.w[i] |= ch.w[i];
+                const bool tick = (uint32_t)(now - s_formulaTick) >= FORMULA_TICK_MS;
+                if (tick) s_formulaTick = now;
+                s_formulas.step(*s_s.state, s_changed, now, tick);
+                s_changed.clear();
             }
 
             bool testing(uint8_t sig)
@@ -362,10 +422,8 @@ namespace App
                     // load() refused: nothing decodes (it holds no rows then).
                     LOGI("car", "decode map REFUSED by CanDecode: no signals decoded");
                 }
-                // A derived signal with a row or a constant: the binding wins.
-                s_derived.clearBound();
-                for (uint16_t i = 0; i < t.row.size(); ++i) s_derived.setBound(t.row[i].sig, true);
-                for (uint16_t i = 0; i < t.k.size(); ++i)   s_derived.setBound(t.k[i].sig, true);
+                // A row or a constant wins over a formula and Derived's math.
+                rebind();
                 if (!s_s.state) { refreshVerified(); return; }
                 for (uint8_t i = 0; i < s_nConst; ++i)
                     if (t.constOf(s_constSig[i]) < 0 && !testing(s_constSig[i]))
@@ -421,6 +479,7 @@ namespace App
                 Cmd c;
                 while (s_cmd && xQueueReceive(s_cmd, &c, 0) == pdTRUE) applyCmd(c, now);
                 if (s_table.applyIfDirty()) applyTable();
+                if (s_formulaSet.applyIfDirty()) applyFormulas();
                 expireTests(now);
                 alerts(now);
             }
@@ -585,6 +644,7 @@ namespace App
                         }
                     }
 
+                    runFormulas(now);            // after the frames: their values are in
 #if FEATURE_DIAG
                     CarDiag::loop(now);          // after the frames: their replies are in
 #endif
@@ -614,6 +674,13 @@ namespace App
             if (s_s.n > MAX_SOURCES) s_s.n = MAX_SOURCES;
             s_cmd = xQueueCreateStatic(CMD_DEPTH, sizeof(Cmd), s_cmdStore, &s_cmdBuf);
             loadTable(s.decode, s.decodeFrom);
+            {
+                Vehicle::FormulaSet fs;
+                if (s.formulas) fs = *s.formulas;
+                else            fs.factory();
+                s_formulaSet.init(fs);
+                applyFormulas();
+            }
             s_alerts.init(s.alerts);
             if (s_s.sniffer) {
                 // Off where the capture recorder is the tool (T-2CAN): a busy car
@@ -708,6 +775,8 @@ namespace App
         Staged<Vehicle::DecodeTable, true>& decodeTable() { return s_table; }
 
         Stats stats() { return s_stats.read(); }
+        Staged<Vehicle::FormulaSet>& formulaSet() { return s_formulaSet; }
+        Expr::SigSet formulaTargets() { return s_targetsPub.read(); }
         Staged<Vehicle::AlertRules>& alertRules() { return s_alerts; }
         AlertStats alertStats() { return s_alertPub.read(); }
 

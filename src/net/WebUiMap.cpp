@@ -71,7 +71,7 @@ namespace
     // ?live=1: every signal, in enum order (the meta's order), as
     // [value, ageMs, src, verified, confirm]: value null when there is none,
     // age null when CAN never set it; src c=can k=const p=pinned d=derived
-    // o=off; confirm 1 = a CAN hypothesis the owner may ✓, 2 = ✓ by the owner
+    // f=a formula o=off; confirm 1 = a CAN hypothesis the owner may ✓, 2 = ✓ by the owner
     // (the factory row is a hypothesis), may be taken back, 0 = neither.
     // Compact on purpose: the live page polls it every 1.5 s.
     void putLive(ChunkOut& out, const Vehicle::State& st, uint32_t now)
@@ -81,6 +81,9 @@ namespace
             const uint8_t* in = nullptr;
             how[s] = Vehicle::Derived::inputs(s, in) ? 'd' : 'o';
         }
+        // A formula over Derived's math; a row or a constant over both.
+        const Expr::SigSet ft = App::Car::formulaTargets();
+        for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) if (ft.has(s)) how[s] = 'f';
         App::Car::decodeTable().read([&](const Vehicle::DecodeTable& t) {
             for (uint16_t i = 0; i < t.row.size(); ++i) if (t.row[i].sig < Vehicle::SIG_COUNT) how[t.row[i].sig] = 'c';
             for (uint16_t i = 0; i < t.k.size(); ++i)   if (t.k[i].sig < Vehicle::SIG_COUNT) how[t.k[i].sig] = 'k';
@@ -415,6 +418,77 @@ void WebUi::routesMap()
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
 
+    // ---- the formulas (src/vehicle/Formulas.h) --------------------------------
+    // GET: {rows:[{name, f, unit, dec, bool, on, sig, v}], problem}: the set as
+    // staged (the newest edit), each row's signal ("" when it has none: a bad
+    // name, a row off) and its value now (null: none); `problem` the first
+    // thing Formulas::check finds ({row, code, pos}), or null.
+    // POST {rows:[...]} replaces the set, {reset:true} brings the factory's back
+    // (fuel_pct, range_calc). Checked first (400 "<row name>: <code> <pos>"),
+    // then applied by the car task and saved in the car file.
+    route("/api/formulas", HTTP_GET, [this](PsychicRequest* r) {
+        Scratch<Vehicle::FormulaSet> set;
+        if (!set) return r->reply(503, "text/plain", "no_memory");
+        if (!App::Car::formulaSet().peek(*set)) return r->reply(503, "text/plain", "busy");
+        JsonDocument d(&PsramJson::instance());
+        JsonArray rows = d["rows"].to<JsonArray>();
+        for (uint16_t i = 0; i < set->rows.size(); ++i) {
+            const Vehicle::FormulaRow& fr = set->rows[i];
+            JsonObject o = rows.add<JsonObject>();
+            CarFile::formulaRowTo(o, fr);
+            const uint8_t sig = Vehicle::sigByName(fr.name);
+            const bool live = sig < Vehicle::SIG_COUNT && fr.on;
+            o["sig"] = live ? fr.name : "";
+            char b[16];
+            if (live && _state && _state->has(sig))
+                o["v"] = serialized(String(dec(b, sizeof(b), _state->get(sig), Vehicle::meta(sig).decimals)));
+            else
+                o["v"] = nullptr;
+        }
+        Vehicle::FormulaProblem pr;
+        if (Vehicle::Formulas::check(*set, pr)) d["problem"] = nullptr;
+        else {
+            JsonObject o = d["problem"].to<JsonObject>();
+            o["row"] = pr.row;
+            o["code"] = pr.e.code ? pr.e.code : "";
+            o["pos"] = pr.e.pos;
+        }
+        String out;
+        serializeJson(d, out);
+        return replyJson(r, out);
+    });
+
+    route("/api/formulas", HTTP_POST, [this](PsychicRequest* r) {
+        JsonDocument d(&PsramJson::instance());
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
+        Scratch<Vehicle::FormulaSet> set;
+        if (!set) return r->reply(503, "text/plain", "no_memory");
+        const bool reset = d["reset"] | false;
+        if (reset) {
+            set->factory();
+        } else {
+            if (!d["rows"].is<JsonArrayConst>()) return r->reply(400, "text/plain", "param rows");
+            JsonObjectConst car = d.as<JsonObjectConst>();
+            JsonDocument wrap;
+            wrap["formulas"] = car["rows"];
+            if (const char* why = CarFile::getFormulas(wrap.as<JsonObjectConst>(), *set))
+                return r->reply(400, "text/plain", why);
+        }
+        Vehicle::FormulaProblem pr;
+        if (!Vehicle::Formulas::check(*set, pr)) {
+            char w[64];
+            const char* name = pr.row < set->rows.size() ? set->rows[pr.row].name : "";
+            snprintf(w, sizeof(w), "%s %u", pr.e.code ? pr.e.code : "?", (unsigned)pr.e.pos);
+            return bad(r, 400, *name ? name : nullptr, w);
+        }
+        if (!App::Car::formulaSet().edit([&](Vehicle::FormulaSet& f) { f = *set; }))
+            return r->reply(503, "text/plain", "busy");
+        const bool saved = reset ? CarStore::factoryFormulas() : CarStore::saveFormulas(*set);
+        LOGI("map", "formulas: %u row(s)%s%s", (unsigned)set->rows.size(), reset ? ", the factory's" : "",
+             saved ? "" : ", NOT in the car file");
+        return r->reply(200, "application/json", saved ? "{\"ok\":true}" : "{\"ok\":true,\"saved\":false}");
+    });
+
     // A formula (src/vehicle/Expr.h) checked and evaluated once on the car's
     // signals now: {f} -> {ok:true, v, inputs:[names], timed} or {ok:false,
     // code, pos} (code an e.<code>, pos the byte). The editor's live check;
@@ -547,10 +621,14 @@ void WebUi::mapToFile(ChunkOut& out)
         CarFile::putFields(o, Canbox::activeProtocol(), c->fields);
         o["hu"]["send"] = c->enabled;
     }
+    Scratch<Vehicle::FormulaSet> fs;
+    const bool haveF = fs && App::Car::formulaSet().peek(*fs);
+    if (haveF) CarFile::putFormulas(o, *fs);
     // serializeJson into a String replaces it: the key goes out on its own.
     String s;
     if (haveT) { out.put(",\"decode\":"); serializeJson(o["decode"], s); out.put(s.c_str(), s.length()); }
     if (haveC) { out.put(",\"hu\":");     serializeJson(o["hu"], s);     out.put(s.c_str(), s.length()); }
+    if (haveF) { out.put(",\"formulas\":"); serializeJson(o["formulas"], s); out.put(s.c_str(), s.length()); }
 }
 
 const char* WebUi::mapFromFile(JsonObjectConst file, bool dry, bool& changedMap, bool& changedHu)
@@ -583,8 +661,23 @@ const char* WebUi::mapFromFile(JsonObjectConst file, bool dry, bool& changedMap,
         }
         changedHu = true;
     }
+    // The formulas: the whole set, checked like POST /api/formulas.
+    Scratch<Vehicle::FormulaSet> fs;
+    bool changedF = false;
+    if (!file["formulas"].isNull()) {
+        if (!fs) return "no_memory";
+        if (const char* why = CarFile::getFormulas(file, *fs)) return why;
+        Vehicle::FormulaProblem pr;
+        if (!Vehicle::Formulas::check(*fs, pr)) return pr.e.code ? pr.e.code : "formulas";
+        changedF = true;
+    }
     if (dry) return nullptr;
 
+    if (changedF) {
+        if (!App::Car::formulaSet().edit([&](Vehicle::FormulaSet& f) { f = *fs; })) return "busy";
+        if (!CarStore::saveFormulas(*fs)) return "file_failed";
+        LOGI("map", "formulas from a settings file: %u row(s)", (unsigned)fs->rows.size());
+    }
     if (changedMap) {
         if (!App::Car::decodeTable().edit([&](Vehicle::DecodeTable& t) { t = table; })) return "busy";
         if (!CarStore::saveDecode(table)) return "file_failed";

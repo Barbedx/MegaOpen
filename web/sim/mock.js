@@ -565,6 +565,16 @@ const FM_DEF={eng_temp:1,prnd:1,fuel_pct:1},fmDef=id=>FM_DEF[id]?{from:'off',src
 function fmOff(id){const r=(S.fm||{})[id]||fmDef(id);return !!r&&r.from==='off'}
 g('/api/hu/fields',()=>({proto:'raise112',rows:(C.raise||[]).filter(x=>x.fw).map(x=>({id:x.id,sig:x.id,v:fmOff(x.id)?null:mapVal(x).v??null,rule:(S.fm||{})[x.id]||null,def:fmDef(x.id)}))}));
 po('/api/hu/fields',q=>{S.fm=S.fm||{};for(const r of q.rows||[]){if(r.from==='auto')delete S.fm[r.id];else S.fm[r.id]={from:r.from,src:r.from==='own'?r.id:r.src||'',mul:r.mul||1,div:r.div||1,add:r.add||0}}return ok});
+/* формули (src/vehicle/Formulas.h): заводські fuel_pct і range_calc; /api/expr — лише синтаксис на словах, значення з S.car */
+const fmFactory=()=>[{name:'fuel_pct',f:'fuel_level * 100 / 60',unit:'',dec:0,bool:false,on:true},{name:'range_calc',f:'fuel_level * 100 / cons_avg',unit:'',dec:0,bool:false,on:true}];
+g('/api/formulas',()=>({rows:(S.fms||(S.fms=fmFactory())).map(x=>({...x,sig:x.on?x.name:'',v:null})),problem:null}));
+po('/api/formulas',q=>{if(q.reset){S.fms=fmFactory();return {ok:true}}if(!Array.isArray(q.rows))return fail(400,'param rows');
+ const seen={};for(const r of q.rows){if(!/^[a-z_][a-z0-9_]{0,22}$/.test(r.name||''))return fail(400,(r.name?r.name+': ':'')+'formula_name 0');if(seen[r.name])return fail(400,r.name+': formula_twice 0');seen[r.name]=1}
+ S.fms=q.rows.map(r=>({name:r.name,f:r.f||'',unit:r.unit||'',dec:r.dec|0,bool:!!r.bool,on:r.on!==false}));return {ok:true}});
+po('/api/expr',q=>{const f=String(q.f||'').trim();if(!f)return {ok:false,code:'expr_empty',pos:0};
+ if(/[<>=!&|+\-*\/%,(]\s*$/.test(f))return {ok:false,code:'expr_end',pos:f.length};
+ const names=(f.match(/[a-z_][a-z0-9_]*/g)||[]).filter(n=>!['and','or','not','true','false','min','max','abs','clamp','if','has','round','lookup','age','delta','changed','rises','falls','rate','integral','avg','held'].includes(n));
+ return {ok:true,v:null,inputs:[...new Set(names)],timed:/\b(held|avg|rate|integral|age)\(/.test(f)}});
 g('/api/logs/tags',()=>({tags:['boot','wifi','hu','key','car','push','ota'].map(x=>({tag:x,lvl:null})),spec:S.set.logTags||''}));
 /* /api/gears (src/net/WebUiMap.cpp): живі значення передачі, таблиця, піки навчання */
 g('/api/gears',()=>{const v=S.car&&S.car.speed!==undefined?S.car.speed:4250,r=2100,k=Math.round(v/r*100);

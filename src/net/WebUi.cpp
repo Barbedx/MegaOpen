@@ -190,6 +190,10 @@ void WebUi::begin(Cfg::Config& cfg, KeyEngine& engine, KeyMap& map,
     // A phone that stops reading holds httpd in send() for this long, not the
     // default 5 s. Seconds.
     _server.config.send_wait_timeout = 2;
+    // A settings file carries the car file (decode rows and formulas by
+    // name): past the library's 16 kB with a full set (128 formulas alone
+    // are ~38 kB). The body is buffered by malloc, in PSRAM at this size.
+    _server.maxRequestBodySize = 64 * 1024;
 
     // [mem] marks per step of begin() (serial only; memMark is in main.cpp).
     auto mem = [](const char* what) {

@@ -18,6 +18,13 @@ namespace Vehicle
         _ts[s]  = nowMs ? nowMs : 1;    // 0 stays the "never decoded" sentinel
     }
 
+    void State::clear(uint8_t s)
+    {
+        if (s >= SIG_COUNT || !_ts[s]) return;
+        _ts[s] = 0;
+        if (!_pinned[s]) _changed.set(s);
+    }
+
     void State::pin(uint8_t s, int32_t v)
     {
         if (s >= SIG_COUNT) return;

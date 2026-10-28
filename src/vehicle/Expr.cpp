@@ -1,4 +1,5 @@
 #include "Expr.h"
+#include <initializer_list>
 #include <math.h>
 #include <string.h>
 
@@ -274,6 +275,13 @@ namespace Expr
             return emit(f->code, 1 - (int)argc, argc, slot, k);
         }
     };
+
+    bool reserved(const char* name, size_t len)
+    {
+        for (const char* w : {"true", "false", "and", "or", "not"}) if (word(name, len, w)) return true;
+        for (const Fn& f : FNS) if (word(name, len, f.name)) return true;
+        return false;
+    }
 
     void Program::clear()
     {

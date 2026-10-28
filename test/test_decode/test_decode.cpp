@@ -840,7 +840,7 @@ void test_gear_from_speed_rpm_and_the_switches()
     TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_GEAR));
 }
 
-void test_fuel_rate_consumption_trip_and_range()
+void test_fuel_rate_consumption_and_trip()
 {
     Derived d;
     State s;
@@ -866,7 +866,7 @@ void test_fuel_rate_consumption_trip_and_range()
     TEST_ASSERT_EQUAL_INT32(144, s.get(SIG_CONS_AVG));
     TEST_ASSERT_EQUAL_INT32(50, s.get(SIG_TRIP_KM));            // 181 s at 100 km/h
     TEST_ASSERT_EQUAL_INT32(72, s.get(SIG_TRIP_FUEL));          // 9050 counts = 0.724 L
-    TEST_ASSERT_EQUAL_INT32(277, s.get(SIG_RANGE_CALC));        // 40 L / 14.4
+    TEST_ASSERT_FALSE(s.has(SIG_RANGE_CALC));                   // a factory formula now (test_formulas)
     // The trip computer: 3 min 1 s with the engine on, all of it at 100 km/h.
     TEST_ASSERT_EQUAL_INT32(3, s.get(SIG_TRIP_ELAPSED));        // minutes
     TEST_ASSERT_INT32_WITHIN(5, 10000, s.get(SIG_AVG_SPEED));   // km/h x100 (mm truncated a step)
@@ -885,9 +885,13 @@ void test_derived_signals_name_their_inputs()
     const uint8_t* in = nullptr;
     TEST_ASSERT_EQUAL_UINT8(0, Derived::inputs(SIG_FUEL_LEVEL, in));
     TEST_ASSERT_NULL(in);
-    TEST_ASSERT_EQUAL_UINT8(3, Derived::inputs(SIG_RANGE_CALC, in));
-    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LEVEL, in[2]);
-    for (uint8_t s = SIG_GEAR; s <= SIG_TRIP_KM; ++s) TEST_ASSERT_TRUE(Derived::inputs(s, in) > 0);
+    // range_calc and fuel_pct are factory formulas: their inputs are the
+    // formula's (Formulas::inputsOf), not Derived's.
+    TEST_ASSERT_EQUAL_UINT8(0, Derived::inputs(SIG_RANGE_CALC, in));
+    TEST_ASSERT_EQUAL_UINT8(0, Derived::inputs(SIG_FUEL_PCT, in));
+    TEST_ASSERT_TRUE(Derived::inputs(SIG_CONS_AVG, in) > 0);
+    for (uint8_t s = SIG_GEAR; s <= SIG_TRIP_KM; ++s)
+        if (s != SIG_RANGE_CALC) TEST_ASSERT_TRUE(Derived::inputs(s, in) > 0);
 }
 
 // ---- panel alerts --------------------------------------------------------------------
@@ -1356,7 +1360,7 @@ int main(int, char**)
     RUN_TEST(test_alert_on_brake_ignores_an_invalid_frame);
     RUN_TEST(test_gear_is_the_nearest_ratio_within_the_band);
     RUN_TEST(test_gear_from_speed_rpm_and_the_switches);
-    RUN_TEST(test_fuel_rate_consumption_trip_and_range);
+    RUN_TEST(test_fuel_rate_consumption_and_trip);
     RUN_TEST(test_derived_signals_name_their_inputs);
     RUN_TEST(test_the_blob_round_trips_the_factory_table_and_constants);
     RUN_TEST(test_a_confirm_flips_the_flag_and_survives_the_blob);

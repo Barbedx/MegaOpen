@@ -14,6 +14,9 @@ namespace Vehicle
         // --- from the decoder -------------------------------------------------
         void set(uint8_t s, int32_t v, uint32_t nowMs);
 
+        // No value any more (a formula that has none): has() is false again.
+        void clear(uint8_t s);
+
         // --- from the web UI --------------------------------------------------
         void pin(uint8_t s, int32_t v);      // clamped to the signal's range
         void unpin(uint8_t s);
