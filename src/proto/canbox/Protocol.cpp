@@ -1,11 +1,12 @@
 #include "Protocol.h"
+#include <math.h>
+#include <stdio.h>
 #include <string.h>
-#include "RaiseTargets.h"
-#include "Rav4Emitter.h"
+#include "Raise112.h"
 
 namespace Canbox
 {
-    int FieldProtocol::findField(const char* id) const
+    int Protocol::findField(const char* id) const
     {
         if (!id) return -1;
         for (uint8_t i = 0; i < fieldCount(); ++i)
@@ -13,33 +14,58 @@ namespace Canbox
         return -1;
     }
 
-    const FieldRule* FieldProtocol::ruleFor(const FieldMap& own, uint8_t f) const
+    const FieldRule* Protocol::ruleFor(const FieldMap& own, uint8_t f) const
     {
         const FieldRule* r = own.find(f);
         return r ? r : defaults().find(f);
     }
 
-    void FieldProtocol::withDefaults(const FieldMap& own, FieldMap& out) const
+    void Protocol::withDefaults(const FieldMap& own, FieldMap& out) const
     {
         out = defaults();
         for (uint8_t i = 0; i < own.count(); ++i) out.set(own.at(i));
     }
 
-    namespace
+    const char* fmtFixed(char* b, unsigned cap, int32_t v, uint8_t dec)
     {
-        // Raise protocol 112, the RAV4 profile: RaiseTargets' rows, the
-        // emitter's defaults.
-        struct Raise112 final : FieldProtocol {
-            const char* id() const override { return "raise112"; }
-            uint8_t     fieldCount() const override { return RaiseTargets::count(); }
-            TargetView  field(uint8_t i) const override { return RaiseTargets::at(i); }
-            const FieldMap& defaults() const override { return Rav4Emitter::defaults(); }
-        };
+        if (!dec) { snprintf(b, cap, "%ld", (long)v); return b; }
+        int32_t p = 1;
+        for (uint8_t i = 0; i < dec; ++i) p *= 10;
+        const int64_t a = v < 0 ? -(int64_t)v : v;
+        snprintf(b, cap, "%s%ld.%0*ld", v < 0 ? "-" : "", (long)(a / p), (int)dec, (long)(a % p));
+        return b;
     }
 
-    const FieldProtocol& activeProtocol()
+    bool toFixed(double v, uint8_t dec, int32_t& out)
     {
-        static const Raise112 p;
-        return p;
+        for (uint8_t i = 0; i < dec; ++i) v *= 10;
+        if (!(v > -2147483648.0 && v < 2147483647.0)) return false;   // NaN too
+        out = (int32_t)lround(v);
+        return true;
     }
+
+    namespace Protocols
+    {
+        namespace
+        {
+            const Protocol* const kAll[] = {&raise112()};
+            constexpr uint8_t N = sizeof(kAll) / sizeof(kAll[0]);
+            uint8_t s_active = 0;
+        }
+
+        uint8_t         count() { return N; }
+        const Protocol& at(uint8_t i) { return *kAll[i < N ? i : 0]; }
+
+        int find(const char* id)
+        {
+            if (!id) return -1;
+            for (uint8_t i = 0; i < N; ++i)
+                if (!strcmp(kAll[i]->id(), id)) return i;
+            return -1;
+        }
+
+        void select(uint8_t i) { s_active = i < N ? i : 0; }
+    }
+
+    const Protocol& activeProtocol() { return Protocols::at(Protocols::s_active); }
 }

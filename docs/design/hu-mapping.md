@@ -116,9 +116,17 @@ One page, two tables, same row shape:
    the catalog (`proto`, and the field list still under the key `raise`,
    which the Companion app's bundled page reads) go through it; the page
    shows «Протокол ГУ». test/test_protocol runs the map on a stub protocol.
-   Still RAV4-bound: the hu task holds a `Rav4Emitter` and its Raise
-   `Tuning` (units, 0x28 form) and message table; an emitter interface is
-   the next step when a second wire format is chosen.
+   *As built (5b, 2026-10-28, rules.md slice 0a):* `FieldProtocol` became
+   `Canbox::Protocol` with the emitter behind `Canbox::Emitter` (configure,
+   tick, sendNow, sendByCmd, preview, counters), the message table, the frame,
+   and the protocol's own settings: its tuning lives opaque in
+   `Canbox::HuConfig::tuning` and its rows (raise.*) come from the module
+   (Raise112.cpp), appended to the registry. `Protocols::select` picks one at
+   boot from the setting `huProtocol`. The hu task, main, the web and the
+   catalog know no Raise type; the map page draws the protocol's settings
+   from the registry (the `units` of /api/map are gone: raise.fuelUnit /
+   raise.tripUnit). Inbound (RxParser, HuDialect, the media text, key frames)
+   is slice 0b.
 
 Each slice: host tests, the RAV4 bytes compared against recorded frames, the
 bench, then the car.

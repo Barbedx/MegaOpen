@@ -126,10 +126,16 @@ static void test_required_keys()
     for (const char* k : {"layouts", "styles", "scenes", "panels", "bleModes", "classes",
                           "dests", "actions", "panelKeys", "huKeys", "console", "raise", "logTags"})
         list(k);
+    // The head-unit protocol and the group of its own settings (raise.*).
+    for (const char* k : {"proto", "protoSet"}) {
+        const V* p = cat().get(k);
+        TEST_ASSERT_NOT_NULL_MESSAGE(p, k);
+        TEST_ASSERT_EQUAL_MESSAGE(V::Str, p->t, k);
+    }
     const V* e = cat().get("enums");
     TEST_ASSERT_NOT_NULL(e);
     for (const char* k : {"arrows", "icons", "src", "fmt", "mediaSrc", "canRates", "capModes",
-                          "fuelUnits", "tripUnits", "mapSrc", "macroTriggers", "macroEffects",
+                          "mapSrc", "macroTriggers", "macroEffects",
                           "ledOrder", "ledIdle", "ledReact", "logLevels"}) {
         const V* l = e->get(k);
         TEST_ASSERT_NOT_NULL_MESSAGE(l, k);

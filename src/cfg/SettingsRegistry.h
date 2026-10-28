@@ -5,7 +5,6 @@
 #include "../knobs/KnobConfig.h"
 #include "../vehicle/AlertRules.h"
 #include "../capture/CanRecorder.h"
-#include "../proto/canbox/Rav4Emitter.h"
 
 // Every setting the user can change, described once: the web form and the
 // panel menu are both drawn from this table, so they cannot disagree on a
@@ -28,15 +27,16 @@ namespace Cfg
 {
     // What a registry entry reads and writes. `k` is null on a board without
     // knobs, `c` without the capture recorder, `a` where the caller has no
-    // alert rules at hand, `t`/`msg` (the head-unit emitter's tuning and its
-    // Rav4Emitter::MAX_MESSAGES switches, together) without the emitter;
-    // their entries then report unavailable.
+    // alert rules at hand, `hu`/`msg` (the head-unit protocol's tuning,
+    // Canbox::HuConfig::tuning, which only its own rows read, and its message
+    // switches, together) without the emitter; their entries then report
+    // unavailable.
     struct Model {
         Settings*            s = nullptr;
         Knobs::Config*       k = nullptr;
         Vehicle::AlertRules* a = nullptr;
         Capture::Settings*   c = nullptr;
-        Canbox::Tuning*      t = nullptr;
+        void*                hu = nullptr;
         bool*                msg = nullptr;
     };
 

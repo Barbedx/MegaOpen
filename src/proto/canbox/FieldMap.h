@@ -11,7 +11,7 @@
 // Fields and signals are Vehicle::Sig ids (the RAV4 fields are Sigs today).
 //
 // Pure: env:native tests it. NVS keeps it as one blob (pack/unpack), the
-// emitter's config carries a copy (App::Hu::EmitterCfg).
+// emitter's config carries a copy (Canbox::HuConfig).
 namespace Canbox
 {
     enum FieldKind : uint8_t { FK_SIGNAL = 1, FK_CONST = 2, FK_OFF = 3 };

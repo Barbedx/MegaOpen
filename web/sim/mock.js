@@ -418,7 +418,7 @@ function liveVal(n,t){const s=t/1000,w=(p,a,b)=>a+(b-a)*(.5+.5*Math.sin(s/p));
 /* будь-який сигнал за назвою (WebUiMap.cpp: id поля ГУ — назва його сигналу): межі з META, прив'язка — своя, заводська або нема */
 const sigT=id=>C.raise.find(x=>x.id===id)||(m=>m&&{id:m[0],dec:m[2],min:+decStr(m[5],m[2]),max:+decStr(m[6],m[2]),kind:m[3]?'b':'n'})(META.find(m=>m[0]===id));
 const bindOf=id=>S.map[id]||(r=>r&&r.can?{src:'can',can:r.can,k:0}:{src:'off',can:null,k:0})(SIM_DECODE.rows.find(x=>x.sig===id));
-const mapBase=()=>({send:S.emitter,uart:S.set.uartEnabled,units:{fuel:S.tun.fuelUnit,trip:S.tun.tripUnit}});
+const mapBase=()=>({send:S.emitter,uart:S.set.uartEnabled});
 g('/api/map',q=>{const o=mapBase();o.rows=q.live?[]:C.raise.map(t=>({id:t.id,...S.map[t.id],...mapVal(t)}));
  if(q.live){const t=Date.now();o.sigs=META.map(m=>{const v=liveVal(m[0],t),src=DERIVED.has(m[0])?'d':BOUND.has(m[0])?'c':'o';
   const ms=src==='c'&&measured(m[0]);
@@ -434,7 +434,6 @@ function canWhy(c){if(!hexOk(c.id)||hexV(c.id)>0x1FFFFFFF)return 'can.id: param'
  if(c.shift!=null&&(!isInt(c.shift)||c.shift<0||c.shift>31))return 'can.shift: param';if(!hexOk(c.mask)||!hexV(c.mask))return 'can.mask: param';
  const i16=x=>isInt(x)&&x&&x>=-32768&&x<=32767;if(c.mul!=null&&!i16(c.mul))return 'can.mul: param';if(c.div!=null&&!i16(c.div))return 'can.div: param';if(c.add!=null&&!isInt(c.add))return 'can.add: param';return ''}
 po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(409,'uart_off');
- if(q.units){const f=q.units.fuel??S.tun.fuelUnit,t=q.units.trip??S.tun.tripUnit;if(!C.enums.fuelUnits.some(e=>e.v===f))return fail(400,'param units.fuel');if(!C.enums.tripUnits.some(e=>e.v===t))return fail(400,'param units.trip')}
  const rows=q.rows||[];if(rows.length>16)return fail(400,'param rows');const E=[];
  for(const r of rows){const t=sigT(r.id);if(!t)return fail(404,'not_found');
   if(E.some(([x])=>x.id===r.id))return fail(400,r.id+': twice');
@@ -447,7 +446,6 @@ po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(
   if(!BOUND.has(n))return fail(409,'confirm: no_can_row')}
 
  if(q.send!==undefined){S.emitter=!!q.send;emit(2,'HU','[map] send to the head unit '+(S.emitter?'on':'off'))}
- if(q.units){if(q.units.fuel!=null)S.tun.fuelUnit=q.units.fuel;if(q.units.trip!=null)S.tun.tripUnit=q.units.trip}
  if(q.reset){S.map=defMap();S.conf={}}
  if(q.confirm!=null){const on=q.confirm.on??true;S.conf[q.confirm.sig]=on;emit(2,'CAN','[map] '+q.confirm.sig+(on?' confirmed in the car (measured)':' back to a hypothesis'))}
  for(const[r,t]of E){const c=r.can||{};S.map[r.id]={src:r.src,can:r.src==='can'?{id:'0x'+hexV(c.id).toString(16).toUpperCase().padStart(3,'0'),byte:c.byte,len:c.len??1,shift:c.shift??0,mask:hexV(c.mask).toString(16).toUpperCase(),mul:c.mul??1,div:c.div??1,add:c.add??0,le:!!c.le,signed:!!c.signed}:null,k:r.src==='const'?toInt(r.k,t.dec)/pow10(t.dec):0}}

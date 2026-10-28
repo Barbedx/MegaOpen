@@ -413,8 +413,8 @@ void WebUi::settingsOut(JsonObject d, bool forFile)
     Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
     // The emitter's, likewise (the hu task owns it). Per request (Scratch):
     // ~450 B with the field map, neither on httpd's stack nor static.
-    Scratch<App::Hu::EmitterCfg> huBox;
-    App::Hu::EmitterCfg* hu = _emitter && huBox && App::Hu::emitterCfg().peek(*huBox) ? huBox.get() : nullptr;
+    Scratch<Canbox::HuConfig> huBox;
+    Canbox::HuConfig* hu = _emitter && huBox && App::Hu::emitterCfg().peek(*huBox) ? huBox.get() : nullptr;
 #if FEATURE_CAPTURE
     Capture::Settings cs = Capture::settings();
     Capture::Settings* csp = &cs;
@@ -425,9 +425,9 @@ void WebUi::settingsOut(JsonObject d, bool forFile)
     Knobs::Config kc;
     if (_knobs) kc = _knobs->config();
     const Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp,
-                       hu ? &hu->tuning : nullptr, hu ? hu->msgOn : nullptr};
+                       hu ? hu->tuning : nullptr, hu ? hu->msgOn : nullptr};
 #else
-    const Cfg::Model m{&s, nullptr, alp, csp, hu ? &hu->tuning : nullptr, hu ? hu->msgOn : nullptr};
+    const Cfg::Model m{&s, nullptr, alp, csp, hu ? hu->tuning : nullptr, hu ? hu->msgOn : nullptr};
 #endif
     Cfg::SettingsJson::write(m, d, forFile);
 }
@@ -453,12 +453,12 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         // with the field map) per request instead (Scratch).
         static Vehicle::AlertRules al;
         Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
-        Scratch<App::Hu::EmitterCfg> huBox;
+        Scratch<Canbox::HuConfig> huBox;
         if (!huBox) { out = "no_memory"; return 503; }
-        App::Hu::EmitterCfg& hu = *huBox;
+        Canbox::HuConfig& hu = *huBox;
         const bool huOk = _emitter && App::Hu::emitterCfg().peek(hu);
-        static Canbox::Tuning huWas;
-        huWas = hu.tuning;
+        static uint8_t huWas[Canbox::HuConfig::TUNING_MAX];
+        memcpy(huWas, hu.tuning, sizeof(huWas));
 #if FEATURE_CAPTURE
         Capture::Settings cs = Capture::settings();
         Capture::Settings* csp = &cs;
@@ -470,9 +470,9 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         // settings lock throughout, as the menu's knob commits do (dispatch()).
         Knobs::Config kc;
         if (_knobs) kc = _knobs->config();
-        Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
+        Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp, huOk ? hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
 #else
-        Cfg::Model m{&s, nullptr, alp, csp, huOk ? &hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
+        Cfg::Model m{&s, nullptr, alp, csp, huOk ? hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
 #endif
         // A file skips what this board does not have, so a part that is
         // merely busy (its owner held it for the peek) must not pass for
@@ -554,13 +554,13 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         // message switches (RAM only). The tuning goes to NVS when it changed.
         bool huBusy = false;
         if (ap & Cfg::AP_HU) {
-            huBusy = !App::Hu::emitterCfg().edit([&](App::Hu::EmitterCfg& c) {
-                c.tuning = hu.tuning;
+            huBusy = !App::Hu::emitterCfg().edit([&](Canbox::HuConfig& c) {
+                memcpy(c.tuning, hu.tuning, sizeof(c.tuning));
                 memcpy(c.msgOn, hu.msgOn, sizeof(c.msgOn));
             });
             if (huBusy) LOGW("cfg", "settings: the head-unit emitter was busy, its part not applied");
-            else if (memcmp(&hu.tuning, &huWas, sizeof(huWas))) {
-                _cfg->saveTuning(hu.tuning);
+            else if (memcmp(hu.tuning, huWas, sizeof(huWas))) {
+                _cfg->saveTuning(Canbox::activeProtocol(), hu.tuning);
                 LOGI("cfg", "canbox tuning saved (survives a power cycle)");
             }
         }
@@ -2101,22 +2101,23 @@ void WebUi::routesCanbox()
     // The emitter is the hu task's: its settings are read from the staged copy
     // (the newest edit) and previews are built on this handler's stack.
     route("/api/messages", HTTP_GET, [this](PsychicRequest* r) {
-        Scratch<App::Hu::EmitterCfg> cfgBox;   // ~450 B: not on httpd's 4 kB stack
+        Scratch<Canbox::HuConfig> cfgBox;   // ~450 B: not on httpd's 4 kB stack
         if (!cfgBox) return r->reply(503, "text/plain", "no_memory");
-        App::Hu::EmitterCfg& cfg = *cfgBox;
+        Canbox::HuConfig& cfg = *cfgBox;
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
         JsonDocument d;
         JsonArray a = d["messages"].to<JsonArray>();
-        for (uint8_t i = 0; i < Canbox::Rav4Emitter::messageCount(); ++i) {
-            const Canbox::MsgInfo& info = Canbox::msgInfo(i);
+        const Canbox::Protocol& proto = Canbox::activeProtocol();
+        for (uint8_t i = 0; i < proto.messageCount(); ++i) {
+            const Canbox::MessageView mv = proto.message(i);
             JsonObject o = a.add<JsonObject>();
             o["id"]       = i;
-            o["name"]     = Canbox::Rav4Emitter::messageName(i);
-            o["cmd"]      = Canbox::Rav4Emitter::messageCmd(i);
-            o["interval"] = Canbox::Rav4Emitter::messageInterval(i);
-            o["enabled"]  = i < Canbox::Rav4Emitter::MAX_MESSAGES && cfg.msgOn[i];
-            o["conf"]     = Canbox::confName(info.conf);
-            o["note"]     = info.note;
+            o["name"]     = mv.name;
+            o["cmd"]      = mv.cmd;
+            o["interval"] = mv.intervalMs;
+            o["enabled"]  = i < Canbox::HuConfig::MAX_MESSAGES && cfg.msgOn[i];
+            o["conf"]     = mv.conf;
+            o["note"]     = mv.note;
 
             // The bytes it would send now; ready=false when none of its signals
             // is known (the emitter stays silent).
@@ -2168,8 +2169,9 @@ void WebUi::routesCanbox()
     // they are resolved in the car, where every ignition cycle is a reboot)
     // is the registry's raise.* entries: GET/POST /api/settings.
 
-    // Send any Raise frame: cmd + payload; the framer adds the 0x2E header,
-    // length and checksum. No allow-list, on purpose.
+    // Send any frame of the head-unit protocol: cmd + payload; its framer adds
+    // the rest (Raise: the 0x2E header, length and checksum). No allow-list,
+    // on purpose.
     route("/api/canbox/raw", HTTP_POST, [this](PsychicRequest* r) {
         if (!_tx) return r->reply(503, "text/plain", "not_built uart");
         if (!r->hasParam("cmd")) return r->reply(400, "text/plain", "param cmd");
@@ -2182,7 +2184,7 @@ void WebUi::routesCanbox()
         if (n < 0) return r->reply(400, "text/plain", "param data");
 
         uint8_t frame[Canbox::MAX_FRAME];
-        const uint8_t flen = Canbox::buildFrame((uint8_t)cmd, payload, (uint8_t)n, frame);
+        const uint8_t flen = Canbox::activeProtocol().frame((uint8_t)cmd, payload, (uint8_t)n, frame);
         if (!flen) return r->reply(400, "text/plain", "too_long");
 
         // The hu task's vehicle lane, never the UART from here: httpd is on
@@ -2518,9 +2520,13 @@ void WebUi::healthJson(JsonObject d)
                 // 0xF3 NACKs: frames of ours the unit says it does not support.
                 o["notSupported"] = _huDialect->notSupported();
             }
-            // 0x28 frames that changed: each may pop the climate overlay
-            // (Rav4Emitter::climateChanges, TempHold.h). A counter, read as is.
-            if (_emitter) o["climateChanges"] = _emitter->climateChanges();
+            // The protocol's own counters (Raise: climateChanges, 0x28 frames
+            // that changed, each may pop the climate overlay). Read as is.
+            if (_emitter)
+                for (uint8_t k = 0; k < _emitter->statCount(); ++k) {
+                    const Canbox::EmitterStat st = _emitter->stat(k);
+                    o[st.id] = st.value;
+                }
             // Wiring check: nothing at all = wrong pin or no ground; junk and
             // no frames = wired, wrong speed or dialect; bad checksums = noise.
             o["junk"]   = _huRx ? _huRx->junkBytes() : 0;

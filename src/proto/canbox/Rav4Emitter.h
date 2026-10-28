@@ -4,6 +4,7 @@
 #include "../../Version.h"
 #include "TempHold.h"
 #include "FieldView.h"
+#include "Protocol.h"
 
 // Everything this firmware can tell a RAV4-profile head unit, on a schedule
 // (ARCHITECTURE.md §7.3). Portable: frames leave through a write callback, time
@@ -13,6 +14,8 @@
 // by hand; pinning lets a unit be probed without any vehicle CAN.
 //
 // A table: adding a message is a builder plus a row; the web UI picks it up.
+// The Emitter of Raise 112 (Raise112.cpp): the rest of the firmware sees it
+// only through Canbox::Emitter.
 namespace Canbox
 {
     // Tuning::fuelUnit and tripUnit as the wire carries them, for /api/catalog.
@@ -68,9 +71,8 @@ namespace Canbox
         bool fromBlob(const uint8_t* in, uint8_t len);
     };
 
-    class Rav4Emitter {
+    class Rav4Emitter final : public Emitter {
     public:
-        using WriteFn = void (*)(const uint8_t* frame, uint8_t len, void* ctx);
 
         // Message table index, public: the web UI and tests address messages by it.
         enum Msg : uint8_t {
@@ -107,7 +109,11 @@ namespace Canbox
         // A/C is the vendor spec and what the head-unit Java parses.
         enum class Cmd28 : uint8_t { OutsideTemp = 0, AirCon = 1 };
 
-        void begin(WriteFn write, void* ctx) { _write = write; _ctx = ctx; }
+        // ---- Emitter -------------------------------------------------------
+        void begin(WriteFn write, void* ctx) override { _write = write; _ctx = ctx; }
+        // Enabled, HuConfig::tuning as a Tuning, the switches, the field map.
+        void configure(const HuConfig& c) override;
+
         void setEnabled(bool on) { _enabled = on; }
         bool enabled() const { return _enabled; }
 
@@ -136,14 +142,14 @@ namespace Canbox
         bool msgEnabled(uint8_t i) const;
 
         // Run every scheduler against the current state.
-        void tick(const FieldView& s, uint32_t nowMs);
+        void tick(const FieldView& s, uint32_t nowMs) override;
 
         // Emit one message now, regardless of schedule (web UI "send now").
-        bool sendNow(uint8_t msgIndex, const FieldView& s);
+        bool sendNow(uint8_t msgIndex, const FieldView& s) override;
 
         // The 0x90 responder: the head unit names a box->HU command it wants
         // re-sent. False when there is no builder or nothing to say.
-        bool sendByCmd(uint8_t cmd, const FieldView& s);
+        bool sendByCmd(uint8_t cmd, const FieldView& s) override;
 
         static uint8_t messageCount();
         static const char* messageName(uint8_t i);
@@ -153,7 +159,10 @@ namespace Canbox
         static uint8_t doorsMask(const FieldView& s);
         static uint8_t lightsMask(const FieldView& s);
 
-        uint32_t framesSent() const { return _framesSent; }
+        uint32_t framesSent() const override { return _framesSent; }
+        // climateChanges, for /api/status.
+        uint8_t     statCount() const override { return 1; }
+        EmitterStat stat(uint8_t) const override { return {"climateChanges", _climateChanges}; }
         // 0x28 frames sent whose payload differed from the 0x28 before: each
         // may pop the head unit's climate overlay. Any task (a counter).
         uint32_t climateChanges() const { return _climateChanges; }
@@ -164,9 +173,10 @@ namespace Canbox
 
         // Build one message into a caller-owned buffer without transmitting it.
         bool preview(uint8_t msgIndex, const FieldView& s,
-                     uint8_t* frame, uint8_t& frameLen) const;
+                     uint8_t* frame, uint8_t& frameLen) const override;
 
         static constexpr uint8_t MAX_MESSAGES = 24;
+        static_assert(MAX_MESSAGES <= HuConfig::MAX_MESSAGES, "HuConfig::MAX_MESSAGES is smaller than the RAV4 table");
 
         // The fields that start off (FieldMap rules FK_OFF): ones the head unit
         // decodes but no capture has shown in use (docs/hu-decoder.md §2b, §6),
@@ -181,11 +191,6 @@ namespace Canbox
         void    setFieldMap(const FieldMap& m);
         const FieldMap& fieldMap() const { return _own; }       // the owner's rules
         const FieldMap& effective() const { return _map; }      // what is sent
-        // The old experiment switches (NVS "huExp", settings files before
-        // 1.6.2) as rules, added to `m` where it has none for that field: the
-        // one-time migration. False when a bit has no field (0x80), two fill
-        // one field, or `m` has no room left.
-        static bool experimentsToRules(uint8_t bits, FieldMap& m);
 
         Rav4Emitter();
 

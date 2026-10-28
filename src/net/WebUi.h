@@ -136,7 +136,7 @@ private:
 #include "../bus/Mcp2518Source.h"
 #endif
 #include "../vehicle/VehicleState.h"
-#include "../proto/canbox/Rav4Emitter.h"
+#include "../proto/canbox/Protocol.h"
 #include "../proto/canbox/RaiseFramer.h"
 #if FEATURE_VEHICLE_CAN
 #include "../vehicle/CanSniffer.h"
@@ -162,9 +162,10 @@ public:
 
     // Separate so the keypad page works with no CAN transceiver. The canbox
     // console sends 0x20 key frames and reports what the head unit sent back.
-    void attachVehicle(Vehicle::State& state, Canbox::Rav4Emitter& emitter, UartTx& tx,
+    // `emitter`: the head-unit protocol's live one, null when none was made.
+    void attachVehicle(Vehicle::State& state, const Canbox::Emitter* emitter, UartTx& tx,
                        Sinks::CanboxUartSink& keySink, Canbox::RxParser& huRx) {
-        _state = &state; _emitter = &emitter; _tx = &tx;
+        _state = &state; _emitter = emitter; _tx = &tx;
         _keySink = &keySink; _huRx = &huRx;
     }
 
@@ -474,7 +475,7 @@ private:
     Can2RateFn             _can2Rate = nullptr;
 #endif
     Vehicle::State*        _state = nullptr;
-    Canbox::Rav4Emitter*   _emitter = nullptr;
+    const Canbox::Emitter* _emitter = nullptr;
     UartTx*                _tx = nullptr;
     Sinks::CanboxUartSink* _keySink = nullptr;
     Canbox::RxParser*      _huRx = nullptr;

@@ -52,6 +52,7 @@ namespace Cfg
         if (_s.displayType == "updatelist_menu") _s.displayType = "updatelist";
         _s.funcReg     = _p.getBool  ("funcReg", true);
         _s.bleMode     = _p.getString("bleMode", "ams");
+        _s.huProtocol  = _p.getString("huProto", "raise112");
         _s.autoTime    = _p.getBool  ("autoTime", true);
         _s.mediaScreen = _p.getBool  ("mediaScr", false);
         // isKey first: added after boards were seeded, and an absent key costs
@@ -186,6 +187,7 @@ namespace Cfg
         _p.putBool  ("funcReg",  _s.funcReg);
 
         _p.putString("bleMode",  _s.bleMode);
+        _p.putString("huProto",  _s.huProtocol);
         _p.putBool  ("autoTime", _s.autoTime);
         _p.putBool  ("mediaScr", _s.mediaScreen);
         _p.putBool  ("carScr",   _s.carScreen);
@@ -284,19 +286,23 @@ namespace Cfg
     }
 #endif
 
-    void Config::saveTuning(const Canbox::Tuning& t)
+    void Config::saveTuning(const Canbox::Protocol& p, const void* t)
     {
-        uint8_t blob[Canbox::Tuning::BLOB_SIZE];
-        t.toBlob(blob);
-        _p.putBytes("rav4tune", blob, sizeof(blob));
+        uint8_t blob[64];
+        const uint8_t n = p.tuningBlobSize();
+        if (n > sizeof(blob)) return;
+        p.tuningToBlob(t, blob);
+        _p.putBytes(p.tuningKey(), blob, n);
     }
 
-    void Config::loadTuning(Canbox::Tuning& t)
+    void Config::loadTuning(const Canbox::Protocol& p, void* t)
     {
-        uint8_t blob[Canbox::Tuning::BLOB_SIZE];
-        size_t n = _p.getBytes("rav4tune", blob, sizeof(blob));
-        // Short read or unknown layout: keep the defaults.
-        if (n != sizeof(blob) || !t.fromBlob(blob, sizeof(blob))) t = Canbox::Tuning{};
+        uint8_t blob[64];
+        const uint8_t n = p.tuningBlobSize();
+        // isKey first: getBytes on an absent key prints an IDF error per boot.
+        if (n > sizeof(blob) || !_p.isKey(p.tuningKey())) return;
+        // Short read or unknown layout: the defaults stay.
+        if (_p.getBytes(p.tuningKey(), blob, n) == n) p.tuningFromBlob(t, blob, n);
     }
 
     bool Config::saveDecode(const uint8_t* b, size_t n)

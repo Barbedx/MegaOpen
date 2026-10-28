@@ -104,34 +104,12 @@ namespace Canbox
         for (uint8_t i = 0; i < own.count(); ++i) _map.set(own.at(i));
     }
 
-    bool Rav4Emitter::experimentsToRules(uint8_t bits, FieldMap& m)
+    void Rav4Emitter::configure(const HuConfig& c)
     {
-        // The bits as they were (1.6.1): coolant 1, fuel % in 7D 04 2, the
-        // computed range and consumption 4, PRND 8, the battery 16 in the
-        // field of bits 5-6 (0x21 range, 0x7D 04, 0x23).
-        if (bits & 0x80) return false;
-        const uint8_t at = (bits >> 5) & 3;
-        if ((bits & 16) && (at == 3 || (at == 1 && (bits & 2)) || (at != 1 && (bits & 4)))) return false;
-        bool fit = true;   // a full map refuses a rule: then the switches stay in NVS
-        auto own = [&](uint8_t f) {
-            FieldRule r; r.field = f; r.kind = FK_SIGNAL; r.src = f;
-            if (!m.find(f)) fit &= m.set(r);
-        };
-        auto from = [&](uint8_t f, uint8_t src, int16_t div) {
-            FieldRule r; r.field = f; r.kind = FK_SIGNAL; r.src = src; r.div = div;
-            if (!m.find(f)) fit &= m.set(r);
-        };
-        if (bits & 1) own(SIG_ENG_TEMP);
-        if (bits & 2) own(SIG_FUEL_PCT);
-        if (bits & 8) own(SIG_PRND);
-        if (bits & 4) {
-            from(SIG_RANGE, SIG_RANGE_CALC, 1);
-            from(SIG_FUEL_INST, SIG_CONS_INST, 1);
-            from(SIG_FUEL_AVG, SIG_CONS_AVG, 1);
-        }
-        if (bits & 16)   // volts x100 -> x10, rounded
-            from(at == 0 ? SIG_RANGE : at == 1 ? SIG_FUEL_PCT : SIG_FUEL_AVG, SIG_BATT_V, 10);
-        return fit;
+        _enabled = c.enabled;
+        _t = c.tuningAs<Tuning>();
+        setFieldMap(c.fields);
+        for (uint8_t i = 0; i < MAX_MESSAGES; ++i) _msgOn[i] = c.msgOn[i];
     }
 
     // ---- Tuning persistence -------------------------------------------------

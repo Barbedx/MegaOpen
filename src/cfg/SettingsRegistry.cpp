@@ -13,6 +13,7 @@
 #include "../utils/Log.h"
 #include "../utils/LogTags.h"
 #include "../net/Catalog.h"
+#include "../proto/canbox/Protocol.h"
 
 namespace Cfg
 {
@@ -92,6 +93,13 @@ namespace Cfg
 #endif
 
         const SEnum kBleModes = { Catalog::bleModeCount, Catalog::bleModeId, Catalog::bleModeName, "ble" };
+        // Every head-unit protocol in this image (Canbox::Protocols), by id.
+        const SEnum kHuProtocols = {
+            [] { return Canbox::Protocols::count(); },
+            [](uint8_t i) { return Canbox::Protocols::at(i).id(); },
+            [](uint8_t) -> const char* { return nullptr; },   // k.proto.<id> (web/i18n)
+            "proto",
+        };
         const SEnum kPanels   = { Catalog::panelCount,   Catalog::panelId,   Catalog::panelName, "panel" };
 
         // can2Bitrate: 0 = find it, then the rates Autobaud probes, ascending.
@@ -269,70 +277,12 @@ namespace Cfg
             {"on", SType::Bool, 0, 1, nullptr},
         };
         const STable kMessages = {
-            Canbox::Rav4Emitter::messageCount, 1, kMsgCols,
+            [] { return Canbox::activeProtocol().messageCount(); }, 1, kMsgCols,
             [](const Model& m, uint8_t r, uint8_t) -> int32_t { return m.msg[r] ? 1 : 0; },
             [](Model& m, uint8_t r, uint8_t, int32_t v) { m.msg[r] = v != 0; return true; },
             nullptr,
         };
-        static_assert(Canbox::Rav4Emitter::MAX_MESSAGES <= 255, "a table has at most 255 rows");
-
-        // ---- the head-unit emitter's tuning (Canbox::Tuning) ----------------
-        // 0x28 carries one of two messages: the row is the stored value.
-        struct IdName { const char* id; const char* name; };
-        const IdName kCmd28[] = {{"temp", nullptr}, {"ac", nullptr}};
-        // FUEL_UNITS / TRIP_UNITS rows, with ASCII ids; the row stores its `v`.
-        const char* const kFuelIds[] = {"l100km", "kml", "mpg"};
-        const char* const kTripIds[] = {"km", "miles", "hide"};
-        static_assert(sizeof(kFuelIds) / sizeof(kFuelIds[0]) == sizeof(Canbox::FUEL_UNITS) / sizeof(Canbox::FUEL_UNITS[0]),
-                      "kFuelIds is out of step with FUEL_UNITS");
-        static_assert(sizeof(kTripIds) / sizeof(kTripIds[0]) == sizeof(Canbox::TRIP_UNITS) / sizeof(Canbox::TRIP_UNITS[0]),
-                      "kTripIds is out of step with TRIP_UNITS");
-        constexpr uint8_t FUEL_ROWS = sizeof(kFuelIds) / sizeof(kFuelIds[0]);
-        constexpr uint8_t TRIP_ROWS = sizeof(kTripIds) / sizeof(kTripIds[0]);
-
-        const SEnum kCmd28E = {
-            [] { return (uint8_t)(sizeof(kCmd28) / sizeof(kCmd28[0])); },
-            [](uint8_t i) { return kCmd28[i < 2 ? i : 0].id; },
-            [](uint8_t i) { return kCmd28[i < 2 ? i : 0].name; },
-            "cmd28",
-        };
-        const SEnum kFuelE = {
-            [] { return FUEL_ROWS; },
-            [](uint8_t i) { return kFuelIds[i < FUEL_ROWS ? i : 0]; },
-            [](uint8_t i) { return Canbox::FUEL_UNITS[i < FUEL_ROWS ? i : 0].name; },
-            "fuelUnit",
-        };
-        const SEnum kTripE = {
-            [] { return TRIP_ROWS; },
-            [](uint8_t i) { return kTripIds[i < TRIP_ROWS ? i : 0]; },
-            [](uint8_t i) { return Canbox::TRIP_UNITS[i < TRIP_ROWS ? i : 0].name; },
-            "tripUnit",
-        };
-        template <size_t N>
-        int32_t unitRow(const Canbox::UnitRow (&t)[N], uint8_t v)
-        {
-            for (size_t i = 0; i < N; ++i) if (t[i].v == v) return (int32_t)i;
-            return 0;
-        }
-
-        // 0x30: exactly 16 bytes on the wire, space-padded; shown trimmed.
-        constexpr uint8_t VERSION_LEN = sizeof(Canbox::Tuning{}.version) - 1;
-        const SStr kVersion = {
-            VERSION_LEN,
-            [](const Model& m, char* out, size_t cap) {
-                if (!cap) return;
-                size_t n = strnlen(m.t->version, VERSION_LEN);
-                while (n && m.t->version[n - 1] == ' ') --n;
-                if (n >= cap) n = cap - 1;
-                memcpy(out, m.t->version, n);
-                out[n] = 0;
-            },
-            [](Model& m, const char* v) {
-                const size_t n = strnlen(v, VERSION_LEN);
-                for (size_t i = 0; i < VERSION_LEN; ++i) m.t->version[i] = i < n ? v[i] : ' ';
-                m.t->version[VERSION_LEN] = 0;
-            },
-        };
+        static_assert(Canbox::HuConfig::MAX_MESSAGES <= 255, "a table has at most 255 rows");
 
         // A String field stored by id, read and written as its row.
         int32_t rowOf(const SEnum& en, const Str& v)
@@ -359,8 +309,6 @@ namespace Cfg
 #define K_PUT(stmt) [](Model& m, int32_t v) { Knobs::Config& k = *m.k; (void)v; stmt; }
 #define C_GET(expr) [](const Model& m) -> int32_t { const Capture::Settings& c = *m.c; return (int32_t)(expr); }
 #define C_PUT(stmt) [](Model& m, int32_t v) { Capture::Settings& c = *m.c; (void)v; stmt; }
-#define T_GET(expr) [](const Model& m) -> int32_t { const Canbox::Tuning& t = *m.t; return (int32_t)(expr); }
-#define T_PUT(stmt) [](Model& m, int32_t v) { Canbox::Tuning& t = *m.t; (void)v; stmt; }
 
         const SEntry kTable[] = {
 #if FEATURE_DISPLAY_CAN    // the screen: nothing to set on a build without the panel
@@ -480,6 +428,10 @@ namespace Cfg
              0, 1, 0, nullptr, nullptr, S_GET(s.uartEnabled), S_PUT(s.uartEnabled = v != 0)},
             {"pulseMs", "Key pulse", "link", SType::Int, W, AP_KEYS,
              40, 500, 10, "ms", nullptr, S_GET(s.pulseMs), S_PUT(s.pulseMs = (uint16_t)v)},
+            // Picked once at boot (Canbox::Protocols::select).
+            {"huProtocol", "HU protocol", "link", SType::Enum, W, AP_REBOOT,
+             0, 0, 0, nullptr, &kHuProtocols, S_GET(rowOf(kHuProtocols, s.huProtocol)),
+             S_PUT(s.huProtocol = kHuProtocols.id((uint8_t)v))},
             // Serial1 is opened once at boot.
             {"uartBaud", "UART baud", "link", SType::Enum, W, AP_REBOOT,
              0, 0, 0, nullptr, &kBaudRates, S_GET(baudIndex(s.uartBaud)),
@@ -589,38 +541,6 @@ namespace Cfg
             {"cap.autoProtect", "Mark protects", "cap", SType::Bool, W, AP_CAP,
              0, 1, 0, nullptr, nullptr, C_GET(c.autoProtect), C_PUT(c.autoProtect = v != 0)},
 
-            // ---- the head-unit emitter's Raise tuning (NVS "tuning") ---------
-            // The ranges only stop nonsense: the emitter takes any of these
-            // (docs/raise-protocol.md says what each one changes on the unit).
-            G("raise", "Raise", nullptr, W),
-            {"raise.doorsLen", "Doors len", "raise", SType::Int, W, AP_HU,
-             1, 2, 1, nullptr, nullptr, T_GET(t.doorsLen), T_PUT(t.doorsLen = (uint8_t)v)},
-            {"raise.cmd28", "0x28 carries", "raise", SType::Enum, W, AP_HU,
-             0, 0, 0, nullptr, &kCmd28E, T_GET(t.cmd28 ? 1 : 0), T_PUT(t.cmd28 = (uint8_t)v)},
-            {"raise.steerInvert", "Steer invert", "raise", SType::Bool, W, AP_HU,
-             0, 1, 0, nullptr, nullptr, T_GET(t.steerInvert != 0), T_PUT(t.steerInvert = v ? 1 : 0)},
-            // 10 = whole degrees, 1 = the x10 value.
-            {"raise.steerDiv", "Steer div", "raise", SType::Int, W, AP_HU,
-             1, 10, 1, nullptr, nullptr, T_GET(t.steerDiv), T_PUT(t.steerDiv = (uint8_t)v)},
-            // Spec 380, a Clio III 500, mikescotland 540; never near 5400.
-            {"raise.steerClamp", "Steer clamp", "raise", SType::Int, W, AP_HU,
-             100, 1000, 10, nullptr, nullptr, T_GET(t.steerClamp), T_PUT(t.steerClamp = (int16_t)v)},
-            {"raise.fuelUnit", "Fuel unit", "raise", SType::Enum, W, AP_HU,
-             0, 0, 0, nullptr, &kFuelE, T_GET(unitRow(Canbox::FUEL_UNITS, t.fuelUnit)),
-             T_PUT(t.fuelUnit = Canbox::FUEL_UNITS[v].v)},
-            {"raise.tripUnit", "Trip unit", "raise", SType::Enum, W, AP_HU,
-             0, 0, 0, nullptr, &kTripE, T_GET(unitRow(Canbox::TRIP_UNITS, t.tripUnit)),
-             T_PUT(t.tripUnit = Canbox::TRIP_UNITS[v].v)},
-            {"raise.tripFields", "Trip fields", "raise", SType::Bool, W, AP_HU,
-             0, 1, 0, nullptr, nullptr, T_GET(t.tripFields != 0), T_PUT(t.tripFields = v ? 1 : 0)},
-            // 13 fills the HISTORY screen; 3 is the copied form the unit drops.
-            {"raise.histLen", "History len", "raise", SType::Int, W, AP_HU,
-             3, 13, 1, nullptr, nullptr, T_GET(t.histLen), T_PUT(t.histLen = (uint8_t)v)},
-            {"raise.radarInvert", "Radar invert", "raise", SType::Bool, W, AP_HU,
-             0, 1, 0, nullptr, nullptr, T_GET(t.radarInvert != 0), T_PUT(t.radarInvert = v ? 1 : 0)},
-            {"raise.version", "Version", "raise", SType::Str, W, AP_HU,
-             0, 0, 0, nullptr, nullptr, nullptr, nullptr, nullptr, &kVersion},
-
             // ---- the panel alerts: the whole table, row i = rule i ----------
             // Drawn by the live-car page, not the settings card.
             {"alerts", "Alerts", nullptr, SType::Table, W, AP_CAR,
@@ -638,27 +558,32 @@ namespace Cfg
 #undef K_PUT
 #undef C_GET
 #undef C_PUT
-#undef T_GET
-#undef T_PUT
 
         constexpr size_t N = sizeof(kTable) / sizeof(kTable[0]);
     }
 
     namespace Registry
     {
-        size_t count() { return N; }
-        const SEntry& at(size_t i) { return kTable[i < N ? i : 0]; }
+        // The table, then the head-unit protocol's own rows (raise.*).
+        size_t count() { return N + Canbox::activeProtocol().settingCount(); }
+        const SEntry& at(size_t i)
+        {
+            if (i < N) return kTable[i];
+            const Canbox::Protocol& p = Canbox::activeProtocol();
+            return i - N < p.settingCount() ? p.setting(i - N) : kTable[0];
+        }
 
         int indexOf(const char* id)
         {
-            if (id) for (size_t i = 0; i < N; ++i) if (!strcmp(id, kTable[i].id)) return (int)i;
+            const size_t n = count();
+            if (id) for (size_t i = 0; i < n; ++i) if (!strcmp(id, at(i).id)) return (int)i;
             return -1;
         }
 
         const SEntry* find(const char* id)
         {
             const int i = indexOf(id);
-            return i < 0 ? nullptr : &kTable[i];
+            return i < 0 ? nullptr : &at((size_t)i);
         }
 
         bool available(const Model& m, const SEntry& e)
@@ -666,7 +591,7 @@ namespace Cfg
             if (e.type == SType::Group) return true;
             if (e.apply & AP_CAR) return m.a != nullptr;
             if (e.apply & AP_CAP) return m.c != nullptr;
-            if (e.apply & AP_HU)  return m.t != nullptr && m.msg != nullptr;
+            if (e.apply & AP_HU)  return m.hu != nullptr && m.msg != nullptr;
             return (e.apply & AP_KNOBS) ? m.k != nullptr : m.s != nullptr;
         }
 

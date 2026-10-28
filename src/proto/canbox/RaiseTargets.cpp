@@ -198,31 +198,5 @@ namespace Canbox
             v.dec     = m.decimals;
             return v;
         }
-
-        int find(const char* id)
-        {
-            if (!id) return -1;
-            for (uint8_t i = 0; i < kCount; ++i)
-                if (!strcmp(at(i).id, id)) return i;
-            return -1;
-        }
-
-        const char* fmt(char* b, unsigned cap, int32_t v, uint8_t dec)
-        {
-            if (!dec) { snprintf(b, cap, "%ld", (long)v); return b; }
-            int32_t p = 1;
-            for (uint8_t i = 0; i < dec; ++i) p *= 10;
-            const int64_t a = v < 0 ? -(int64_t)v : v;
-            snprintf(b, cap, "%s%ld.%0*ld", v < 0 ? "-" : "", (long)(a / p), (int)dec, (long)(a % p));
-            return b;
-        }
-
-        bool toInt(double v, uint8_t dec, int32_t& out)
-        {
-            for (uint8_t i = 0; i < dec; ++i) v *= 10;
-            if (!(v > -2147483648.0 && v < 2147483647.0)) return false;   // NaN too
-            out = (int32_t)lround(v);
-            return true;
-        }
     }
 }

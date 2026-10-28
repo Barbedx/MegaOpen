@@ -5,15 +5,6 @@ const bars=r=>{const n=r>-55?4:r>-67?3:r>-78?2:1;return `<span class="sig">${[1,
 /* усі налаштування з реєстру прошивки (CAT.settings): ті самі, що в меню на щитку;
    ті, що вже є на сторінці (data-k в `have`), не дублюються; reboot -> смуга перезавантаження.
    Одиниця — уже в назві («Брязкіт, мс»), тож поруч не дописується; лише значення «лише читати» несе її */
-/* один параметр реєстру рядком (той самий вигляд, що в «Усіх налаштуваннях») */
-const setField=(se,f,hint='')=>{
- const v=se[f.id],k=(f.reboot?'rb:':'')+'/api/settings|'+f.id,ex=f.reboot?rbA(k,v,f.label):'';let c;
- if(f.ro)c=`<span class="mono">${esc(f.enum?((f.enum.find(o=>o.v===v)||{}).name||v):v)}${f.unit?' '+esc(unitT(f.unit)):''}</span>`;
- else if(f.type==='bool')c=sw(k,v,ex);
- else if(f.type==='enum')c=sel(k,f.enum.map(o=>[o.v,o.name]),v,'data-str'+ex);
- else if(f.type==='str')c=txt(k,v,'','in','text',`maxlength="${f.max}"${ex}`);
- else c=num(k,v,`min="${f.min}" max="${f.max}"${f.step?` step="${f.step}"`:''}${ex}`);
- return row(esc(f.label),c,f.volatile?t('bd.volatile'):'',hint)};
 const setById=(se,id,hint)=>{const f=(CAT.settings||[]).find(x=>x.id===id);return f&&id in se?setField(se,f,hint):''};
 const allSettings=(se,have)=>{let h='';for(const f of CAT.settings||[]){
  if(f.type==='group'){h+=`<div class="row muted"><b>${esc(f.label)}</b></div>`;continue}

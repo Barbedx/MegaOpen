@@ -34,7 +34,7 @@ namespace Keys
         Text,       // three rows on the OEM panel; `arg` split on '|'
         Popup,      // a popup on the OEM panel
         Pane,       // the 48x48 graphic layer; `arg` is the scene name
-        Message,    // Rav4Emitter::sendNow(code) — one scheduled telemetry message
+        Message,    // the protocol emitter's sendNow(code): one scheduled telemetry message
         _Count
     };
     const char* effectName(Effect e);

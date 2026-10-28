@@ -54,7 +54,7 @@ SCR.map={title:'map.title',hidden:true,async render(m){
  card(t('ca.rav4'),
   row(t('ca.proto'),`<b>${esc(tHas('k.proto.'+CAT.proto)?t('k.proto.'+CAT.proto):CAT.proto||'')}</b>`,t('ca.protoSub'))+
   row(t('ca.send'),sw('/api/map|send',mp.send),t('ca.kept'),t('ca.sendH'))+
-  row(t('ca.units'),sel('#fuel',enumOpts('fuelUnits'),mp.units.fuel,`aria-label="${esc(t('ca.fuel'))}"`)+sel('#trip',enumOpts('tripUnits'),mp.units.trip,`aria-label="${esc(t('ca.trip'))}"`),'','','mUnits')+
+  `<div id="cProto">${protoSettings(se)}</div>`+
   `<div class="pad"><div class="seg wrap" id="mGrp" data-v="all">${groups.map(([v,n])=>`<button type="button" data-val="${esc(v)}" class="${v==='all'?'on':''}">${esc(n)}</button>`).join('')}</div></div>`+
   row(t('ca.sweep'),`<span class="fr"><select class="in" id="mSwT" aria-label="${esc(t('ca.step'))}">${[3,5,8].map(s=>`<option value="${s}"${s===5?' selected':''}>${t('ca.sec',s)}</option>`).join('')}</select><button class="btn" type="button" id="mSwGo">${t('ca.sweepGo')}</button><b class="mono" id="mSwV">—</b></span>`,'0x7D 06, D2 = 0…15',t('ca.sweepH'),'mSwRow')+
   `<div class="tw"><table class="mapt"><thead><tr><th>${t('ca.thField')}</th><th>${t('ca.thNow')}</th><th>${t('ca.thFrom')}</th><th>${t('ca.thTest')}</th></tr></thead><tbody id="map">${this.withRules(raiseRows(mp)).map(mapRow).join('')}</tbody></table></div>`,'cMap','custom full')+
@@ -80,7 +80,7 @@ SCR.map={title:'map.title',hidden:true,async render(m){
   const mm=this.M[+b.dataset.add];this.A[i]=[mm[0],mm[3]?'rises':'above',0,60,true];this.drawAlerts();this.go('alerts');hlRow($(`#alT tr[data-r="${i}"]`))};
  // Поля ГУ
  saver($('#cMap .row'),()=>API.post('/api/map',{send:$('[data-k="/api/map|send"]').checked}),'[data-k]');
- saver($('#mUnits'),()=>API.post('/api/map',{units:{fuel:val($('[data-f="fuel"]')),trip:val($('[data-f="trip"]'))}}),'[data-f]');
+ saver($('#cProto'),genericSave,'[data-k]');
  $('#mSwGo').onclick=async e=>{const b=e.target,v=$('#mSwV'),live=tok=>this.sw===tok&&document.contains(b);if(this.sw){this.sw=null;b.textContent=t('ca.sweepGo');return}
   const pr=(this.fl||{}).prnd,on=pr&&((pr.rule||pr.def||{}).from!=='off');if(!on){sv(svOf(b),'bad',t('ca.needSel'));return}
   const tok=this.sw={};b.textContent=t('ca.sweepStop');

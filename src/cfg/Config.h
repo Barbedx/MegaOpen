@@ -11,7 +11,7 @@
 // AffaMap.h pulls in AffaDisplay.h; a build without the panel must not.
 #include "../keys/AffaMap.h"
 #endif
-#include "../proto/canbox/Rav4Emitter.h"
+#include "../proto/canbox/Protocol.h"
 #include "Secrets.h"
 #if FEATURE_RESISTIVE_KEYS
 #include "../sinks/ResistiveMap.h"
@@ -44,22 +44,19 @@ namespace Cfg
         bool savePaneBits(const uint8_t* b, size_t n);   // false: not written
         bool loadPaneBits(uint8_t* b, size_t n);
 #endif
-        // The uncertain-value block, resolved in a car, so it must survive reboots.
-        void saveTuning(const Canbox::Tuning& t);
-        void loadTuning(Canbox::Tuning& t);
+        // The head-unit protocol's settings (HuConfig::tuning), resolved in a
+        // car, so they must survive reboots: the protocol's own key and blob.
+        // load leaves `t` as it is when nothing valid is stored.
+        void saveTuning(const Canbox::Protocol& p, const void* t);
+        void loadTuning(const Canbox::Protocol& p, void* t);
         // "Send car data to the head unit": off until the owner first turns
         // it on, then remembered (2026-10-20, after doors, lights, indicators
         // and steering were checked in the car).
         void saveHuSend(bool on) { _p.putBool("huSend", on); }
         bool loadHuSend()        { return _p.getBool("huSend", false); }
-        // The head-unit experiments (Rav4Emitter::Exp), all off until switched.
-        // The experiment switches before 1.6.2: read once, made field rules
-        // (Rav4Emitter::experimentsToRules) and removed.
-        void    clearHuExp() { _p.remove("huExp"); }
         // The head-unit field map (Canbox::FieldMap), one blob.
         bool    saveFieldMap(const Canbox::FieldMap& m);
         bool    loadFieldMap(Canbox::FieldMap& m);
-        uint8_t loadHuExp()          { return _p.getUChar("huExp", 0); }
         // The user's decode map (Vehicle::DecodeTable::pack), key "decode".
         // load: its length, 0 when there is none or it does not fit `cap`.
         // erase: back to factory (decode_defaults.inc). False: not written.

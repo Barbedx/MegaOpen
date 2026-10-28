@@ -129,6 +129,17 @@ function fieldCtrl(f,k,v){
   return num(k,v===undefined?'':v,`min="${f.min}" max="${f.max}"${f.step?` step="${f.step}"`:''}`)}
  return txt(k,v===undefined?'':v,'','in','text','maxlength="'+f.max+'"');
 }
+/* один параметр реєстру рядком (той самий вигляд, що в «Усіх налаштуваннях») */
+const setField=(se,f,hint='')=>{
+ const v=se[f.id],k=(f.reboot?'rb:':'')+'/api/settings|'+f.id,ex=f.reboot?rbA(k,v,f.label):'';let c;
+ if(f.ro)c=`<span class="mono">${esc(f.enum?((f.enum.find(o=>o.v===v)||{}).name||v):v)}${f.unit?' '+esc(unitT(f.unit)):''}</span>`;
+ else if(f.type==='bool')c=sw(k,v,ex);
+ else if(f.type==='enum')c=sel(k,f.enum.map(o=>[o.v,o.name]),v,'data-str'+ex);
+ else if(f.type==='str')c=txt(k,v,'','in','text',`maxlength="${f.max}"${ex}`);
+ else c=num(k,v,`min="${f.min}" max="${f.max}"${f.step?` step="${f.step}"`:''}${ex}`);
+ return row(esc(f.label),c,f.volatile?t('bd.volatile'):'',hint)};
+/* налаштування протоколу ГУ (CAT.protoSet, raise.*) рядками: усі, без своїх копій на сторінках */
+const protoSettings=se=>(CAT.settings||[]).filter(f=>f.parent===CAT.protoSet&&f.id in se).map(f=>setField(se,f)).join('');
 const fieldLabel=f=>esc(f.label)+(f.max&&!f.num&&!f.enum?' · '+f.max:'');
 /* спільні чипи: WiFi (Огляд, Плата), CAN A і кнопка запису (Огляд, Авто) */
 function wifiChip(chip,sub,st,lost){if(st.mode==='off'){setChip(chip,'off',t('c.wifiOff'));sub.textContent=t('c.wifiOffW');return}if(st.mode==='ap'){setChip(chip,'warn',t('c.ap'));sub.textContent=(st.apName||st.ssid)+' · '+st.ip+' · '+lost}else{setChip(chip,'ok',st.ssid);sub.textContent=st.ip+' · '+st.rssi+' dBm'}}

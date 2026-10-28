@@ -63,7 +63,7 @@ namespace App
             QueueHandle_t      s_sendNowQ = nullptr;
             std::atomic<uint32_t> s_sendNowDrops{0};
             RR::Channel        s_rr;
-            Staged<EmitterCfg> s_cfg;
+            Staged<Canbox::HuConfig> s_cfg;
             int                s_id = -1;
 
             // The frame at the head of the vehicle lane, kept across passes
@@ -90,14 +90,7 @@ namespace App
             uint32_t s_rxBytes = 0;
             uint32_t s_pendingStale = 0;
 
-            void applyCfg(const EmitterCfg& c)
-            {
-                s_s.emitter->setEnabled(c.enabled);
-                s_s.emitter->setTuning(c.tuning);
-                s_s.emitter->setFieldMap(c.fields);
-                for (uint8_t i = 0; i < Canbox::Rav4Emitter::MAX_MESSAGES; ++i)
-                    s_s.emitter->setMsgEnabled(i, c.msgOn[i]);
-            }
+            void applyCfg(const Canbox::HuConfig& c) { if (s_s.emitter) s_s.emitter->configure(c); }
 
             // The emitter's write: into the reply queue while answering a 0x90,
             // otherwise onto the vehicle lane behind whatever is queued.
@@ -160,12 +153,12 @@ namespace App
                     if (!s_rr.take(t, a)) continue;          // the waiter gave up
                     RR::Result r;
                     if (a.op == OP_SEND_NOW)
-                        r.status = s_s.emitter->sendNow((uint8_t)a.u[0], *s_s.state) ? 1 : 0;
+                        r.status = s_s.emitter && s_s.emitter->sendNow((uint8_t)a.u[0], *s_s.state) ? 1 : 0;
                     s_rr.complete(t, r);
                 }
                 uint8_t idx;
                 while (s_sendNowQ && xQueueReceive(s_sendNowQ, &idx, 0) == pdTRUE)
-                    if (!s_s.emitter->sendNow(idx, *s_s.state))
+                    if (!s_s.emitter || !s_s.emitter->sendNow(idx, *s_s.state))
                         LOGI("macro", "message %u has no data - pin its signals", (unsigned)idx);
             }
 
@@ -252,7 +245,7 @@ namespace App
                         s_s.rx->reset();
                     if (s_cfg.applyIfDirty()) applyCfg(s_cfg.live());
                     serveRequests();
-                    s_s.emitter->tick(*s_s.state, now);
+                    if (s_s.emitter) s_s.emitter->tick(*s_s.state, now);
                     if (s_s.wake) s_s.wake(now);
                     // Read again right before the gate: a frame that began
                     // while the pass formatted (wake's echo lines) is then
@@ -275,7 +268,7 @@ namespace App
             }
         }
 
-        void begin(const Setup& s, const EmitterCfg& cfg)
+        void begin(const Setup& s, const Canbox::HuConfig& cfg)
         {
             s_s = s;
             for (auto& d : s_outDrops) d.store(0);
@@ -285,7 +278,7 @@ namespace App
             s_rr.begin();
             s_cfg.init(cfg);
             applyCfg(cfg);
-            s_s.emitter->begin(emitWrite, nullptr);
+            if (s_s.emitter) s_s.emitter->begin(emitWrite, nullptr);
             s_s.rx->onAck(ackNow, nullptr);
             // Nothing here reads with a timeout; this makes any Stream helper
             // that would (readBytes, parseInt) return at once instead of
@@ -326,7 +319,8 @@ namespace App
             return true;
         }
 
-        Staged<EmitterCfg>& emitterCfg() { return s_cfg; }
+        Staged<Canbox::HuConfig>& emitterCfg() { return s_cfg; }
+        const Canbox::Emitter* emitter() { return s_s.emitter; }
 
         void requestSendNow(uint8_t idx)
         {
@@ -346,22 +340,24 @@ namespace App
 
         bool preview(uint8_t idx, uint8_t* frame, uint8_t& len)
         {
-            if (!s_s.state) return false;
+            if (!s_s.state || !s_s.proto) return false;
             // A scratch emitter: the hu task's own is never read off its task.
-            // Both in Scratch: the caller is httpd (4 kB stack), and the two
-            // hold three field maps (~1.2 kB).
-            struct Work { EmitterCfg c; Canbox::Rav4Emitter e; };
-            Scratch<Work> w;
-            if (!w || !s_cfg.peek(w->c)) return false;
-            w->e.setTuning(w->c.tuning);
-            w->e.setFieldMap(w->c.fields);
-            return w->e.preview(idx, *s_s.state, frame, len);
+            // Both in scratch memory: the caller is httpd (4 kB stack), and
+            // the two hold three field maps (~1.2 kB).
+            Scratch<Canbox::HuConfig> c;
+            ScratchBytes mem(s_s.proto->emitterSize());
+            if (!c || !mem || !s_cfg.peek(*c)) return false;
+            Canbox::Emitter* e = s_s.proto->makeEmitter(mem.get());
+            e->configure(*c);
+            const bool ok = e->preview(idx, *s_s.state, frame, len);
+            e->~Emitter();
+            return ok;
         }
 
         bool sendByCmd(uint8_t cmd)
         {
             s_replyMode = true;
-            const bool ok = s_s.emitter->sendByCmd(cmd, *s_s.state);
+            const bool ok = s_s.emitter && s_s.emitter->sendByCmd(cmd, *s_s.state);
             s_replyMode = false;
             return ok;
         }

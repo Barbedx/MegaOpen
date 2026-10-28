@@ -22,12 +22,5 @@ namespace Canbox
     {
         uint8_t    count();
         TargetView at(uint8_t i);
-        // The row index for an id, or -1.
-        int        find(const char* id);
-
-        // A signal's integer with its decimal point placed: 4700, 2 -> "47.00".
-        const char* fmt(char* b, unsigned cap, int32_t v, uint8_t dec);
-        // The other way, rounded: 47.004, 2 -> 4700. False when it does not fit.
-        bool        toInt(double v, uint8_t dec, int32_t& out);
     }
 }

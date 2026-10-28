@@ -5,6 +5,8 @@
 #include <set>
 #include "cfg/SettingsRegistry.h"
 #include "cfg/SettingsJson.h"
+#include "proto/canbox/Protocol.h"
+#include "proto/canbox/Rav4Emitter.h"
 #include "utils/Log.h"
 
 // The registry is what the settings form and the panel menu both draw, so a
@@ -30,13 +32,14 @@ namespace
         Knobs::Config       k;
         Vehicle::AlertRules a;
         Capture::Settings   c;
-        Canbox::Tuning      t;
-        bool                msg[Canbox::Rav4Emitter::MAX_MESSAGES];
-        Model               m{&s, &k, &a, &c, &t, msg};
+        Canbox::HuConfig    hu;              // every message on, the protocol's tuning
+        Canbox::Tuning&     t   = hu.tuningAs<Canbox::Tuning>();
+        bool*               msg = hu.msgOn;
+        Model               m{&s, &k, &a, &c, hu.tuning, hu.msgOn};
         Fixture()
         {
             a.factory();
-            for (bool& b : msg) b = true;   // EmitterCfg's default: every message on
+            Canbox::activeProtocol().initConfig(hu);
         }
     };
 
@@ -530,8 +533,8 @@ void test_hu_messages_table()
     const SEntry* e = Registry::find("huMessages");
     TEST_ASSERT_NOT_NULL(e);
     TEST_ASSERT_TRUE(e->flags & F_VOLATILE);
-    TEST_ASSERT_EQUAL(Canbox::Rav4Emitter::messageCount(), e->tab->rows());
-    TEST_ASSERT_TRUE(e->tab->rows() <= Canbox::Rav4Emitter::MAX_MESSAGES);
+    TEST_ASSERT_EQUAL(Canbox::activeProtocol().messageCount(), e->tab->rows());
+    TEST_ASSERT_TRUE(e->tab->rows() <= Canbox::HuConfig::MAX_MESSAGES);
     TEST_ASSERT_EQUAL_INT32(1, Registry::cell(f.m, *e, 2, 0));
     uint8_t ap = 0;
     TEST_ASSERT_TRUE(Registry::setCell(f.m, *e, 2, 0, 0, &ap));
@@ -620,7 +623,7 @@ static const char* const kNotInRegistry[] = {"ssid", "pass", "mdnsName", "apName
 // the number. Host layout: std::string fields.
 void test_settings_struct_unchanged()
 {
-    TEST_ASSERT_EQUAL_MESSAGE(sizeof(std::string) * 12 + 104, sizeof(Settings),
+    TEST_ASSERT_EQUAL_MESSAGE(sizeof(std::string) * 13 + 104, sizeof(Settings),
                               "Cfg::Settings changed: add a registry entry, then update this size");
     // Every other field: count the entries that write Settings.
     size_t n = 0;
@@ -629,7 +632,7 @@ void test_settings_struct_unchanged()
         if (scalar(e) && !(e.flags & F_VOLATILE) && !(e.apply & (AP_KNOBS | AP_CAR | AP_CAP | AP_HU))) ++n;
     }
     // 55 scalar/enum fields in Settings (carSig counts three, gearRatio six, the log six), all in the registry.
-    TEST_ASSERT_EQUAL(56, n);
+    TEST_ASSERT_EQUAL(57, n);   // + huProtocol
     (void)kNotInRegistry;
 }
 
@@ -805,7 +808,7 @@ void test_a_file_skips_what_this_board_does_not_have()
     SettingsJson::write(a.m, d.to<JsonObject>(), true);
     TEST_ASSERT_FALSE(d["ledR.anim"].isNull());
     Fixture b;
-    Model noKnobs{&b.s, nullptr, &b.a, &b.c, &b.t, b.msg};
+    Model noKnobs{&b.s, nullptr, &b.a, &b.c, b.hu.tuning, b.msg};
     static SettingsJson::Read r;
     r = SettingsJson::Read{};
     SettingsJson::Errors err;

@@ -4,6 +4,7 @@
 #include "proto/canbox/Rav4Emitter.h"
 #include "proto/canbox/RaiseFramer.h"
 #include "proto/canbox/RaiseTargets.h"
+#include "proto/canbox/Raise112.h"
 #include "proto/canbox/Protocol.h"
 #include <initializer_list>
 
@@ -936,16 +937,16 @@ void test_raise_targets_ids_are_unique_and_name_real_signals()
         // The name is the page's (k.raise.<id>); a row keeps one only when it is
         // the protocol's own word (AUTO, ECO).
         TEST_ASSERT_TRUE_MESSAGE(t.group && *t.group && t.cmd && (*t.cmd || !t.fw), t.id);
-        TEST_ASSERT_EQUAL_INT_MESSAGE(i, RT::find(t.id), t.id);          // unique
+        TEST_ASSERT_EQUAL_INT_MESSAGE(i, Canbox::raise112().findField(t.id), t.id);          // unique
         if (t.sig < SIG_COUNT) TEST_ASSERT_EQUAL_STRING(meta(t.sig).name, t.id);
         // A field the firmware sends has a signal to hold its value.
         if (t.fw) TEST_ASSERT_TRUE_MESSAGE(t.sig < SIG_COUNT && t.msg < E::MSG_COUNT, t.id);
         else      TEST_ASSERT_EQUAL_UINT8_MESSAGE(Canbox::NO_MSG, t.msg, t.id);
     }
-    TEST_ASSERT_EQUAL_INT(-1, RT::find("nope"));
+    TEST_ASSERT_EQUAL_INT(-1, Canbox::raise112().findField("nope"));
     // The bonnet goes out in 0x24 D1 b7. The battery is the one row not sent:
     // protocol 112 has no field for it, and the page says so (`why`).
-    TEST_ASSERT_TRUE(RT::at((uint8_t)RT::find("bonnet")).fw);
+    TEST_ASSERT_TRUE(RT::at((uint8_t)Canbox::raise112().findField("bonnet")).fw);
     for (uint8_t i = 0; i < RT::count(); ++i) {
         const Canbox::TargetView t = RT::at(i);
         TEST_ASSERT_EQUAL_MESSAGE(t.fw, t.why == nullptr, t.id);
@@ -999,16 +1000,16 @@ void test_raise_values_place_the_decimal_point()
 {
     namespace RT = Canbox::RaiseTargets;
     char b[16];
-    TEST_ASSERT_EQUAL_STRING("47.00", RT::fmt(b, sizeof(b), 4700, 2));
-    TEST_ASSERT_EQUAL_STRING("-0.5", RT::fmt(b, sizeof(b), -5, 1));
-    TEST_ASSERT_EQUAL_STRING("-40", RT::fmt(b, sizeof(b), -40, 0));
-    TEST_ASSERT_EQUAL_STRING("655.35", RT::fmt(b, sizeof(b), 65535, 2));
+    TEST_ASSERT_EQUAL_STRING("47.00", Canbox::fmtFixed(b, sizeof(b), 4700, 2));
+    TEST_ASSERT_EQUAL_STRING("-0.5", Canbox::fmtFixed(b, sizeof(b), -5, 1));
+    TEST_ASSERT_EQUAL_STRING("-40", Canbox::fmtFixed(b, sizeof(b), -40, 0));
+    TEST_ASSERT_EQUAL_STRING("655.35", Canbox::fmtFixed(b, sizeof(b), 65535, 2));
     int32_t v = 0;
-    TEST_ASSERT_TRUE(RT::toInt(47.004, 2, v));
+    TEST_ASSERT_TRUE(Canbox::toFixed(47.004, 2, v));
     TEST_ASSERT_EQUAL_INT32(4700, v);
-    TEST_ASSERT_TRUE(RT::toInt(-12.3, 1, v));
+    TEST_ASSERT_TRUE(Canbox::toFixed(-12.3, 1, v));
     TEST_ASSERT_EQUAL_INT32(-123, v);
-    TEST_ASSERT_FALSE(RT::toInt(1e12, 0, v));
+    TEST_ASSERT_FALSE(Canbox::toFixed(1e12, 0, v));
 }
 
 // ---- head-unit fields that start off, and the old experiment switches ---------------
@@ -1024,9 +1025,10 @@ static void expCapture(const uint8_t* f, uint8_t n, void*)
     g_cmd23 += f[1] == 0x23;
 }
 
-// The 1.6.1 switches as rules (Rav4Emitter::experimentsToRules, the boot
-// migration): each one fills its field from what it used to, nothing else.
-void test_old_experiments_become_field_rules()
+// Field rules on the RAV4 frames: each fills its field from its source,
+// nothing else (the coolant, the tank % in 7D 04, range and consumption from
+// the board).
+void test_field_rules_fill_their_frames()
 {
     State s;
     s.set(SIG_ENG_TEMP, 90, 1);
@@ -1039,29 +1041,30 @@ void test_old_experiments_become_field_rules()
     e.begin(expCapture, nullptr);
     TEST_ASSERT_EQUAL_UINT8(0, e.fieldMap().count());
     uint32_t base = 0;
-    auto run = [&](uint8_t bits) {
+    auto run = [&](const FieldMap& m) {
         g_sub09 = g_cmd21 = g_cmd22 = g_cmd23 = 0;
         memset(g_odo, 0, sizeof(g_odo));
-        FieldMap m;
-        TEST_ASSERT_TRUE(E::experimentsToRules(bits, m));
         e.setFieldMap(m);
         base += 100000;
         for (uint32_t t = 0; t < 12000; t += 100) e.tick(s, base + t);
     };
-    run(0);                                         // nothing new reaches the head unit
+    const FieldMap none, coolant = fields({own(SIG_ENG_TEMP)}), tank = fields({own(SIG_FUEL_PCT)});
+    const FieldMap board = fields({from(SIG_RANGE, SIG_RANGE_CALC), from(SIG_FUEL_INST, SIG_CONS_INST),
+                                   from(SIG_FUEL_AVG, SIG_CONS_AVG)});
+    run(none);                                      // nothing new reaches the head unit
     TEST_ASSERT_EQUAL_INT(0, g_sub09);
     TEST_ASSERT_EQUAL_INT(0, g_cmd21 + g_cmd22 + g_cmd23);
     // No 0x5FD: the cluster's odometer (0x5C5) still goes in 7D 04, F2 08 in D4-D5.
     const uint8_t plain[] = {0x2E, 0x7D, 0x0C, 0x04, 0x40, 0xE2, 0x01, 0xF2, 0x08};
     TEST_ASSERT_EQUAL_HEX8_ARRAY(plain, g_odo, sizeof(plain));
-    run(1);                                         // coolant
+    run(coolant);
     TEST_ASSERT_TRUE(g_sub09 > 0);
     TEST_ASSERT_EQUAL_INT(0, g_cmd22);
-    run(2);                                         // the tank, 51.6 % in D4-D5
+    run(tank);                                      // 51.6 % in D4-D5
     TEST_ASSERT_EQUAL_INT(0, g_sub09);
     const uint8_t odo[] = {0x2E, 0x7D, 0x0C, 0x04, 0x40, 0xE2, 0x01, 0x04, 0x02};   // 516 = 51.6 % x10
     TEST_ASSERT_EQUAL_HEX8_ARRAY(odo, g_odo, sizeof(odo));
-    run(4);                                         // range and consumption from the board
+    run(board);
     TEST_ASSERT_TRUE(g_cmd21 > 0 && g_cmd22 > 0 && g_cmd23 > 0);
     // A rule is the field's source: a value of the field's own signal is not read.
     uint8_t frame[64], len = 0;
@@ -1072,20 +1075,10 @@ void test_old_experiments_become_field_rules()
     TEST_ASSERT_EQUAL_HEX8(72, frame[5]);
     // The coolant frame itself: 0x7D 09 [00][78 - 90 = 0xF4]; the tablet
     // shows (78 - D2) mod 256 (owner's sweep 2026-10-25), so 90.
-    run(1);
+    run(coolant);
     TEST_ASSERT_TRUE(e.preview(E::MSG_COOLANT, s, frame, len));
     const uint8_t cool[] = {0x2E, 0x7D, 0x03, 0x09, 0x00, 0xF4};
     TEST_ASSERT_EQUAL_HEX8_ARRAY(cool, frame, sizeof(cool));
-    // Two fills of one field, and a bit with no field, do not convert.
-    FieldMap m;
-    TEST_ASSERT_FALSE(E::experimentsToRules(16 | (1 << 5) | 2, m));   // the battery and the tank, both 7D 04
-    TEST_ASSERT_FALSE(E::experimentsToRules(16 | 4, m));              // the battery and the range, both 0x21
-    TEST_ASSERT_FALSE(E::experimentsToRules(16 | (3 << 5), m));       // no field 3
-    TEST_ASSERT_FALSE(E::experimentsToRules(0x80, m));
-    // A rule the owner already has is kept.
-    FieldMap k = fields({konst(SIG_ENG_TEMP, 70)});
-    TEST_ASSERT_TRUE(E::experimentsToRules(1, k));
-    TEST_ASSERT_EQUAL_UINT8(FK_CONST, k.find(SIG_ENG_TEMP)->kind);
 }
 
 static int g_sub06;
@@ -1237,7 +1230,7 @@ void test_ac_form_needs_a_trusted_signal()
 int main(int, char**)
 {
     UNITY_BEGIN();
-    RUN_TEST(test_old_experiments_become_field_rules);
+    RUN_TEST(test_field_rules_fill_their_frames);
     RUN_TEST(test_battery_in_another_field);
     RUN_TEST(test_outside_temp_is_held_against_flicker);
     RUN_TEST(test_climate_frame_changes_only_on_a_lasting_value);

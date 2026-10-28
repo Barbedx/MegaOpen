@@ -1,23 +1,56 @@
 #include <unity.h>
 #include <string.h>
+#include <new>
 #include <initializer_list>
 #include "proto/canbox/Protocol.h"
 #include "proto/canbox/FieldView.h"
+#include "proto/canbox/Rav4Emitter.h"
+#include "cfg/SettingsRegistry.h"
 #include "vehicle/VehicleState.h"
 
 void setUp() {}
 void tearDown() {}
 
-// The map layer knows a head-unit protocol only through FieldProtocol
-// (docs/design/hu-mapping.md, step 5): a second protocol is a module with
-// its own field list and defaults, and the field map, the rule lookup and
-// FieldView work on it unchanged. The stub has no wire format.
+// The firmware knows a head-unit protocol only through Canbox::Protocol and
+// Canbox::Emitter (docs/design/rules.md, slice 0): a second protocol is a
+// module with its own fields, messages, settings and frame, and the field
+// map, FieldView, HuConfig and the settings registry work on it unchanged.
+// The stub has a one-byte frame and one message.
 using namespace Vehicle;
 using namespace Canbox;
 
 namespace
 {
-    struct Stub final : FieldProtocol {
+    struct StubTuning { uint8_t speedDiv = 100; };
+
+    struct StubEmitter final : Emitter {
+        WriteFn w = nullptr;
+        void* ctx = nullptr;
+        HuConfig cfg;
+        uint32_t sent = 0;
+        void begin(WriteFn fn, void* c) override { w = fn; ctx = c; }
+        void configure(const HuConfig& c) override { cfg = c; }
+        void tick(const FieldView&, uint32_t) override {}
+        bool preview(uint8_t msg, const FieldView& s, uint8_t* f, uint8_t& len) const override
+        {
+            if (msg != 0 || !s.has(SIG_SPEED)) return false;
+            f[0] = (uint8_t)(s.get(SIG_SPEED) / cfg.tuningAs<StubTuning>().speedDiv);
+            len = 1;
+            return true;
+        }
+        bool sendNow(uint8_t msg, const FieldView& s) override
+        {
+            uint8_t f[4], len = 0;
+            if (!preview(msg, s, f, len)) return false;
+            w(f, len, ctx);
+            ++sent;
+            return true;
+        }
+        bool sendByCmd(uint8_t cmd, const FieldView& s) override { return cmd == 0x55 && sendNow(0, s); }
+        uint32_t framesSent() const override { return sent; }
+    };
+
+    struct Stub final : Protocol {
         const char* id() const override { return "stub"; }
         uint8_t fieldCount() const override { return 2; }
         TargetView field(uint8_t i) const override
@@ -26,7 +59,7 @@ namespace
             v.id  = i ? "eng_temp" : "speed";
             v.sig = i ? SIG_ENG_TEMP : SIG_SPEED;
             v.fw  = true;
-            v.msg = NO_MSG;
+            v.msg = i ? NO_MSG : 0;
             return v;
         }
         const FieldMap& defaults() const override
@@ -41,6 +74,39 @@ namespace
             }();
             return m;
         }
+        uint8_t     messageCount() const override { return 1; }
+        MessageView message(uint8_t) const override { return {"speed", 0x55, 100, "low", ""}; }
+        size_t   emitterSize() const override { return sizeof(StubEmitter); }
+        Emitter* makeEmitter(void* mem) const override { return new (mem) StubEmitter(); }
+        uint8_t frame(uint8_t cmd, const uint8_t*, uint8_t len, uint8_t* out) const override
+        {
+            if (len) return 0;
+            out[0] = cmd;
+            return 1;
+        }
+        void        initTuning(void* t) const override { new (t) StubTuning(); }
+        const char* tuningKey() const override { return "stubtune"; }
+        uint8_t     tuningBlobSize() const override { return 1; }
+        void tuningToBlob(const void* t, uint8_t* out) const override { out[0] = static_cast<const StubTuning*>(t)->speedDiv; }
+        bool tuningFromBlob(void* t, const uint8_t* in, uint8_t len) const override
+        {
+            if (len != 1 || !in[0]) return false;
+            static_cast<StubTuning*>(t)->speedDiv = in[0];
+            return true;
+        }
+        size_t settingCount() const override { return 0; }
+        const Cfg::SEntry& setting(size_t) const override { return Cfg::Registry::at(0); }
+    };
+
+    uint8_t g_frame[8], g_len;
+    void capture(const uint8_t* f, uint8_t n, void*) { memcpy(g_frame, f, n); g_len = n; }
+
+    // The emitter a protocol makes, in 8-aligned storage, as the hu task holds it.
+    struct Made {
+        alignas(8) uint8_t mem[4096];
+        Emitter* e;
+        explicit Made(const Protocol& p) { TEST_ASSERT_TRUE(p.emitterSize() <= sizeof(mem)); e = p.makeEmitter(mem); }
+        ~Made() { e->~Emitter(); }
     };
 }
 
@@ -73,10 +139,51 @@ void test_a_second_protocol_runs_the_map_unchanged()
     TEST_ASSERT_EQUAL_UINT8(FK_CONST, p.ruleFor(own, SIG_ENG_TEMP)->kind);
 }
 
+// The hu task's whole use of a protocol: a config with its tuning, an
+// emitter made and configured, a send, the head unit's request, a raw frame.
+void test_a_second_protocol_sends_through_the_interface()
+{
+    const Stub p;
+    HuConfig c;
+    p.initConfig(c);
+    TEST_ASSERT_EQUAL_UINT8(100, c.tuningAs<StubTuning>().speedDiv);
+    c.tuningAs<StubTuning>().speedDiv = 10;
+    Made m(p);
+    m.e->begin(capture, nullptr);
+    m.e->configure(c);
+    State s;
+    s.set(SIG_SPEED, 470, 1);
+    g_len = 0;
+    TEST_ASSERT_TRUE(m.e->sendNow(0, s));
+    TEST_ASSERT_EQUAL_UINT8(1, g_len);
+    TEST_ASSERT_EQUAL_UINT8(47, g_frame[0]);
+    TEST_ASSERT_TRUE(m.e->sendByCmd(0x55, s));
+    TEST_ASSERT_FALSE(m.e->sendByCmd(0x56, s));
+    TEST_ASSERT_EQUAL_UINT32(2, m.e->framesSent());
+    uint8_t f[4];
+    TEST_ASSERT_EQUAL_UINT8(1, p.frame(0x42, nullptr, 0, f));
+    TEST_ASSERT_EQUAL_HEX8(0x42, f[0]);
+    // Its tuning stored and read back; a bad blob leaves it as it was.
+    uint8_t b[1];
+    p.tuningToBlob(c.tuning, b);
+    HuConfig d;
+    p.initConfig(d);
+    TEST_ASSERT_TRUE(p.tuningFromBlob(d.tuning, b, 1));
+    TEST_ASSERT_EQUAL_UINT8(10, d.tuningAs<StubTuning>().speedDiv);
+    const uint8_t zero = 0;
+    TEST_ASSERT_FALSE(p.tuningFromBlob(d.tuning, &zero, 1));
+    TEST_ASSERT_EQUAL_UINT8(10, d.tuningAs<StubTuning>().speedDiv);
+}
+
 void test_the_active_protocol_is_raise_112()
 {
-    const FieldProtocol& p = activeProtocol();
+    const Protocol& p = activeProtocol();
     TEST_ASSERT_EQUAL_STRING("raise112", p.id());
+    TEST_ASSERT_EQUAL_UINT8(1, Protocols::count());
+    TEST_ASSERT_EQUAL_INT(0, Protocols::find("raise112"));
+    TEST_ASSERT_EQUAL_INT(-1, Protocols::find("nope"));
+    Protocols::select(7);                               // out of range: the first
+    TEST_ASSERT_EQUAL_STRING("raise112", activeProtocol().id());
     TEST_ASSERT_TRUE(p.fieldCount() > 50);
     const int i = p.findField("speed");
     TEST_ASSERT_TRUE(i >= 0);
@@ -85,12 +192,100 @@ void test_the_active_protocol_is_raise_112()
     FieldMap none;
     for (const uint8_t f : {SIG_ENG_TEMP, SIG_PRND, SIG_FUEL_PCT})
         TEST_ASSERT_EQUAL_UINT8(FK_OFF, p.ruleFor(none, f)->kind);
+    TEST_ASSERT_EQUAL_UINT8(Rav4Emitter::MSG_COUNT, p.messageCount());
+    TEST_ASSERT_EQUAL_STRING("speed 0x7D03", p.message(Rav4Emitter::MSG_SPEED).name);
+    TEST_ASSERT_EQUAL_UINT8(0x7D, p.message(Rav4Emitter::MSG_SPEED).cmd);
+}
+
+// The interface changes no byte: the emitter made through Raise 112 and
+// configured with a HuConfig sends what a Rav4Emitter set up by hand does.
+void test_raise_112_through_the_interface_sends_the_same_bytes()
+{
+    const Protocol& p = activeProtocol();
+    HuConfig c;
+    p.initConfig(c);
+    c.enabled = true;
+    Tuning& t = c.tuningAs<Tuning>();
+    TEST_ASSERT_EQUAL_UINT8(10, t.steerDiv);            // Tuning's defaults
+    t.cmd28 = 1;
+    t.histLen = 3;
+    Made m(p);
+    Rav4Emitter direct;
+    Tuning dt;
+    dt.cmd28 = 1;
+    dt.histLen = 3;
+    direct.setTuning(dt);
+    State s;
+    s.set(SIG_SPEED, 4700, 1);
+    s.set(SIG_STEERING, -265, 1);
+    s.set(SIG_FUEL_INST, 72, 1);
+    s.set(SIG_AC_ON, 1, 1);
+    m.e->configure(c);
+    for (uint8_t i = 0; i < p.messageCount(); ++i) {
+        uint8_t a[64], b[64], la = 0, lb = 0;
+        const bool oa = m.e->preview(i, s, a, la), ob = direct.preview(i, s, b, lb);
+        TEST_ASSERT_EQUAL_MESSAGE(ob, oa, p.message(i).name);
+        if (oa) {
+            TEST_ASSERT_EQUAL_UINT8_MESSAGE(lb, la, p.message(i).name);
+            TEST_ASSERT_EQUAL_HEX8_ARRAY_MESSAGE(b, a, la, p.message(i).name);
+        }
+    }
+    // The raw frame is Raise's: 2E cmd len payload checksum.
+    uint8_t f[8];
+    const uint8_t pl[] = {0x01, 0x02};
+    TEST_ASSERT_EQUAL_UINT8(6, p.frame(0x20, pl, 2, f));
+    TEST_ASSERT_EQUAL_HEX8(0x2E, f[0]);
+    // The tuning blob round-trips through the protocol (NVS "rav4tune").
+    TEST_ASSERT_EQUAL_STRING("rav4tune", p.tuningKey());
+    uint8_t blob[64];
+    p.tuningToBlob(c.tuning, blob);
+    HuConfig d;
+    p.initConfig(d);
+    TEST_ASSERT_TRUE(p.tuningFromBlob(d.tuning, blob, p.tuningBlobSize()));
+    TEST_ASSERT_EQUAL_UINT8(1, d.tuningAs<Tuning>().cmd28);
+    TEST_ASSERT_EQUAL_UINT8(3, d.tuningAs<Tuning>().histLen);
+    // 0x28 carries one form: the other one's fields are blocked, with why.
+    TEST_ASSERT_EQUAL_STRING("form_ac", p.messageBlocked(Rav4Emitter::MSG_TEMP, c));
+    TEST_ASSERT_NULL(p.messageBlocked(Rav4Emitter::MSG_AC, c));
+    t.cmd28 = 0;
+    TEST_ASSERT_EQUAL_STRING("form_temp", p.messageBlocked(Rav4Emitter::MSG_AC, c));
+    TEST_ASSERT_NULL(p.messageBlocked(Rav4Emitter::MSG_SPEED, c));
+}
+
+// The registry carries the protocol's rows after its own, its group first.
+void test_the_registry_takes_the_protocol_settings()
+{
+    const Protocol& p = activeProtocol();
+    TEST_ASSERT_TRUE(p.settingCount() > 5);
+    TEST_ASSERT_EQUAL_STRING("raise", p.setting(0).id);
+    const size_t n = Cfg::Registry::count();
+    TEST_ASSERT_EQUAL_STRING(p.setting(p.settingCount() - 1).id, Cfg::Registry::at(n - 1).id);
+    const Cfg::SEntry* e = Cfg::Registry::find("raise.cmd28");
+    TEST_ASSERT_NOT_NULL(e);
+    // Its get/put edit HuConfig::tuning through Model::hu.
+    HuConfig c;
+    p.initConfig(c);
+    Cfg::Settings s;
+    Cfg::Model m{&s, nullptr, nullptr, nullptr, c.tuning, c.msgOn};
+    TEST_ASSERT_TRUE(Cfg::Registry::available(m, *e));
+    TEST_ASSERT_TRUE(Cfg::Registry::set(m, *e, 1));
+    TEST_ASSERT_EQUAL_UINT8(1, c.tuningAs<Tuning>().cmd28);
+    Cfg::Model none{&s, nullptr};
+    TEST_ASSERT_FALSE(Cfg::Registry::available(none, *e));
+    // The protocol is a setting, read at boot.
+    const Cfg::SEntry* hp = Cfg::Registry::find("huProtocol");
+    TEST_ASSERT_NOT_NULL(hp);
+    TEST_ASSERT_TRUE(hp->apply & Cfg::AP_REBOOT);
+    TEST_ASSERT_EQUAL_INT(0, Cfg::Registry::get(m, *hp));
 }
 
 int main(int, char**)
 {
     UNITY_BEGIN();
     RUN_TEST(test_a_second_protocol_runs_the_map_unchanged);
+    RUN_TEST(test_a_second_protocol_sends_through_the_interface);
     RUN_TEST(test_the_active_protocol_is_raise_112);
+    RUN_TEST(test_raise_112_through_the_interface_sends_the_same_bytes);
+    RUN_TEST(test_the_registry_takes_the_protocol_settings);
     return UNITY_END();
 }

@@ -13,7 +13,7 @@
 #include "proto/canbox/RaiseFramer.h"
 #include "proto/canbox/HuDialect.h"
 #include "display/PanelBusWatch.h"
-#include "proto/canbox/Rav4Emitter.h"
+#include "proto/canbox/Protocol.h"
 // Knob codes: the second byte is a detent count, not a press state — no release.
 #include "proto/canbox/Rav4Profile.h"
 #include "vehicle/VehicleState.h"
@@ -135,7 +135,9 @@ static Sinks::ResistiveKeySink g_resSink;
 static Knobs::Service        g_knobs;
 #endif
 static Vehicle::State        g_state;
-static Canbox::Rav4Emitter   g_emitter;
+// The head-unit protocol's live emitter (Canbox::Protocol::makeEmitter), made
+// once at boot in internal RAM; the hu task's from App::Hu::begin on.
+static Canbox::Emitter*      g_emitter = nullptr;
 static WebUi                 g_web;
 static WifiManager           g_wifi;
 static Canbox::RxParser      g_huRx;
@@ -1060,7 +1062,7 @@ static void macroFire(const Keys::Macro& m, void*)
             break;
         case Keys::EffectRoute::UartOut: {
             uint8_t frame[Canbox::MAX_FRAME];
-            const uint8_t len = Canbox::buildFrame(m.code, m.data, m.dataLen, frame);
+            const uint8_t len = Canbox::activeProtocol().frame(m.code, m.data, m.dataLen, frame);
             // The hu task's vehicle lane: an arbitrary frame is not a key, and
             // must not go in front of the next ack.
             if (!len)
@@ -1854,6 +1856,15 @@ void setup()
     Log::setLevel(LogLevel::INF);
 
     g_cfg.begin();
+    // The head-unit protocol, before anything reads Canbox::activeProtocol()
+    // (the settings registry, the hu task, the web).
+    {
+        const int hp = Canbox::Protocols::find(g_cfg.s().huProtocol.c_str());
+        Canbox::Protocols::select(hp < 0 ? 0 : (uint8_t)hp);
+        if (hp < 0)
+            LOGW("hu", "protocol \"%s\" is not in this image: %s", g_cfg.s().huProtocol.c_str(),
+                 Canbox::activeProtocol().id());
+    }
     // The log's own settings, saved (docs/design/logging.md).
     {
         const Cfg::Settings& s = g_cfg.s();
@@ -1967,25 +1978,26 @@ void setup()
     // from NVS (every ignition is a reboot); the emitter sends only when the
     // owner has switched it on (remembered) and the UART is on.
     {
-        App::Hu::EmitterCfg ec;
-        g_cfg.loadTuning(ec.tuning);
+        const Canbox::Protocol& proto = Canbox::activeProtocol();
+        static Canbox::HuConfig ec;   // ~450 B, once: not on setup()'s stack
+        proto.initConfig(ec);
+        g_cfg.loadTuning(proto, ec.tuning);
         ec.enabled = g_cfg.loadHuSend() && g_cfg.s().uartEnabled;
         g_cfg.loadFieldMap(ec.fields);
-        // The experiment switches of 1.6.1 and before become field rules, once.
-        if (const uint8_t bits = g_cfg.loadHuExp()) {
-            const bool ok = Canbox::Rav4Emitter::experimentsToRules(bits, ec.fields);
-            const bool saved = ok && g_cfg.saveFieldMap(ec.fields);
-            if (saved) g_cfg.clearHuExp();
-            LOGW("hu", "experiments 0x%02X -> field map: %s", (unsigned)bits,
-                 !ok ? "not convertible, kept for the next boot" : saved ? "saved" : "NOT saved, again next boot");
-        }
         if (ec.fields.count())
             LOGI("hu", "field map: %u rule(s) from NVS", (unsigned)ec.fields.count());
+        void* mem = heap_caps_aligned_alloc(8, proto.emitterSize(), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (!mem) {
+            LOGE("hu", "no memory for the %s emitter: the head unit gets no car data", proto.id());
+        } else {
+            g_emitter = proto.makeEmitter(mem);
+        }
         App::Hu::Setup hs;
         hs.port    = &Serial1;
         hs.tx      = &g_tx;
         hs.rx      = &g_huRx;
-        hs.emitter = &g_emitter;
+        hs.proto   = &proto;
+        hs.emitter = g_emitter;
         hs.state   = &g_state;
         hs.wake    = huWake;
         App::Hu::begin(hs, ec);

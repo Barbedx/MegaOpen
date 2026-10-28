@@ -14,8 +14,6 @@
 #include "../bus/Autobaud.h"
 #include "../proto/canbox/Rav4Profile.h"
 #include "../proto/canbox/Rav4Catalog.h"
-#include "../proto/canbox/Rav4Emitter.h"
-#include "../proto/canbox/RaiseTargets.h"
 #include "../proto/canbox/Protocol.h"
 #include "../vehicle/DecodeTable.h"
 #include "../sinks/ResistiveMap.h"
@@ -401,14 +399,6 @@ namespace Catalog
                 j.obj().kn("v", i).kso("name", Sinks::ResistiveMap::SPIN_TITLES[i]).endObj();
             j.endArr();
 
-            auto units = [&](const char* key, const Canbox::UnitRow* t, size_t n) {
-                j.k(key).arr();
-                for (size_t i = 0; i < n; ++i) j.obj().kn("v", t[i].v).kso("name", t[i].name).endObj();
-                j.endArr();
-            };
-            units("fuelUnits", Canbox::FUEL_UNITS, sizeof(Canbox::FUEL_UNITS) / sizeof(Canbox::FUEL_UNITS[0]));
-            units("tripUnits", Canbox::TRIP_UNITS, sizeof(Canbox::TRIP_UNITS) / sizeof(Canbox::TRIP_UNITS[0]));
-
             names(j, "mapSrc", Vehicle::MAP_SRC);
 
             j.k("macroTriggers").arr();
@@ -539,16 +529,18 @@ namespace Catalog
         // and max with the decimal point placed, as the page types and shows
         // values. The key is named for the first protocol, Raise; the
         // Companion app's bundled page reads it, so it keeps its name.
-        const Canbox::FieldProtocol& P = Canbox::activeProtocol();
+        // `protoSet`: the group of its own settings in `settings` (raise).
+        const Canbox::Protocol& P = Canbox::activeProtocol();
         j.ks("proto", P.id());
+        if (P.settingCount()) j.ks("protoSet", P.setting(0).id);
         j.k("raise").arr();
         for (uint8_t i = 0; i < P.fieldCount(); ++i) {
             const Canbox::TargetView t = P.field(i);
             char lo[16], hi[16];
             j.obj().ks("id", t.id).ks("group", t.group).kso("name", t.name).ks("unit", t.unit)
                 .ks("cmd", t.cmd).ks("kind", t.boolean ? "b" : "n")
-                .k("min").lit(Canbox::RaiseTargets::fmt(lo, sizeof(lo), t.min, t.dec))
-                .k("max").lit(Canbox::RaiseTargets::fmt(hi, sizeof(hi), t.max, t.dec))
+                .k("min").lit(Canbox::fmtFixed(lo, sizeof(lo), t.min, t.dec))
+                .k("max").lit(Canbox::fmtFixed(hi, sizeof(hi), t.max, t.dec))
                 .kn("dec", t.dec).kb("fw", t.fw);
             j.kso("why", t.why);
             j.endObj();

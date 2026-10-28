@@ -70,6 +70,8 @@ namespace Cfg
         // head unit) | both (transport to the phone, volume to the head unit).
         // Read once at boot; "off" keeps ~40 kB of host state out of RAM.
         Str      bleMode = "ams";
+        // The head-unit protocol (Canbox::Protocols), by id. Read once at boot.
+        Str      huProtocol = "raise112";
         // No wifiSleep setting: WiFi power save is derived from bleMode
         // (WifiManager::sleepRequired()). BT on with power save off makes the
         // IDF WiFi driver abort at radio start and boot-loop.
