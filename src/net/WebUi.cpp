@@ -2121,7 +2121,7 @@ void WebUi::routesCanbox()
 
             // The bytes it would send now; ready=false when none of its signals
             // is known (the emitter stays silent).
-            uint8_t frame[Canbox::MAX_FRAME];
+            uint8_t frame[Canbox::HU_FRAME_MAX];
             uint8_t len = 0;
             if (App::Hu::preview(i, frame, len)) {
                 String hex; appendHex(hex, frame, len);
@@ -2179,11 +2179,11 @@ void WebUi::routesCanbox()
         const uint32_t cmd = paramU32(r, "cmd", "", 16);
         if (cmd > 0xFF) return r->reply(400, "text/plain", "param cmd");
 
-        uint8_t payload[Canbox::MAX_PAYLOAD];
+        uint8_t payload[Canbox::HU_FRAME_MAX];
         const int n = parseHex(paramStr(r, "data", "").c_str(), payload, sizeof(payload));
         if (n < 0) return r->reply(400, "text/plain", "param data");
 
-        uint8_t frame[Canbox::MAX_FRAME];
+        uint8_t frame[Canbox::HU_FRAME_MAX];
         const uint8_t flen = Canbox::activeProtocol().frame((uint8_t)cmd, payload, (uint8_t)n, frame);
         if (!flen) return r->reply(400, "text/plain", "too_long");
 
@@ -2502,23 +2502,24 @@ void WebUi::healthJson(JsonObject d)
                 "hu_ok",
                 "hu_seen",
                 "hu_dialect_vw"};
-            const uint32_t n = _huRx ? _huRx->frames() : 0;
+            const Canbox::DecoderStats rs = _huRx ? _huRx->stats() : Canbox::DecoderStats{};
+            const uint32_t n = rs.frames;
 #if FEATURE_DISPLAY_CAN
             const uint8_t live = !_hu ? 4 : _hu->heard(millis()) ? 3 : 2;
 #else
             const uint8_t live = 4;
 #endif
-            // Wired and talking, but in the other profile: nothing it sends is
-            // understood and nothing we send is shown. Set its canbox profile
-            // to Toyota RAV4 (the head unit's car settings).
-            const bool vw = _huDialect && _huDialect->kind() == Canbox::HuDialect::Kind::Vw;
+            // Wired and talking, but in a profile the protocol does not speak:
+            // nothing it sends is understood and nothing we send is shown
+            // (Raise: set the unit's canbox profile to Toyota RAV4).
+            const bool vw = _huRx && _huRx->wrongDialect();
             const uint8_t i = !_cfg->s().uartEnabled ? 0 : !n ? 1 : vw ? 5 : live;
             JsonObject o = chain("hu", i == 0 ? "off" : i == 3 ? "ok" : i == 5 ? "broken" : "idle", W[i]);
             o["rxFrames"] = n;
-            if (_huDialect) {
-                o["dialect"] = Canbox::HuDialect::name(_huDialect->kind());
-                // 0xF3 NACKs: frames of ours the unit says it does not support.
-                o["notSupported"] = _huDialect->notSupported();
+            if (_huRx) {
+                o["dialect"] = _huRx->dialect();
+                // Frames of ours the unit says it does not support (Raise 0xF3).
+                o["notSupported"] = rs.notSupported;
             }
             // The protocol's own counters (Raise: climateChanges, 0x28 frames
             // that changed, each may pop the climate overlay). Read as is.
@@ -2529,8 +2530,8 @@ void WebUi::healthJson(JsonObject d)
                 }
             // Wiring check: nothing at all = wrong pin or no ground; junk and
             // no frames = wired, wrong speed or dialect; bad checksums = noise.
-            o["junk"]   = _huRx ? _huRx->junkBytes() : 0;
-            o["badCs"]  = _huRx ? _huRx->badChecksums() : 0;
+            o["junk"]   = rs.junkBytes;
+            o["badCs"]  = rs.badChecksums;
         }
 
 #if FEATURE_KNOBS

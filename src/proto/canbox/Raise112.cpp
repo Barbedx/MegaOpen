@@ -1,6 +1,7 @@
 #include "Raise112.h"
 #include <new>
 #include <string.h>
+#include "HuDialect.h"
 #include "RaiseFramer.h"
 #include "RaiseTargets.h"
 #include "Rav4Catalog.h"
@@ -120,6 +121,74 @@ namespace Canbox
 #undef T_PUT
         constexpr size_t ROWS = sizeof(kRows) / sizeof(kRows[0]);
 
+        // The head unit's side of Raise: RxParser frames it, HuDialect tells
+        // the profile, and the frames that mean something to the firmware
+        // become HuInbound calls.
+        class RaiseDecoder final : public Decoder {
+        public:
+            void begin(const HuInbound& in) override
+            {
+                _in = in;
+                _rx.onAck(onAck, this);
+                _rx.onFrame(onFrame, this);
+                _rx.onJunk(onJunk, this);
+            }
+            void feed(uint8_t b) override { _rx.feed(b); }
+            bool midFrame() const override { return _rx.midFrame(); }
+            void reset() override { _rx.reset(); }
+            DecoderStats stats() const override
+            {
+                DecoderStats s;
+                s.frames = _rx.frames();
+                s.badChecksums = _rx.badChecksums();
+                s.truncated = _rx.truncated();
+                s.junkBytes = _rx.junkBytes();
+                s.desyncs = _rx.desyncs();
+                s.notSupported = _dialect.notSupported();
+                return s;
+            }
+            const char* dialect() const override { return HuDialect::name(_dialect.kind()); }
+            // This firmware speaks Toyota RAV4 only (HuDialect.h).
+            bool wrongDialect() const override { return _dialect.kind() == HuDialect::Kind::Vw; }
+
+        private:
+            static void onAck(void* c)
+            {
+                const HuInbound& in = static_cast<RaiseDecoder*>(c)->_in;
+                if (in.ackDue) in.ackDue(in.ctx);
+            }
+            static void onFrame(uint8_t cmd, const uint8_t* p, uint8_t len, void* c)
+            {
+                RaiseDecoder& d = *static_cast<RaiseDecoder*>(c);
+                const HuInbound& in = d._in;
+                d._dialect.onFrame(cmd);
+                if (in.frame) in.frame(cmd, p, len, d._rx.lastTotalLen(), in.ctx);
+                // 0x9D = [hours][minutes][00], once a minute, unprompted
+                // (verified against wall time; docs/raise-protocol.md §3 says
+                // there is none). Range-checked: other units may use 0x9D
+                // differently.
+                if (cmd == 0x9D && len >= 2 && p[0] <= 23 && p[1] <= 59 && in.clock)
+                    in.clock(p[0], p[1], in.ctx);
+                // 0x90: the unit names a command it wants (spec len-2 form and
+                // DUDU len-1 form alike).
+                if (cmd == 0x90 && len >= 1 && in.request) in.request(p[0], in.ctx);
+            }
+            static void onJunk(uint8_t b, void* c)
+            {
+                RaiseDecoder& d = *static_cast<RaiseDecoder*>(c);
+                const HuInbound& in = d._in;
+                d._dialect.onJunk(b);
+                // 0xFF outside a frame is the unit's ACK of one of ours: every
+                // frame is answered with it. Counted, not junk.
+                if (b == 0xFF) { if (in.ackIn) in.ackIn(in.ctx); return; }
+                if (in.junk) in.junk(b, in.ctx);
+            }
+
+            RxParser  _rx;
+            HuDialect _dialect;
+            HuInbound _in;
+        };
+
         struct Raise112 final : Protocol {
             const char* id() const override { return "raise112"; }
 
@@ -147,9 +216,24 @@ namespace Canbox
             size_t   emitterSize() const override { return sizeof(Rav4Emitter); }
             Emitter* makeEmitter(void* mem) const override { return new (mem) Rav4Emitter(); }
 
+            size_t   decoderSize() const override { return sizeof(RaiseDecoder); }
+            Decoder* makeDecoder(void* mem) const override { return new (mem) RaiseDecoder(); }
+            int16_t  ackByte() const override { return 0xFF; }
+
             uint8_t frame(uint8_t cmd, const uint8_t* payload, uint8_t len, uint8_t* out) const override
             {
                 return buildFrame(cmd, payload, len, out);
+            }
+            // `2E <cmd> <len> <payload...> <checksum>`.
+            bool unframe(const uint8_t* f, uint8_t len, uint8_t& cmd, const uint8_t*& payload,
+                         uint8_t& plen, uint16_t& total) const override
+            {
+                if (len < 4 || f[0] != SOF) return false;
+                cmd = f[1];
+                payload = f + 3;
+                plen = (uint8_t)(len - 4);
+                total = f[2];
+                return true;
             }
 
             void        initTuning(void* t) const override { new (t) Tuning(); }
@@ -170,6 +254,7 @@ namespace Canbox
             size_t        settingCount() const override { return ROWS; }
             const SEntry& setting(size_t i) const override { return kRows[i < ROWS ? i : 0]; }
         };
+        static_assert(MAX_FRAME <= HU_FRAME_MAX, "a Raise frame must fit HU_FRAME_MAX");
         static_assert(sizeof(Tuning) <= HuConfig::TUNING_MAX, "Tuning must fit HuConfig::TUNING_MAX");
         static_assert(alignof(Tuning) <= 8, "HuConfig::tuning is 8-aligned");
     }

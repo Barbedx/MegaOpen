@@ -1,6 +1,5 @@
 #pragma once
 #include <Arduino.h>
-#include "../proto/canbox/RaiseFramer.h"
 #include "../proto/canbox/Protocol.h"
 #include "../vehicle/VehicleState.h"
 #include "../utils/Staged.h"
@@ -29,7 +28,7 @@ namespace App
         struct Setup {
             HardwareSerial*      port    = nullptr;
             UartTx*              tx      = nullptr;
-            Canbox::RxParser*    rx      = nullptr;
+            Canbox::Decoder*     rx      = nullptr;   // the protocol's, inbound
             // The head-unit protocol and its live emitter (the hu task's own).
             const Canbox::Protocol* proto   = nullptr;
             Canbox::Emitter*        emitter = nullptr;
@@ -43,12 +42,14 @@ namespace App
         // seeded with `cfg`. start() creates the task.
         // `cfg` is the emitter's settings as the web edits them (Canbox::HuConfig;
         // its field map is NVS "huFmap"); the hu task applies each edit.
-        void begin(const Setup& s, const Canbox::HuConfig& cfg);
+        // `inbound`: what the head unit's frames mean, for the caller (its
+        // ackDue is the hu task's own and is replaced).
+        void begin(const Setup& s, const Canbox::HuConfig& cfg, const Canbox::HuInbound& inbound);
         void start();
         // The head unit's ACK (0xFF) of one of our frames; any task.
         void noteAckIn();
 
-        // Any task, zero wait. A frame up to Canbox::MAX_FRAME bytes, written
+        // Any task, zero wait. A frame up to Canbox::HU_FRAME_MAX bytes, written
         // through the vehicle lane in order. False = queue full, counted.
         bool post(Kind k, const uint8_t* frame, uint8_t len);
 

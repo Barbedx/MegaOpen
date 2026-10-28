@@ -11,7 +11,6 @@
 #include "sinks/CanboxUartSink.h"
 #include "sinks/UartTx.h"
 #include "proto/canbox/RaiseFramer.h"
-#include "proto/canbox/HuDialect.h"
 #include "display/PanelBusWatch.h"
 #include "proto/canbox/Protocol.h"
 // Knob codes: the second byte is a detent count, not a press state — no release.
@@ -140,9 +139,8 @@ static Vehicle::State        g_state;
 static Canbox::Emitter*      g_emitter = nullptr;
 static WebUi                 g_web;
 static WifiManager           g_wifi;
-static Canbox::RxParser      g_huRx;
-// Which canbox profile the head unit speaks (proto/canbox/HuDialect.h).
-static Canbox::HuDialect     g_huDialect;
+// The head-unit protocol's decoder (inbound), made at boot like the emitter.
+static Canbox::Decoder*      g_huRx = nullptr;
 
 static uint32_t g_ghosts = 0;
 static uint32_t g_encSteps = 0;
@@ -895,10 +893,12 @@ static String huLastFramesJson(bool inOnly)
 // ring, and nothing more. The log sees it as the hu task's [hu] echo.
 static void uartTap(char dir, const uint8_t* frame, uint8_t len, void*)
 {
-    // A Raise frame is `2E <cmd> <len> <payload...> <checksum>`; store the payload
-    // unwrapped, like the inbound rows from RxParser.
-    if (len >= 4) huRecord(dir, frame[1], frame + 3, (uint8_t)(len - 4), frame[2]);
-    else          huRecord(dir, 0, frame, len, len);
+    // The payload unwrapped (Protocol::unframe), like the inbound rows.
+    uint8_t cmd = 0, plen = 0;
+    const uint8_t* p = nullptr;
+    uint16_t total = 0;
+    if (Canbox::activeProtocol().unframe(frame, len, cmd, p, plen, total)) huRecord(dir, cmd, p, plen, total);
+    else                                                                    huRecord(dir, 0, frame, len, len);
 }
 
 // The UART key sink's write: the keys task, into the FIFO or UartTx's hold.
@@ -1061,7 +1061,7 @@ static void macroFire(const Keys::Macro& m, void*)
             }
             break;
         case Keys::EffectRoute::UartOut: {
-            uint8_t frame[Canbox::MAX_FRAME];
+            uint8_t frame[Canbox::HU_FRAME_MAX];
             const uint8_t len = Canbox::activeProtocol().frame(m.code, m.data, m.dataLen, frame);
             // The hu task's vehicle lane: an arbitrary frame is not a key, and
             // must not go in front of the next ack.
@@ -1183,37 +1183,41 @@ static void affaTraceDrain()
 }
 #endif
 
-// The head unit's clock: undocumented `0x9D` = `[hours][minutes][00]`, once a
-// minute, unprompted (verified against wall time; docs/raise-protocol.md §3 says
-// there is none). Range-checked, since other units may use 0x9D differently.
-// On the hu task: the clock and the media header are App::Ui's, so this only
-// asks (postHuClock), and the ui task posts it and retries until delivered.
-static void onHuClock(const uint8_t* payload, uint8_t len)
+// The head unit's clock (HuInbound::clock; Raise's 0x9D, once a minute,
+// unprompted). On the hu task: the clock and the media header are App::Ui's,
+// so this only asks (postHuClock), and the ui task posts it and retries until
+// delivered.
+static void onHuClock(uint8_t h, uint8_t m, void*)
 {
-    if (len < 2 || payload[0] > 23 || payload[1] > 59) return;
     // Once a minute is the unit's own pace; logging each is cheap.
     static uint16_t s_last = 0xFFFF;
-    const uint16_t hm = (uint16_t)((payload[0] << 8) | payload[1]);
+    const uint16_t hm = (uint16_t)((h << 8) | m);
     if (hm == s_last) return;                        // same minute, nothing to redraw
     s_last = hm;
 #if FEATURE_DISPLAY_CAN
     App::Ui::postHuClock(hm);
 #endif
-    LOGI("hu", "clock from head unit: %02u:%02u",
-                   (unsigned)payload[0], (unsigned)payload[1]);
+    LOGI("hu", "clock from head unit: %02u:%02u", (unsigned)h, (unsigned)m);
 }
 
-// Every head-unit frame, on the hu task, after its ack went out.
-static void onHuFrame(uint8_t cmd, const uint8_t* payload, uint8_t len, void*)
+// The head unit asked for one of our messages (HuInbound::request; Raise's
+// 0x90). The answer goes in the reply lane, ahead of queued telemetry.
+static void onHuRequest(uint8_t cmd, void*)
 {
-    g_huDialect.onFrame(cmd);
-    if (cmd == 0x9D) onHuClock(payload, len);
+    const bool sent = App::Hu::sendByCmd(cmd);
+    LOGI("hu", "head unit asked for %02X -> %s", cmd, sent ? "sent" : "nothing to say");
+}
+
+static void onHuAckIn(void*) { App::Hu::noteAckIn(); }
+
+// Every head-unit frame, on the hu task, after its ack went out.
+static void onHuFrame(uint8_t cmd, const uint8_t* payload, uint8_t len, uint16_t total, void*)
+{
     // Decoded, at DBG ("hu"); the frame itself is in the capture (bus 2).
     // Static: the hu task is the only caller, and its stack is 3 kB.
     static int8_t s_hurTag = -1;
     const bool say = Log::on(LogLevel::DBG, "hu", s_hurTag);
     static char b[LogBus::MAX_LINE];
-    const uint16_t total = g_huRx.lastTotalLen();
     int n = say ? snprintf(b, sizeof(b), "D [hu] R cmd=%02X len=%u", cmd, (unsigned)total) : 0;
     if (say) {
         if (total > len) n += snprintf(b + n, sizeof(b) - n, " (+%u trunc)", (unsigned)(total - len));
@@ -1245,15 +1249,6 @@ static void onHuFrame(uint8_t cmd, const uint8_t* payload, uint8_t len, void*)
     // what is text; `looksLikeText` is only for the log column.
     g_hu.onFrame(cmd, payload, len, millis());
 #endif
-
-    // 0x90: the head unit requests a message by command byte in payload[0]
-    // (spec len-2 form and DUDU len-1 form alike). The answer goes in the
-    // reply lane, ahead of queued telemetry.
-    if (cmd == 0x90 && len >= 1) {
-        const bool sent = App::Hu::sendByCmd(payload[0]);
-        LOGI("hu", "0x90: head unit asked for %02X -> %s", payload[0],
-                       sent ? "sent" : "nothing to say");
-    }
 }
 
 // Bytes outside any frame, batched so they log as lines, not single bytes.
@@ -1266,10 +1261,6 @@ static uint32_t g_junkAtMs = 0;
 // and the ring's echo shows it on Serial and the web.
 static void onHuJunk(uint8_t b, void*)
 {
-    g_huDialect.onJunk(b);
-    // 0xFF outside a frame is the head unit's ACK of one of ours (Raise: every
-    // frame is answered with 0xFF): counted, not junk.
-    if (b == 0xFF) { App::Hu::noteAckIn(); return; }
     g_junk[g_junkLen++] = b;
     g_junkAtMs = millis();
     if (g_junkLen >= sizeof(g_junk)) {
@@ -1986,21 +1977,30 @@ void setup()
         g_cfg.loadFieldMap(ec.fields);
         if (ec.fields.count())
             LOGI("hu", "field map: %u rule(s) from NVS", (unsigned)ec.fields.count());
+        // Emitter and decoder, once, in internal RAM: the hu task's 2 ms pass.
         void* mem = heap_caps_aligned_alloc(8, proto.emitterSize(), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-        if (!mem) {
-            LOGE("hu", "no memory for the %s emitter: the head unit gets no car data", proto.id());
-        } else {
-            g_emitter = proto.makeEmitter(mem);
-        }
+        if (mem) g_emitter = proto.makeEmitter(mem);
+        else     LOGE("hu", "no memory for the %s emitter: the head unit gets no car data", proto.id());
+        void* dmem = heap_caps_aligned_alloc(8, proto.decoderSize(), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (dmem) g_huRx = proto.makeDecoder(dmem);
+        else      LOGE("hu", "no memory for the %s decoder: the head unit is not heard", proto.id());
         App::Hu::Setup hs;
         hs.port    = &Serial1;
         hs.tx      = &g_tx;
-        hs.rx      = &g_huRx;
+        hs.rx      = g_huRx;
         hs.proto   = &proto;
         hs.emitter = g_emitter;
         hs.state   = &g_state;
         hs.wake    = huWake;
-        App::Hu::begin(hs, ec);
+        // What the head unit's frames mean (the protocol decides which);
+        // the ack is the hu task's own, written the moment a frame ends.
+        Canbox::HuInbound in;
+        in.frame   = onHuFrame;
+        in.junk    = onHuJunk;
+        in.ackIn   = onHuAckIn;
+        in.clock   = onHuClock;
+        in.request = onHuRequest;
+        App::Hu::begin(hs, ec, in);
     }
 
     g_engine.begin(&g_scanner, &g_map);
@@ -2086,11 +2086,6 @@ void setup()
              (unsigned)kc.feetCount, (unsigned)kc.maxMilliamps);
     }
 #endif
-
-    // The ack is the hu task's own (App::Hu::begin): written the moment a
-    // frame ends, before these run.
-    g_huRx.onFrame(onHuFrame, nullptr);
-    g_huRx.onJunk(onHuJunk, nullptr);
 
 #if FEATURE_DISPLAY_CAN || FEATURE_BLE
     // The head unit as a media source, always registered; `mediaSource` selects.
@@ -2446,7 +2441,6 @@ void setup()
 #if FEATURE_BLE
     g_web.attachPhone([]() { return Bluetooth::IsConnected(); }, &g_media);
     g_web.attachHuMedia(&g_hu);
-    g_web.attachHuDialect(&g_huDialect);
     g_web.attachBle([]() { return Bluetooth::GetStatusJson(); },
                     []() { Bluetooth::ClearBonds(); });
     // Null for a sink not in the chain, so /api/health (keys.dest) can report it as not live.
@@ -2462,7 +2456,6 @@ void setup()
     g_web.attachPhone([]() { return false; }, &g_media);
     // The head-unit source is attached in both branches.
     g_web.attachHuMedia(&g_hu);
-    g_web.attachHuDialect(&g_huDialect);
 #endif
 #endif
 #if FEATURE_VEHICLE_CAN

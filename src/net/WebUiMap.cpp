@@ -478,9 +478,9 @@ void WebUi::routesMap()
             default: return r->reply(503, "text/plain", "busy");
         }
 
-        char hex[3 * Canbox::MAX_FRAME + 1];
+        char hex[3 * Canbox::HU_FRAME_MAX + 1];
         hex[0] = '\0';
-        uint8_t frame[Canbox::MAX_FRAME], len = 0;
+        uint8_t frame[Canbox::HU_FRAME_MAX], len = 0;
         if (App::Hu::preview(t.msg, frame, len))
             for (unsigned i = 0, o = 0; i < len; ++i) o += (unsigned)snprintf(hex + o, sizeof(hex) - o, i ? " %02X" : "%02X", frame[i]);
         char vs[16];

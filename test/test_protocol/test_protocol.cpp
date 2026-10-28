@@ -5,6 +5,7 @@
 #include "proto/canbox/Protocol.h"
 #include "proto/canbox/FieldView.h"
 #include "proto/canbox/Rav4Emitter.h"
+#include "proto/canbox/RaiseFramer.h"
 #include "cfg/SettingsRegistry.h"
 #include "vehicle/VehicleState.h"
 
@@ -50,6 +51,19 @@ namespace
         uint32_t framesSent() const override { return sent; }
     };
 
+    // One byte per frame, no ack: the byte is the command.
+    struct StubDecoder final : Decoder {
+        HuInbound in;
+        uint32_t n = 0;
+        void begin(const HuInbound& i) override { in = i; }
+        void feed(uint8_t b) override { ++n; if (in.frame) in.frame(b, nullptr, 0, 0, in.ctx); }
+        bool midFrame() const override { return false; }
+        void reset() override {}
+        DecoderStats stats() const override { DecoderStats s; s.frames = n; return s; }
+        const char* dialect() const override { return "stub"; }
+        bool wrongDialect() const override { return false; }
+    };
+
     struct Stub final : Protocol {
         const char* id() const override { return "stub"; }
         uint8_t fieldCount() const override { return 2; }
@@ -78,6 +92,15 @@ namespace
         MessageView message(uint8_t) const override { return {"speed", 0x55, 100, "low", ""}; }
         size_t   emitterSize() const override { return sizeof(StubEmitter); }
         Emitter* makeEmitter(void* mem) const override { return new (mem) StubEmitter(); }
+        size_t   decoderSize() const override { return sizeof(StubDecoder); }
+        Decoder* makeDecoder(void* mem) const override { return new (mem) StubDecoder(); }
+        int16_t  ackByte() const override { return -1; }
+        bool unframe(const uint8_t* f, uint8_t len, uint8_t& cmd, const uint8_t*& p, uint8_t& pl, uint16_t& t) const override
+        {
+            if (len != 1) return false;
+            cmd = f[0]; p = f + 1; pl = 0; t = 0;
+            return true;
+        }
         uint8_t frame(uint8_t cmd, const uint8_t*, uint8_t len, uint8_t* out) const override
         {
             if (len) return 0;
@@ -252,6 +275,96 @@ void test_raise_112_through_the_interface_sends_the_same_bytes()
     TEST_ASSERT_NULL(p.messageBlocked(Rav4Emitter::MSG_SPEED, c));
 }
 
+// What the head unit says, through Raise 112's decoder: the ack owed at the
+// end of every frame, the clock, a request, the unit's own ack of ours, its
+// NACK, and a unit set to the VW profile.
+namespace
+{
+    struct Heard {
+        int acksDue = 0, frames = 0, junk = 0, acksIn = 0, h = -1, m = -1, req = -1;
+        uint16_t total = 0;
+    };
+    Heard g_h;
+    HuInbound heard()
+    {
+        HuInbound in;
+        in.ackDue  = [](void*) { ++g_h.acksDue; };
+        in.frame   = [](uint8_t, const uint8_t*, uint8_t, uint16_t t, void*) { ++g_h.frames; g_h.total = t; };
+        in.junk    = [](uint8_t, void*) { ++g_h.junk; };
+        in.ackIn   = [](void*) { ++g_h.acksIn; };
+        in.clock   = [](uint8_t h, uint8_t m, void*) { g_h.h = h; g_h.m = m; };
+        in.request = [](uint8_t c, void*) { g_h.req = c; };
+        return in;
+    }
+    void say(Decoder& d, uint8_t cmd, std::initializer_list<uint8_t> p)
+    {
+        uint8_t pl[16], f[24], n = 0;
+        for (uint8_t b : p) pl[n++] = b;
+        const uint8_t len = buildFrame(cmd, pl, n, f);
+        for (uint8_t i = 0; i < len; ++i) d.feed(f[i]);
+    }
+    struct MadeDecoder {
+        alignas(8) uint8_t mem[1024];
+        Decoder* d;
+        explicit MadeDecoder(const Protocol& p) { TEST_ASSERT_TRUE(p.decoderSize() <= sizeof(mem)); d = p.makeDecoder(mem); }
+        ~MadeDecoder() { d->~Decoder(); }
+    };
+}
+
+void test_raise_112_hears_the_head_unit_through_the_interface()
+{
+    const Protocol& p = activeProtocol();
+    TEST_ASSERT_EQUAL_INT16(0xFF, p.ackByte());
+    MadeDecoder md(p);
+    Decoder& d = *md.d;
+    g_h = Heard{};
+    d.begin(heard());
+    say(d, 0x9D, {12, 34, 0});                        // the clock
+    TEST_ASSERT_EQUAL_INT(12, g_h.h);
+    TEST_ASSERT_EQUAL_INT(34, g_h.m);
+    TEST_ASSERT_EQUAL_INT(1, g_h.acksDue);
+    TEST_ASSERT_EQUAL_UINT16(3, g_h.total);
+    say(d, 0x9D, {25, 0, 0});                         // out of range: no clock
+    TEST_ASSERT_EQUAL_INT(12, g_h.h);
+    say(d, 0x90, {0x24});                             // a request, DUDU's len-1 form
+    TEST_ASSERT_EQUAL_INT(0x24, g_h.req);
+    TEST_ASSERT_EQUAL_INT(3, g_h.frames);
+    TEST_ASSERT_EQUAL_INT(3, g_h.acksDue);
+    d.feed(0xFF);                                     // its ack of ours: not junk
+    d.feed(0xF3);                                     // its NACK: junk, and counted
+    TEST_ASSERT_EQUAL_INT(1, g_h.acksIn);
+    TEST_ASSERT_EQUAL_INT(1, g_h.junk);
+    DecoderStats st = d.stats();
+    TEST_ASSERT_EQUAL_UINT32(3, st.frames);
+    TEST_ASSERT_EQUAL_UINT32(1, st.notSupported);
+    TEST_ASSERT_EQUAL_STRING("toyota", d.dialect());
+    TEST_ASSERT_FALSE(d.wrongDialect());
+    // Mid-frame, then abandoned: a desync, and the lanes may open again.
+    d.feed(SOF);
+    d.feed(0x9D);
+    TEST_ASSERT_TRUE(d.midFrame());
+    d.reset();
+    TEST_ASSERT_FALSE(d.midFrame());
+    TEST_ASSERT_EQUAL_UINT32(1, d.stats().desyncs);
+    // A unit on the VW profile: wired right, set wrong.
+    MadeDecoder vw(p);
+    vw.d->begin(heard());
+    for (int i = 0; i < 3; ++i) say(*vw.d, 0xC1, {1});
+    TEST_ASSERT_EQUAL_STRING("vw", vw.d->dialect());
+    TEST_ASSERT_TRUE(vw.d->wrongDialect());
+    // A frame of ours, unwrapped for the ring.
+    uint8_t f[16], cmd = 0, plen = 0;
+    const uint8_t pl[] = {0x07, 0x01};
+    const uint8_t n = p.frame(0x20, pl, 2, f);
+    const uint8_t* pp = nullptr;
+    uint16_t total = 0;
+    TEST_ASSERT_TRUE(p.unframe(f, n, cmd, pp, plen, total));
+    TEST_ASSERT_EQUAL_HEX8(0x20, cmd);
+    TEST_ASSERT_EQUAL_UINT8(2, plen);
+    TEST_ASSERT_EQUAL_HEX8(0x07, pp[0]);
+    TEST_ASSERT_FALSE(p.unframe(pl, 2, cmd, pp, plen, total));
+}
+
 // The registry carries the protocol's rows after its own, its group first.
 void test_the_registry_takes_the_protocol_settings()
 {
@@ -286,6 +399,7 @@ int main(int, char**)
     RUN_TEST(test_a_second_protocol_sends_through_the_interface);
     RUN_TEST(test_the_active_protocol_is_raise_112);
     RUN_TEST(test_raise_112_through_the_interface_sends_the_same_bytes);
+    RUN_TEST(test_raise_112_hears_the_head_unit_through_the_interface);
     RUN_TEST(test_the_registry_takes_the_protocol_settings);
     return UNITY_END();
 }

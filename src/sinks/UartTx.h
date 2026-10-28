@@ -35,9 +35,10 @@ public:
     void pumpKeys();
     bool keysHeld() const { return _kqN != 0; }
 
-    // Bare 0xFF. The head unit allows 10 ms. The hu task only. *inflightOut
-    // gets the bytes that were already in the FIFO in front of it.
-    bool writeAck(uint16_t* inflightOut = nullptr);
+    // One bare byte, the protocol's ack (Raise 0xFF). The head unit allows
+    // 10 ms. The hu task only. *inflightOut gets the bytes that were already
+    // in the FIFO in front of it.
+    bool writeAck(uint8_t ack, uint16_t* inflightOut = nullptr);
 
     // A reply (0x90) or a vehicle/raw frame, through the lane gate. The hu
     // task only: it knows whether the head unit is mid-frame and when it last

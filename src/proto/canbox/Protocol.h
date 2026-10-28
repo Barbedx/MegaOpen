@@ -18,6 +18,9 @@ namespace Cfg { struct SEntry; }
 namespace Canbox
 {
     constexpr uint8_t NO_MSG = 0xFF;
+    // The longest frame any protocol here builds: the hu task's queues and
+    // every caller's buffer are this big.
+    constexpr uint8_t HU_FRAME_MAX = 40;
 
     // One field with everything resolved. min, max and the values sent are
     // the signal's integers; `dec` places the decimal point (speed 4700,
@@ -103,6 +106,54 @@ namespace Canbox
         virtual EmitterStat stat(uint8_t) const { return {"", 0}; }
     };
 
+    // What the head unit says, as the protocol's decoder hears it. Set once,
+    // before the hu task runs; every call is on the hu task, from feed().
+    // Any callback may be null.
+    struct HuInbound {
+        void* ctx = nullptr;
+        // A frame just ended and an ack is owed: now, before it is even
+        // checked (Raise allows 10 ms; a 12-byte frame takes 4).
+        void (*ackDue)(void* ctx) = nullptr;
+        // Every good frame: its command, the payload as kept (cut at the
+        // decoder's buffer) and the length it declared.
+        void (*frame)(uint8_t cmd, const uint8_t* p, uint8_t len, uint16_t total, void* ctx) = nullptr;
+        // A byte outside any frame that means nothing to the protocol.
+        void (*junk)(uint8_t b, void* ctx) = nullptr;
+        // The head unit acknowledged a frame of ours.
+        void (*ackIn)(void* ctx) = nullptr;
+        // The head unit's clock, range-checked.
+        void (*clock)(uint8_t h, uint8_t m, void* ctx) = nullptr;
+        // The head unit asked for one of our messages by its wire command.
+        void (*request)(uint8_t cmd, void* ctx) = nullptr;
+    };
+
+    // The decoder's counters. Any task (plain reads).
+    struct DecoderStats {
+        uint32_t frames = 0, badChecksums = 0, truncated = 0, junkBytes = 0, desyncs = 0;
+        // Frames of ours the unit says it does not support (Raise: 0xF3).
+        uint32_t notSupported = 0;
+    };
+
+    // The protocol's receiver: bytes from the head unit in, HuInbound out.
+    // The hu task's own.
+    class Decoder {
+    public:
+        virtual ~Decoder() = default;
+        virtual void begin(const HuInbound& in) = 0;
+        virtual void feed(uint8_t b) = 0;
+        // Inside a frame: its ack will be owed when it ends, so the lanes
+        // hold off (sinks/UartLanes.h).
+        virtual bool midFrame() const = 0;
+        // Abandon a frame in progress (the line went quiet mid-frame).
+        virtual void reset() = 0;
+        virtual DecoderStats stats() const = 0;
+        // What the unit's own frames say about the profile it is set to:
+        // a word for /api/health ("toyota", "vw", "unknown"), and whether it
+        // is one this protocol does not speak (wired right, set wrong).
+        virtual const char* dialect() const = 0;
+        virtual bool        wrongDialect() const = 0;
+    };
+
     class Protocol {
     public:
         virtual ~Protocol() = default;
@@ -128,10 +179,20 @@ namespace Canbox
         virtual size_t   emitterSize() const = 0;
         virtual Emitter* makeEmitter(void* mem) const = 0;
 
+        // ---- the decoder (inbound), made like the emitter ----------------------
+        virtual size_t   decoderSize() const = 0;
+        virtual Decoder* makeDecoder(void* mem) const = 0;
+        // The byte that acknowledges a frame of the head unit's; -1: none is sent.
+        virtual int16_t  ackByte() const = 0;
+
         // ---- framing -----------------------------------------------------------
         // One frame of the wire format around `cmd` and `payload` (the raw
         // console, macros): its length, 0 when it does not fit.
         virtual uint8_t frame(uint8_t cmd, const uint8_t* payload, uint8_t len, uint8_t* out) const = 0;
+        // The other way, for the frame ring: a whole frame of ours into its
+        // command and payload. False: not a frame (shown raw).
+        virtual bool unframe(const uint8_t* f, uint8_t len, uint8_t& cmd, const uint8_t*& payload,
+                             uint8_t& plen, uint16_t& total) const = 0;
 
         // ---- its settings (HuConfig::tuning) ----------------------------------
         // The defaults, into HuConfig::TUNING_MAX bytes at `t`.

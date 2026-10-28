@@ -121,10 +121,9 @@ void UartTx::pumpKeys()
     retireHeld(k);
 }
 
-bool UartTx::writeAck(uint16_t* inflightOut)
+bool UartTx::writeAck(uint8_t ack, uint16_t* inflightOut)
 {
     if (!_port || !_lock) return false;
-    static const uint8_t ack = 0xFF;
     if (xSemaphoreTake(_lock, LOCK_WAIT) != pdTRUE) {
         _ackDropped.fetch_add(1, std::memory_order_relaxed);
         return false;

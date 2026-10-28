@@ -27,7 +27,6 @@ static inline int replyPage(PsychicRequest* r, const uint8_t* gz, size_t len,
     return res.send();
 }
 #include "Catalog.h"
-#include "../proto/canbox/HuDialect.h"
 #include "../display/PanelBusWatch.h"
 
 // A JSON body streamed in chunks from one static buffer rather than built as
@@ -164,9 +163,9 @@ public:
     // console sends 0x20 key frames and reports what the head unit sent back.
     // `emitter`: the head-unit protocol's live one, null when none was made.
     void attachVehicle(Vehicle::State& state, const Canbox::Emitter* emitter, UartTx& tx,
-                       Sinks::CanboxUartSink& keySink, Canbox::RxParser& huRx) {
+                       Sinks::CanboxUartSink& keySink, const Canbox::Decoder* huRx) {
         _state = &state; _emitter = emitter; _tx = &tx;
-        _keySink = &keySink; _huRx = &huRx;
+        _keySink = &keySink; _huRx = huRx;
     }
 
 #if FEATURE_DISPLAY_CAN
@@ -230,7 +229,6 @@ public:
     // The head unit as a media source, changeable live, without a reboot.
     void attachHuMedia(HuMediaSource* hu) { _hu = hu; }
     // Which canbox profile the head unit speaks (health `hu`); hu task writes.
-    void attachHuDialect(const Canbox::HuDialect* d) { _huDialect = d; }
     // Who else is on the panel bus (health `panel`).
     void attachPanelWatch(const MegaOpen::PanelBusWatch* w) { _panelWatch = w; }
 
@@ -478,7 +476,6 @@ private:
     const Canbox::Emitter* _emitter = nullptr;
     UartTx*                _tx = nullptr;
     Sinks::CanboxUartSink* _keySink = nullptr;
-    Canbox::RxParser*      _huRx = nullptr;
-    const Canbox::HuDialect* _huDialect = nullptr;
+    const Canbox::Decoder* _huRx = nullptr;   // the protocol's, inbound
     const MegaOpen::PanelBusWatch* _panelWatch = nullptr;
 };

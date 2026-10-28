@@ -35,7 +35,7 @@ namespace App
             constexpr uint32_t PENDING_MAX_MS  = 500;
             // Silence inside a frame longer than this abandons it: the head
             // unit reset mid-frame or the length byte was corrupt
-            // (RxParser::reset). A unit writes a frame in one go, and at
+            // (Decoder::reset). A unit writes a frame in one go, and at
             // 38400 the core hands bytes over one at a time (RX FIFO-full
             // threshold 1 below 57600 baud), so 10 ms is ~38 byte times of
             // real silence; the frame's ack window is gone by then anyway.
@@ -46,7 +46,7 @@ namespace App
             struct OutFrame {
                 uint8_t kind = 0;
                 uint8_t len  = 0;
-                uint8_t b[Canbox::MAX_FRAME];
+                uint8_t b[Canbox::HU_FRAME_MAX];
             };
 
             Setup              s_s;
@@ -88,6 +88,7 @@ namespace App
             uint32_t s_lmax = 0;
             uint32_t s_replyRetries = 0, s_replyLost = 0;
             uint32_t s_rxBytes = 0;
+            int16_t  s_ack = -1;          // the protocol's ack byte, -1 none
             uint32_t s_pendingStale = 0;
 
             void applyCfg(const Canbox::HuConfig& c) { if (s_s.emitter) s_s.emitter->configure(c); }
@@ -99,7 +100,7 @@ namespace App
                 if (s_replyMode) {
                     // Full: this answer is the one lost; the head unit asks
                     // again on its next poll.
-                    if (s_replyCount >= REPLY_DEPTH || len > Canbox::MAX_FRAME) { ++s_replyLost; return; }
+                    if (s_replyCount >= REPLY_DEPTH || len > Canbox::HU_FRAME_MAX) { ++s_replyLost; return; }
                     OutFrame& r = s_reply[(uint8_t)((s_replyHead + s_replyCount) % REPLY_DEPTH)];
                     r.kind = (uint8_t)Kind::Vehicle;
                     r.len  = len;
@@ -111,13 +112,13 @@ namespace App
             }
 
             // The ack the moment a frame ends, before it is even checked or
-            // parsed (RxParser::onAck). Late = how long since this read began
+            // parsed (HuInbound::ackDue). Late = how long since this read began
             // plus the bytes it found in the FIFO: the part the 2 ms poll adds
             // before the read is not visible from here.
             void ackNow(void*)
             {
                 uint16_t inflight = 0;
-                if (!s_s.tx->writeAck(&inflight)) return;
+                if (s_ack < 0 || !s_s.tx->writeAck((uint8_t)s_ack, &inflight)) return;
                 const uint32_t late = (micros() - s_readAtUs) + Sinks::UartLanes::wireUs(inflight);
                 if (late > s_ackLateMaxUs) s_ackLateMaxUs = late;
             }
@@ -140,7 +141,7 @@ namespace App
                     if (!got) break;
                     s_lastRxMs = now;
                     s_rxBytes += got;
-                    for (size_t i = 0; i < got; ++i) s_s.rx->feed(buf[i]);
+                    if (s_s.rx) for (size_t i = 0; i < got; ++i) s_s.rx->feed(buf[i]);
                     budget -= got;
                 }
             }
@@ -168,7 +169,7 @@ namespace App
             // and the frame just written fills it for a few milliseconds.
             void writeOut(uint32_t now)
             {
-                const bool     mid   = s_s.rx->midFrame();
+                const bool     mid   = s_s.rx && s_s.rx->midFrame();
                 const uint32_t quiet = now - s_lastRxMs;
                 using Lane = Sinks::UartLanes::Lane;
 
@@ -216,7 +217,7 @@ namespace App
                                (unsigned)s_outDrops[0].load(), (unsigned)s_outDrops[1].load(),
                                (unsigned)s_replyRetries, (unsigned)s_replyLost,
                                (unsigned)s_pendingStale, (unsigned)s_sendNowDrops.load(),
-                               (unsigned)s_lmax, (unsigned)s_rxBytes, (unsigned)s_s.rx->desyncs());
+                               (unsigned)s_lmax, (unsigned)s_rxBytes, (unsigned)(s_s.rx ? s_s.rx->stats().desyncs : 0));
                 s_ackLateMaxUs = 0;
                 s_lmax = 0;
             }
@@ -241,7 +242,7 @@ namespace App
                     rxDrain(now);
                     // A frame that stopped half way would otherwise swallow
                     // the next ones and keep the lanes shut.
-                    if (s_s.rx->midFrame() && (uint32_t)(now - s_lastRxMs) > RX_GAP_MS)
+                    if (s_s.rx && s_s.rx->midFrame() && (uint32_t)(now - s_lastRxMs) > RX_GAP_MS)
                         s_s.rx->reset();
                     if (s_cfg.applyIfDirty()) applyCfg(s_cfg.live());
                     serveRequests();
@@ -268,7 +269,7 @@ namespace App
             }
         }
 
-        void begin(const Setup& s, const Canbox::HuConfig& cfg)
+        void begin(const Setup& s, const Canbox::HuConfig& cfg, const Canbox::HuInbound& inbound)
         {
             s_s = s;
             for (auto& d : s_outDrops) d.store(0);
@@ -279,7 +280,11 @@ namespace App
             s_cfg.init(cfg);
             applyCfg(cfg);
             if (s_s.emitter) s_s.emitter->begin(emitWrite, nullptr);
-            s_s.rx->onAck(ackNow, nullptr);
+            // The decoder's events: the ack is ours, the rest the caller's.
+            s_ack = s_s.proto ? s_s.proto->ackByte() : -1;
+            Canbox::HuInbound in = inbound;
+            in.ackDue = ackNow;
+            if (s_s.rx) s_s.rx->begin(in);
             // Nothing here reads with a timeout; this makes any Stream helper
             // that would (readBytes, parseInt) return at once instead of
             // holding the HAL mutex the key writes share (§3.3).
@@ -304,7 +309,7 @@ namespace App
         bool post(Kind k, const uint8_t* frame, uint8_t len)
         {
             const uint8_t ki = (uint8_t)k < (uint8_t)Kind::COUNT ? (uint8_t)k : 0;
-            if (!s_out || !frame || !len || len > Canbox::MAX_FRAME) {
+            if (!s_out || !frame || !len || len > Canbox::HU_FRAME_MAX) {
                 s_outDrops[ki].fetch_add(1, std::memory_order_relaxed);
                 return false;
             }
