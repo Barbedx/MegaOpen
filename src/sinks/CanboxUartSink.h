@@ -1,9 +1,11 @@
 #pragma once
 #include "../keys/IKeySink.h"
-#include "../proto/canbox/RaiseFramer.h"
+#include "../proto/canbox/Protocol.h"
 
-// Key events -> Raise canbox 0x20 frames on the head-unit UART
-// (ARCHITECTURE.md §6.1). Portable (write callback + tick()) for native tests.
+// Key events -> the head-unit protocol's key frames on the UART (Raise: 0x20;
+// ARCHITECTURE.md §6.1). What a key is on the wire (its code, knob or button,
+// mute as a long press) is the protocol's; the timing here is every
+// protocol's. Portable (write callback + tick()) for native tests.
 //
 // A detent has no release of its own, so a non-knob wheel step is a press now
 // and a scheduled (not delayed) release: _pulseMs after the detent happened,
@@ -37,6 +39,8 @@ namespace Sinks
         void setClasses(uint8_t m) { _mask = m; }
         uint8_t classes() const { return _mask; }
         void setPulseMs(uint16_t ms) { _pulseMs = ms; }
+        // The protocol whose key frames go out; unset = activeProtocol().
+        void setProtocol(const Canbox::Protocol& p) { _proto = &p; }
 
         void onKey(const Keys::Event& e) override;
         const char* id() const override { return "uart"; }
@@ -88,6 +92,11 @@ namespace Sinks
         // Sends a non-release frame, remembering when a press of `code` left.
         bool sendPress(uint8_t code, uint8_t state, uint32_t nowMs);
 
+        const Canbox::Protocol& proto() const { return _proto ? *_proto : Canbox::activeProtocol(); }
+        // Mute sent as its code held (Protocol::muteIsLong), not as a code of its own.
+        bool longMute(const Keys::Event& e) const;
+
+        const Canbox::Protocol* _proto = nullptr;
         WriteFn   _write = nullptr;
         WriteOkFn _writeOk = nullptr;
         void*     _ctx = nullptr;

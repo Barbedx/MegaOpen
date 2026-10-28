@@ -7,6 +7,7 @@
 #include "proto/canbox/Rav4Emitter.h"
 #include "proto/canbox/RaiseFramer.h"
 #include "cfg/SettingsRegistry.h"
+#include "sinks/CanboxUartSink.h"
 #include "vehicle/VehicleState.h"
 
 void setUp() {}
@@ -92,6 +93,22 @@ namespace
         MessageView message(uint8_t) const override { return {"speed", 0x55, 100, "low", ""}; }
         size_t   emitterSize() const override { return sizeof(StubEmitter); }
         Emitter* makeEmitter(void* mem) const override { return new (mem) StubEmitter(); }
+        // A key is [0xE0 | state][code]; mute is a code of its own (0x11).
+        uint8_t keyFrame(uint8_t code, uint8_t state, uint8_t* out) const override
+        {
+            out[0] = (uint8_t)(0xE0 | state);
+            out[1] = code;
+            return 2;
+        }
+        uint8_t keyCodeFor(Keys::Action a) const override
+        {
+            return a == Keys::Action::VolUp ? 0x10 : a == Keys::Action::Mute ? 0x11 : 0;
+        }
+        bool    isKnobCode(uint8_t) const override { return false; }
+        bool    muteIsLong() const override { return false; }
+        uint8_t keyCodeCount() const override { return 2; }
+        KeyCodeView keyCode(uint8_t i) const override { return i ? KeyCodeView{0x11, "mute", "low", ""} : KeyCodeView{0x10, "vol+", "low", ""}; }
+
         size_t   decoderSize() const override { return sizeof(StubDecoder); }
         Decoder* makeDecoder(void* mem) const override { return new (mem) StubDecoder(); }
         int16_t  ackByte() const override { return -1; }
@@ -198,6 +215,36 @@ void test_a_second_protocol_sends_through_the_interface()
     TEST_ASSERT_EQUAL_UINT8(10, d.tuningAs<StubTuning>().speedDiv);
 }
 
+// The key sink's timing is every protocol's; what goes on the wire is the
+// protocol's: its frame, its codes, and mute as a code of its own here.
+namespace
+{
+    uint8_t g_keys[8][4];
+    uint8_t g_nKeys = 0;
+    void keyOut(const uint8_t* f, uint8_t n, void*) { if (g_nKeys < 8 && n <= 4) memcpy(g_keys[g_nKeys++], f, n); }
+}
+
+void test_a_second_protocol_takes_the_keys()
+{
+    const Stub p;
+    TEST_ASSERT_EQUAL_STRING("mute", p.keyCodeName(0x11));
+    TEST_ASSERT_EQUAL_STRING("?", p.keyCodeName(0x55));
+    Sinks::CanboxUartSink k;
+    k.setProtocol(p);
+    k.begin(keyOut, nullptr);
+    g_nKeys = 0;
+    Keys::Event e{};
+    e.action = Keys::Action::Mute;
+    e.state = Keys::State::Press;
+    k.onKey(e);
+    TEST_ASSERT_EQUAL_UINT8(1, g_nKeys);
+    TEST_ASSERT_EQUAL_HEX8(0xE0 | KEY_PRESS, g_keys[0][0]);   // a plain press: no long mute here
+    TEST_ASSERT_EQUAL_HEX8(0x11, g_keys[0][1]);
+    TEST_ASSERT_TRUE(k.sendKey(0x10, KEY_RELEASE));
+    TEST_ASSERT_EQUAL_HEX8(0xE0, g_keys[1][0]);
+    TEST_ASSERT_EQUAL_HEX8(0x10, g_keys[1][1]);
+}
+
 void test_the_active_protocol_is_raise_112()
 {
     const Protocol& p = activeProtocol();
@@ -218,6 +265,14 @@ void test_the_active_protocol_is_raise_112()
     TEST_ASSERT_EQUAL_UINT8(Rav4Emitter::MSG_COUNT, p.messageCount());
     TEST_ASSERT_EQUAL_STRING("speed 0x7D03", p.message(Rav4Emitter::MSG_SPEED).name);
     TEST_ASSERT_EQUAL_UINT8(0x7D, p.message(Rav4Emitter::MSG_SPEED).cmd);
+    // Keys: SOURCE held is mute, the wheel is a rotary code.
+    TEST_ASSERT_TRUE(p.muteIsLong());
+    TEST_ASSERT_EQUAL_HEX8(0x07, p.keyCodeFor(Keys::Action::Mute));
+    TEST_ASSERT_TRUE(p.isKnobCode(p.keyCodeFor(Keys::Action::EncCw)));
+    uint8_t kf[8];
+    TEST_ASSERT_EQUAL_UINT8(6, p.keyFrame(0x01, KEY_PRESS, kf));
+    const uint8_t volUp[] = {0x2E, 0x20, 0x02, 0x01, 0x01};
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(volUp, kf, sizeof(volUp));
 }
 
 // The interface changes no byte: the emitter made through Raise 112 and
@@ -397,6 +452,7 @@ int main(int, char**)
     UNITY_BEGIN();
     RUN_TEST(test_a_second_protocol_runs_the_map_unchanged);
     RUN_TEST(test_a_second_protocol_sends_through_the_interface);
+    RUN_TEST(test_a_second_protocol_takes_the_keys);
     RUN_TEST(test_the_active_protocol_is_raise_112);
     RUN_TEST(test_raise_112_through_the_interface_sends_the_same_bytes);
     RUN_TEST(test_raise_112_hears_the_head_unit_through_the_interface);

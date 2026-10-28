@@ -136,7 +136,7 @@ private:
 #endif
 #include "../vehicle/VehicleState.h"
 #include "../proto/canbox/Protocol.h"
-#include "../proto/canbox/RaiseFramer.h"
+#include "../proto/canbox/Protocol.h"
 #if FEATURE_VEHICLE_CAN
 #include "../vehicle/CanSniffer.h"
 #endif

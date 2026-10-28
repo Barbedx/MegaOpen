@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include "../../keys/KeyAction.h"
+#include "Protocol.h"   // KEY_RELEASE / KEY_PRESS / KEY_LONG, the state byte as is
 
 // Toyota RAV4 2018-2020 key codes for the Raise canbox message set.
 //
@@ -40,7 +41,6 @@ namespace Canbox
         RAV4_MODE     = 0x88,
     };
 
-    enum : uint8_t { KEY_RELEASE = 0, KEY_PRESS = 1, KEY_LONG = 2 };
 
     inline constexpr bool isKnobCode(uint8_t code) {
         return code >= RAV4_KNOB_VOL_UP && code <= RAV4_KNOB_TUNE_DOWN;

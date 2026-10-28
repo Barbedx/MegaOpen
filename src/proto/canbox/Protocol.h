@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "FieldMap.h"
 #include "FieldView.h"
+#include "../../keys/KeyAction.h"
 
 namespace Cfg { struct SEntry; }
 
@@ -38,6 +39,18 @@ namespace Canbox
         bool        fw;       // false: a car value the protocol has no field for
         uint8_t     sig;
         uint8_t     msg;      // the protocol's message that carries it, NO_MSG none
+    };
+
+    // A key frame's state byte, the interface's words (a protocol maps them
+    // onto its own wire): a knob code carries a detent count instead.
+    enum : uint8_t { KEY_RELEASE = 0, KEY_PRESS = 1, KEY_LONG = 2 };
+
+    // One key code the protocol knows, for the page's key list.
+    struct KeyCodeView {
+        uint8_t     code;
+        const char* name;
+        const char* conf;     // how sure: "confirmed" .. "conflict"
+        const char* note;     // "" when there is nothing worth saying
     };
 
     // One message the emitter sends on its schedule.
@@ -178,6 +191,22 @@ namespace Canbox
         // caller destroys it through the virtual destructor.
         virtual size_t   emitterSize() const = 0;
         virtual Emitter* makeEmitter(void* mem) const = 0;
+
+        // ---- keys: what a key event is on this head unit ---------------------
+        // One key frame: `code` with KEY_* (a knob code: a detent count). Its
+        // length, 0 when it does not fit.
+        virtual uint8_t keyFrame(uint8_t code, uint8_t state, uint8_t* out) const = 0;
+        // The code an action sends when its keymap row names none; 0: none.
+        virtual uint8_t keyCodeFor(Keys::Action a) const = 0;
+        // A rotary code: one frame with a detent count, no release.
+        virtual bool    isKnobCode(uint8_t code) const = 0;
+        // Mute has no code of its own: it is a long press of
+        // keyCodeFor(Mute) (RAV4: SOURCE held).
+        virtual bool    muteIsLong() const = 0;
+        virtual uint8_t     keyCodeCount() const = 0;
+        virtual KeyCodeView keyCode(uint8_t i) const = 0;
+        // "?" when the code is not in the list.
+        const char* keyCodeName(uint8_t code) const;
 
         // ---- the decoder (inbound), made like the emitter ----------------------
         virtual size_t   decoderSize() const = 0;

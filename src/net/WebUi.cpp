@@ -3,8 +3,7 @@
 #include "RescuePage.h"
 #include "lwip/sockets.h"
 #include "../cfg/SettingsJson.h"
-#include "../proto/canbox/Rav4Profile.h"
-#include "../proto/canbox/Rav4Catalog.h"
+#include "../proto/canbox/Protocol.h"
 #include "Catalog.h"
 #include "../cfg/SettingsRegistry.h"
 #include "../keys/KeyDests.h"
@@ -768,11 +767,12 @@ void WebUi::routes()
             o["pos"]       = i;
             o["action"]    = name(s.action);
             o["code"]      = s.code;
-            o["effective"] = s.code ? s.code : Canbox::rav4CodeFor(s.action);
+            o["effective"] = s.code ? s.code : Canbox::activeProtocol().keyCodeFor(s.action);
         }
         const uint8_t cw = map->encCode(true), ccw = map->encCode(false);
-        d["encCw"]       = cw  ? cw  : (uint8_t)Canbox::RAV4_KNOB_TUNE_UP;
-        d["encCcw"]      = ccw ? ccw : (uint8_t)Canbox::RAV4_KNOB_TUNE_DOWN;
+        const Canbox::Protocol& P = Canbox::activeProtocol();
+        d["encCw"]       = cw  ? cw  : P.keyCodeFor(Keys::Action::EncCw);
+        d["encCcw"]      = ccw ? ccw : P.keyCodeFor(Keys::Action::EncCcw);
         d["encInverted"] = k.encInverted;
         String out; serializeJson(d, out);
         return replyJson(r, out);
@@ -1437,9 +1437,10 @@ void WebUi::routesAffaMap()
                 o["code"]   = row.code;
                 o["asLong"] = row.asLong;
                 // What actually goes on the wire: override, else profile default.
-                o["effective"] = row.code ? row.code : Canbox::rav4CodeFor(row.action);
-                o["effectiveName"] =
-                    Canbox::keyCodeName(row.code ? row.code : Canbox::rav4CodeFor(row.action));
+                const Canbox::Protocol& P = Canbox::activeProtocol();
+                const uint8_t eff = row.code ? row.code : P.keyCodeFor(row.action);
+                o["effective"] = eff;
+                o["effectiveName"] = P.keyCodeName(eff);
             }
         }
 
@@ -2201,9 +2202,9 @@ void WebUi::routesCanbox()
         return r->reply(202, "application/json", out.c_str());
     });
 
-    // A 0x20 key frame with a literal code, bypassing the keymap.
-    // For 0x81-0x86 the second byte is a detent count, not a press state, and
-    // there is no release.
+    // A key frame with a literal code, bypassing the keymap. For a knob code
+    // (Raise 0x81-0x86) the second byte is a detent count, not a press state,
+    // and there is no release.
     route("/api/canbox/key", HTTP_POST, [this](PsychicRequest* r) {
         if (!_keySink) return r->reply(503, "text/plain", "not_built uart");
         if (!r->hasParam("code")) return r->reply(400, "text/plain", "param code");
@@ -2211,7 +2212,7 @@ void WebUi::routesCanbox()
         const uint8_t state = (uint8_t)paramU32(r, "state", "1", 0);
 
         // A button needs its release or the head unit holds it; knobs have none.
-        const bool release = !Canbox::isKnobCode(code) && paramBool(r, "release", true) && state != 0;
+        const bool release = !Canbox::activeProtocol().isKnobCode(code) && paramBool(r, "release", true) && state != 0;
         // The keys task sends it, after any key already queued.
         if (!App::KeyBus::postLiteral(code, state, release))
             return r->reply(503, "text/plain", "queue_full");

@@ -12,8 +12,6 @@
 #include "../media/MediaRouter.h"
 #include "../capture/CapFormat.h"
 #include "../bus/Autobaud.h"
-#include "../proto/canbox/Rav4Profile.h"
-#include "../proto/canbox/Rav4Catalog.h"
 #include "../proto/canbox/Protocol.h"
 #include "../vehicle/DecodeTable.h"
 #include "../sinks/ResistiveMap.h"
@@ -453,7 +451,7 @@ namespace Catalog
                 for (uint8_t b = 0; b < CLASS_BITS; ++b) if (c == (1u << b)) bit = b;
                 if (bit < 0) j.null(); else j.n(bit);
                 char h[4] = "";
-                if (const uint8_t code = Canbox::rav4CodeFor(a)) snprintf(h, sizeof(h), "%02X", code);
+                if (const uint8_t code = Canbox::activeProtocol().keyCodeFor(a)) snprintf(h, sizeof(h), "%02X", code);
                 j.ks("hu", h).endObj();
             }
             j.endArr();
@@ -474,8 +472,9 @@ namespace Catalog
             j.endArr();
 
             j.k("huKeys").arr();
-            for (uint8_t i = 0; i < Canbox::keyCodeCount(); ++i) {
-                const auto& kc = Canbox::keyCodeAt(i);
+            const Canbox::Protocol& P = Canbox::activeProtocol();
+            for (uint8_t i = 0; i < P.keyCodeCount(); ++i) {
+                const Canbox::KeyCodeView kc = P.keyCode(i);
                 char h[4];
                 snprintf(h, sizeof(h), "%02X", kc.code);
                 j.obj().ks("code", h).kso("name", kc.name).endObj();

@@ -6,6 +6,7 @@
 #include "RaiseTargets.h"
 #include "Rav4Catalog.h"
 #include "Rav4Emitter.h"
+#include "Rav4Profile.h"
 #include "../../cfg/SettingsRegistry.h"
 
 namespace Canbox
@@ -215,6 +216,22 @@ namespace Canbox
 
             size_t   emitterSize() const override { return sizeof(Rav4Emitter); }
             Emitter* makeEmitter(void* mem) const override { return new (mem) Rav4Emitter(); }
+
+            // 0x20 [code][state]: the interface's KEY_* are the wire's.
+            uint8_t keyFrame(uint8_t code, uint8_t state, uint8_t* out) const override
+            {
+                const uint8_t payload[2] = {code, state};
+                return buildFrame(CMD_KEY, payload, 2, out);
+            }
+            uint8_t keyCodeFor(Keys::Action a) const override { return rav4CodeFor(a); }
+            bool    isKnobCode(uint8_t code) const override { return Canbox::isKnobCode(code); }
+            bool    muteIsLong() const override { return true; }
+            uint8_t keyCodeCount() const override { return Canbox::keyCodeCount(); }
+            KeyCodeView keyCode(uint8_t i) const override
+            {
+                const KeyCode& k = keyCodeAt(i);
+                return {k.code, k.name, confName(k.conf), k.note};
+            }
 
             size_t   decoderSize() const override { return sizeof(RaiseDecoder); }
             Decoder* makeDecoder(void* mem) const override { return new (mem) RaiseDecoder(); }

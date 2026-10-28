@@ -26,6 +26,15 @@ namespace Canbox
         for (uint8_t i = 0; i < own.count(); ++i) out.set(own.at(i));
     }
 
+    const char* Protocol::keyCodeName(uint8_t code) const
+    {
+        for (uint8_t i = 0; i < keyCodeCount(); ++i) {
+            const KeyCodeView k = keyCode(i);
+            if (k.code == code) return k.name;
+        }
+        return "?";
+    }
+
     const char* fmtFixed(char* b, unsigned cap, int32_t v, uint8_t dec)
     {
         if (!dec) { snprintf(b, cap, "%ld", (long)v); return b; }

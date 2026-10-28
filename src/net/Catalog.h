@@ -5,7 +5,7 @@
 // GET /api/catalog (docs/design/web-ui.md, "/api/catalog shape"): every list the
 // page renders instead of hard-coding — layouts, styles, scenes, actions, key
 // codes, panel keys, console commands, enums. Each list is read from the table
-// that owns it (MediaScreen, MediaPane, KeyAction, AffaMap, Rav4Catalog, ...),
+// that owns it (MediaScreen, MediaPane, KeyAction, AffaMap, the HU protocol, ...),
 // never copied here; the few with no other owner are declared in Catalog.cpp.
 //
 // Pure (no Arduino): env:native writes build/catalog.json from this same code,

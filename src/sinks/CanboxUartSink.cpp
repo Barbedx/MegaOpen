@@ -1,5 +1,4 @@
 #include "CanboxUartSink.h"
-#include "../proto/canbox/Rav4Profile.h"
 
 namespace Sinks
 {
@@ -8,9 +7,8 @@ namespace Sinks
     bool CanboxUartSink::sendKey(uint8_t code, uint8_t state)
     {
         if (!_enabled || (!_write && !_writeOk) || code == 0) return false;
-        uint8_t payload[2] = {code, state};
-        uint8_t frame[Canbox::MAX_FRAME];
-        uint8_t n = Canbox::buildFrame(Canbox::CMD_KEY, payload, 2, frame);
+        uint8_t frame[Canbox::HU_FRAME_MAX];
+        const uint8_t n = proto().keyFrame(code, state, frame);
         if (!n) return false;
         bool ok = true;
         if (_writeOk) ok = _writeOk(frame, n, _ctx);
@@ -30,7 +28,7 @@ namespace Sinks
                 sendKey(p.code, Canbox::KEY_RELEASE);
                 p.used = false;
             }
-            if (_muteDown) sendKey(Canbox::RAV4_SOURCE, Canbox::KEY_RELEASE);
+            if (_muteDown) sendKey(proto().keyCodeFor(Keys::Action::Mute), Canbox::KEY_RELEASE);
             _muteDown = false;
         }
         _enabled = on;
@@ -69,6 +67,11 @@ namespace Sinks
         return true;
     }
 
+    bool CanboxUartSink::longMute(const Event& e) const
+    {
+        return e.action == Keys::Action::Mute && !e.codeHint && proto().muteIsLong();
+    }
+
     // The only place the translation lives; onKey() and the popup both use it.
     CanboxUartSink::Explain CanboxUartSink::explain(const Event& e) const
     {
@@ -80,7 +83,7 @@ namespace Sinks
         if (cls == Keys::CLASS_NONE) { x.why = "no class";   return x; }
         if (!(_mask & cls))          { x.why = "not routed"; return x; }
 
-        const uint8_t code = e.codeHint ? e.codeHint : Canbox::rav4CodeFor(e.action);
+        const uint8_t code = e.codeHint ? e.codeHint : proto().keyCodeFor(e.action);
         if (!code) { x.why = "no code"; return x; }
         x.code = code;
 
@@ -89,7 +92,7 @@ namespace Sinks
 
             // Rotary codes (0x81-0x86): second byte is a detent count, no release.
             // Other codes need press + scheduled release or they stick down.
-            if (Canbox::isKnobCode(code)) {
+            if (proto().isKnobCode(code)) {
                 x.sends = true; x.knob = true; x.state = 1;   // one detent
                 return x;
             }
@@ -97,10 +100,10 @@ namespace Sinks
             return x;
         }
 
-        // Mute is a long press of SOURCE on this profile, not a code of its own.
-        // A Long (an asLong map row) is the same press; a Long after a Press
-        // that already held SOURCE is not sent twice.
-        if (e.action == Keys::Action::Mute && !e.codeHint) {
+        // Mute held: a long press of its code (RAV4: SOURCE), not a code of
+        // its own. A Long (an asLong map row) is the same press; a Long after
+        // a Press that already holds it is not sent twice.
+        if (longMute(e)) {
             if (e.state == State::Press || (e.state == State::Long && !_muteDown)) {
                 x.sends = true; x.state = Canbox::KEY_LONG; return x;
             }
@@ -124,7 +127,7 @@ namespace Sinks
         const Explain x = explain(e);
         if (!x.sends) return;
 
-        const bool mute = e.action == Keys::Action::Mute && !e.codeHint;
+        const bool mute = longMute(e);
         if (mute) _muteDown = x.state != Canbox::KEY_RELEASE;
 
         if (x.knob) { sendKey(x.code, x.state); return; }
@@ -158,7 +161,7 @@ namespace Sinks
     void CanboxUartSink::sendTap(uint8_t code, uint8_t state)
     {
         // Knob codes carry a detent count: no release. A release is just sent.
-        if (Canbox::isKnobCode(code) || state == Canbox::KEY_RELEASE) { sendKey(code, state); return; }
+        if (proto().isKnobCode(code) || state == Canbox::KEY_RELEASE) { sendKey(code, state); return; }
         const uint32_t now = nowOr(0);
         if (sendPress(code, state, now)) schedule(code, now + Keys::MIN_GAP_MS);
     }

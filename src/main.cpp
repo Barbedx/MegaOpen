@@ -10,11 +10,9 @@
 #include "keys/MacroEngine.h"
 #include "sinks/CanboxUartSink.h"
 #include "sinks/UartTx.h"
-#include "proto/canbox/RaiseFramer.h"
 #include "display/PanelBusWatch.h"
 #include "proto/canbox/Protocol.h"
 // Knob codes: the second byte is a detent count, not a press state — no release.
-#include "proto/canbox/Rav4Profile.h"
 #include "vehicle/VehicleState.h"
 #include "net/WebUi.h"
 #include "net/WifiManager.h"
