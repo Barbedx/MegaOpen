@@ -4,6 +4,7 @@
 #include "proto/canbox/Rav4Emitter.h"
 #include "proto/canbox/RaiseFramer.h"
 #include "proto/canbox/RaiseTargets.h"
+#include "proto/canbox/Protocol.h"
 #include <initializer_list>
 
 using namespace Vehicle;
@@ -1108,10 +1109,10 @@ void test_selector_probe_goes_out_only_when_its_field_is_on()
     TEST_ASSERT_EQUAL_INT(0, g_sub06);
     TEST_ASSERT_FALSE(e.preview(E::MSG_GEAR, s, frame, len));
     TEST_ASSERT_FALSE(e.sendNow(E::MSG_GEAR, s));
-    TEST_ASSERT_EQUAL_UINT8(FK_OFF, E::ruleFor(FieldMap(), SIG_PRND)->kind);
+    TEST_ASSERT_EQUAL_UINT8(FK_OFF, Canbox::activeProtocol().ruleFor(FieldMap(), SIG_PRND)->kind);
     // On: 0x7D 06 [00][02], and each new value goes out at once.
     e.setFieldMap(fields({own(SIG_PRND)}));
-    TEST_ASSERT_NULL(E::ruleFor(FieldMap(), SIG_SPEED));
+    TEST_ASSERT_NULL(Canbox::activeProtocol().ruleFor(FieldMap(), SIG_SPEED));
     for (uint32_t t = 0; t < 2000; t += 100) e.tick(s, 10000 + t);
     TEST_ASSERT_TRUE(g_sub06 > 0);
     const uint8_t two[] = {0x2E, 0x7D, 0x03, 0x06, 0x00, 0x02};

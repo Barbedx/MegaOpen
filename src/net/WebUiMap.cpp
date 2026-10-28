@@ -8,6 +8,7 @@
 #include "../app/CarDiag.h"
 #include "../proto/canbox/RaiseTargets.h"
 #include "../proto/canbox/FieldView.h"
+#include "../proto/canbox/Protocol.h"
 #include "../vehicle/DecodeTable.h"
 #include "../vehicle/Derived.h"
 #include "../utils/LogBus.h"
@@ -155,14 +156,15 @@ void WebUi::routesMap()
         out.put(b, fit(snprintf(b, sizeof(b), "{\"send\":%s,\"uart\":%s,\"units\":{\"fuel\":%u,\"trip\":%u},\"rows\":[",
                             cfg.enabled ? "true" : "false", _cfg->s().uartEnabled ? "true" : "false",
                             (unsigned)cfg.tuning.fuelUnit, (unsigned)cfg.tuning.tripUnit), sizeof(b)));
-        const uint8_t nRows = oneSig < Vehicle::SIG_COUNT ? 1 : RT::count();
+        const Canbox::FieldProtocol& P = Canbox::activeProtocol();
+        const uint8_t nRows = oneSig < Vehicle::SIG_COUNT ? 1 : P.fieldCount();
         for (uint8_t i = 0; !live && i < nRows; ++i) {
             struct { const char* id; uint8_t sig; uint8_t dec; } t;
             if (oneSig < Vehicle::SIG_COUNT) {
                 const Vehicle::Meta& mt = Vehicle::meta(oneSig);
                 t = {mt.name, oneSig, mt.decimals};
             } else {
-                const TargetView rt = RT::at(i);
+                const TargetView rt = P.field(i);
                 t = {rt.id, rt.sig, rt.dec};
             }
             // The binding, copied out under the staging mutex (the newest edit).
@@ -241,7 +243,8 @@ void WebUi::routesMap()
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
         Scratch<Canbox::FieldMap> eff;
         if (!eff) return r->reply(503, "text/plain", "no_memory");
-        Canbox::Rav4Emitter::withDefaults(cfg.fields, *eff);
+        const Canbox::FieldProtocol& P = Canbox::activeProtocol();
+        P.withDefaults(cfg.fields, *eff);
         const Canbox::FieldView fv(*_state, eff.get());
         ChunkOut out(r);
         char b[220], v[16];
@@ -254,10 +257,10 @@ void WebUi::routesMap()
                                 ru->kind == Canbox::FK_SIGNAL && ru->src < Vehicle::SIG_COUNT ? Vehicle::meta(ru->src).name : "",
                                 (int)ru->mul, (int)ru->div, (long)ru->add), sizeof(b)));
         };
-        out.put("{\"proto\":\"raise112\",\"rows\":[");
+        out.put(b, fit(snprintf(b, sizeof(b), "{\"proto\":\"%s\",\"rows\":[", P.id()), sizeof(b)));
         bool first = true;
-        for (uint8_t i = 0; i < RT::count(); ++i) {
-            const TargetView t = RT::at(i);
+        for (uint8_t i = 0; i < P.fieldCount(); ++i) {
+            const TargetView t = P.field(i);
             if (t.sig >= Vehicle::SIG_COUNT || !t.fw) continue;
             const bool has = fv.has(t.sig);
             out.put(b, fit(snprintf(b, sizeof(b), "%s{\"id\":\"%s\",\"sig\":\"%s\",\"v\":%s,\"rule\":",
@@ -266,7 +269,7 @@ void WebUi::routesMap()
             first = false;
             rule(cfg.fields.find(t.sig), t.sig);
             out.put(",\"def\":");
-            rule(Canbox::Rav4Emitter::defaults().find(t.sig), t.sig);
+            rule(P.defaults().find(t.sig), t.sig);
             out.put("}");
         }
         out.put("]}");
@@ -283,9 +286,10 @@ void WebUi::routesMap()
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
         Canbox::FieldMap& m = cfg.fields;   // the copy in Scratch, edited
         for (JsonObjectConst row : d["rows"].as<JsonArrayConst>()) {
-            const int ti = RT::find(row["id"] | "");
+            const Canbox::FieldProtocol& P = Canbox::activeProtocol();
+            const int ti = P.findField(row["id"] | "");
             if (ti < 0) return r->reply(400, "text/plain", "param id");
-            const uint8_t field = RT::at((uint8_t)ti).sig;
+            const uint8_t field = P.field((uint8_t)ti).sig;
             const char* from = row["from"] | "auto";
             if (!strcmp(from, "auto")) { m.clear(field); continue; }
             Canbox::FieldRule ru;
@@ -465,7 +469,7 @@ void WebUi::routesMap()
         if (const char* why = formWhy(t.msg, cfg.tuning.cmd28)) return bad(r, 409, id, why);
         // A field that is off (the owner's rule, or one that starts off: an
         // unknown frame to the tablet) is not sent, test or not.
-        const Canbox::FieldRule* fr = Canbox::Rav4Emitter::ruleFor(cfg.fields, t.sig);
+        const Canbox::FieldRule* fr = Canbox::activeProtocol().ruleFor(cfg.fields, t.sig);
         if (fr && fr->kind == Canbox::FK_OFF) return bad(r, 409, id, "field_off");
 
         int32_t v = 0;

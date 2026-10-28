@@ -16,6 +16,7 @@
 #include "../proto/canbox/Rav4Catalog.h"
 #include "../proto/canbox/Rav4Emitter.h"
 #include "../proto/canbox/RaiseTargets.h"
+#include "../proto/canbox/Protocol.h"
 #include "../vehicle/DecodeTable.h"
 #include "../sinks/ResistiveMap.h"
 #if FEATURE_DISPLAY_CAN
@@ -534,11 +535,15 @@ namespace Catalog
 #endif
         j.endArr();
 
-        // Every field the RAV4 profile carries (RaiseTargets): min and max with
-        // the decimal point placed, as the page types and shows values.
+        // Every field the active head-unit protocol carries (Protocol.h): min
+        // and max with the decimal point placed, as the page types and shows
+        // values. The key is named for the first protocol, Raise; the
+        // Companion app's bundled page reads it, so it keeps its name.
+        const Canbox::FieldProtocol& P = Canbox::activeProtocol();
+        j.ks("proto", P.id());
         j.k("raise").arr();
-        for (uint8_t i = 0; i < Canbox::RaiseTargets::count(); ++i) {
-            const Canbox::TargetView t = Canbox::RaiseTargets::at(i);
+        for (uint8_t i = 0; i < P.fieldCount(); ++i) {
+            const Canbox::TargetView t = P.field(i);
             char lo[16], hi[16];
             j.obj().ks("id", t.id).ks("group", t.group).kso("name", t.name).ks("unit", t.unit)
                 .ks("cmd", t.cmd).ks("kind", t.boolean ? "b" : "n")

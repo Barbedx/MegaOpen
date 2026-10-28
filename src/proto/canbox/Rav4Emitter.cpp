@@ -97,16 +97,11 @@ namespace Canbox
         return m;
     }
 
-    void Rav4Emitter::withDefaults(const FieldMap& own, FieldMap& out)
-    {
-        out = defaults();
-        for (uint8_t i = 0; i < own.count(); ++i) out.set(own.at(i));
-    }
-
     void Rav4Emitter::setFieldMap(const FieldMap& own)
     {
         _own = own;
-        withDefaults(own, _map);
+        _map = defaults();
+        for (uint8_t i = 0; i < own.count(); ++i) _map.set(own.at(i));
     }
 
     bool Rav4Emitter::experimentsToRules(uint8_t bits, FieldMap& m)

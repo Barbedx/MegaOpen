@@ -105,6 +105,17 @@ One page, two tables, same row shape:
    and the `calc` / `setBound` special cases deleted.
 5. **Second protocol stub** (no wire format, a test module) to prove a swap needs
    no change outside the module.
+   *As built (5a, 2026-10-28):* `Canbox::FieldProtocol` (src/proto/canbox/Protocol.h):
+   `id()`, the field list (`fieldCount`, `field`), `defaults()`, and the
+   generic `findField` / `ruleFor` / `withDefaults`. `activeProtocol()` is
+   the one swap point (Raise 112 today, from RaiseTargets and
+   `Rav4Emitter::defaults`). `/api/hu/fields`, `/api/map`'s field rows and
+   the catalog (`proto`, and the field list still under the key `raise`,
+   which the Companion app's bundled page reads) go through it; the page
+   shows «Протокол ГУ». test/test_protocol runs the map on a stub protocol.
+   Still RAV4-bound: the hu task holds a `Rav4Emitter` and its Raise
+   `Tuning` (units, 0x28 form) and message table; an emitter interface is
+   the next step when a second wire format is chosen.
 
 Each slice: host tests, the RAV4 bytes compared against recorded frames, the
 bench, then the car.

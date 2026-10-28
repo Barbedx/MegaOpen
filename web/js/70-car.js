@@ -81,6 +81,7 @@ SCR.car={title:'nav.car',async render(m){
   row(t('k.set.cap.mode'),seg('/api/settings|cap.mode',enumOpts('capModes'),cp.settings.mode)))+
  card(t('ca.files'),row('','',t('ca.filesH'))+`<div id="files"></div><div class="fr"><button class="btn dng" type="button" id="fUnp">${t('ca.delUnp')}</button></div>`,'cFiles','custom'):C2?notBuilt(t('ca.rec'),t('ca.noRec')):'')+
  card(t('ca.rav4'),
+  row(t('ca.proto'),`<b>${esc(tHas('k.proto.'+CAT.proto)?t('k.proto.'+CAT.proto):CAT.proto||'')}</b>`,t('ca.protoSub'))+
   row(t('ca.send'),sw('/api/map|send',mp.send),t('ca.kept'),t('ca.sendH'))+
   row(t('ca.units'),sel('#fuel',enumOpts('fuelUnits'),mp.units.fuel,`aria-label="${esc(t('ca.fuel'))}"`)+sel('#trip',enumOpts('tripUnits'),mp.units.trip,`aria-label="${esc(t('ca.trip'))}"`),'','','mUnits')+
   row(t('ca.sweep'),`<span class="fr"><select class="in" id="mSwT" aria-label="${esc(t('ca.step'))}">${[3,5,8].map(s=>`<option value="${s}"${s===5?' selected':''}>${t('ca.sec',s)}</option>`).join('')}</select><button class="btn" type="button" id="mSwGo">${t('ca.sweepGo')}</button><b class="mono" id="mSwV">—</b></span>`,'0x7D 06, D2 = 0…15',t('ca.sweepH'),'mSwRow')+

@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include "Rav4Emitter.h"
+#include "Protocol.h"   // TargetView, NO_MSG
 
 // Every field the RAV4 profile can carry to the head unit, one row each
 // (docs/design/web-ui.md, slice 7; docs/design/event-tasks.md §5b, the mapping
@@ -17,26 +18,6 @@
 // points at the experiment that borrows another field for it.
 namespace Canbox
 {
-    constexpr uint8_t NO_MSG = 0xFF;
-
-    // One row with everything resolved: what the catalog and /api/map read.
-    // min, max (and the values /api/map serves) are the signal's integers;
-    // `dec` places the decimal point (speed 4700, dec 2 = 47.00 km/h).
-    struct TargetView {
-        const char* id;
-        const char* group;
-        const char* name;
-        const char* unit;
-        const char* cmd;      // "" when not sent
-        const char* why;      // fw=false: why not, for the page; else null
-        bool        boolean;
-        int32_t     min, max;
-        uint8_t     dec;
-        bool        fw;
-        uint8_t     sig;
-        uint8_t     msg;
-    };
-
     namespace RaiseTargets
     {
         uint8_t    count();

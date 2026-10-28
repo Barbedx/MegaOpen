@@ -186,15 +186,6 @@ namespace Canbox
         // one-time migration. False when a bit has no field (0x80) or two
         // fill one field.
         static bool experimentsToRules(uint8_t bits, FieldMap& m);
-        // defaults() with the owner's rules over them, into `out`: what is sent.
-        static void withDefaults(const FieldMap& own, FieldMap& out);
-        // The rule a field is sent by with the owner's map `own`: theirs, else
-        // the default, else null (its own signal).
-        static const FieldRule* ruleFor(const FieldMap& own, uint8_t field)
-        {
-            const FieldRule* r = own.find(field);
-            return r ? r : defaults().find(field);
-        }
 
         Rav4Emitter();
 
