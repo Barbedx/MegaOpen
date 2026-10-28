@@ -884,6 +884,7 @@ void WebUi::routes()
         }
 #endif
         mapToFile(out);   // the CAN map and the head-unit emitter
+#if FEATURE_DISPLAY_CAN
         // The Custom scene's picture, when one was drawn: it lives only in
         // this board's NVS, so a reset or another board would lose it.
         if (_ui.paneBits) {
@@ -900,6 +901,7 @@ void WebUi::routes()
                 }
             }
         }
+#endif
         out.put("}");
         return out.finish();
     });
@@ -931,11 +933,16 @@ void WebUi::routes()
             clamped = knobsFromJson(kj, kc, &kerr);
         }
 #endif
-        // The Custom scene's picture (576 hex), checked now, saved after the settings.
+        // The Custom scene's picture (576 hex), checked now, saved after the
+        // settings. A build without the panel skips it.
         JsonVariantConst pj = d["picture"];
+#if FEATURE_DISPLAY_CAN
         const bool picIn = !pj.isNull() && _ui.paneBits;
         if (!pj.isNull() && (!pj.is<const char*>() || !MegaOpen::MediaPane::fromHex(pj.as<const char*>(), nullptr)))
             return r->reply(400, "text/plain", "param picture");
+#else
+        const bool picIn = false;
+#endif
         // The CAN map and the head-unit emitter are checked before anything
         // is applied, like the rest; applied after the settings.
         bool mapIn = false, huIn = false;
@@ -948,6 +955,7 @@ void WebUi::routes()
         if (!dry && (mapIn || huIn))
             if (const char* why = mapFromFile(d["decode"], d["hu"], false, mapIn, huIn))
                 return r->reply(500, "text/plain", why);
+#if FEATURE_DISPLAY_CAN
         if (!dry && picIn) {
             const char* hex = pj.as<const char*>();
             if (!_ui.paneBits->edit([&](App::Ui::PaneBits& p) { MegaOpen::MediaPane::fromHex(hex, p.bits); p.set = true; }))
@@ -957,6 +965,7 @@ void WebUi::routes()
             if (!saved) return r->reply(500, "text/plain", "nvs_failed");
             LOGI("media", "own picture set from a settings file");
         }
+#endif
 
         JsonDocument o;
         deserializeJson(o, out);
