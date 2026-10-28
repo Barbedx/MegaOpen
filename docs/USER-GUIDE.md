@@ -65,6 +65,17 @@ then goes everywhere: the menu, the car screen, alerts and the G-метр.
 **↺ скасувати** takes it back. «Заводські прив'язки» turns every confirmed
 signal back into a **?**.
 
+**Where a signal comes from** is changed here and only here: press the source
+chip on its row. A CAN row (ID, byte, length, shift, mask, × ÷ +), a constant,
+or nothing. **Запам'ятати** then **Показати зміни** finds the byte: remember
+the bus, do the thing (open a door), and the IDs that changed are listed.
+
+**What the head unit gets** is the map on **Авто → мапа ГУ**: each field's
+**«Звідки»** is its own signal (the default), another signal scaled
+(× ÷ +, e.g. the battery `batt_v` ÷10 into the range field), a constant, or
+off. Coolant, the P/R/N/D probe and «Бак, %» start off; switch one on with
+«Звідки» → свій сигнал.
+
 If the list looks short after an update, see
 [«Заводські прив'язки»](#after-an-update).
 
