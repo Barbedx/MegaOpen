@@ -4,6 +4,7 @@
 #include <Preferences.h>
 #include <esp_heap_caps.h>
 #include <esp_http_client.h>
+#include <esp_crc.h>
 #include "../link/UsbLink.h"
 #include <mbedtls/base64.h>
 #include "freertos/FreeRTOS.h"
@@ -430,23 +431,43 @@ namespace LogPush
         // in it as text (the car's dumps carried "Bearer github_pat_..." to
         // the log repository, 1.6.0-rc5). Each one is overwritten with '*'
         // before the dump leaves, as is any other github_pat_ / ghp_ run.
-        void blank(char* d, size_t n, const char* secret)
+        // True when it blanked anything.
+        bool blank(char* d, size_t n, const char* secret)
         {
             const size_t k = secret ? strlen(secret) : 0;
-            if (k < 4 || k > n) return;
+            if (k < 4 || k > n) return false;
+            bool hit = false;
             for (size_t i = 0; i + k <= n; ++i)
-                if (d[i] == secret[0] && !memcmp(d + i, secret, k)) { memset(d + i, '*', k); i += k - 1; }
+                if (d[i] == secret[0] && !memcmp(d + i, secret, k)) { memset(d + i, '*', k); i += k - 1; hit = true; }
+            return hit;
+        }
+        // A dump the redaction changed fails its own checksum, and the decoder
+        // (esp_coredump) refuses it. The ELF/CRC32 format (sdkconfig) ends in
+        // a CRC-32 of everything before it, the whole length in its first
+        // word: written again over the redacted bytes.
+        void reseal(char* d, size_t n)
+        {
+#if CONFIG_ESP_COREDUMP_CHECKSUM_CRC32
+            uint32_t tot = 0;
+            if (n < 8) return;
+            memcpy(&tot, d, 4);
+            if (tot != n) return;   // not the layout this knows: left as it is
+            const uint32_t crc = esp_crc32_le(0, (const uint8_t*)d, (uint32_t)(n - 4));
+            memcpy(d + n - 4, &crc, 4);
+#else
+            (void)d; (void)n;
+#endif
         }
         void redact(char* d, size_t n, const char* tok)
         {
-            blank(d, n, tok);
+            bool hit = blank(d, n, tok);
             static const char* const PASS[][2] = {{"megaopen", "pass"}, {"megaopen", "apPass"}, {"net2", "pass"}};
             for (const auto& kv : PASS) {
                 Preferences p;
                 if (!p.begin(kv[0], true)) continue;
                 const String s = p.getString(kv[1], "");
                 p.end();
-                blank(d, n, s.c_str());
+                hit |= blank(d, n, s.c_str());
             }
             static const char* const PREFIX[] = {"github_pat_", "ghp_"};
             for (const char* pre : PREFIX) {
@@ -456,8 +477,10 @@ namespace LogPush
                     size_t j = i + k;
                     while (j < n && (isalnum((unsigned char)d[j]) || d[j] == '_')) d[j++] = '*';
                     i = j;
+                    hit = true;
                 }
             }
+            if (hit) reseal(d, n);
         }
 
         // A coredump copied by main.cpp, if one is there: true when it was tried.

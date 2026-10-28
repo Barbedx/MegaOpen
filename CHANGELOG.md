@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Fixed
+- A coredump pushed to GitHub could not be decoded when the redaction had blanked a secret in it (`Invalid core dump CRC`): its CRC-32 is written again over the redacted bytes. Checked on the bench's redacted dump of boot 122 (re-sealed offline, then decoded).
+
 ## [1.6.3] - 2026-10-28
 
 ### Changed
