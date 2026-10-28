@@ -38,28 +38,29 @@ const mapEd=(r,sigs)=>{const ru=r.rule||{from:'auto',src:'',mul:1,div:1,add:0},c
  <div class="mf" style="margin-top:8px"><button class="btn sm pri" type="button" data-save>${t('ca.save')}</button><button class="btn sm" type="button" data-close>✕</button></div></td></tr>`};
 /* рядок на 2 с підсвічено (.hl), прокручено до середини */
 const hlRow=tr=>{if(!tr)return;tr.scrollIntoView({block:'center'});tr.classList.add('hl');setTimeout(()=>tr.classList.remove('hl'),2000)};
-const MAP_TABS=['sig','fields','alerts'];
+/* вкладка -> її картка; картки прямо в #main (широкий екран: .full на всю ширину, не в колонки) */
+const MAP_TABS={sig:'lvCard',fields:'cMap',alerts:'alCard'};
 SCR.map={title:'map.title',hidden:true,async render(m){
  const[r,se,mp,hf]=await Promise.all([API.get('/api/map?meta=1&live=1'),API.get('/api/settings'),API.get('/api/map'),API.get('/api/hu/fields').catch(()=>null)]);
  const al=(CAT.settings||[]).find(f=>f.id==='alerts')||{cols:[]},cond=al.cols.find(c=>c.id==='cond')||{enum:[]};
  this.M=r.meta;this.C=cond.enum.map(o=>[o.v,o.name]);this.A=se.alerts||[];this.n=0;this.grp='all';this.mp=mp;this.sw=null;this.last=null;this.setFl(hf);
- const tab=location.hash.split(':')[1]||'';this.tb=MAP_TABS.includes(tab)?tab:'sig';
+ const tab=location.hash.split(':')[1]||'';this.tb=MAP_TABS[tab]?tab:'sig';
  /* фільтр за групою: значення — 'all' або назва групи, як у data-g рядка */
  const groups=[['all',t('ca.all')],...[...new Set(CAT.raise.map(x=>x.group))].map(g=>[g,g])];
- m.innerHTML=`<div class="pad">${seg('#mTab',[['sig',t('map.tSig')],['fields',t('map.tFields')],['alerts',t('map.tAlerts')]],this.tb)}</div>`+
- `<div data-tab="sig">`+card(t('lv.signals'),row(t('lv.auto'),sw('#lvAuto',true,'data-nosave'),t('lv.autoSub'))+
+ m.innerHTML=`<div class="pad full">${seg('#mTab',[['sig',t('map.tSig')],['fields',t('map.tFields')],['alerts',t('map.tAlerts')]],this.tb)}</div>`+
+ card(t('lv.signals'),row(t('lv.auto'),sw('#lvAuto',true,'data-nosave'),t('lv.autoSub'))+
   row(t('lv.only'),sw('#lvOnly',true,'data-nosave'))+row(t('lv.alerts'),`<span id="lvAl" class="muted">${DASH}</span>`,t('lv.alertsSub'))+
-  `<div class="fr"><button class="btn" type="button" id="lvReset">${t('ca.factory')}</button></div><datalist id="idl"></datalist><div class="tw"><table><thead><tr><th>${t('lv.thSig')}</th><th>${t('lv.thNow')}</th><th>${t('lv.thAge')}</th><th>${t('lv.thSrc')}</th><th title="${esc(t('lv.checkedT'))}">✓</th><th></th></tr></thead><tbody id="lvT"></tbody></table></div>`,'lvCard','custom full')+`</div>`+
- `<div data-tab="fields">`+card(t('ca.rav4'),
+  `<div class="fr"><button class="btn" type="button" id="lvReset">${t('ca.factory')}</button></div><datalist id="idl"></datalist><div class="tw"><table><thead><tr><th>${t('lv.thSig')}</th><th>${t('lv.thNow')}</th><th>${t('lv.thAge')}</th><th>${t('lv.thSrc')}</th><th title="${esc(t('lv.checkedT'))}">✓</th><th></th></tr></thead><tbody id="lvT"></tbody></table></div>`,'lvCard','custom full')+
+ card(t('ca.rav4'),
   row(t('ca.proto'),`<b>${esc(tHas('k.proto.'+CAT.proto)?t('k.proto.'+CAT.proto):CAT.proto||'')}</b>`,t('ca.protoSub'))+
   row(t('ca.send'),sw('/api/map|send',mp.send),t('ca.kept'),t('ca.sendH'))+
   row(t('ca.units'),sel('#fuel',enumOpts('fuelUnits'),mp.units.fuel,`aria-label="${esc(t('ca.fuel'))}"`)+sel('#trip',enumOpts('tripUnits'),mp.units.trip,`aria-label="${esc(t('ca.trip'))}"`),'','','mUnits')+
   `<div class="pad"><div class="seg wrap" id="mGrp" data-v="all">${groups.map(([v,n])=>`<button type="button" data-val="${esc(v)}" class="${v==='all'?'on':''}">${esc(n)}</button>`).join('')}</div></div>`+
   row(t('ca.sweep'),`<span class="fr"><select class="in" id="mSwT" aria-label="${esc(t('ca.step'))}">${[3,5,8].map(s=>`<option value="${s}"${s===5?' selected':''}>${t('ca.sec',s)}</option>`).join('')}</select><button class="btn" type="button" id="mSwGo">${t('ca.sweepGo')}</button><b class="mono" id="mSwV">—</b></span>`,'0x7D 06, D2 = 0…15',t('ca.sweepH'),'mSwRow')+
-  `<div class="tw"><table class="mapt"><thead><tr><th>${t('ca.thField')}</th><th>${t('ca.thNow')}</th><th>${t('ca.thFrom')}</th><th>${t('ca.thTest')}</th></tr></thead><tbody id="map">${this.withRules(raiseRows(mp)).map(mapRow).join('')}</tbody></table></div>`,'cMap','custom full')+`</div>`+
- `<div data-tab="alerts">`+card(t('lv.alCard'),row('','',t('lv.alH'))+
+  `<div class="tw"><table class="mapt"><thead><tr><th>${t('ca.thField')}</th><th>${t('ca.thNow')}</th><th>${t('ca.thFrom')}</th><th>${t('ca.thTest')}</th></tr></thead><tbody id="map">${this.withRules(raiseRows(mp)).map(mapRow).join('')}</tbody></table></div>`,'cMap','custom full')+
+ card(t('lv.alCard'),row('','',t('lv.alH'))+
   `<div class="tw"><table><thead><tr><th>${t('lv.thSig')}</th><th>${t('lv.thCond')}</th><th>${t('lv.thThr')}</th><th>${t('lv.thPause')}</th><th>${t('lv.thOn')}</th></tr></thead><tbody id="alT"></tbody></table></div>`+
-  `<div class="fr"><button class="btn pri" type="button" id="alSave">${t('lv.alSave')}</button><button class="btn" type="button" id="alFac">${t('lv.alFactory')}</button></div>`,'alCard','custom')+`</div>`;
+  `<div class="fr"><button class="btn pri" type="button" id="alSave">${t('lv.alSave')}</button><button class="btn" type="button" id="alFac">${t('lv.alFactory')}</button></div>`,'alCard','custom full');
  this.go(this.tb);this.draw(r);this.drawAlerts();BIND.wire($('#lvT'));
  $('[data-f="mTab"]').addEventListener('change',e=>this.go(e.currentTarget.dataset.v));
  // Сигнали
@@ -115,7 +116,7 @@ SCR.map={title:'map.title',hidden:true,async render(m){
  $('#alSave').onclick=e=>{this.A=this.readAlerts();run(e.target,()=>API.post('/api/settings',{alerts:this.A.map(a=>[a[0],a[1],+a[2]||0,parseInt(a[3])||0,!!a[4]])}),t('lv.saved'))};
 },
 /* вкладка: панелі показати/сховати, хеш без hashchange; на «Сигнали» — свіжі позначки «→ поле ГУ» */
-go(tb){this.tb=tb;put($('[data-f="mTab"]'),tb);$$('#main [data-tab]').forEach(p=>p.hidden=p.dataset.tab!==tb);
+go(tb){this.tb=tb;put($('[data-f="mTab"]'),tb);for(const[k,id]of Object.entries(MAP_TABS))$('#'+id).hidden=k!==tb;
  history.replaceState(null,'',tb==='sig'?'#map':'#map:'+tb);if(tb==='sig'&&this.last)this.draw(this.last)},
 /* поле ГУ: вкладка «Поля ГУ»; фільтр групи знято, якщо ховає рядок */
 goField(id){this.go('fields');const tr=$(`#map tr[data-id="${id}"]`);if(!tr)return;if(tr.hidden){put($('#mGrp'),'all');this.group('all')}hlRow(tr)},
