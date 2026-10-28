@@ -204,6 +204,18 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   log: three of the failed tries overlapped board resets caused by opening COM4.
   Re-test with the log over WiFi (no COM4), read `disconnected reason=`.
 
+### USB link
+
+- **The link stopped taking data once (bench, 1.6.5, 2026-10-28), not reproduced.**
+  During the first `tools/usb_link.py cable` run (pings of 4..1024 bytes, 4 in
+  flight, right after an HTTP-over-link request that the board counted as a
+  `fails`), the board stopped accepting host writes after 13 frames: every
+  write timed out, through `clear_halt` and a USB reset, while `usblink` kept
+  beating and `/api/status` said `mounted: true, rx: 13`. Only a reboot
+  brought it back. Fifteen runs after, burst and edge sizes included, never
+  did it again. If it comes back: the `[usb]` lines, `/api/status` `usb`, and
+  whether `tud_vendor_n_available` stays 0 (the OUT endpoint not re-armed).
+
 ### Build / code health
 - **Internal heap, two levers not taken yet** (audit 2026-10-21; the log ring
   and request-only statics already moved to PSRAM). Both need a board soak,

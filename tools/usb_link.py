@@ -9,6 +9,18 @@
     python tools/usb_link.py test fuel_low    # POST /api/alerts/test, then wait for the event
     python tools/usb_link.py gateway          # be the app's internet for the board, until ^C
     python tools/usb_link.py gateway check    # ... and ask the board to check GitHub for an update
+    python tools/usb_link.py cable [seconds]  # test a USB cable: echoes checked byte for byte, a verdict
+
+`cable` sends PINGs of every size up to 1024 bytes, random bytes with a
+sequence number, a few in flight, and checks every PONG against what was sent.
+It counts lost and wrong echoes, CRC-bad frames, and drops of the device (each
+one reconnected), and prints the throughput, the latency and one line: GOOD or
+BAD and why. A frame the cable corrupts on the way in is dropped by the board's
+CRC check and shows as lost; one corrupted on the way back fails the CRC here.
+No HTTP during the test, the firmware is not changed for it, WiFi is not
+needed. It cannot measure the cable's voltage drop: a cable that browns the
+board out shows as drops. Run one test per process: a process that exits
+while the board is still answering leaves the board waiting 3 s (`cut`).
 
 `gateway` does what MegaOpen Companion does for the board: it carries the board's
 own GitHub requests (GhOta, LogPush) over this PC's network, GitHub hosts only.
@@ -19,7 +31,9 @@ The same frames as the app (android/.../link/Frames.kt, UsbLink.kt). Under Git B
 set MSYS_NO_PATHCONV=1, or /api/... arrives as a Windows path.
 """
 import json
+import os
 import queue
+import random
 import struct
 import sys
 import threading
@@ -114,6 +128,7 @@ class Link:
         if itf is None:
             sys.exit("the board has no vendor interface (an old build?)")
         usb.util.claim_interface(dev, itf.bInterfaceNumber)
+        self.dev = dev
         out_ = lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == usb.util.ENDPOINT_OUT
         self.ep_out = usb.util.find_descriptor(itf, custom_match=out_)
         self.ep_in = usb.util.find_descriptor(itf, custom_match=lambda e: not out_(e))
@@ -280,8 +295,117 @@ class Link:
         return split(self.request("POST", path, json.dumps(obj).encode(), "application/json"))
 
 
+def cable(seconds):
+    """Test the cable between this PC and the board; see the docstring above."""
+    # Sizes: the 64-byte packet edges (a frame is 10 bytes + payload), and the rest at random.
+    edges = [0, 1, 53, 54, 55, 117, 118, 119, 502, 1014, 1024]
+    window = 4
+    link = Link()
+    print("HELLO", link.hello())
+    sent = ok = wrong = lost = drops = 0
+    crc_bad = 0            # this PC's CRC failures, summed over reconnects
+    up = down = 0
+    lat = []
+    inflight = {}          # seq -> (payload, t0)
+    seq = 0
+    t_end = time.time() + seconds
+    t_start = time.time()
+    last_print = t_start
+
+    def reconnect():
+        nonlocal link, crc_bad
+        crc_bad += link.bad
+        usb.util.dispose_resources(link.dev)   # free the claim, or the new Link cannot take it
+        for _ in range(40):
+            time.sleep(0.5)
+            try:
+                link = Link()
+                link.hello()
+                return True
+            except (SystemExit, Exception):
+                continue
+        return False
+
+    while time.time() < t_end or inflight:
+        # Fill the window while there is time left.
+        while len(inflight) < window and time.time() < t_end:
+            n = random.choice(edges) if random.random() < 0.3 else random.randint(4, 1024)
+            n = max(n, 4)
+            payload = struct.pack("<I", seq) + os.urandom(n - 4)
+            try:
+                link.send(PING, payload=payload)
+            except usb.core.USBTimeoutError:
+                # Still on the bus, but it takes nothing for 2 s: the board's
+                # side, not a cut wire (a cable fault drops the device).
+                print("BAD: the board stopped taking data (%d sent, %d ok); replug it and run again" % (sent, ok))
+                return 1
+            except usb.core.USBError:
+                drops += 1
+                print("  the board dropped off USB; reconnecting ...")
+                lost += len(inflight)
+                inflight.clear()
+                if not reconnect():
+                    print("BAD: the board did not come back on USB")
+                    return 1
+                continue
+            inflight[seq] = (payload, time.time())
+            sent += 1
+            up += len(payload) + 10
+            seq += 1
+        # One answer, or a timeout for the oldest.
+        try:
+            t, p = link.ctl.get(timeout=0.5)
+        except queue.Empty:
+            t = None
+        now = time.time()
+        if t == PONG and len(p) >= 4:
+            (k,) = struct.unpack("<I", p[:4])
+            if k in inflight:
+                payload, t0 = inflight.pop(k)
+                down += len(p) + 10
+                if p == payload:
+                    ok += 1
+                    lat.append((now - t0) * 1000)
+                else:
+                    wrong += 1
+            else:
+                wrong += 1     # an echo of nothing sent, or a mangled sequence number
+        for k in [k for k, (_, t0) in inflight.items() if now - t0 > 2.0]:
+            inflight.pop(k)
+            lost += 1
+        if now - last_print >= 5:
+            last_print = now
+            el = now - t_start
+            print("  %4.0f s: %d sent, %d ok, %d lost, %d wrong, %.0f kB/s" %
+                  (el, sent, ok, lost, wrong, (up + down) / el / 1024))
+    el = time.time() - t_start
+    crc_bad += link.bad
+    lat.sort()
+    pct = lambda q: lat[min(len(lat) - 1, int(len(lat) * q))] if lat else 0
+    print()
+    print("cable test, %.0f s: %d pings of 4..1024 bytes, %.1f MB both ways, %.0f kB/s" %
+          (el, sent, (up + down) / 1e6, (up + down) / el / 1024))
+    print("  echoes ok       %d" % ok)
+    print("  lost            %d" % lost)
+    print("  wrong bytes     %d" % wrong)
+    print("  CRC-bad frames  %d" % crc_bad)
+    print("  USB drops       %d" % drops)
+    print("  latency         p50 %.1f ms, p99 %.1f ms, max %.1f ms" % (pct(0.5), pct(0.99), lat[-1] if lat else 0))
+    why = []
+    if drops: why.append("%d drop(s) off USB" % drops)
+    if lost: why.append("%d lost" % lost)
+    if wrong: why.append("%d wrong echo(es)" % wrong)
+    if crc_bad: why.append("%d CRC error(s)" % crc_bad)
+    if not ok: why.append("no echo at all")
+    print()
+    print("GOOD: every echo came back intact" if not why else "BAD: " + ", ".join(why))
+    return 0 if not why else 1
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "hello"
+    if cmd == "cable":
+        sys.exit(cable(int(sys.argv[2]) if len(sys.argv) > 2 else 30))
     link = Link(net=cmd == "gateway")
     info = link.hello()
     print("HELLO", info)

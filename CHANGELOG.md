@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- A USB cable test from a PC: `python tools/usb_link.py cable [seconds]` sends pings of every size up to 1024 bytes over the board's USB link and checks each echo byte for byte; it counts lost and wrong echoes, CRC errors and drops (reconnecting), prints the speed and latency, and ends GOOD or BAD. No firmware change, no WiFi. On the bench: 4861 echoes in 30 s, none lost, ~143 kB/s.
+
 ## [1.6.5] - 2026-10-28
 
 ### Added
