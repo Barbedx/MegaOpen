@@ -12,7 +12,7 @@ Mégane II. Doors, boot, lights and indicators are already measured.
   saved map keeps those old too.
 - Turn the recorder on (Авто → Запис). Put a marker on each step: the capture
   is what settles a wrong bit afterwards.
-- Open Авто → Наживо → Відкрити on the phone (`#live`). It lists every
+- Open Авто → Мапа → Відкрити on the phone (`#map`, tab Сигнали). It lists every
   signal with its value, age, source and a ✓ (measured) or ? (hypothesis).
 - Optional, on the glass: Екран → "Екран авто замість аудіо" shows three
   chosen signals (rows 1-3) instead of now-playing, and the panel menu (hold
@@ -20,12 +20,12 @@ Mégane II. Doors, boot, lights and indicators are already measured.
 
 **How the yes/no rows read.** Brake, clutch, neutral and both reverse rows
 are Renault 2-bit states: 01 is yes, 00 no, and 10/11 (reserved, not fitted,
-invalid) leave the value where it was, so its age keeps growing on Наживо.
+invalid) leave the value where it was, so its age keeps growing on Сигнали.
 Belts and the passenger seat are turned round by the firmware so that
 **1 = buckled / somebody sitting**. `Замки` is raw: 1 boot locked, 2 doors
 locked, 3 both.
 
-| # | Do | Watch on Наживо, expect | Row |
+| # | Do | Watch on Сигнали, expect | Row |
 |---|---|---|---|
 | 1 | Key off: handbrake on/off ×3 | Ручник 1 / 0 | `0x5C5` b1.5/1 |
 | 2 | Lock/unlock with the remote | Замки 3 / 0 (1 or 2 if only one side locks) | `0x60D` b3.3/2 |
@@ -42,19 +42,19 @@ locked, 3 both.
 | 13 | When the low-fuel lamp lights | a "Car alert / fuel_low: 1 ?" popup on the display (held while a menu is open) | `0x5C5` b1.2/1 + alert rule 1 |
 | 14 | Before/after refuelling | Пальне, л in both copies | `0x5C5` / `0x715` b5.0/7 |
 | 15 | A drive of 5 km+ | Витрата зараз/середня, Запас ходу (розрах.), vs the cluster's trip computer | `0x551` b2.0/8 counter |
-| 16 | A steady left turn, then hard braking in a straight line | `accel_lat` and `accel_long` on Наживо: write down the sign of each. The G-метр (pick it on Екран → Картинка 48×48 → G-метр; it is not in the carousel) shows felt force, so its dot should go **right** in the left turn and **up** under braking. This confirms 0x2A0's signs | `0x2A0` b2.0/16, b1.0/8 |
+| 16 | A steady left turn, then hard braking in a straight line | `accel_lat` and `accel_long` on Сигнали: write down the sign of each. The G-метр (pick it on Екран → Картинка 48×48 → G-метр; it is not in the carousel) shows felt force, so its dot should go **right** in the left turn and **up** under braking. This confirms 0x2A0's signs | `0x2A0` b2.0/16, b1.0/8 |
 
-**After a check passes, press «✓ підтвердити» on that row** of Наживо (a
+**After a check passes, press «✓ підтвердити» on that row** of Сигнали (a
 derived value has no button: confirm its inputs). The row is saved as measured
-in this board's map, and the `?` goes everywhere: Наживо, the panel menu, the
+in this board's map, and the `?` goes everywhere: Сигнали, the panel menu, the
 car screen, alerts and the G-метр's ring. «↺ скасувати» makes it a hypothesis
 again. «Заводські прив'язки» brings back every hypothesis, so press ✓ again
 after one. A row measured for everyone loses `DF_HYPOTHESIS` in
 `decode_defaults.inc`. A row that does not read right: the capture, the marker
 and the step number go to the next session.
 
-**Alerts.** The bell 🔔 beside a signal on Наживо adds a rule to the
-"Сповіщення на дисплей" card on the same page (up to 16 rules: вище, нижче,
+**Alerts.** The bell 🔔 beside a signal on Сигнали adds a rule to the
+Сповіщення tab of the same page (up to 16 rules: вище, нижче,
 з'явилось, зникло, змінилось, with a pause of at least 5 s between popups). The card saves
 through `/api/settings` (`alerts`) like every other setting; a bad cell is
 refused with its row and column. The only factory rule is the low-fuel

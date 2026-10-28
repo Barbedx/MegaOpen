@@ -103,6 +103,9 @@ One page, two tables, same row shape:
    `Derived` keep car meanings only; the migration.
 4. **The page:** the two-table «Мапа», the protocol select, the old RAV4 card
    and the `calc` / `setBound` special cases deleted.
+   *As built (2026-10-28):* «Мапа» (`#map`) with three tabs, Сигнали | Поля ГУ |
+   Сповіщення, replaces «Авто — наживо» and the RAV4 card on «Авто»; see
+   docs/design/map-page.md. Web only.
 5. **Second protocol stub** (no wire format, a test module) to prove a swap needs
    no change outside the module.
    *As built (5a, 2026-10-28):* `Canbox::FieldProtocol` (src/proto/canbox/Protocol.h):

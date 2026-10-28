@@ -8,6 +8,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 ### Added
 - A USB cable test from a PC: `python tools/usb_link.py cable [seconds]` sends pings of every size up to 1024 bytes over the board's USB link and checks each echo byte for byte; it counts lost and wrong echoes, CRC errors and drops (reconnecting), prints the speed and latency, and ends GOOD or BAD. No firmware change, no WiFi. On the bench: 4861 echoes in 30 s, none lost, ~143 kB/s.
 
+### Changed
+- One page for the head-unit mapping: «Мапа» (`#map`, a card on «Авто») with three tabs, Сигнали | Поля ГУ | Сповіщення (`#map:fields`, `#map:alerts`). Сигнали is the old «Авто — наживо» table (source chips, ✓, 🔔, «Заводські прив'язки»), and each signal row now names the head-unit fields that take it («→ поле ГУ», a link to the field). Поля ГУ is the old RAV4 card from «Авто» (protocol, «Слати в ГУ», units, «Звідки», test ▶, «Прогін селектора»); «змінити в таблиці сигналів» and the other signal's name open that signal's source editor on Сигнали, without leaving the page. Сповіщення is the alert rules table; 🔔 lands there on the new row. `#live` is gone. Web only (docs/design/map-page.md).
+
 ## [1.6.5] - 2026-10-28
 
 ### Added

@@ -52,12 +52,18 @@ is open; track keys move the menu instead.
 
 Do not use the menu while driving.
 
-## The live car page
+## The map page
 
-**Авто → Наживо → Відкрити.** Every signal the board reads from the car's CAN
+**Авто → Мапа → Відкрити.** The whole chain «CAN row → signal → head-unit
+field» on one page, in three tabs: **Сигнали** (where a signal comes from),
+**Поля ГУ** (what the head unit gets) and **Сповіщення** (alerts on the
+display). The tab is in the address: `#map`, `#map:fields`, `#map:alerts`.
+
+**Сигнали** lists every signal the board reads from the car's CAN
 (listen-only): value, age, where it comes from, and **✓** (checked in a car)
 or **?** (positioned from Renault's data, not yet checked). It refreshes
-every 2 s.
+every 2 s. Under a signal's name, **→ поле ГУ** names the head-unit fields
+that take it; press one to land on that field in **Поля ГУ**.
 
 When you have checked a **?** signal in the car (the steps are in
 `docs/car-test-can-signals.md`), press **✓ підтвердити** on its row. The `?`
@@ -70,19 +76,22 @@ chip on its row. A CAN row (ID, byte, length, shift, mask, × ÷ +), a constant,
 or nothing. **Запам'ятати** then **Показати зміни** finds the byte: remember
 the bus, do the thing (open a door), and the IDs that changed are listed.
 
-**What the head unit gets** is the map on **Авто → мапа ГУ**: each field's
+**What the head unit gets** is the tab **Поля ГУ**: each field's
 **«Звідки»** is its own signal (the default), another signal scaled
 (× ÷ +, e.g. the battery `batt_v` ÷10 into the range field), a constant, or
 off. Coolant, the P/R/N/D probe and «Бак, %» start off; switch one on with
-«Звідки» → свій сигнал.
+«Звідки» → свій сигнал. «змінити в таблиці сигналів» (and the name of the
+other signal) goes back to **Сигнали** with that signal's source editor open.
+The tab also holds the protocol, «Слати в ГУ», the units, ▶ (a test value)
+and «Прогін селектора».
 
 If the list looks short after an update, see
 [«Заводські прив'язки»](#after-an-update).
 
 ### Alerts on the display
 
-The **🔔** beside a signal adds a rule to **Сповіщення на дисплей** on the
-same page. Up to 16 rules:
+The **🔔** beside a signal adds a rule and opens the tab **Сповіщення**
+with the new row. Up to 16 rules:
 
 | condition | fires when |
 | --- | --- |
@@ -177,7 +186,7 @@ old one.
 
 If a signal's binding was ever saved, the board keeps that saved list of
 bindings, and signals added by the update do not show. Press
-**Заводські прив'язки** once, above the signals table (**Авто → Наживо**). It
+**Заводські прив'язки** once, above the signals table (**Мапа › Сигнали**). It
 replaces your own bindings with the new factory list; the head-unit map
 («Звідки») is not touched.
 

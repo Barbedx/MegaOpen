@@ -192,7 +192,9 @@ canvas.glassC{display:block;width:100%;height:auto;border-radius:8px;border:2px 
 .tcell{display:flex;gap:4px;align-items:center}
 .tcell .in{width:84px}
 tr.nofw td{color:var(--mute)}
-.row.hl{outline:2px solid var(--acc);outline-offset:-2px;border-radius:8px}
+.row.hl,tr.hl{outline:2px solid var(--acc);outline-offset:-2px;border-radius:8px}
+/* «→ поле ГУ» під сигналом і посилання редактора поля на сигнал (72-map.js): цілі для пальця, як .row .c>a */
+.fmk{display:block}.fmk a,a[data-goto]{display:inline-flex;align-items:center;justify-content:center;min-height:40px;min-width:40px}
 tr.testing td:nth-child(2){color:var(--warn);font-weight:700}
 .tag.new{color:var(--acc);border-color:var(--acc)}
 /* прапорець у таблиці: зона натискання 40 px — label навколо нього */

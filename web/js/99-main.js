@@ -5,7 +5,7 @@ let CAT=null;
 let routing=Promise.resolve();
 function route(){routing=routing.then(doRoute,doRoute);return routing}
 async function doRoute(){
- const id=(location.hash||'#home').slice(1);curId=SCR[id]?id:'home';cur=SCR[curId];const my=++gen;
+ const id=(location.hash||'#home').slice(1).split(':')[0];curId=SCR[id]?id:'home';cur=SCR[curId];const my=++gen;
  if(leave){leave();leave=null}
  $('#title').textContent=t(cur.title);$$('#tabs a').forEach(a=>a.classList.toggle('on',a.dataset.t===curId));$('#back').hidden=!cur.hidden;
  if(curId==='service')$('#tabSvc').hidden=false;

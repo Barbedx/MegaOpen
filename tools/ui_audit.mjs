@@ -29,7 +29,7 @@ mkdirSync(out, { recursive: true });
 // Where each build env is looked at. Every tab on the car build; the direct
 // build's own screens (matrix, KEY1/KEY2) on Кнопки and Плата.
 const PAGES = [
-  ...['home', 'screen', 'keys', 'car', 'live', 'board', 'service'].map(t => ['t2can', t]),
+  ...['home', 'screen', 'keys', 'car', 'map', 'map:fields', 'map:alerts', 'board', 'service'].map(t => ['t2can', t]),
   ['direct', 'keys'], ['direct', 'board'],
 ];
 const SIZES = [[390, 844], [360, 740]];
@@ -167,7 +167,7 @@ try {
     await cmd('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: theme }] });
     for (const [w, h] of SIZES) {
       for (const [env, tab] of PAGES) {
-        const key = `${theme}-${w}-${env}-${tab}`;
+        const key = `${theme}-${w}-${env}-${tab.replace(':', '-')}`;  // no ":" in a file name (Windows)
         try {
           await cmd('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: 1, mobile: true });
           await cmd('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
