@@ -1,4 +1,5 @@
 #include "MediaPane.h"
+#include "PaneImages.h"
 #include <string.h>
 #include "../utils/UiList.h"
 
@@ -39,6 +40,9 @@ namespace MegaOpen
         {"tape",   nullptr},
         {"tunnel", nullptr},
         {"gmeter", nullptr},
+        {"tryzub", nullptr},
+        {"tryzubclock", nullptr},
+        {"renault", nullptr},
         {"custom", nullptr},
     };
     static_assert(sizeof(kScenes) / sizeof(kScenes[0]) == (size_t)MediaPane::SCENE_COUNT,
@@ -66,8 +70,9 @@ namespace MegaOpen
 
     bool MediaPane::animates(Scene s)
     {
-        // Media counts: its spectrum animates while playing.
-        return s != Scene::Off && s != Scene::Custom;
+        // Media counts: its spectrum animates while playing; TryzubClock's
+        // minute changes.
+        return s != Scene::Off && s != Scene::Custom && s != Scene::Tryzub && s != Scene::Renault;
     }
 
     bool MediaPane::usesMedia(Scene s) { return s == Scene::Media || s == Scene::Tape; }
@@ -75,7 +80,7 @@ namespace MegaOpen
     MediaPane::Scene MediaPane::carouselNext(Scene s)
     {
         uint8_t i = (uint8_t)((uint8_t)s + 1);
-        // Wrap past Off, never onto it; GMeter and Custom are not stops.
+        // Wrap past Off, never onto it; GMeter, the pictures and Custom are not stops.
         if (i >= (uint8_t)Scene::GMeter) i = 1;
         return (Scene)i;
     }
@@ -347,6 +352,9 @@ namespace MegaOpen
             case Scene::Tunnel:
             case Scene::GMeter:
             case Scene::Clock:
+            case Scene::Tryzub:
+            case Scene::TryzubClock:
+            case Scene::Renault:
             case Scene::Custom:
             case Scene::Off:
                 return;
@@ -481,6 +489,21 @@ namespace MegaOpen
         line(b, cx,     cy, cx + 16 * isin(ma) / 1024, cy - 16 * icos(ma) / 1024);
         line(b, cx,     cy, cx + 19 * isin(sa) / 1024, cy - 19 * icos(sa) / 1024);
         rect(b, cx - 1, cy - 1, cx + 1, cy + 1, true);
+    }
+
+    // The small tryzub (rows 0..30) and the time under it, HH:MM in the
+    // pane's 5x7 digits, centred: 27 columns (digit 6, colon 4, last digit 5).
+    void MediaPane::drawTryzubClock(uint8_t* b) const
+    {
+        memcpy(b, PaneImages::kTryzubSmall, sizeof(PaneImages::kTryzubSmall));
+        const uint32_t h = _clockSecs / 3600, m = (_clockSecs / 60) % 60;
+        int at = (W - 27) / 2;
+        const int y = 37;
+        glyph(b, kDigits[h / 10], at, y); at += 6;
+        glyph(b, kDigits[h % 10], at, y); at += 6;
+        glyph(b, kColon, at, y);          at += 4;
+        glyph(b, kDigits[m / 10], at, y); at += 6;
+        glyph(b, kDigits[m % 10], at, y);
     }
 
     void MediaPane::drawStars(uint8_t* b) const
@@ -742,6 +765,9 @@ namespace MegaOpen
             case Scene::Tape:   drawTape(out);   break;
             case Scene::Tunnel: drawTunnel(out); break;
             case Scene::GMeter: drawGMeter(out); break;
+            case Scene::Tryzub:  memcpy(out, PaneImages::kTryzub, BYTES);  break;
+            case Scene::TryzubClock: drawTryzubClock(out); break;
+            case Scene::Renault: memcpy(out, PaneImages::kRenault, BYTES); break;
             case Scene::Custom: if (_custom) memcpy(out, _custom, BYTES); break;
             // Off composes an empty pane: no capture shows a "remove layer"
             // command, so an all-zero image is the only way to blank the glass.

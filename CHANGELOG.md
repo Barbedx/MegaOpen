@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.6.5] - 2026-10-28
+
+### Added
+- The pictures are back on the panel, as scenes on «Екран»: «тризуб», «тризуб + годинник» (a smaller tryzub with the time, HH:MM, under it, live) and «Renault» (the losange). They were AffaDisplay's bench console's pictures (the tryzub its default), gone with those examples (AffaDisplay 8e0d7ae); the bitmaps are copied from its examples/shared/nav_images.h (src/display/PaneImages.h). Still pictures, so not carousel stops, like «свій малюнок».
+- The settings file carries the panel's own picture («свій малюнок», `picture`, 576 hex) when one is drawn: a reset or another board no longer loses it. An import checks it with the rest and the preview says it is there.
+
 ## [1.6.4] - 2026-10-28
 
 ### Added

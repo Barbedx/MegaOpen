@@ -884,6 +884,22 @@ void WebUi::routes()
         }
 #endif
         mapToFile(out);   // the CAN map and the head-unit emitter
+        // The Custom scene's picture, when one was drawn: it lives only in
+        // this board's NVS, so a reset or another board would lose it.
+        if (_ui.paneBits) {
+            struct Pic { uint8_t bits[MegaOpen::MediaPane::BYTES]; char hex[MegaOpen::MediaPane::BYTES * 2 + 1]; bool set; };
+            Scratch<Pic> pic;   // ~870 B: not on httpd's stack
+            if (pic) {
+                pic->set = false;
+                _ui.paneBits->read([&](const App::Ui::PaneBits& p) { pic->set = p.set; memcpy(pic->bits, p.bits, sizeof(pic->bits)); });
+                if (pic->set) {
+                    MegaOpen::MediaPane::toHex(pic->bits, pic->hex);
+                    out.put(",\"picture\":\"");
+                    out.put(pic->hex);
+                    out.put("\"");
+                }
+            }
+        }
         out.put("}");
         return out.finish();
     });
@@ -915,6 +931,11 @@ void WebUi::routes()
             clamped = knobsFromJson(kj, kc, &kerr);
         }
 #endif
+        // The Custom scene's picture (576 hex), checked now, saved after the settings.
+        JsonVariantConst pj = d["picture"];
+        const bool picIn = !pj.isNull() && _ui.paneBits;
+        if (!pj.isNull() && (!pj.is<const char*>() || !MegaOpen::MediaPane::fromHex(pj.as<const char*>(), nullptr)))
+            return r->reply(400, "text/plain", "param picture");
         // The CAN map and the head-unit emitter are checked before anything
         // is applied, like the rest; applied after the settings.
         bool mapIn = false, huIn = false;
@@ -927,6 +948,15 @@ void WebUi::routes()
         if (!dry && (mapIn || huIn))
             if (const char* why = mapFromFile(d["decode"], d["hu"], false, mapIn, huIn))
                 return r->reply(500, "text/plain", why);
+        if (!dry && picIn) {
+            const char* hex = pj.as<const char*>();
+            if (!_ui.paneBits->edit([&](App::Ui::PaneBits& p) { MegaOpen::MediaPane::fromHex(hex, p.bits); p.set = true; }))
+                return r->reply(503, "text/plain", "busy");
+            bool saved = false;
+            _ui.paneBits->read([&](const App::Ui::PaneBits& p) { saved = _cfg->savePaneBits(p.bits, sizeof(p.bits)); });
+            if (!saved) return r->reply(500, "text/plain", "nvs_failed");
+            LOGI("media", "own picture set from a settings file");
+        }
 
         JsonDocument o;
         deserializeJson(o, out);
@@ -934,6 +964,7 @@ void WebUi::routes()
             o["knobs"] = knobs;
             o["map"]   = mapIn;      // the file carries the CAN map
             o["hu"]    = huIn;       // and the head-unit emitter
+            o["picture"] = picIn;    // and the owner's own picture
             JsonArray cl = o["clamped"].to<JsonArray>();
 #if FEATURE_KNOBS
             for (uint16_t b = 1; b; b = (uint16_t)(b << 1))

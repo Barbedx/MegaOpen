@@ -5,6 +5,7 @@
 // something else.
 #include <initializer_list>
 #include "display/MediaPane.h"
+#include "display/PaneImages.h"
 
 using MegaOpen::MediaPane;
 
@@ -375,9 +376,9 @@ static void test_two_panes_stepped_alike_draw_alike()
 
 static void test_the_carousel_visits_every_scene_but_off_and_custom_and_wraps()
 {
-    // Each stop once, never Off, GMeter or Custom, and back to the start —
-    // the ui task trusts this for the ring and only supplies the clock.
-    constexpr uint8_t STOPS = MediaPane::SCENE_COUNT - 3;   // all but Off, GMeter and Custom
+    // Each stop once, never Off, GMeter, the pictures or Custom, and back to
+    // the start — the ui task trusts this for the ring and only supplies the clock.
+    constexpr uint8_t STOPS = (uint8_t)MediaPane::Scene::GMeter - 1;   // everything before GMeter but Off
     bool seen[MediaPane::SCENE_COUNT] = {false};
     MediaPane::Scene s = MediaPane::Scene::Media;
     for (uint8_t i = 0; i < STOPS; ++i) {
@@ -491,7 +492,9 @@ static void test_every_decorative_scene_moves_when_stepped()
         const auto s = (MediaPane::Scene)i;
         if (s == MediaPane::Scene::Off || s == MediaPane::Scene::Media ||
             s == MediaPane::Scene::Tape || s == MediaPane::Scene::GMeter ||
-            s == MediaPane::Scene::Clock || s == MediaPane::Scene::Custom) continue;
+            s == MediaPane::Scene::Clock || s == MediaPane::Scene::Custom ||
+            s == MediaPane::Scene::Tryzub || s == MediaPane::Scene::TryzubClock ||
+            s == MediaPane::Scene::Renault) continue;
         MediaPane p;
         p.setScene(s);
         p.step();
@@ -502,6 +505,37 @@ static void test_every_decorative_scene_moves_when_stepped()
         composeGuarded(p, b);
         TEST_ASSERT_TRUE_MESSAGE(memcmp(a, b, MediaPane::BYTES) != 0,
                                  MediaPane::sceneName(s));
+    }
+}
+
+// ---- the pictures (PaneImages.h) ---------------------------------------
+static void test_pictures_draw_and_the_tryzub_clock_tells_the_time()
+{
+    MediaPane p;
+    uint8_t a[MediaPane::BYTES], b[MediaPane::BYTES];
+    p.setScene(MediaPane::Scene::Tryzub);
+    composeGuarded(p, a);
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(MegaOpen::PaneImages::kTryzub, a, MediaPane::BYTES);
+    TEST_ASSERT_FALSE(MediaPane::animates(MediaPane::Scene::Tryzub));
+    p.setScene(MediaPane::Scene::Renault);
+    composeGuarded(p, a);
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(MegaOpen::PaneImages::kRenault, a, MediaPane::BYTES);
+    // The small tryzub on top, the time under it; another minute, another image.
+    p.setScene(MediaPane::Scene::TryzubClock);
+    p.setClockSecs(10 * 3600 + 23 * 60);
+    composeGuarded(p, a);
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(MegaOpen::PaneImages::kTryzubSmall, a, sizeof(MegaOpen::PaneImages::kTryzubSmall));
+    bool under = false;   // the digits, in rows 31..47
+    for (size_t k = sizeof(MegaOpen::PaneImages::kTryzubSmall); k < MediaPane::BYTES; ++k) under |= a[k] != 0;
+    TEST_ASSERT_TRUE(under);
+    p.setClockSecs(10 * 3600 + 24 * 60);
+    composeGuarded(p, b);
+    TEST_ASSERT_TRUE(memcmp(a, b, MediaPane::BYTES) != 0);
+    // Not carousel stops: a picture is picked on purpose.
+    for (uint8_t i = 1; i < MediaPane::SCENE_COUNT; ++i) {
+        const auto n = MediaPane::carouselNext((MediaPane::Scene)i);
+        TEST_ASSERT_TRUE(n != MediaPane::Scene::Tryzub && n != MediaPane::Scene::TryzubClock &&
+                         n != MediaPane::Scene::Renault);
     }
 }
 
@@ -919,6 +953,7 @@ int main(int, char**)
     RUN_TEST(test_the_picture_survives_a_round_trip_through_hex);
     RUN_TEST(test_a_bad_hex_picture_is_refused_whole);
     RUN_TEST(test_every_decorative_scene_moves_when_stepped);
+    RUN_TEST(test_pictures_draw_and_the_tryzub_clock_tells_the_time);
     RUN_TEST(test_life_reseeds_rather_than_freezing);
     RUN_TEST(test_compose_does_not_advance_the_animation);
     RUN_TEST(test_the_clock_face_reads_the_time_it_was_given);

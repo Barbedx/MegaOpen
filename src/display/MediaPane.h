@@ -52,12 +52,17 @@ namespace MegaOpen
             Tape,      // a cassette: reels turn while playing, tape wound by the position — REAL DATA
             Tunnel,    // nested squares rushing outward from a drifting centre
             GMeter,    // the car's lateral/longitudinal g (0x2A0): a dot, its trail, the peak — REAL DATA
+            // Pictures, picked on purpose like Custom, not carousel stops (a
+            // stop must move): from AffaDisplay's bench console (PaneImages.h).
+            Tryzub,    // the Ukrainian tryzub, still
+            TryzubClock, // a smaller tryzub with the time, HH:MM, under it
+            Renault,   // the Renault losange, still
             Custom,    // the owner's own 48x48 picture (POST /api/media bits=), still
             _Count
         };
         static constexpr uint8_t SCENE_COUNT = (uint8_t)Scene::_Count;
 
-        // Carousel: every scene but Off, GMeter and Custom, in enum order,
+        // Carousel: every scene before GMeter but Off, in enum order,
         // wrapping. Custom stays out: a still picture the owner picks on
         // purpose, not a decoration to rotate through; GMeter likewise (most
         // boards have no car data, and it would show a dotted ring). The ui
@@ -169,6 +174,7 @@ namespace MegaOpen
         void drawVu(uint8_t* b) const;
         void drawWave(uint8_t* b) const;
         void drawClock(uint8_t* b) const;
+        void drawTryzubClock(uint8_t* b) const;
         void drawStars(uint8_t* b) const;
         void drawBounce(uint8_t* b) const;
         void drawRings(uint8_t* b) const;
