@@ -11,6 +11,7 @@
 #include "../bus/Autobaud.h"
 #include "../capture/CapFormat.h"
 #include "../utils/Log.h"
+#include "../utils/LogTags.h"
 #include "../net/Catalog.h"
 
 namespace Cfg
@@ -204,6 +205,19 @@ namespace Cfg
             [] { return Log::LEVELS; },
             [](uint8_t i) { return Log::LEVEL_NAMES[i < Log::LEVELS ? i : 0]; },
             [](uint8_t i) { return Log::LEVEL_NAMES[i < Log::LEVELS ? i : 0]; },
+        };
+        // logTags: kept only when it reads (LogTags::setSpec), applied at once.
+        const SStr kLogTags = {
+            (uint8_t)LogTags::SPEC_MAX,
+            [](const Model& m, char* out, size_t cap) {
+                if (cap) snprintf(out, cap, "%s", m.s->logTags.c_str());
+            },
+            [](Model& m, const char* v) {
+                LogTags probe;
+                if (!probe.setSpec(v)) return;
+                m.s->logTags = v;
+                Log::setTagSpec(v);
+            },
         };
 #undef UI_NAMES_ENUM
 
@@ -523,9 +537,24 @@ namespace Cfg
             {"gear6", "6th", "gears", SType::Int, W, AP_NONE,
              0, 999, 1, nullptr, nullptr, S_GET(s.gearRatio[5]), S_PUT(s.gearRatio[5] = (uint16_t)v)},
             G("service", "Service", nullptr, WM),
-            {"logLevel", "Log level", "service", SType::Enum, WM | F_VOLATILE, AP_NONE,
-             0, 0, 0, nullptr, &kLogLevels, [](const Model&) -> int32_t { return (int32_t)Log::level(); },
-             [](Model&, int32_t v) { Log::setLevel((LogLevel)v); }},
+            // The log (docs/design/logging.md): saved, applied at once.
+            {"logLevel", "Log level", "service", SType::Enum, WM, AP_NONE,
+             0, 0, 0, nullptr, &kLogLevels, S_GET(s.logLevel),
+             [](Model& m, int32_t v) { m.s->logLevel = (uint8_t)v; Log::setLevel((LogLevel)v); }},
+            {"logTags", "Log per tag", "service", SType::Str, W, AP_NONE,
+             0, 0, 0, nullptr, nullptr, nullptr, nullptr, nullptr, &kLogTags},
+            {"logWeb", "Log to page", "service", SType::Enum, W, AP_NONE,
+             0, 0, 0, nullptr, &kLogLevels, S_GET(s.logWeb),
+             [](Model& m, int32_t v) { m.s->logWeb = (uint8_t)v; Log::setSinkLevel(Log::SINK_WEB, (LogLevel)v); }},
+            {"logFlash", "Log to flash", "service", SType::Enum, W, AP_NONE,
+             0, 3, 0, nullptr, &kLogLevels, S_GET(s.logFlash),
+             [](Model& m, int32_t v) { m.s->logFlash = (uint8_t)v; Log::setSinkLevel(Log::SINK_FLASH, (LogLevel)v); }},
+            {"logPush", "Log to GitHub", "service", SType::Enum, W, AP_NONE,
+             0, 0, 0, nullptr, &kLogLevels, S_GET(s.logPush),
+             [](Model& m, int32_t v) { m.s->logPush = (uint8_t)v; Log::setSinkLevel(Log::SINK_PUSH, (LogLevel)v); }},
+            {"logSerial", "Log to serial", "service", SType::Enum, W, AP_NONE,
+             0, 0, 0, nullptr, &kLogLevels, S_GET(s.logSerial),
+             [](Model& m, int32_t v) { m.s->logSerial = (uint8_t)v; Log::setSinkLevel(Log::SINK_SERIAL, (LogLevel)v); }},
             // Set by the page's «Режим розробника»; off at boot.
             {"devMode", "Dev mode", "service", SType::Bool, W | F_VOLATILE, AP_NONE,
              0, 1, 0, nullptr, nullptr, S_GET(s.devMode), S_PUT(s.devMode = v != 0)},

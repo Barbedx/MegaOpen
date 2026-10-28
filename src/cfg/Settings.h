@@ -41,6 +41,15 @@ namespace Cfg
         uint8_t  remindBrakeKmh  = 5;
         // The gears, km/h per 1000 rpm x10, 1st..6th (src/vehicle/Derived.h);
         // 0 = no such gear. Copy what [gear] learns, or the live gear_ratio.
+        // The log (docs/design/logging.md): the global threshold, per-tag
+        // thresholds ("hu=TRC knobs=DBG"), and the lowest level each sink takes.
+        // LogLevel values: 0 ERR .. 4 TRC.
+        uint8_t  logLevel  = 2;
+        Str      logTags   = "";
+        uint8_t  logWeb    = 4;
+        uint8_t  logFlash  = 3;
+        uint8_t  logPush   = 4;
+        uint8_t  logSerial = 2;
         uint16_t gearRatio[6] = {80, 147, 207, 275, 359, 431};
         Str      apName = "MegaOpen";
         Str      apPass = MO_AP_PASS;      // >= 8 chars or the AP comes up open

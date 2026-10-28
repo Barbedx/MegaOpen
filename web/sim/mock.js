@@ -67,7 +67,7 @@ const zone=(react)=>({count:5,react,anim:'breathe',leds:Array(8).fill('#00a0ff')
 const defKnobs=()=>({enc:encDef(true,['EncCw','EncCcw','Ok','SrcNext']),enc2:encDef(false,['VolUp','VolDown','Mute','None']),
  led:{enabled:false,order:'grb',brightness:128,holdMs:1500,levelSteps:30,animPeriod:60,rightFirst:false,ringReverse:false,zoneLeds:8,zones:[zone('level'),zone('flash')],
   feet:{count:0,max:144,anim:'static',brightness:96,color:'#ffffff'},maxMilliamps:400}});
-const defSet=()=>({pulseMs:120,uartEnabled:true,uartBaud:'38400',ssid:'HomeWiFi',bleMode:'ams',autoTime:true,ancsPopup:true,mdnsOn:true,wifiAuto:false,remindLightsKmh:10,remindBrakeKmh:5,mediaLayout:'info',mediaSource:'auto',
+const defSet=()=>({pulseMs:120,uartEnabled:true,uartBaud:'38400',ssid:'HomeWiFi',bleMode:'ams',autoTime:true,ancsPopup:true,mdnsOn:true,wifiAuto:false,remindLightsKmh:10,remindBrakeKmh:5,logTags:'',logWeb:'TRC',logFlash:'DBG',logPush:'TRC',logSerial:'INF',mediaLayout:'info',mediaSource:'auto',
  huTitleCmd:0,huArtistCmd:0,huTitleFirst:true,keyPopup:true,keyPopupMs:1200});
 /* Canbox::Tuning */
 const defTun=()=>({cmd28:0,doorsLen:2,steerInvert:0,steerDiv:10,steerClamp:540,fuelUnit:2,tripUnit:2,tripFields:1,histLen:13,radarInvert:0,version:'raise-rav4-1.2   '});

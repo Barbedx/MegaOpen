@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+- The log, step 1 of docs/design/logging.md: the level (`logLevel`) is saved and survives a reboot; per-tag levels (`logTags`, e.g. `hu=TRC knobs=DBG`, tags register themselves on first use); and per sink, the lowest level each takes (`logWeb`, `logFlash` at most DBG, `logPush`, `logSerial`). The LOGx macros look a tag up once per call site and format nothing for a line that will not be written.
+
 ### Fixed
 - The head unit's odometer was empty for a drive: 0x5FD did not come once (1.6.1 `[drive]`, two drives), so the field now takes the cluster's odometer (0x5C5, always on the bus) whenever 0x5FD is silent, not only under the 7D 04 experiments.
 

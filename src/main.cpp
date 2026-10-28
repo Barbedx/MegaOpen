@@ -203,7 +203,7 @@ static bool isIdfLine(const char* line) { return !strncmp(line, IDF, sizeof(IDF)
 
 static void serialSink(const char* line, int len, uint32_t)
 {
-    if (isWebOnly(line)) return;
+    if (isWebOnly(line) || !Log::sinkTakes(Log::SINK_SERIAL, line, len)) return;
 #if !ARDUINO_USB_CDC_ON_BOOT
     if (isIdfLine(line)) return;
 #endif
@@ -271,6 +271,7 @@ static bool huChanged(const char* line, int len, uint32_t ms)
 // unit's frames when they change.
 static void pushSink(const char* line, int len, uint32_t ms)
 {
+    if (!Log::sinkTakes(Log::SINK_PUSH, line, len)) return;
     const bool hur = !strncmp(line, HUR, sizeof(HUR) - 1);
     if (hur || isHuEcho(line)) {
         if (huChanged(line, len, ms)) LogPush::sink(line, len, ms);
@@ -287,7 +288,7 @@ static void pushSink(const char* line, int len, uint32_t ms)
 // line per press, held in RAM with the rest (LogFile.h).
 static void fileSink(const char* line, int len, uint32_t ms)
 {
-    if (!isWebOnly(line) && !isHuEcho(line)) LogFile::sink(line, len, ms);
+    if (!isWebOnly(line) && !isHuEcho(line) && Log::sinkTakes(Log::SINK_FLASH, line, len)) LogFile::sink(line, len, ms);
 }
 
 // Every software reboot (ESP.restart, esp_restart, the OTA and rollback
@@ -1890,6 +1891,19 @@ void setup()
     Log::setLevel(LogLevel::INF);
 
     g_cfg.begin();
+    // The log's own settings, saved (docs/design/logging.md).
+    {
+        const Cfg::Settings& s = g_cfg.s();
+        Log::setLevel((LogLevel)(s.logLevel < Log::LEVELS ? s.logLevel : 2));
+        Log::setTagSpec(s.logTags.c_str());
+        Log::setSinkLevel(Log::SINK_WEB, (LogLevel)s.logWeb);
+        Log::setSinkLevel(Log::SINK_FLASH, (LogLevel)s.logFlash);
+        Log::setSinkLevel(Log::SINK_PUSH, (LogLevel)s.logPush);
+        Log::setSinkLevel(Log::SINK_SERIAL, (LogLevel)s.logSerial);
+        if (s.logLevel != 2 || s.logTags.length())
+            logf("[log] level %s%s%s", Log::levelName(Log::level()), s.logTags.length() ? ", per tag: " : "",
+                 s.logTags.c_str());
+    }
     g_cfg.loadKeyMap(g_map);
 #if FEATURE_DISPLAY_CAN
     // The render policy's settings from NVS, what it draws from, and its UiQ

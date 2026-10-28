@@ -134,7 +134,7 @@ namespace Cfg
         inline constexpr uint8_t TAG_MAX = 14;
         // The most entries one POST /api/settings may change: room for every
         // entry (test_settings holds count() to it), and a 400 past it.
-        inline constexpr size_t MAX_CHANGES = 96;
+        inline constexpr size_t MAX_CHANGES = 112;
 
         size_t        count();
         const SEntry& at(size_t i);

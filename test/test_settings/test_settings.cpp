@@ -479,21 +479,29 @@ void test_decimal_text_both_ways()
 
 // ---- RAM-only entries ---------------------------------------------------------------
 
-// The log level is set at once and never saved: no apply bit asks anyone to
-// write NVS, and it is never a reboot setting.
-void test_log_level_is_ram_only()
+// The log's settings (docs/design/logging.md) are saved and apply at once:
+// the level goes to the logger and to Settings in one set, no apply bit, and
+// a bad per-tag spec is not kept.
+void test_log_settings_are_saved_and_apply_at_once()
 {
     Fixture f;
     const SEntry* e = Registry::find("logLevel");
     TEST_ASSERT_NOT_NULL(e);
-    TEST_ASSERT_TRUE(e->flags & F_VOLATILE);
+    TEST_ASSERT_FALSE(e->flags & F_VOLATILE);
     TEST_ASSERT_TRUE(e->flags & F_MENU);
     uint8_t ap = 0;
     TEST_ASSERT_TRUE(Registry::set(f.m, *e, Registry::enumIndex(*e, "TRC"), &ap));
     TEST_ASSERT_EQUAL((int)LogLevel::TRC, (int)Log::level());
+    TEST_ASSERT_EQUAL_UINT8(4, f.s.logLevel);
     TEST_ASSERT_EQUAL(0, ap);
     TEST_ASSERT_TRUE(Registry::set(f.m, *e, Registry::enumIndex(*e, "INF")));
-    TEST_ASSERT_EQUAL((int)LogLevel::INF, (int)Log::level());
+    TEST_ASSERT_EQUAL_UINT8(2, f.s.logLevel);
+    const SEntry* tags = Registry::find("logTags");
+    TEST_ASSERT_NOT_NULL(tags);
+    TEST_ASSERT_TRUE(Registry::setText(f.m, *tags, "hu=TRC knobs=DBG"));
+    TEST_ASSERT_EQUAL_STRING("hu=TRC knobs=DBG", f.s.logTags.c_str());
+    Registry::setText(f.m, *tags, "hu=LOUD");                // not a level: kept as it was
+    TEST_ASSERT_EQUAL_STRING("hu=TRC knobs=DBG", f.s.logTags.c_str());
     for (size_t i = 0; i < Registry::count(); ++i) {
         const SEntry& x = Registry::at(i);
         if (x.flags & F_VOLATILE) TEST_ASSERT_EQUAL_MESSAGE(0, x.apply & AP_REBOOT, x.id);
@@ -506,19 +514,11 @@ void test_log_level_is_ram_only()
 // a stale copy shows the new value at once.
 void test_menu_volatile_entries_read_their_owner()
 {
-    Fixture f;
-    const SEntry* e = Registry::find("logLevel");
-    Cfg::Settings stale = f.s;
-    Cfg::Model copy{&stale, f.m.k};
-    TEST_ASSERT_TRUE(Registry::set(f.m, *e, Registry::enumIndex(*e, "DBG")));
-    TEST_ASSERT_EQUAL(Registry::enumIndex(*e, "DBG"), Registry::get(copy, *e));
-    Registry::set(f.m, *e, Registry::enumIndex(*e, "INF"));
-    // And nothing else the menu can commit is volatile yet; a new one needs
-    // the same property, or a Config::touch() test on the board.
+    // None is left (the log level is saved since 1.6.2): a new one needs the
+    // property this test held for logLevel, or a Config::touch() test on the board.
     for (size_t i = 0; i < Registry::count(); ++i) {
         const SEntry& x = Registry::at(i);
-        if ((x.flags & F_VOLATILE) && (x.flags & F_MENU))
-            TEST_ASSERT_EQUAL_STRING_MESSAGE("logLevel", x.id, "a new volatile menu entry: check its snapshot");
+        TEST_ASSERT_FALSE_MESSAGE((x.flags & F_VOLATILE) && (x.flags & F_MENU), x.id);
     }
 }
 
@@ -560,9 +560,9 @@ void test_texts_are_web_only_and_described()
         ++texts;
         TEST_ASSERT_FALSE_MESSAGE(e.flags & F_MENU, e.id);
         TEST_ASSERT_NOT_NULL_MESSAGE(e.str, e.id);
-        TEST_ASSERT_TRUE_MESSAGE(e.str->maxLen > 0 && e.str->maxLen < 64, e.id);
+        TEST_ASSERT_TRUE_MESSAGE(e.str->maxLen > 0 && e.str->maxLen <= 160, e.id);
     }
-    TEST_ASSERT_EQUAL(1, texts);   // raise.version
+    TEST_ASSERT_EQUAL(2, texts);   // raise.version, logTags
 }
 
 // Exactly 16 bytes on the wire, space-padded; read back trimmed.
@@ -620,7 +620,7 @@ static const char* const kNotInRegistry[] = {"ssid", "pass", "mdnsName", "apName
 // the number. Host layout: std::string fields.
 void test_settings_struct_unchanged()
 {
-    TEST_ASSERT_EQUAL_MESSAGE(sizeof(std::string) * 11 + 88, sizeof(Settings),
+    TEST_ASSERT_EQUAL_MESSAGE(sizeof(std::string) * 12 + 96, sizeof(Settings),
                               "Cfg::Settings changed: add a registry entry, then update this size");
     // Every other field: count the entries that write Settings.
     size_t n = 0;
@@ -628,8 +628,8 @@ void test_settings_struct_unchanged()
         const SEntry& e = Registry::at(i);
         if (scalar(e) && !(e.flags & F_VOLATILE) && !(e.apply & (AP_KNOBS | AP_CAR | AP_CAP | AP_HU))) ++n;
     }
-    // 50 scalar/enum fields in Settings (carSig counts three, gearRatio six), all in the registry.
-    TEST_ASSERT_EQUAL(50, n);
+    // 55 scalar/enum fields in Settings (carSig counts three, gearRatio six, the log five), all in the registry.
+    TEST_ASSERT_EQUAL(55, n);
     (void)kNotInRegistry;
 }
 
@@ -694,7 +694,7 @@ void test_a_settings_file_leaves_out_what_is_not_a_setting()
     Fixture f;
     JsonDocument d;
     SettingsJson::write(f.m, d.to<JsonObject>(), true);
-    TEST_ASSERT_FALSE(d["logLevel"].is<const char*>());
+    TEST_ASSERT_TRUE(d["logLevel"].is<const char*>());            // saved since 1.6.2: in the file
     TEST_ASSERT_TRUE(d["can2Detected"].isNull());
     TEST_ASSERT_TRUE(d["uartBaud"].is<const char*>());
     JsonDocument in;
@@ -704,7 +704,7 @@ void test_a_settings_file_leaves_out_what_is_not_a_setting()
     SettingsJson::Errors err;
     SettingsJson::read(f.m, in.as<JsonObjectConst>(), r, err, true);
     TEST_ASSERT_FALSE(err.any());
-    TEST_ASSERT_EQUAL_UINT8(0, r.n);
+    TEST_ASSERT_EQUAL_UINT8(1, r.n);                              // the log level is a setting now
 }
 
 // Every bad key is reported, not the first one only, and nothing is applied:
@@ -940,7 +940,7 @@ int main(int, char**)
     RUN_TEST(test_an_empty_alert_is_never_on);
     RUN_TEST(test_tables_refuse_the_scalar_calls);
     RUN_TEST(test_decimal_text_both_ways);
-    RUN_TEST(test_log_level_is_ram_only);
+    RUN_TEST(test_log_settings_are_saved_and_apply_at_once);
     RUN_TEST(test_menu_volatile_entries_read_their_owner);
     RUN_TEST(test_hu_messages_table);
     RUN_TEST(test_texts_are_web_only_and_described);

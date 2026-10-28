@@ -24,6 +24,12 @@ namespace Cfg
         _s.wifiAuto = _p.getBool("wifiAuto", false);
         _s.remindLightsKmh = _p.getUChar("rmLights", 10);
         _s.remindBrakeKmh  = _p.getUChar("rmBrake", 5);
+        _s.logLevel  = _p.getUChar("logLv", 2);
+        _s.logTags   = _p.getString("logTags", "");
+        _s.logWeb    = _p.getUChar("logWeb", 4);
+        _s.logFlash  = _p.getUChar("logFlash", 3);
+        _s.logPush   = _p.getUChar("logPush", 4);
+        _s.logSerial = _p.getUChar("logSer", 2);
         {
             // Keys g1..g6 (1.6.2): the gr1..gr5 of 1.6.1 held the computed
             // five-speed table, wrong for this car; they are left unread.
@@ -153,6 +159,12 @@ namespace Cfg
         _p.putBool  ("wifiAuto", _s.wifiAuto);
         _p.putUChar ("rmLights", _s.remindLightsKmh);
         _p.putUChar ("rmBrake",  _s.remindBrakeKmh);
+        _p.putUChar ("logLv",    _s.logLevel);
+        _p.putString("logTags",  _s.logTags);
+        _p.putUChar ("logWeb",   _s.logWeb);
+        _p.putUChar ("logFlash", _s.logFlash);
+        _p.putUChar ("logPush",  _s.logPush);
+        _p.putUChar ("logSer",   _s.logSerial);
         {
             static const char* const key[6] = {"g1", "g2", "g3", "g4", "g5", "g6"};
             for (int i = 0; i < 6; ++i) _p.putUShort(key[i], _s.gearRatio[i]);

@@ -25,6 +25,10 @@ namespace Log {
         {"SYS", ""},   // boot, hb, mem, task, stall, stk, log, cfg, idf, ...
     };
     inline constexpr uint8_t TAG_COUNT = sizeof(TAG_ROWS) / sizeof(TAG_ROWS[0]);
+
+    // Where a line can go (docs/design/logging.md): each takes lines up to its
+    // own level, set by logWeb / logFlash / logPush / logSerial.
+    enum Sink : uint8_t { SINK_WEB = 0, SINK_FLASH, SINK_PUSH, SINK_SERIAL, SINK_COUNT };
 }
 
 // Native (host) test build: no-op stubs so the portable logic layer links
@@ -35,6 +39,9 @@ namespace Log {
     inline LogLevel&   levelRef() { static LogLevel l = LogLevel::INF; return l; }
     inline void        setLevel(LogLevel lvl) { levelRef() = lvl; }
     inline LogLevel    level() { return levelRef(); }
+    inline bool        setTagSpec(const char*) { return true; }
+    inline void        setSinkLevel(Sink, LogLevel) {}
+    inline bool        on(LogLevel, const char*, int8_t&) { return false; }
     inline bool        enabled(LogLevel) { return false; }
     inline const char *levelName(LogLevel) { return ""; }
     inline void        emit(LogLevel, const char *, const char *, ...) {}
@@ -60,8 +67,8 @@ namespace Log {
 //   DBG  per-operation narration; TRC  per-frame firehose.
 //
 // Runtime threshold (default INF) via the settings registry's logLevel
-// (/api/settings, the panel menu; nothing reads serial input). Not
-// persisted: TRC costs the CAN path real time.
+// (/api/settings, the panel menu; saved), per tag via logTags, per sink via
+// logWeb / logFlash / logPush / logSerial (docs/design/logging.md).
 // Gated-out lines return before formatting; guard costly payload builds with
 // Log::enabled(). Fixed stack buffer, no String: safe in the CAN callback.
 // ============================================================================
@@ -69,9 +76,35 @@ namespace Log {
 namespace Log {
     void     setLevel(LogLevel lvl);
     LogLevel level();
-    bool     enabled(LogLevel lvl);   // true when lvl <= current threshold
+    bool     enabled(LogLevel lvl);   // true when lvl <= the global threshold
     const char *levelName(LogLevel lvl);
 
+    // Per-tag thresholds, the setting logTags ("hu=TRC knobs=DBG"); false on a
+    // bad spec (nothing changes). LogTags.h.
+    bool setTagSpec(const char* spec);
+    const char* tagSpec();
+    // The tags seen this boot, with their override (LogTags::NONE: global).
+    uint8_t     tagCount();
+    const char* tagName(uint8_t i);
+    uint8_t     tagOverride(uint8_t i);
+
+    // The lowest level a sink takes; a line goes to it when it passed its
+    // tag's threshold AND its level is at most the sink's. The flash log never
+    // takes TRC (every frame would erase sectors): asked for, it gets DBG.
+    void     setSinkLevel(Sink s, LogLevel lvl);
+    LogLevel sinkLevel(Sink s);
+    // For a sink: does this line ("<L> [tag] ...", or a legacy line = INF) go?
+    bool     sinkTakes(Sink s, const char* line, int len);
+
+    // Would a line of this level and tag be written? `slot` caches the tag's
+    // index (start it at -1): the macros keep one per call site.
+    bool on(LogLevel lvl, const char* tag, int8_t& slot);
+    // Formats and writes, no threshold check (the macros checked).
+    void write(LogLevel lvl, const char* tag, const char* fmt, ...)
+        __attribute__((format(printf, 3, 4)));
+
+    // Checks the threshold itself (looks the tag up every call): for code that
+    // cannot use the macros.
     void emit(LogLevel lvl, const char *cat, const char *fmt, ...)
         __attribute__((format(printf, 3, 4)));
 
@@ -80,9 +113,16 @@ namespace Log {
 }
 
 // Category: short stable literal ("BT", "CAN", "AFFA", ...); used as a filter key.
-#define LOGE(cat, ...) Log::emit(LogLevel::ERR, cat, __VA_ARGS__)
-#define LOGW(cat, ...) Log::emit(LogLevel::WRN, cat, __VA_ARGS__)
-#define LOGI(cat, ...) Log::emit(LogLevel::INF, cat, __VA_ARGS__)
-#define LOGD(cat, ...) Log::emit(LogLevel::DBG, cat, __VA_ARGS__)
-#define LOGT(cat, ...) Log::emit(LogLevel::TRC, cat, __VA_ARGS__)
+// The tag is a string literal; its index is looked up once per call site, and
+// the arguments are evaluated only when the line will be written.
+#define LOG_AT(lvl, cat, ...)                                                        \
+    do {                                                                             \
+        static int8_t s_logTag_ = -1;                                                \
+        if (Log::on(lvl, cat, s_logTag_)) Log::write(lvl, cat, __VA_ARGS__);         \
+    } while (0)
+#define LOGE(cat, ...) LOG_AT(LogLevel::ERR, cat, __VA_ARGS__)
+#define LOGW(cat, ...) LOG_AT(LogLevel::WRN, cat, __VA_ARGS__)
+#define LOGI(cat, ...) LOG_AT(LogLevel::INF, cat, __VA_ARGS__)
+#define LOGD(cat, ...) LOG_AT(LogLevel::DBG, cat, __VA_ARGS__)
+#define LOGT(cat, ...) LOG_AT(LogLevel::TRC, cat, __VA_ARGS__)
 #endif // NATIVE
