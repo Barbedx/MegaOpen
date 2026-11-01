@@ -10,7 +10,7 @@ async function doRoute(){
  $('#title').textContent=t(cur.title);$$('#tabs a').forEach(a=>a.classList.toggle('on',a.dataset.t===curId));$('#back').hidden=!cur.hidden;
  if(curId==='service')$('#tabSvc').hidden=false;
  const m=$('#main');m.innerHTML='<div class="row muted">…</div>';window.scrollTo(0,0);
- try{await cur.render(m)}catch(e){if(my===gen)m.innerHTML=card(t('c.errTitle'),row(esc(errT(e)),`<button class="btn" type="button" onclick="route()">${t('c.retry')}</button>`,e.req?esc(e.req):''))}
+ try{await cur.render(m)}catch(e){reportPageError(curId,e);if(my===gen)m.innerHTML=card(t('c.errTitle'),row(esc(errT(e)),`<button class="btn" type="button" onclick="route()">${t('c.retry')}</button>`,e.req?esc(e.req):''))}
 }
 let busy=false,tickN=0;
 async function foot(){const st=await API.get('/api/status');$('#foot').textContent=[st.fw,st.build.split(' ')[0],t('m.boot',st.boots),t('m.up',fmtUp(st.uptimeMs)),t('m.mem',Math.round(st.heap/1024)),st.ip].join(' · ')}

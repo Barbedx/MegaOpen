@@ -695,6 +695,30 @@ void WebUi::routes()
     // counters always; the flash files where they exist.
     // The tags seen this boot (they register on first use) and their own
     // level, null = the global one: the «Журнал» card's per-tag rows.
+    // The page's own errors: a screen that failed to open, an uncaught
+    // exception. One line at WARN under [page], so the flash log and the
+    // push carry what the owner saw; on 2026-11-01 «невідоме значення…» on
+    // «Сигнали» in the car left no trace anywhere, the error lived in the
+    // phone's browser alone. Form fields: where (the screen), msg, req (the
+    // request that failed, if one did). At most one a second; folded to one
+    // line and cut, whatever the page sends.
+    route("/api/page/error", HTTP_POST, [](PsychicRequest* r) {
+        static uint32_t s_lastMs = 0;
+        const uint32_t now = millis();
+        if (now - s_lastMs < 1000) return r->reply(200, "text/plain", "OK");
+        s_lastMs = now;
+        String msg = paramStr(r, "msg"), req = paramStr(r, "req"), where = paramStr(r, "where");
+        auto fold = [](String& s, unsigned cap) {
+            s.replace('\n', ' ');
+            s.replace('\r', ' ');
+            if (s.length() > cap) s.remove(cap);
+        };
+        fold(msg, 160); fold(req, 80); fold(where, 24);
+        if (!msg.length()) return r->reply(400, "text/plain", "param msg");
+        LOGW("page", "%s: %s%s%s", where.c_str(), msg.c_str(), req.length() ? " @ " : "", req.c_str());
+        return r->reply(200, "text/plain", "OK");
+    });
+
     route("/api/logs/tags", HTTP_GET, [](PsychicRequest* r) {
         JsonDocument d;
         JsonArray a = d["tags"].to<JsonArray>();

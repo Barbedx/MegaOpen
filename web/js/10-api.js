@@ -46,6 +46,13 @@ async function call(m,path,params){
  return body;
 }
 const API={get:p=>call('GET',p),post:(p,params)=>call('POST',p,params)};
+/* помилка сторінки — у журнал плати ([page], рівень W: у флеш і в push), щоб звіт з авто ніс її текст,
+   а не переказ. Не частіше ніж раз на 10 с; «немає зв’язку з платою» не шлемо (нема кому); відповіді не чекаємо */
+let PERR_AT=0;
+function reportPageError(where,e){const now=Date.now();if(now-PERR_AT<10000)return;const msg=String(e&&e.message||e||'').slice(0,160);
+ if(!msg||msg===t('c.noBoard'))return;PERR_AT=now;call('POST','/api/page/error',{where:String(where||'').slice(0,24),req:(e&&e.req)||'',msg}).catch(()=>{})}
+window.addEventListener('error',ev=>reportPageError(location.hash||'#home',ev.error||ev.message));
+window.addEventListener('unhandledrejection',ev=>reportPageError(location.hash||'#home',ev.reason));
 /* файл з плати: браузер сам качає за посиланням. Повертає {note} для run() */
 async function download(path,name){
  if(window.SIM){await SIM.call('GET',path);return {note:t('c.simDl',name)}}

@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.6.11] - 2026-11-01
+
+### Added
+- The page's own errors reach the board's log: a screen that fails to open, or an uncaught error, is sent to `POST /api/page/error` and written as one `[page]` line at WARN (the screen, the text, the request that failed), so the flash log and the push to GitHub carry what the owner saw. Until now such an error lived in the phone's browser alone («невідоме значення…» on «Сигнали» in the car, 2026-11-01, no trace anywhere). At most one a second on the board, one in 10 s from a page.
+
 ## [1.6.10] - 2026-11-01
 
 ### Added

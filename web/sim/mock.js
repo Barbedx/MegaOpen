@@ -174,6 +174,8 @@ function logsSince(since){if(since>logSeq)since=0;const old=RING.length?RING[0].
  lines=RING.filter(l=>l.n>since).slice(0,200),next=lines.length?lines[lines.length-1].n:Math.max(since,old-1);return {lines,next,lost,more:next<logSeq,dropped:0,boot:SIM_BOOT}}
 /* ---- маршрути мок-API ---- */
 const R={},g=(p,f)=>R['GET '+p]=f,po=(p,f)=>R['POST '+p]=f;
+/* помилка сторінки: прошивка пише її в журнал [page]; мок лише приймає */
+po('/api/page/error',q=>{emit(1,'NET','[page] '+(q.where||'')+': '+(q.msg||'')+(q.req?' @ '+q.req:''));return 'OK'});
 /* помилки прошивки: text/plain, тіло — сам текст */
 const fail=(st,text)=>({__status:st,body:String(text)});
 const ok={ok:true},queued=()=>({__status:202,body:{queued:true,note:'queued for the display task; the result is reported in the log'}});

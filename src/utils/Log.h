@@ -21,7 +21,7 @@ namespace Log {
         {"CAN", "can can2 twai car"},
         {"CAP", "cap"},
         {"MAC", "macro"},
-        {"NET", "net wifi web"},
+        {"NET", "net wifi web page"},
         {"SYS", ""},   // boot, hb, mem, task, stall, stk, log, cfg, idf, ...
     };
     inline constexpr uint8_t TAG_COUNT = sizeof(TAG_ROWS) / sizeof(TAG_ROWS[0]);

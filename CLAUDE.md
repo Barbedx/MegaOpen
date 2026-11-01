@@ -60,6 +60,7 @@ map; this file is the "where do I look" index for a session in the car.
 | `[ble]` | iPhone link, AMS/HID queues |
 | `[ota]` | trial / CONFIRMED / rolling back |
 | `[usb]` | USB link: host SOFs / addressed / configured (link up), bus reset, suspend; the app's frames |
+| `[page]` | the web page's own errors, sent by the page: which screen, the text, the request that failed |
 | `[push]` | log push to GitHub: file sent, bytes queued, GitHub's refusal |
 | `[alert]` | panel alert rules |
 | `[mem]`, `[win]`, `[stk]`, `[task]`, `[stall]` | heap, stacks, task ages, loop gaps |
