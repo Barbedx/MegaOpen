@@ -122,6 +122,166 @@ namespace CarFile
         return nullptr;
     }
 
+    // ---- the rules -----------------------------------------------------------------
+
+    namespace
+    {
+        void actionTo(JsonObject o, const Vehicle::RuleAction& a)
+        {
+            o["effect"] = Keys::effectName(a.effect);
+            char hex[4];
+            switch (a.effect) {
+                case Keys::Effect::Action:
+                    o["action"] = Keys::name(a.action);
+                    if (a.code) { snprintf(hex, sizeof(hex), "%02X", a.code); o["codeHex"] = hex; }
+                    break;
+                case Keys::Effect::KeyCode:
+                case Keys::Effect::Message:
+                    snprintf(hex, sizeof(hex), "%02X", a.code);
+                    o["codeHex"] = hex;
+                    break;
+                case Keys::Effect::Raw: {
+                    snprintf(hex, sizeof(hex), "%02X", a.code);
+                    o["codeHex"] = hex;
+                    char data[Keys::Macro::MAX_DATA * 3];
+                    int n = 0;
+                    for (uint8_t j = 0; j < a.dataLen && j < Keys::Macro::MAX_DATA; ++j)
+                        n += snprintf(data + n, sizeof(data) - n, "%s%02X", j ? " " : "", a.data[j]);
+                    data[n] = 0;
+                    o["data"] = data;    // copied by the document
+                    break;
+                }
+                default:
+                    o["arg"] = a.arg;      // Text, Popup, Pane
+                    break;
+            }
+        }
+
+        // "01 A0 ff" -> bytes; -1 on a bad digit or too many.
+        int hexBytes(const char* s, uint8_t* out, uint8_t cap)
+        {
+            uint8_t n = 0;
+            int hi = -1;
+            for (; *s; ++s) {
+                int v;
+                if (*s >= '0' && *s <= '9') v = *s - '0';
+                else if (*s >= 'a' && *s <= 'f') v = *s - 'a' + 10;
+                else if (*s >= 'A' && *s <= 'F') v = *s - 'A' + 10;
+                else if (*s == ' ' || *s == ':' || *s == ',') { if (hi >= 0) return -1; continue; }
+                else return -1;
+                if (hi < 0) { hi = v; continue; }
+                if (n >= cap) return -1;
+                out[n++] = (uint8_t)((hi << 4) | v);
+                hi = -1;
+            }
+            return hi >= 0 ? -1 : (int)n;
+        }
+
+        const char* actionFrom(JsonObjectConst o, Vehicle::RuleAction& a)
+        {
+            a = Vehicle::RuleAction{};
+            a.effect = Keys::effectFromName(o["effect"] | "none");
+            if (a.effect == Keys::Effect::None) return "do.effect: param";
+            a.action = Keys::fromName(o["action"] | "None");
+            const char* hex = o["codeHex"] | "";
+            if (hex[0]) {
+                uint8_t c;
+                if (hexBytes(hex, &c, 1) != 1) return "do.codeHex: param";
+                a.code = c;
+            }
+            const char* data = o["data"] | "";
+            if (data[0]) {
+                const int n = hexBytes(data, a.data, Keys::Macro::MAX_DATA);
+                if (n < 0) return "do.data: macro_hex 8";
+                a.dataLen = (uint8_t)n;
+            }
+            const char* arg = o["arg"] | "";
+            if (strlen(arg) >= Keys::Macro::ARG_LEN) return "do.arg: too_long";
+            strncpy(a.arg, arg, Keys::Macro::ARG_LEN - 1);
+            return nullptr;
+        }
+    }
+
+    void ruleRowTo(JsonObject o, const Vehicle::RuleRow& r)
+    {
+        o["name"] = r.name;
+        o["on"]   = r.on;
+        if (r.isGesture()) {
+            JsonObject g = o["gesture"].to<JsonObject>();
+            g["trigger"] = Keys::triggerName(r.gesture.trigger);
+            JsonArray k = g["keys"].to<JsonArray>();
+            const uint8_t n = r.gesture.trigger == Keys::Trigger::Combo ? r.gesture.members : 1;
+            for (uint8_t j = 0; j < n && j < Keys::Macro::MAX_MEMBERS; ++j) k.add(Keys::name(r.gesture.keys[j]));
+            if (r.gesture.trigger == Keys::Trigger::Sequence) {
+                g["taps"]     = r.gesture.taps;
+                g["windowMs"] = r.gesture.windowMs;
+            }
+            g["swallow"] = r.gesture.swallow;
+        }
+        o["when"]  = r.when;
+        o["pause"] = r.pauseS;
+        JsonArray d = o["do"].to<JsonArray>();
+        for (uint8_t k = 0; k < r.nAct && k < Vehicle::RuleRow::MAX_ACTIONS; ++k) actionTo(d.add<JsonObject>(), r.act[k]);
+    }
+
+    const char* ruleRowFrom(JsonObjectConst o, Vehicle::RuleRow& r)
+    {
+        r = Vehicle::RuleRow{};
+        const char* name = o["name"] | "";
+        const char* when = o["when"] | "";
+        if (!name[0] || strlen(name) > Vehicle::RULE_NAME) return "name: rule_name";
+        if (strlen(when) > Expr::Program::MAX_SRC) return "when: expr_long";
+        strncpy(r.name, name, Vehicle::RULE_NAME);
+        strncpy(r.when, when, Expr::Program::MAX_SRC);
+        r.on = o["on"] | true;
+        const long pause = o["pause"] | (long)Vehicle::RuleRow::PAUSE_MIN_S;
+        if (pause < 0 || pause > 65535) return "pause: between 0 65535";
+        r.pauseS = (uint16_t)pause;
+        if (o["gesture"].is<JsonObjectConst>()) {
+            JsonObjectConst g = o["gesture"];
+            r.gesture.trigger = Keys::triggerFromName(g["trigger"] | "off");
+            if (r.gesture.trigger == Keys::Trigger::Off) return "gesture.trigger: param";
+            r.gesture.members = 0;
+            for (JsonVariantConst v : g["keys"].as<JsonArrayConst>()) {
+                if (r.gesture.members >= Keys::Macro::MAX_MEMBERS) break;
+                const Keys::Action a = Keys::fromName(v | "None");
+                if (a != Keys::Action::None) r.gesture.keys[r.gesture.members++] = a;
+            }
+            const long taps = g["taps"] | 3L, win = g["windowMs"] | 600L;
+            if (taps < 2 || taps > 10) return "gesture.taps: between 2 10";
+            if (win < 50 || win > 65535) return "gesture.windowMs: between 50 65535";
+            r.gesture.taps = (uint8_t)taps;
+            r.gesture.windowMs = (uint16_t)win;
+            r.gesture.swallow = g["swallow"] | true;
+        }
+        r.nAct = 0;
+        for (JsonObjectConst a : o["do"].as<JsonArrayConst>()) {
+            if (r.nAct >= Vehicle::RuleRow::MAX_ACTIONS) return "do: rows_max 3";
+            if (const char* why = actionFrom(a, r.act[r.nAct])) return why;
+            ++r.nAct;
+        }
+        return nullptr;
+    }
+
+    void putRules(JsonObject car, const Vehicle::RuleSet& set)
+    {
+        JsonArray a = car["rules"].to<JsonArray>();
+        for (uint16_t i = 0; i < set.rows.size(); ++i) ruleRowTo(a.add<JsonObject>(), set.rows[i]);
+    }
+
+    const char* getRules(JsonObjectConst car, Vehicle::RuleSet& set)
+    {
+        set.rows.clear();
+        if (!car["rules"].is<JsonArrayConst>()) return "rules: missing";
+        for (JsonObjectConst o : car["rules"].as<JsonArrayConst>()) {
+            if (set.rows.size() >= Vehicle::RuleSet::MAX_ROWS) { set.rows.clear(); return "rules: rule_rows"; }
+            Vehicle::RuleRow r;
+            if (const char* why = ruleRowFrom(o, r)) { set.rows.clear(); return why; }
+            if (!set.rows.push(r)) { set.rows.clear(); return "no_memory"; }
+        }
+        return nullptr;
+    }
+
     int ruleJson(char* b, size_t cap, const Canbox::FieldRule& r)
     {
         static const char* const FROM[] = {"", "sig", "k", "off"};

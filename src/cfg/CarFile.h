@@ -6,6 +6,7 @@
 #include "../proto/canbox/FieldMap.h"
 #include "../proto/canbox/Protocol.h"
 #include "../vehicle/Formulas.h"
+#include "../vehicle/Rules.h"
 
 // The car's configuration as one JSON document (docs/design/rules.md, slice 1):
 // what /cfg/car.json in LittleFS holds (CarStore) and what a settings file
@@ -20,7 +21,11 @@
 //    "hu":{"raise112":{"fields":[{"field":"range","from":"sig","src":"range_calc",
 //                                 "mul":1,"div":1,"add":0}]}},
 //    "formulas":[{"name":"fuel_pct","f":"fuel_level * 100 / 60","unit":"",
-//                 "dec":0,"bool":false,"on":true}]}
+//                 "dec":0,"bool":false,"on":true}],
+//    "rules":[{"name":"fuel_low","on":true,"when":"rises(fuel_low)","pause":300,
+//              "do":[{"effect":"popup","arg":""}]},
+//             {"name":"source","on":true,"gesture":{"trigger":"combo","keys":["VolUp","VolDown"],
+//              "swallow":true},"when":"","pause":0,"do":[{"effect":"key","codeHex":"07"}]}]}
 //
 // No `decode`: the factory table (decode_defaults.inc). Field maps are kept
 // per protocol: another protocol's entry is left as it is.
@@ -50,6 +55,16 @@ namespace CarFile
     // One row both ways, for /api/formulas too.
     void        formulaRowTo(JsonObject o, const Vehicle::FormulaRow& r);
     const char* formulaRowFrom(JsonObjectConst o, Vehicle::FormulaRow& r);
+
+    // ---- the rules (Vehicle::RuleSet) ---------------------------------------------
+    void putRules(JsonObject car, const Vehicle::RuleSet& set);
+    // `car["rules"]`, as written; checked by the caller (Rules::check).
+    // nullptr = read; "rules: missing" = none (the caller's factory set).
+    const char* getRules(JsonObjectConst car, Vehicle::RuleSet& set);
+    // One row both ways, for /api/rules too. An action: {effect, and the field
+    // Keys::EFFECTS[].field names: action | codeHex | codeHex+data | arg}.
+    void        ruleRowTo(JsonObject o, const Vehicle::RuleRow& r);
+    const char* ruleRowFrom(JsonObjectConst o, Vehicle::RuleRow& r);
 
     // ---- one field rule, as /api/hu/fields and the file write it ----------------
     // {"from":"own"|"sig"|"k"|"off","src","mul","div","add"}; the length written.
