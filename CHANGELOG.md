@@ -5,6 +5,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-11-01
+
+### Added
+- **Rules** («Мапа» › «Правила», docs/design/rules.md slice 4): one mechanism for what the panel alerts and the key macros did. A rule is «when → do» with a pause and a switch. By signal: a formula over the car's signals that fires when it becomes true (`rises(fuel_low)`, `speed > 100 && !light_dip`; true at first sight counts), again no sooner than the pause (5 s at least). By gesture: a key combination MacroEngine detects on the keys task (together, several presses, a hold), with an optional «only if» formula. Up to three actions in order: a popup on the display (text with `{signal}` placeholders, or the signal and its value), three rows of text, a pane scene, a key through the routing matrix, a literal head-unit key code, a raw head-unit frame, a head-unit message. The popup keeps the alerts' manners: one pending, never over the menu, dropped if the rule no longer holds by the time the glass is free; the apps read the shown ones from `/api/alerts` as before (`sig` is now the rule's name). No «set a signal» action and no ELSE: a state a rule would keep is a formula. The rules live in the car file (`/cfg/car.json` `rules`, by signal name); 1.6's NVS alert rows and macros are carried over once, on the first boot (`[car] rules: N row(s) from NVS alerts/macros`), and the NVS keys are erased after the OTA trial. `GET/POST /api/rules`, `POST /api/rules/test?id=N`; the `🔔` beside a signal starts a rule on it; the settings file (`/api/config`) carries `rules` with the decode table, the field map and the formulas. The log says each fire under `[rule]`. 8 host tests (`test_rules`).
+
+### Removed
+- The panel alert table (`/api/settings` `alerts`, the «Сповіщення» tab, `AlertRules`/`AlertEval`), the macro card on «Клавіші» with `/api/macros`, and the NVS keys `alerts` and `macros`: all of it is rules now. A settings file from 1.6 still imports; its `alerts` rows are skipped (the rules came from NVS on the update).
+
+### Fixed
+- The car file could lose a part it held: ArduinoJson keeps a `const char[N]` by pointer (it takes one for a string literal), so a formula row (since 1.6.9) or a rule row written from a struct that was gone by the next save went into `/cfg/car.json` as garbage, and the next boot refused that part (`formulas in /cfg/car.json refused (...)`: the factory's ran). Every string is copied into the document now (`test_carfile`: the document owns its strings). A board that ran 1.6.9 and logs such a refusal: save that part once from its page (or its «Заводські»), the file is whole again.
+- A settings file that carried formulas but neither the CAN map nor the head-unit fields was checked, answered ok, and then not applied. Every part the file carries is applied, and the import preview names them (the CAN bindings, the head-unit fields, the formulas, the rules).
+- The update's carry-over of the 1.6 alert table read a version-1 blob (saved up to 1.6.3) as sixteen rules on `service_calc`: an empty row there is the saving build's signal count, not 0xFF. It reads as 1.6.9 read it, and a carried set that would not check goes nowhere (the factory's instead, with the reason in the log).
+
 ### Changed
 - «Напруга АКБ» on «Поля ГУ» says what is so: protocol 112 has no voltage field and the head unit reads none from a canbox, the volts on its screen are its own measurement. It no longer suggests sending the battery in another field's place. The guide says where «Бак, %» shows (`0x7D 04` bytes 4-5, the head unit's status bar beside the range) and that it starts off.
 

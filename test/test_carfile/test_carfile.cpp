@@ -3,6 +3,8 @@
 #include <ArduinoJson.h>
 #include "cfg/CarFile.h"
 #include "vehicle/DecodeTable.h"
+#include "vehicle/Formulas.h"
+#include "vehicle/Rules.h"
 #include "vehicle/Signals.h"
 #include "proto/canbox/Protocol.h"
 
@@ -193,9 +195,84 @@ void test_the_old_nvs_blob_carries_into_the_file()
     TEST_ASSERT_EQUAL_INT32(1300, w.k[w.constOf(SIG_BATT_V)].value);
 }
 
+// ArduinoJson takes a `const char (&)[N]` for a string literal and keeps the
+// pointer. A const struct's char[] member put into the car document that way
+// dangles once the struct is gone (1.6.9's formulas, 1.7.0's first rules): the
+// next save wrote garbage into /cfg/car.json. Every string in the document is
+// the document's own, and the text survives the struct.
+namespace
+{
+    void assertOwned(JsonVariantConst v, const char* where)
+    {
+        if (v.is<JsonObjectConst>()) {
+            for (JsonPairConst kv : v.as<JsonObjectConst>()) assertOwned(kv.value(), kv.key().c_str());
+            return;
+        }
+        if (v.is<JsonArrayConst>()) {
+            for (JsonVariantConst x : v.as<JsonArrayConst>()) assertOwned(x, where);
+            return;
+        }
+        if (v.is<const char*>()) TEST_ASSERT_FALSE_MESSAGE(v.as<JsonString>().isStatic(), where);
+    }
+}
+
+void test_the_document_owns_its_strings()
+{
+    JsonDocument d;
+    JsonObject car = d.to<JsonObject>();
+    {
+        DecodeTable t;
+        t.factory();
+        FormulaSet f;
+        f.factory();
+        FormulaRow own;
+        strcpy(own.name, "mine");
+        strcpy(own.src, "speed * 2");
+        strcpy(own.unit, "u");
+        TEST_ASSERT_TRUE(f.rows.push(own));
+        RuleSet r;
+        r.factory();
+        RuleRow g;
+        strcpy(g.name, "two_keys");
+        strcpy(g.when, "speed > 5");
+        g.gesture.trigger = Keys::Trigger::Combo;
+        g.gesture.keys[0] = Keys::Action::VolUp;
+        g.gesture.keys[1] = Keys::Action::VolDown;
+        g.gesture.members = 2;
+        g.act[0].effect = Keys::Effect::Text;
+        strcpy(g.act[0].arg, "a|b|c");
+        g.act[1].effect = Keys::Effect::Raw;
+        g.act[1].code = 0x28;
+        g.act[1].data[0] = 0x01;
+        g.act[1].dataLen = 1;
+        g.nAct = 2;
+        TEST_ASSERT_TRUE(r.rows.push(g));
+        CarFile::putDecode(car, t);
+        CarFile::putFormulas(car, f);
+        CarFile::putRules(car, r);
+        // Scribble over the structs before they go: a linked pointer would show it.
+        memset(f.rows[f.rows.size() - 1].name, 'x', USER_NAME);
+        memset(r.rows[r.rows.size() - 1].name, 'x', RULE_NAME);
+        memset(r.rows[r.rows.size() - 1].when, 'x', 16);
+        memset(r.rows[r.rows.size() - 1].act[0].arg, 'x', 8);
+    }
+    assertOwned(d.as<JsonVariantConst>(), "car");
+    FormulaSet gf;
+    TEST_ASSERT_NULL(CarFile::getFormulas(d.as<JsonObjectConst>(), gf));
+    TEST_ASSERT_EQUAL_STRING("mine", gf.rows[gf.rows.size() - 1].name);
+    TEST_ASSERT_EQUAL_STRING("speed * 2", gf.rows[gf.rows.size() - 1].src);
+    RuleSet gr;
+    TEST_ASSERT_NULL(CarFile::getRules(d.as<JsonObjectConst>(), gr));
+    const RuleRow& back = gr.rows[gr.rows.size() - 1];
+    TEST_ASSERT_EQUAL_STRING("two_keys", back.name);
+    TEST_ASSERT_EQUAL_STRING("speed > 5", back.when);
+    TEST_ASSERT_EQUAL_STRING("a|b|c", back.act[0].arg);
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_the_document_owns_its_strings);
     RUN_TEST(test_the_decode_table_round_trips_by_name);
     RUN_TEST(test_an_unknown_name_is_skipped_not_guessed);
     RUN_TEST(test_a_bad_row_refuses_the_table);

@@ -23,7 +23,6 @@
 #include "../board/BoardProfile.h"
 #include "../keys/KeyAction.h"
 #include "../keys/MacroEngine.h"
-#include "../vehicle/AlertRules.h"
 #include "Settings.h"
 
 // Everything the user can change, in NVS. Small values only; the CAN decode
@@ -67,20 +66,15 @@ namespace Cfg
         // erase: back to factory (decode_defaults.inc). False: not written.
         size_t loadDecode(uint8_t* b, size_t cap);
         bool   eraseDecode();
-        // The panel alert rules (Vehicle::AlertRules::toBlob), key "alerts".
-        // load: false when there are none or they are not this layout, and
-        // `a` is left as it was (the caller's factory rules).
-        bool   saveAlerts(const Vehicle::AlertRules& a);
-        bool   loadAlerts(Vehicle::AlertRules& a);
+        // 1.6.x's panel alerts (key "alerts") and key macros (key "macros"):
+        // read once by CarStore into the car file's rules, erased after the
+        // OTA trial. load: the blob's length, 0 when none or it does not fit.
+        size_t loadAlertBlob(uint8_t* b, size_t cap);
+        size_t loadMacroBlob(uint8_t* b, size_t cap);
+        bool   eraseAlerts();
+        bool   eraseMacros();
         // NVS entries left (32 B each), for the boot line. -1: unknown.
         int    nvsFreeEntries();
-        // Not feature-gated: effects this build lacks are refused at execution.
-        void saveMacros(const Keys::MacroEngine& m);
-        // The web's staged table, serialised (MacroEngine::toBlob) as edited,
-        // before the keys task applies it. The web makes the blob under the
-        // staging mutex and writes it to flash after.
-        void saveMacroBlob(const uint8_t (&blob)[Keys::MacroEngine::BLOB_SIZE]);
-        void loadMacros(Keys::MacroEngine& m);
 #if FEATURE_RESISTIVE_KEYS
         // Ladder and per-action rungs in one blob: a rung is only meaningful
         // with the ladder that gives it its ohms.

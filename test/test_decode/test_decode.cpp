@@ -5,7 +5,6 @@
 #include "vehicle/VehicleState.h"
 #include "vehicle/DecodeTable.h"
 #include "vehicle/Derived.h"
-#include "vehicle/AlertRules.h"
 #include <filesystem>
 #include <string>
 
@@ -896,22 +895,6 @@ void test_derived_signals_name_their_inputs()
 
 // ---- panel alerts --------------------------------------------------------------------
 
-void test_alert_factory_is_low_fuel_lights_and_handbrake()
-{
-    AlertRules a;
-    a.factory();
-    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LOW, a.r[0].sig);
-    TEST_ASSERT_EQUAL_UINT8(AC_RISES, a.r[0].cond);
-    TEST_ASSERT_TRUE(a.r[0].on);
-    TEST_ASSERT_EQUAL_UINT8(SIG_DRIVE_NO_LIGHTS, a.r[1].sig);
-    TEST_ASSERT_EQUAL_UINT8(SIG_DRIVE_HANDBRAKE, a.r[2].sig);
-    TEST_ASSERT_TRUE(a.r[1].on && a.r[2].on);
-    TEST_ASSERT_EQUAL_UINT8(AC_RISES, a.r[1].cond);
-    for (uint8_t i = 3; i < AlertRules::ROWS; ++i) {
-        TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, a.r[i].sig);
-        TEST_ASSERT_FALSE(a.r[i].on);
-    }
-}
 
 
 // Settings › Reminders: the speeds move, and 0 switches one off.
@@ -1011,254 +994,16 @@ void test_driving_without_lights_or_with_the_handbrake()
     TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_DRIVE_NO_LIGHTS));
     s.set(SIG_HANDBRAKE, 0, t); at(700);
     TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_DRIVE_HANDBRAKE));
-    char b[32];
-    AlertEval::text(b, sizeof(b), SIG_DRIVE_NO_LIGHTS, 1, false);
-    TEST_ASSERT_EQUAL_STRING("Lights off!", b);
-    AlertEval::text(b, sizeof(b), SIG_DRIVE_HANDBRAKE, 1, false);
-    TEST_ASSERT_EQUAL_STRING("Handbrake on!", b);
 }
 
-void test_alert_cells_check_their_ranges_and_round_trip()
-{
-    AlertRules a;
-    a.factory();
-    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_SIG, SIG_BATT_V));
-    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_COND, AC_BELOW));
-    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_THR, 1180));
-    TEST_ASSERT_FALSE(a.set(3, AlertRules::C_THR, 5000));        // past batt_v's 16.00
-    // A pause under the 5 s floor is raised to it, not refused.
-    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_COOLDOWN, 0));
-    TEST_ASSERT_EQUAL_INT32(ALERT_COOLDOWN_MIN_S, a.get(3, AlertRules::C_COOLDOWN));
-    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_COOLDOWN, -1));
-    TEST_ASSERT_EQUAL_INT32(ALERT_COOLDOWN_MIN_S, a.get(3, AlertRules::C_COOLDOWN));
-    TEST_ASSERT_FALSE(a.set(3, AlertRules::C_COOLDOWN, 70000));
-    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_COOLDOWN, 600));
-    TEST_ASSERT_EQUAL_INT32(600, a.get(3, AlertRules::C_COOLDOWN));
-    TEST_ASSERT_TRUE(a.set(3, AlertRules::C_ON, 1));
-    TEST_ASSERT_FALSE(a.set(3, AlertRules::C_ON, 2));
-    TEST_ASSERT_FALSE(a.set(3, AlertRules::C_COND, AC_COUNT));
-    TEST_ASSERT_FALSE(a.set(3, AlertRules::C_SIG, SIG_COUNT + 1));
-    TEST_ASSERT_FALSE(a.set(AlertRules::ROWS, AlertRules::C_ON, 1));
-    TEST_ASSERT_FALSE(a.set(3, AlertRules::COLS, 1));
-    TEST_ASSERT_EQUAL_INT32(1180, a.get(3, AlertRules::C_THR));
-    TEST_ASSERT_EQUAL_INT32(SIG_BATT_V, a.get(3, AlertRules::C_SIG));
 
-    uint8_t blob[AlertRules::BLOB_BYTES];
-    TEST_ASSERT_EQUAL_UINT32(AlertRules::BLOB_BYTES, a.toBlob(blob));
-    AlertRules b;
-    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
-    for (uint8_t r = 0; r < AlertRules::ROWS; ++r)
-        for (uint8_t c = 0; c < AlertRules::COLS; ++c) TEST_ASSERT_EQUAL_INT32(a.get(r, c), b.get(r, c));
-    blob[0] = 3;
-    TEST_ASSERT_FALSE(b.fromBlob(blob, sizeof(blob)));
-    TEST_ASSERT_FALSE(b.fromBlob(blob, sizeof(blob) - 1));
-}
 
-// An empty row is saved as SIG_SAVED_NONE, not SIG_COUNT: SIG_COUNT moves with
-// every appended signal, and 1.6.3 read 1.6.2's empty rows as fuel_pct.
-void test_alert_empty_rows_survive_a_new_signal()
-{
-    AlertRules a;                                  // all rows empty
-    a.set(0, AlertRules::C_SIG, SIG_BATT_V);
-    uint8_t blob[AlertRules::BLOB_BYTES];
-    a.toBlob(blob);
-    TEST_ASSERT_EQUAL_HEX8(2, blob[0]);
-    TEST_ASSERT_EQUAL_HEX8(SIG_BATT_V, blob[1]);
-    TEST_ASSERT_EQUAL_HEX8(SIG_SAVED_NONE, blob[1 + AlertRules::ROW_BYTES]);
-    AlertRules b;
-    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
-    TEST_ASSERT_EQUAL_UINT8(SIG_BATT_V, b.r[0].sig);
-    TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, b.r[1].sig);
-    // A 1.6.2 blob (v1): its empty rows are 1.6.2's SIG_COUNT (= SIG_FUEL_PCT),
-    // a 1.6.3 one SIG_FUEL_PCT + 1: both come back empty, real ids stay.
-    blob[0] = 1;
-    blob[1 + AlertRules::ROW_BYTES] = SIG_FUEL_PCT;
-    blob[1 + 2 * AlertRules::ROW_BYTES] = SIG_FUEL_PCT + 1;
-    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
-    TEST_ASSERT_EQUAL_UINT8(SIG_BATT_V, b.r[0].sig);
-    TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, b.r[1].sig);
-    TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, b.r[2].sig);
-    TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, b.r[3].sig);   // SIG_SAVED_NONE in a v1 blob: past the list
-    // The car screen's slots go through the same pair.
-    TEST_ASSERT_EQUAL_UINT8(SIG_COUNT, sigFromSaved(SIG_FUEL_PCT, true));
-    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_PCT, sigFromSaved(SIG_FUEL_PCT, false));
-    TEST_ASSERT_EQUAL_UINT8(SIG_ENG_TEMP, sigFromSaved(SIG_ENG_TEMP, true));
-    TEST_ASSERT_EQUAL_UINT8(SIG_SAVED_NONE, sigToSaved(SIG_COUNT));
-}
 
-void test_alert_low_fuel_edge_fires_once_and_waits_for_the_glass()
-{
-    AlertRules a;
-    a.factory();
-    AlertEval e;
-    State s;
-    AlertEval::Fire f;
-    s.set(SIG_FUEL_LOW, 0, 10);
-    e.tick(a, s, 100);
-    TEST_ASSERT_FALSE(e.take(a, s, true, f));
-    s.set(SIG_FUEL_LOW, 1, 200);                                // the lamp lights
-    e.tick(a, s, 200);
-    TEST_ASSERT_FALSE(e.take(a, s, false, f));                  // a menu holds the glass: waits
-    e.tick(a, s, 300);                                          // still on: no second fire
-    TEST_ASSERT_TRUE(e.take(a, s, true, f));
-    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LOW, f.sig);
-    TEST_ASSERT_EQUAL_INT32(1, f.value);
-    TEST_ASSERT_EQUAL_UINT32(1, e.fired());
-    // Off and on again inside the 300 s cooldown: quiet. After it: again.
-    s.set(SIG_FUEL_LOW, 0, 400);  e.tick(a, s, 400);
-    s.set(SIG_FUEL_LOW, 1, 500);  e.tick(a, s, 500);
-    TEST_ASSERT_FALSE(e.take(a, s, true, f));
-    s.set(SIG_FUEL_LOW, 0, 1000); e.tick(a, s, 1000);
-    s.set(SIG_FUEL_LOW, 1, 301000); e.tick(a, s, 301000);
-    TEST_ASSERT_TRUE(e.take(a, s, true, f));
-}
 
-void test_alert_already_on_at_first_sight_counts_as_rising()
-{
-    AlertRules a;
-    a.factory();
-    AlertEval e;
-    State s;
-    AlertEval::Fire f;
-    s.set(SIG_FUEL_LOW, 1, 10);                                 // lit at ignition
-    e.tick(a, s, 10);
-    TEST_ASSERT_TRUE(e.take(a, s, true, f));
-}
 
-void test_alert_pending_is_dropped_when_its_condition_clears()
-{
-    AlertRules a;
-    a.factory();
-    AlertEval e;
-    State s;
-    AlertEval::Fire f;
-    s.set(SIG_FUEL_LOW, 0, 10);  e.tick(a, s, 10);
-    s.set(SIG_FUEL_LOW, 1, 20);  e.tick(a, s, 20);
-    TEST_ASSERT_FALSE(e.take(a, s, false, f));                  // glass held
-    s.set(SIG_FUEL_LOW, 0, 30);  e.tick(a, s, 30);              // over before the glass was free
-    TEST_ASSERT_FALSE(e.take(a, s, true, f));
-    TEST_ASSERT_EQUAL_UINT32(1, e.dropped());
-}
 
-void test_alert_threshold_has_hysteresis_and_newest_wins()
-{
-    AlertRules a;
-    a.factory();
-    for (uint8_t i = 1; i < AlertRules::ROWS; ++i) a.r[i] = AlertRule{};   // rows 1.. are this test's
-    a.r[0].on = false;
-    // batt_v below 11.80 V at the shortest pause (5 s); the band is
-    // 1600/50 = 0.32 V. Readings 6 s apart, so the pause never decides.
-    a.set(1, AlertRules::C_SIG, SIG_BATT_V);
-    a.set(1, AlertRules::C_COND, AC_BELOW);
-    a.set(1, AlertRules::C_THR, 1180);
-    a.set(1, AlertRules::C_ON, 1);
-    AlertEval e;
-    State s;
-    AlertEval::Fire f;
-    uint32_t t = 0;
-    auto at = [&](int32_t v) { t += 6000; s.set(SIG_BATT_V, v, t); e.tick(a, s, t); return e.take(a, s, true, f); };
-    TEST_ASSERT_FALSE(at(1250));
-    TEST_ASSERT_TRUE(at(1170));
-    TEST_ASSERT_FALSE(at(1185));                                // back over, inside the band
-    TEST_ASSERT_FALSE(at(1175));                                // under again: not re-armed
-    TEST_ASSERT_FALSE(at(1212));                                // past thr + band: re-armed
-    TEST_ASSERT_TRUE(at(1160));
-    // Two rules firing in one tick: the later row's popup is the one shown.
-    a.set(2, AlertRules::C_SIG, SIG_HANDBRAKE);
-    a.set(2, AlertRules::C_COND, AC_CHANGES);
-    a.set(2, AlertRules::C_ON, 1);
-    s.set(SIG_HANDBRAKE, 0, t); e.tick(a, s, t);
-    TEST_ASSERT_FALSE(e.take(a, s, true, f));
-    t += 6000;
-    s.set(SIG_BATT_V, 1300, t);
-    e.tick(a, s, t);                                            // re-arms batt_v
-    s.set(SIG_BATT_V, 1100, t + 1);
-    s.set(SIG_HANDBRAKE, 1, t + 1);
-    e.tick(a, s, t + 1);
-    TEST_ASSERT_TRUE(e.take(a, s, true, f));
-    TEST_ASSERT_EQUAL_UINT8(SIG_HANDBRAKE, f.sig);
-    TEST_ASSERT_EQUAL_UINT32(1, e.overwritten());
-}
 
-// "above 0" on a yes/no: the way back (0 - band = -1) is past the range, so
-// it stops at the range's end and the rule re-arms when the value is 0 again.
-void test_alert_threshold_at_the_range_end_still_rearms()
-{
-    AlertRules a;
-    a.factory();
-    for (uint8_t i = 1; i < AlertRules::ROWS; ++i) a.r[i] = AlertRule{};   // rows 1.. are this test's
-    a.r[0].on = false;
-    a.set(1, AlertRules::C_SIG, SIG_FUEL_LOW);
-    a.set(1, AlertRules::C_COND, AC_ABOVE);
-    a.set(1, AlertRules::C_THR, 0);
-    a.set(1, AlertRules::C_ON, 1);
-    // And "below 3" on the 0-3 lock state: back at 3, not 4.
-    a.set(2, AlertRules::C_SIG, SIG_LOCKED);
-    a.set(2, AlertRules::C_COND, AC_BELOW);
-    a.set(2, AlertRules::C_THR, 3);
-    a.set(2, AlertRules::C_ON, 1);
-    AlertEval e;
-    State s;
-    AlertEval::Fire f;
-    uint32_t t = 0;
-    auto at = [&](uint8_t sig, int32_t v) {
-        t += 6000;
-        s.set(sig, v, t);
-        e.tick(a, s, t);
-        return e.take(a, s, true, f) && f.sig == sig;
-    };
-    s.set(SIG_LOCKED, 3, 1);
-    TEST_ASSERT_FALSE(at(SIG_FUEL_LOW, 0));
-    TEST_ASSERT_TRUE(at(SIG_FUEL_LOW, 1));
-    TEST_ASSERT_FALSE(at(SIG_FUEL_LOW, 0));                     // re-armed here
-    TEST_ASSERT_TRUE(at(SIG_FUEL_LOW, 1));
-    TEST_ASSERT_TRUE(at(SIG_LOCKED, 2));
-    TEST_ASSERT_FALSE(at(SIG_LOCKED, 3));
-    TEST_ASSERT_TRUE(at(SIG_LOCKED, 0));
-}
 
-// The pause never goes under 5 s, whatever the table says: an edge rule on
-// a moving value gives one popup per 5 s, not one per tick.
-void test_alert_cooldown_has_a_five_second_floor()
-{
-    AlertRules a;
-    a.factory();
-    a.r[0].on = false;
-    a.set(1, AlertRules::C_SIG, SIG_RPM);
-    a.set(1, AlertRules::C_COND, AC_CHANGES);
-    a.set(1, AlertRules::C_COOLDOWN, 0);
-    a.set(1, AlertRules::C_ON, 1);
-    TEST_ASSERT_EQUAL_UINT16(ALERT_COOLDOWN_MIN_S, a.r[1].cooldownS);
-    a.r[1].cooldownS = 0;                                       // written past set()
-    AlertEval e;
-    State s;
-    for (uint32_t t = 0; t < 12000; t += 100) {                 // rpm moves every tick
-        s.set(SIG_RPM, (int32_t)(800 + t / 100), t + 1);
-        e.tick(a, s, t + 1);
-    }
-    // Changes from t = 100 on: fires at 0.1 s, 5.1 s and 10.1 s.
-    TEST_ASSERT_EQUAL_UINT32(3, e.fired());
-    // An older blob's 0 comes back as the floor.
-    uint8_t blob[AlertRules::BLOB_BYTES];
-    a.toBlob(blob);
-    AlertRules b;
-    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
-    TEST_ASSERT_EQUAL_UINT16(ALERT_COOLDOWN_MIN_S, b.r[1].cooldownS);
-    TEST_ASSERT_EQUAL_UINT16(ALERT_COOLDOWN_MIN_S, AlertRule{}.cooldownS);
-}
-
-void test_alert_text_places_the_decimal_point()
-{
-    char b[48];
-    AlertEval::text(b, sizeof(b), SIG_BATT_V, 1180, false);
-    TEST_ASSERT_EQUAL_STRING("batt_v: 11.80 V ?", b);
-    AlertEval::text(b, sizeof(b), SIG_FUEL_LOW, 1, true);
-    TEST_ASSERT_EQUAL_STRING("fuel_low: 1", b);
-    AlertEval::text(b, sizeof(b), SIG_LOCKED, 3, true);
-    TEST_ASSERT_EQUAL_STRING("locked: 3", b);
-    AlertEval::text(b, sizeof(b), SIG_CLIM_EVAP, -15, true);
-    TEST_ASSERT_EQUAL_STRING("clim_evap: -1.5 C", b);
-}
 
 // A Renault 2-bit state reads 01 yes and 00 no; 10/11 (reserved, invalid)
 // must not read as "yes": the signal keeps its last value and ages.
@@ -1311,53 +1056,17 @@ void test_invalid_reverse_or_neutral_does_not_change_the_gear()
     TEST_ASSERT_EQUAL_INT32(-1, step(0x40));     // reverse 01
 }
 
-void test_alert_on_brake_ignores_an_invalid_frame()
-{
-    AlertRules a;
-    a.factory();
-    a.r[0].on = false;
-    TEST_ASSERT_TRUE(a.set(1, AlertRules::C_SIG, SIG_BRAKE));
-    TEST_ASSERT_TRUE(a.set(1, AlertRules::C_COND, AC_RISES));
-    TEST_ASSERT_TRUE(a.set(1, AlertRules::C_ON, 1));
-    CanDecode dec;
-    TEST_ASSERT_TRUE(dec.loadDefaults());
-    AlertEval e;
-    State s;
-    AlertEval::Fire f;
-    auto at = [&](uint8_t b5, uint32_t t) {
-        dec.apply(frame(0x181, {0, 0, 0, 0x10, 0, b5, 0, 0}), s, t);
-        e.tick(a, s, t);
-        return e.take(a, s, true, f);
-    };
-    TEST_ASSERT_FALSE(at(0x00, 100));
-    TEST_ASSERT_FALSE(at(0x03, 200));            // 11: no rising edge
-    TEST_ASSERT_FALSE(at(0x02, 300));
-    TEST_ASSERT_FALSE(at(0x00, 400));
-    TEST_ASSERT_TRUE(at(0x01, 500));             // a real press still fires
-    TEST_ASSERT_EQUAL_UINT8(SIG_BRAKE, f.sig);
-}
 
 int main(int, char**)
 
 {
     UNITY_BEGIN();
-    RUN_TEST(test_alert_factory_is_low_fuel_lights_and_handbrake);
     RUN_TEST(test_driving_without_lights_or_with_the_handbrake);
     RUN_TEST(test_reminder_speeds_are_settable);
     RUN_TEST(test_a_bound_derived_signal_is_left_to_its_binding);
     RUN_TEST(test_service_counts_down_from_the_step_edge);
-    RUN_TEST(test_alert_cells_check_their_ranges_and_round_trip);
-    RUN_TEST(test_alert_empty_rows_survive_a_new_signal);
-    RUN_TEST(test_alert_low_fuel_edge_fires_once_and_waits_for_the_glass);
-    RUN_TEST(test_alert_already_on_at_first_sight_counts_as_rising);
-    RUN_TEST(test_alert_pending_is_dropped_when_its_condition_clears);
-    RUN_TEST(test_alert_threshold_has_hysteresis_and_newest_wins);
-    RUN_TEST(test_alert_text_places_the_decimal_point);
-    RUN_TEST(test_alert_threshold_at_the_range_end_still_rearms);
-    RUN_TEST(test_alert_cooldown_has_a_five_second_floor);
     RUN_TEST(test_state2_invalid_leaves_the_signal_and_is_counted);
     RUN_TEST(test_invalid_reverse_or_neutral_does_not_change_the_gear);
-    RUN_TEST(test_alert_on_brake_ignores_an_invalid_frame);
     RUN_TEST(test_gear_is_the_nearest_ratio_within_the_band);
     RUN_TEST(test_gear_from_speed_rpm_and_the_switches);
     RUN_TEST(test_fuel_rate_consumption_and_trip);

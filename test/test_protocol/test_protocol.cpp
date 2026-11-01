@@ -482,7 +482,7 @@ void test_the_registry_takes_the_protocol_settings()
     HuConfig c;
     p.initConfig(c);
     Cfg::Settings s;
-    Cfg::Model m{&s, nullptr, nullptr, nullptr, c.tuning, c.msgOn};
+    Cfg::Model m{&s, nullptr, nullptr, c.tuning, c.msgOn};
     TEST_ASSERT_TRUE(Cfg::Registry::available(m, *e));
     TEST_ASSERT_TRUE(Cfg::Registry::set(m, *e, 1));
     TEST_ASSERT_EQUAL_UINT8(1, c.tuningAs<Tuning>().cmd28);

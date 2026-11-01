@@ -361,47 +361,30 @@ namespace Cfg
         return n && m.unpack(blob, n);
     }
 
-    bool Config::saveAlerts(const Vehicle::AlertRules& a)
+    size_t Config::loadAlertBlob(uint8_t* b, size_t cap)
     {
-        uint8_t blob[Vehicle::AlertRules::BLOB_BYTES];
-        const size_t n = a.toBlob(blob);
-        return _p.putBytes("alerts", blob, n) == n;
+        if (!_p.isKey("alerts")) return 0;
+        const size_t n = _p.getBytesLength("alerts");
+        if (!n || n > cap) return 0;
+        return _p.getBytes("alerts", b, n);
     }
 
-    bool Config::loadAlerts(Vehicle::AlertRules& a)
+    bool Config::eraseAlerts() { return !_p.isKey("alerts") || _p.remove("alerts"); }
+
+    size_t Config::loadMacroBlob(uint8_t* b, size_t cap)
     {
-        if (!_p.isKey("alerts")) return false;
-        uint8_t blob[Vehicle::AlertRules::BLOB_BYTES];
-        if (_p.getBytesLength("alerts") != sizeof(blob)) return false;
-        const size_t n = _p.getBytes("alerts", blob, sizeof(blob));
-        return a.fromBlob(blob, n);
+        if (!_p.isKey("macros")) return 0;
+        const size_t n = _p.getBytesLength("macros");
+        if (!n || n > cap) return 0;
+        return _p.getBytes("macros", b, n);
     }
+
+    bool Config::eraseMacros() { return !_p.isKey("macros") || _p.remove("macros"); }
 
     int Config::nvsFreeEntries()
     {
         nvs_stats_t st;
         return nvs_get_stats(nullptr, &st) == ESP_OK ? (int)st.free_entries : -1;
-    }
-
-    void Config::saveMacros(const Keys::MacroEngine& m)
-    {
-        uint8_t blob[Keys::MacroEngine::BLOB_SIZE];
-        m.toBlob(blob);
-        _p.putBytes("macros", blob, sizeof(blob));
-    }
-
-    void Config::saveMacroBlob(const uint8_t (&blob)[Keys::MacroEngine::BLOB_SIZE])
-    {
-        _p.putBytes("macros", blob, sizeof(blob));
-    }
-
-    void Config::loadMacros(Keys::MacroEngine& m)
-    {
-        uint8_t blob[Keys::MacroEngine::BLOB_SIZE];
-        size_t n = _p.getBytes("macros", blob, sizeof(blob));
-        // Defaults (two disabled examples) on any doubt; a half-restored table
-        // would send frames nobody chose to the head unit.
-        if (n != sizeof(blob) || !m.fromBlob(blob, sizeof(blob))) m.loadDefaults();
     }
 
 #if FEATURE_RESISTIVE_KEYS

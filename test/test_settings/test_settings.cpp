@@ -30,15 +30,13 @@ namespace
     struct Fixture {
         Settings            s;
         Knobs::Config       k;
-        Vehicle::AlertRules a;
         Capture::Settings   c;
         Canbox::HuConfig    hu;              // every message on, the protocol's tuning
         Canbox::Tuning&     t   = hu.tuningAs<Canbox::Tuning>();
         bool*               msg = hu.msgOn;
-        Model               m{&s, &k, &a, &c, hu.tuning, hu.msgOn};
+        Model               m{&s, &k, &c, hu.tuning, hu.msgOn};
         Fixture()
         {
-            a.factory();
             Canbox::activeProtocol().initConfig(hu);
         }
     };
@@ -348,15 +346,8 @@ void test_format_is_ascii_and_short()
     TEST_ASSERT_EQUAL_STRING("20", b);
 }
 
-// ---- tables: the panel alerts ----------------------------------------------------
+// ---- tables --------------------------------------------------------------------------
 
-namespace
-{
-    const SEntry& alerts() { return *Registry::find("alerts"); }
-    constexpr uint8_t SIG = Vehicle::AlertRules::C_SIG, COND = Vehicle::AlertRules::C_COND,
-                      THR = Vehicle::AlertRules::C_THR, CD = Vehicle::AlertRules::C_COOLDOWN,
-                      ON = Vehicle::AlertRules::C_ON;
-}
 
 void test_tables_are_web_only_and_described()
 {
@@ -382,86 +373,24 @@ void test_tables_are_web_only_and_described()
             TEST_ASSERT_TRUE_MESSAGE(Registry::colMin(col) <= Registry::colMax(col), col.id);
         }
     }
-    TEST_ASSERT_EQUAL(2, tables);   // alerts, huMessages
+    TEST_ASSERT_EQUAL(1, tables);   // huMessages
 }
 
-void test_alert_cells_read_the_rules()
-{
-    Fixture f;
-    const SEntry& e = alerts();
-    // The factory rule: the car's own low-fuel lamp, on its rising edge.
-    TEST_ASSERT_EQUAL_INT32(f.a.r[0].sig, Registry::cell(f.m, e, 0, SIG));
-    TEST_ASSERT_EQUAL_STRING("fuel_low", e.tab->col[SIG].en->id((uint8_t)Registry::cell(f.m, e, 0, SIG)));
-    TEST_ASSERT_EQUAL_INT32(Vehicle::AC_RISES, Registry::cell(f.m, e, 0, COND));
-    TEST_ASSERT_EQUAL_INT32(1, Registry::cell(f.m, e, 0, ON));
-    // An empty row is the last enum row, and its id is "".
-    const int32_t empty = Registry::cell(f.m, e, 3, SIG);       // rows 1-2: the lights and handbrake rules
-    TEST_ASSERT_EQUAL_INT32(Registry::colMax(e.tab->col[SIG]), empty);
-    TEST_ASSERT_EQUAL_STRING("", e.tab->col[SIG].en->id((uint8_t)empty));
-    TEST_ASSERT_EQUAL(empty, Registry::colEnumIndex(e.tab->col[SIG], ""));
-    // Out of the grid reads 0.
-    TEST_ASSERT_EQUAL_INT32(0, Registry::cell(f.m, e, Vehicle::AlertRules::ROWS, SIG));
-    TEST_ASSERT_EQUAL_INT32(0, Registry::cell(f.m, e, 0, Vehicle::AlertRules::COLS));
-}
 
-void test_alert_cells_write_through_the_rules_check()
-{
-    Fixture f;
-    const SEntry& e = alerts();
-    const Vehicle::Meta& bv = Vehicle::meta(Vehicle::SIG_BATT_V);
-    uint8_t ap = 0;
-    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 3, SIG, Vehicle::SIG_BATT_V, &ap));
-    TEST_ASSERT_EQUAL(AP_CAR, ap);
-    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 3, COND, Vehicle::AC_BELOW));
-    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 3, THR, bv.min));
-    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 3, CD, 300));
-    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 3, ON, 1));
-    TEST_ASSERT_EQUAL(Vehicle::SIG_BATT_V, f.a.r[3].sig);
-    TEST_ASSERT_EQUAL(bv.min, f.a.r[3].thr);
-    TEST_ASSERT_EQUAL(300, f.a.r[3].cooldownS);
-    TEST_ASSERT_TRUE(f.a.r[3].on);
-    TEST_ASSERT_EQUAL(bv.decimals, Registry::cellDecimals(f.m, e, 3, THR));
-    TEST_ASSERT_EQUAL(0, Registry::cellDecimals(f.m, e, 3, CD));
-
-    // Refused, nothing written: a threshold outside the row's signal, an
-    // enum past its rows, a cooldown past 16 bits, a cell off the grid.
-    ap = 0;
-    TEST_ASSERT_FALSE(Registry::setCell(f.m, e, 3, THR, bv.max + 1, &ap));
-    TEST_ASSERT_FALSE(Registry::setCell(f.m, e, 3, COND, Vehicle::AC_COUNT, &ap));
-    TEST_ASSERT_FALSE(Registry::setCell(f.m, e, 3, SIG, Vehicle::SIG_COUNT + 1, &ap));
-    TEST_ASSERT_FALSE(Registry::setCell(f.m, e, 3, CD, 70000, &ap));
-    TEST_ASSERT_FALSE(Registry::setCell(f.m, e, 3, ON, 2, &ap));
-    TEST_ASSERT_FALSE(Registry::setCell(f.m, e, Vehicle::AlertRules::ROWS, SIG, 0, &ap));
-    TEST_ASSERT_EQUAL(0, ap);
-    TEST_ASSERT_EQUAL(bv.min, f.a.r[3].thr);
-    TEST_ASSERT_EQUAL(Vehicle::AC_BELOW, f.a.r[3].cond);
-
-    // The same value again is no change.
-    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 3, CD, 300, &ap));
-    TEST_ASSERT_EQUAL(0, ap);
-}
-
-void test_an_empty_alert_is_never_on()
-{
-    Fixture f;
-    const SEntry& e = alerts();
-    TEST_ASSERT_TRUE(Registry::setCell(f.m, e, 5, ON, 1));
-    TEST_ASSERT_FALSE(f.a.r[5].on);
-}
 
 void test_tables_refuse_the_scalar_calls()
 {
     Fixture f;
-    const SEntry& e = alerts();
+    const SEntry& e = *Registry::find("huMessages");
     TEST_ASSERT_FALSE(Registry::valid(e, 0));
     TEST_ASSERT_FALSE(Registry::set(f.m, e, 0));
     TEST_ASSERT_EQUAL_INT32(0, Registry::get(f.m, e));
-    // A Model without rules: unavailable, every cell refused.
+    // A Model without the emitter: unavailable, every cell refused.
     Settings s;
     Model m{&s, nullptr};
     TEST_ASSERT_FALSE(Registry::available(m, e));
-    TEST_ASSERT_FALSE(Registry::setCell(m, e, 0, CD, 1));
-    TEST_ASSERT_EQUAL_INT32(0, Registry::cell(m, e, 0, CD));
+    TEST_ASSERT_FALSE(Registry::setCell(m, e, 0, 0, 1));
+    TEST_ASSERT_EQUAL_INT32(0, Registry::cell(m, e, 0, 0));
     // A scalar entry has no cells.
     TEST_ASSERT_FALSE(Registry::setCell(f.m, *Registry::find("keyPopup"), 0, 0, 1));
 }
@@ -629,7 +558,7 @@ void test_settings_struct_unchanged()
     size_t n = 0;
     for (size_t i = 0; i < Registry::count(); ++i) {
         const SEntry& e = Registry::at(i);
-        if (scalar(e) && !(e.flags & F_VOLATILE) && !(e.apply & (AP_KNOBS | AP_CAR | AP_CAP | AP_HU))) ++n;
+        if (scalar(e) && !(e.flags & F_VOLATILE) && !(e.apply & (AP_KNOBS | AP_CAP | AP_HU))) ++n;
     }
     // 55 scalar/enum fields in Settings (carSig counts three, gearRatio six, the log six), all in the registry.
     TEST_ASSERT_EQUAL(55, n);   // + huProtocol, - huTitleCmd/huArtistCmd (now raise.*)
@@ -640,7 +569,7 @@ void test_settings_struct_unchanged()
 // ---- the settings file (SettingsJson; GET/POST /api/config) ------------------
 
 // Every value a file carries comes back the same on a fresh board: changed
-// scalars, a text, and a table cell, through JSON text and back.
+// scalars and a text, through JSON text and back.
 void test_a_settings_file_round_trips()
 {
     Fixture a, b;
@@ -655,10 +584,6 @@ void test_a_settings_file_round_trips()
     const SEntry* ver = Registry::find("raise.version");
     TEST_ASSERT_NOT_NULL(ver);
     TEST_ASSERT_TRUE(Registry::setText(a.m, *ver, "file-test-1"));
-    const SEntry* al = Registry::find("alerts");
-    TEST_ASSERT_NOT_NULL(al);
-    const int32_t on = Registry::cell(a.m, *al, 0, 0);
-    TEST_ASSERT_TRUE(Registry::setCell(a.m, *al, 0, 0, on ? 0 : 1));
 
     JsonDocument f;
     f["format"] = SettingsJson::FORMAT;
@@ -687,7 +612,6 @@ void test_a_settings_file_round_trips()
     char t[32];
     Registry::getText(b.m, *ver, t, sizeof(t));
     TEST_ASSERT_EQUAL_STRING("file-test-1", t);
-    TEST_ASSERT_EQUAL_INT32(on ? 0 : 1, Registry::cell(b.m, *al, 0, 0));
 }
 
 // A file carries no read-only or RAM-only entries, and reading one skips the
@@ -808,7 +732,7 @@ void test_a_file_skips_what_this_board_does_not_have()
     SettingsJson::write(a.m, d.to<JsonObject>(), true);
     TEST_ASSERT_FALSE(d["ledR.anim"].isNull());
     Fixture b;
-    Model noKnobs{&b.s, nullptr, &b.a, &b.c, b.hu.tuning, b.msg};
+    Model noKnobs{&b.s, nullptr, &b.c, b.hu.tuning, b.msg};
     static SettingsJson::Read r;
     r = SettingsJson::Read{};
     SettingsJson::Errors err;
@@ -938,9 +862,6 @@ int main(int, char**)
     RUN_TEST(test_stepped);
     RUN_TEST(test_format_is_ascii_and_short);
     RUN_TEST(test_tables_are_web_only_and_described);
-    RUN_TEST(test_alert_cells_read_the_rules);
-    RUN_TEST(test_alert_cells_write_through_the_rules_check);
-    RUN_TEST(test_an_empty_alert_is_never_on);
     RUN_TEST(test_tables_refuse_the_scalar_calls);
     RUN_TEST(test_decimal_text_both_ways);
     RUN_TEST(test_log_settings_are_saved_and_apply_at_once);

@@ -212,7 +212,7 @@ fi
 
 # ---- the map routes: each copies the head-unit config, the deepest stacks on httpd ----
 # (1.6.2 and 1.6.3-rc1 overflowed httpd's stack here; a crash shows as the reboot below)
-for p in /api/map '/api/map?live=1&meta=1' '/api/map?sig=speed' /api/hu/fields /api/messages /api/health; do
+for p in /api/map '/api/map?live=1&meta=1' '/api/map?sig=speed' /api/hu/fields /api/formulas /api/rules /api/messages /api/health; do
     req route GET "$p"
     expect_code "GET $p" 200
 done

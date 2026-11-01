@@ -257,6 +257,40 @@ the 8 NVS macros become gesture rules. Then `AlertRules`, `AlertEval`,
 becomes «Правила». Caps: 128 rules (a PsArray), the gesture ones also
 bounded by what the keys task scans per event (32).
 
+### As built (2026-11-01, 1.7.0)
+
+- `src/vehicle/Rules.*`: RuleRow / RuleSet (PSRAM), check / apply / step /
+  holds / gestureFire / popupText / gestures, fromAlertBlob / fromMacroBlob.
+  A gesture's pause may be 0 (its re-arm is its debounce); a signal rule's is
+  5 s at least. Formula-less gesture = always armed.
+- The car task (`CarTask.cpp`) runs `step()` after the formulas with the same
+  changed set and tick, queues ONE pending popup (newest wins; shown when the
+  glass is free, dropped if the rule no longer holds, a test shows regardless)
+  and writes the shown ones into the alerts ring (`rule` = the name: the apps'
+  key in `/api/alerts` and the USB `A0` event). Other actions go through
+  `Setup::perform` = `main.cpp performAction`, which posts to the owner of
+  each (KeyBus postTap/postEvent/postLiteral, Hu post/requestSendNow, PanelOps
+  postText/postFullscreen, Ui requestScene).
+- Gestures: `Rules::gestures()` makes MacroEngine's table (Keys::Macro::rule =
+  the row); the keys task detects and posts `App::Car::fireRule(row)`; the car
+  task checks «only if» and the pause (`gestureFire`) and performs. httpd
+  rebuilds the table on POST /api/rules; MacroEngine's blob I/O, defaults and
+  run() are gone.
+- CarStore: `rules` in car.json; a 1.6.9 file gets them on first read from
+  NVS `alerts` + `macros` (else the factory three), and those keys are erased
+  with decode/huFmap after the OTA trial. The alert blob reads as 1.6.9's
+  reader read it (versions 1 and 2, `sigFromSaved` for the empty rows); the
+  carried set is checked before it is written. The settings file
+  (`/api/config`) carries `rules` too; `WebUi::applyRules` is the one path
+  from a checked set into the car task, the keys task and the file.
+- CarFile copies every string into the document (`copied()`): ArduinoJson 7
+  links a `const char (&)[N]` as if it were a literal, and CarStore's document
+  outlives every struct it was written from.
+- Gone: AlertRules/AlertEval, the `alerts` registry table (and AP_CAR),
+  Config save/load alerts+macros, WebUiMacro.cpp, KeyMsg::MacroRun, the macro
+  card and «Сповіщення». Catalog enums `ruleTriggers` / `ruleEffects`.
+- Page: «Мапа › Правила» (`#map:rules`), cards per rule; «Клавіші» points there.
+
 ## Slice order (replaces the lists above, 2026-10-28)
 
 0. HU protocol module. **Done** (master b55e239).

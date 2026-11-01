@@ -76,16 +76,6 @@ namespace App
             return post(Keys::Lane::Web, m);
         }
 
-        bool postMacroRun(uint8_t idx)
-        {
-            Keys::KeyMsg m;
-            m.kind = Keys::KeyMsg::Kind::MacroRun;
-            m.a    = idx;
-            m.ev.srcId = 2;
-            m.atUs = nowUs();
-            return post(Keys::Lane::Web, m);
-        }
-
         void kick() { wake(); }
 
         bool pop(Keys::KeyMsg& out)

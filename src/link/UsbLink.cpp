@@ -367,7 +367,7 @@ namespace UsbLink
                 JsonDocument d;
                 d["t"] = "alert";
                 d["seq"] = list[i].seq;
-                d["sig"] = Vehicle::meta(list[i].sig).name;
+                d["sig"] = list[i].rule;
                 d["value"] = list[i].value;
                 d["text"] = list[i].text;
                 char out[192];

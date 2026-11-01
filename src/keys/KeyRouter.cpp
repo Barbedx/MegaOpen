@@ -193,9 +193,6 @@ namespace Keys
             case KeyMsg::Kind::Literal:
                 if (_h.literal) _h.literal((uint8_t)m.code, m.a, m.b != 0, _h.ctx);
                 break;
-            case KeyMsg::Kind::MacroRun:
-                if (_h.macroRun) _h.macroRun(m.a, _h.ctx);
-                break;
         }
     }
 

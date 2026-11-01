@@ -135,7 +135,7 @@ static void test_required_keys()
     const V* e = cat().get("enums");
     TEST_ASSERT_NOT_NULL(e);
     for (const char* k : {"arrows", "icons", "src", "fmt", "mediaSrc", "canRates", "capModes",
-                          "mapSrc", "macroTriggers", "macroEffects",
+                          "mapSrc", "ruleTriggers", "ruleEffects",
                           "ledOrder", "ledIdle", "ledReact", "logLevels"}) {
         const V* l = e->get(k);
         TEST_ASSERT_NOT_NULL_MESSAGE(l, k);

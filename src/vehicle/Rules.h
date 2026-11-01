@@ -18,13 +18,15 @@
 //     second rule on !(...) or falls(...).
 //   * a GESTURE rule's trigger is a key gesture MacroEngine detects on the keys
 //     task (a combo, N taps, a hold); its formula, when there is one, is
-//     "only if": the gesture fires only while it holds.
+//     "only if": the gesture fires only while it holds. The keys task posts
+//     the row to the car task (App::Car::fireRule), which checks and performs.
 //
 // The actions are the macros' effects (Keys::Effect): a popup on the panel,
 // three rows of text, a pane scene, a key action through the routing matrix, a
 // literal key code, a raw head-unit frame, a head-unit message. Up to three,
-// in order. Where each is performed is Keys::effectRoute(); the engine only
-// says WHICH rule fired, the executor lives with the hardware (main.cpp).
+// in order. The engine only says WHICH rule fired; the car task performs the
+// popup itself (one pending, when the glass is free) and posts the rest to
+// the task that owns each (main.cpp performAction, by Keys::effectRoute).
 //
 // The rows live in the car file (/cfg/car.json "rules", CarFile) and in
 // PSRAM; 1.6's 16 NVS alert rows and 8 NVS macros migrate once (fromAlertBlob,
@@ -106,7 +108,8 @@ namespace Vehicle
 
         // The car task: compiles every row and starts their state afresh. Rows
         // that do not check are off (the problem says which). False when one
-        // did not.
+        // did not. The rows' objects are allocated once (PSRAM) and reused:
+        // a reader on another task (live, holds) never meets a freed one.
         bool apply(const RuleSet& set, RuleProblem& p);
 
         // After a pass's formulas: re-evaluates the rows whose inputs are in
@@ -117,9 +120,13 @@ namespace Vehicle
         using FireFn = void (*)(uint16_t row, void* ctx);
         void step(const State& st, const Expr::SigSet& changed, uint32_t nowMs, bool tick, FireFn fire, void* ctx);
 
+        // A gesture rule the keys task detected: true when it may fire now
+        // (on, its "only if" holds, its pause has run out); counts it.
+        bool gestureFire(uint16_t row, uint32_t nowMs);
+
         // The row's formula at its last evaluation ("" holds). For a gesture
         // rule: whether the gesture may fire now. For a pending popup: whether
-        // the rule still holds.
+        // the rule still holds. Any task (plain reads of a row that stays put).
         bool holds(uint16_t row) const;
         bool armed(uint16_t row) const { return holds(row); }
 
@@ -130,22 +137,26 @@ namespace Vehicle
             bool     on = false, gesture = false, holds = false, running = false;
             uint32_t fires = 0, lastFireMs = 0;
         };
-        bool     live(uint16_t row, Live& out) const;
+        bool     live(uint16_t row, Live& out) const;   // any task
         uint16_t rows() const { return _n; }
 
         // The popup text of an action: `arg` with every {signal} replaced by
         // that signal's value (its decimal point placed, no unit), or, with
-        // `arg` empty, "name: value unit" of the formula's first input (the
-        // lowest id), plus " ?" when that signal is not verified; a rule with
-        // no input gives its name. The length written.
+        // `arg` empty, "name: value unit" of the formula's first input, plus
+        // " ?" when that signal is not verified; a rule with no input gives
+        // its name. The length written.
         static int popupText(char* b, size_t cap, const RuleRow& r, const char* arg,
                              const Expr::SigSet& inputs, const State& st);
+        // The value the apps get with a popup: the formula's first input, as
+        // State holds it; 0 when there is none.
+        static int32_t popupValue(const RuleRow& r, const Expr::SigSet& inputs, const State& st);
 
         // The gesture rows of a set as the keys task's MacroTable: macro i
-        // stands for rule rowOf[i], its effect the rule's first action
-        // (Macro::valid wants one; the executor performs them all). How many,
-        // at most `cap` (MacroTable::COUNT); the rest of `out` is cleared.
-        static uint8_t gestures(const RuleSet& set, Keys::MacroTable& out, uint16_t* rowOf, uint8_t cap);
+        // stands for rule `rule` (Keys::Macro::rule), its effect the rule's
+        // first action (Macro::valid wants one; the car task performs them
+        // all). How many, at most `cap` (MacroTable::COUNT); the rest of
+        // `out` is cleared.
+        static uint8_t gestures(const RuleSet& set, Keys::MacroTable& out, uint8_t cap);
 
         // ---- 1.6's tables, once (CarStore::migrate) --------------------------
         // The NVS "alerts" blob (AlertRules::toBlob v1: [1] then 16 x {sig,
@@ -168,9 +179,12 @@ namespace Vehicle
             uint32_t fires = 0, lastFireMs = 0;
             uint16_t pauseS = 0;
         };
-        // Program and State own PSRAM arrays: Row is not a plain record, so
-        // the rows are a fixed array of pointers to heap objects.
-        Row*     _row[RuleSet::MAX_ROWS] = {};
+        bool rowsReady();
+        // MAX_ROWS Rows in one block (PSRAM where there is one), made on the
+        // first apply and kept: Program and State own PsArrays, so a Row is
+        // not a plain record, and a reader on another task must never find
+        // the row it reads gone.
+        Row*     _rows = nullptr;
         uint16_t _n = 0;
         Expr::SigSet _none;
     };

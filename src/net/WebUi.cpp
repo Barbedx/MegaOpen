@@ -411,9 +411,6 @@ void WebUi::putDests(JsonObject out, const App::KeysTask::Routing& k) const
 void WebUi::settingsOut(JsonObject d, bool forFile)
 {
     auto& s = _cfg->s();
-    // The newest rules, applied or not (the car task owns them).
-    Vehicle::AlertRules al;
-    Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
     // The emitter's, likewise (the hu task owns it). Per request (Scratch):
     // ~450 B with the field map, neither on httpd's stack nor static.
     Scratch<Canbox::HuConfig> huBox;
@@ -427,10 +424,10 @@ void WebUi::settingsOut(JsonObject d, bool forFile)
 #if FEATURE_KNOBS
     Knobs::Config kc;
     if (_knobs) kc = _knobs->config();
-    const Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp,
+    const Cfg::Model m{&s, _knobs ? &kc : nullptr, csp,
                        hu ? hu->tuning : nullptr, hu ? hu->msgOn : nullptr};
 #else
-    const Cfg::Model m{&s, nullptr, alp, csp, hu ? hu->tuning : nullptr, hu ? hu->msgOn : nullptr};
+    const Cfg::Model m{&s, nullptr, csp, hu ? hu->tuning : nullptr, hu ? hu->msgOn : nullptr};
 #endif
     Cfg::SettingsJson::write(m, d, forFile);
 }
@@ -449,13 +446,10 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         if (apPass.length() && (apPass.length() < 8 || apPass.length() > 63))
             { out = "apPass: pass_len"; return 400; }
 
-        // The alert rules and the emitter's settings are edited on copies of
-        // what their tasks hold now (rows and cells not sent keep their
-        // values); a copy goes back only when something in it changed.
-        // Static: httpd serves one request at a time. The emitter's (~450 B
-        // with the field map) per request instead (Scratch).
-        static Vehicle::AlertRules al;
-        Vehicle::AlertRules* alp = App::Car::alertRules().peek(al) ? &al : nullptr;
+        // The emitter's settings are edited on a copy of what the hu task
+        // holds now (cells not sent keep their values); the copy goes back
+        // only when something in it changed. Per request (Scratch): ~450 B
+        // with the field map.
         Scratch<Canbox::HuConfig> huBox;
         if (!huBox) { out = "no_memory"; return 503; }
         Canbox::HuConfig& hu = *huBox;
@@ -473,14 +467,14 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         // settings lock throughout, as the menu's knob commits do (dispatch()).
         Knobs::Config kc;
         if (_knobs) kc = _knobs->config();
-        Cfg::Model m{&s, _knobs ? &kc : nullptr, alp, csp, huOk ? hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
+        Cfg::Model m{&s, _knobs ? &kc : nullptr, csp, huOk ? hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
 #else
-        Cfg::Model m{&s, nullptr, alp, csp, huOk ? hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
+        Cfg::Model m{&s, nullptr, csp, huOk ? hu.tuning : nullptr, huOk ? hu.msgOn : nullptr};
 #endif
         // A file skips what this board does not have, so a part that is
         // merely busy (its owner held it for the peek) must not pass for
         // missing: retry before anything is read or applied.
-        if (file && (!alp || (_emitter && !huOk))) { out = "busy"; return 503; }
+        if (file && _emitter && !huOk) { out = "busy"; return 503; }
 
         // Everything that can be refused is checked before anything is applied
         // (the /api/map rule): a 400 lists every refusal and leaves the
@@ -529,17 +523,6 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
             serializeJson(o, out);
             type = "application/json";
             return 200;
-        }
-
-        // The rules first: a busy hand-off is the last refusal, so a refused
-        // request has changed nothing.
-        bool alSaved = true;
-        if (rd.apT & Cfg::AP_CAR) {
-            if (!App::Car::alertRules().stage(al)) { out = "busy"; return 503; }
-            uint8_t on = 0;
-            for (const Vehicle::AlertRule& x : al.r) on += x.on;
-            alSaved = _cfg->saveAlerts(al);
-            LOGI("alert", "rules saved: %u on%s", (unsigned)on, alSaved ? "" : ", NOT in NVS");
         }
 
         const bool huFirst = s.huTitleFirst;
@@ -639,16 +622,11 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
             JsonDocument o;
             o["ok"] = true;
             if (restart) o["pendingReboot"] = true;
-            if (!alSaved || huBusy) {
-                JsonArray p = o["partial"].to<JsonArray>();
-                if (!alSaved) p.add("alerts: nvs_failed");   // applied until the next boot only
-                if (huBusy)   p.add("hu_busy");
-            }
+            if (huBusy) o["partial"].to<JsonArray>().add("hu_busy");
             serializeJson(o, out);
             type = "application/json";
             return 200;
         }
-        if (!alSaved) { out = "alerts: nvs_failed"; return 500; }   // applied until the next boot only
         if (huBusy) { out = "hu_busy"; return 503; }   // its part not applied; the rest saved
         type = "application/json";
         out = restart ? "{\"ok\":true,\"pendingReboot\":true}" : "{\"ok\":true}";
@@ -971,17 +949,18 @@ void WebUi::routes()
 #else
         const bool picIn = false;
 #endif
-        // The CAN map and the head-unit emitter are checked before anything
-        // is applied, like the rest; applied after the settings.
-        bool mapIn = false, huIn = false;
-        if (const char* why = mapFromFile(d.as<JsonObjectConst>(), true, mapIn, huIn))
+        // The car's tables (the CAN map, the head-unit fields, the formulas,
+        // the rules) are checked before anything is applied, like the rest;
+        // applied after the settings.
+        FileParts car;
+        if (const char* why = mapFromFile(d.as<JsonObjectConst>(), true, car))
             return r->reply(400, "text/plain", why);
         String out;
         const char* type = "text/plain";
         const int st = settingsPost(d["settings"].as<JsonObjectConst>(), dry, true, out, type, &kerr);
         if (st != 200) return r->reply(st, type, out.c_str());
-        if (!dry && (mapIn || huIn))
-            if (const char* why = mapFromFile(d.as<JsonObjectConst>(), false, mapIn, huIn))
+        if (!dry && car.any())
+            if (const char* why = mapFromFile(d.as<JsonObjectConst>(), false, car))
                 return r->reply(500, "text/plain", why);
 #if FEATURE_DISPLAY_CAN
         if (!dry && picIn) {
@@ -999,8 +978,10 @@ void WebUi::routes()
         deserializeJson(o, out);
         if (dry) {
             o["knobs"] = knobs;
-            o["map"]   = mapIn;      // the file carries the CAN map
-            o["hu"]    = huIn;       // and the head-unit emitter
+            o["map"]      = car.map;        // the file carries the CAN map
+            o["hu"]       = car.hu;         // what the board sends to the head unit
+            o["formulas"] = car.formulas;   // the formulas
+            o["rules"]    = car.rules;      // the rules
             o["picture"] = picIn;    // and the owner's own picture
             JsonArray cl = o["clamped"].to<JsonArray>();
 #if FEATURE_KNOBS
@@ -1162,7 +1143,7 @@ void WebUi::routes()
 
     routesCanbox();
     routesMap();
-    routesMacros();
+    routesRules();
 
     // Wipes NVS including the WiFi credentials: the board returns in AP mode at
     // http://192.168.4.1/ and the password is gone. Requires ?confirm=factory.

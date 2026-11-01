@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include "../Features.h"
 #include "RequestGate.h"
+namespace Vehicle { struct RuleSet; }
 #include "gen/PageGz.h"      // the pages, gzipped at build time by tools/gen_pages.py
 
 // Every JSON handler answers through this. A String whose allocation failed has
@@ -315,7 +316,6 @@ public:
     }
 
     // Not feature-gated: main.cpp's executor reports effects this build lacks.
-    void attachMacros(Keys::MacroEngine* m) { _macros = m; }
 
     PsychicHttpServer& server() { return _server; }
     // GET /api/status and /api/health, into `d`: the routes, and the status
@@ -358,14 +358,21 @@ private:
 #if FEATURE_DIAG
     void routesDiag();           // WebUiMap.cpp, /api/diag
 #endif
-    // The CAN map and the head-unit emitter in the settings file (WebUiMap.cpp):
-    // `decode` and `hu`, the car file's own shape (CarFile, by signal name).
-    // mapFromFile checks both and,
-    // unless dry, applies and saves them; nullptr or a refusal code.
+    // The car's tables in the settings file (WebUiMap.cpp): `decode`, `hu`,
+    // `formulas` and `rules`, the car file's own shape (CarFile, by signal
+    // name). mapFromFile checks every part the file carries and, unless dry,
+    // applies and saves them; nullptr or a refusal code. `in` says which parts
+    // the file carried (the import preview names them).
+    struct FileParts {
+        bool map = false, hu = false, formulas = false, rules = false;
+        bool any() const { return map || hu || formulas || rules; }
+    };
     void mapToFile(ChunkOut& out);
-    const char* mapFromFile(JsonObjectConst file, bool dry, bool& changedMap,
-                            bool& changedHu);
-    void routesMacros();         // WebUiMacro.cpp
+    const char* mapFromFile(JsonObjectConst file, bool dry, FileParts& in);
+    void routesRules();          // WebUiRules.cpp
+    // A checked rule set into the car task, the keys task and the car file:
+    // nullptr, "busy", "file_failed" (WebUiRules.cpp; POST /api/rules, /api/config).
+    const char* applyRules(const Vehicle::RuleSet& set, bool factory, uint8_t& gestures);
 #if FEATURE_RESISTIVE_KEYS
     void routesRes();            // WebUiRes.cpp
     // The keypad's buttons, best-separated rungs first. Shared by the config
@@ -407,7 +414,6 @@ private:
     Keys::KeyEngine*       _engine = nullptr;
     Keys::KeyMap*          _map = nullptr;
     Sinks::CanboxUartSink* _uart = nullptr;
-    Keys::MacroEngine*     _macros = nullptr;
 #if FEATURE_RESISTIVE_KEYS
     const Sinks::ResistiveKeySink* _res = nullptr;
 #endif

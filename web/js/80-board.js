@@ -87,7 +87,7 @@ cfgBind(){
   const ch=p.changes||[],fw=p.fileFw&&p.fileFw!==this.fw?row(t('bd.otherFw'),chipH('warn',p.fileFw),t('bd.otherFwH')):'';
   prev.innerHTML=fw+row(ch.length?t('bd.willChange',ch.length):t('bd.noChange'),p.reboot?chipH('warn',t('bd.needRestart')):'',ch.map(lbl).map(esc).join(' · '))+
    (p.knobs?row(t('bd.knobs'),'',t('bd.knobsFile')+((p.clamped||[]).length?t('bd.clamped',p.clamped.map(esc).join(', ')):'')):'')+
-   (p.map||p.hu?row(t('bd.mapFile'),'',t('bd.mapFileH')):'')+
+   (p.map||p.hu||p.formulas||p.rules?row(t('bd.carFile'),'',t('bd.carFileH',[p.map&&t('bd.partMap'),p.hu&&t('bd.partHu'),p.formulas&&t('bd.partFormulas'),p.rules&&t('bd.partRules')].filter(Boolean).join(', '))):'')+
    (p.picture?row(t('bd.picFile'),'',t('bd.picFileH')):'')+
    ((p.skipped||[]).length?row(t('bd.skipped'),chipH('off',String(p.skipped.length)),p.skipped.map(lbl).map(esc).join(' · ')):'')+
    (p.unknown?row(t('bd.unknown'),chipH('off',String(p.unknown)),t('bd.unknownH')):'')+

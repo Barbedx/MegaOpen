@@ -115,38 +115,6 @@ namespace Keys
         for (uint8_t i = 0; i < MAX_MACROS; ++i) { _r[i].taps = 0; _r[i].engaged = false; }
     }
 
-    // Two examples, both disabled.
-    void MacroTable::loadDefaults()
-    {
-        clear();
-
-        Macro& a = m[0];
-        a.trigger = Trigger::Combo;
-        a.keys[0] = Action::VolUp; a.keys[1] = Action::VolDown; a.members = 2;
-        a.effect  = Effect::KeyCode;
-        a.code    = 0x07;            // SOURCE — long-SOURCE is mute on this profile
-        a.swallow = true;
-        strncpy(a.name, "VOL+ & VOL-", Macro::NAME_LEN - 1);
-
-        Macro& b = m[1];
-        b.trigger  = Trigger::Sequence;
-        b.keys[0]  = Action::Mute;
-        b.taps     = 3;
-        b.windowMs = 500;
-        b.swallow  = true;
-        b.effect   = Effect::Popup;
-        strncpy(b.arg, "MACRO", Macro::ARG_LEN - 1);
-        strncpy(b.name, "MUTE x3", Macro::NAME_LEN - 1);
-    }
-
-    void MacroEngine::loadDefaults()
-    {
-        MacroTable t;
-        t.loadDefaults();
-        clear();
-        for (uint8_t i = 0; i < MAX_MACROS; ++i) _m[i] = t.m[i];
-    }
-
     void MacroEngine::setTable(const MacroTable& t)
     {
         for (uint8_t i = 0; i < MAX_MACROS; ++i) {
@@ -202,18 +170,6 @@ namespace Keys
         m.lastMs = e.tMs;
         ++_fired;
         if (_fire) _fire(m, _fireCtx);
-    }
-
-    void MacroEngine::run(uint8_t i)
-    {
-        if (i >= MAX_MACROS || !_fire) return;
-        // Not fire(): a test run leaves the counters alone.
-        _fire(_m[i], _fireCtx);
-    }
-
-    uint8_t MacroEngine::progress(uint8_t i) const
-    {
-        return i < MAX_MACROS ? _r[i].taps : 0;
     }
 
     bool MacroEngine::matchCombo(const Event& e)
@@ -388,86 +344,5 @@ namespace Keys
     void MacroEngine::tick(uint32_t nowMs)
     {
         if (_pendN && (int32_t)(nowMs - _pendDeadline) >= 0) flush();
-    }
-
-    // ---- persistence --------------------------------------------------------
-    static constexpr uint8_t kBlobVersion = 1;
-
-    void MacroEngine::toBlob(uint8_t* out) const
-    {
-        MacroTable t;
-        table(t);
-        toBlob(t, out);
-    }
-
-    bool MacroEngine::fromBlob(const uint8_t* in, uint16_t len)
-    {
-        MacroTable t;
-        if (!fromBlob(t, in, len)) return false;
-        for (uint8_t i = 0; i < MAX_MACROS; ++i) _m[i] = t.m[i];
-        reset();
-        return true;
-    }
-
-    void MacroEngine::toBlob(const MacroTable& t, uint8_t* out)
-    {
-        uint16_t p = 0;
-        out[p++] = kBlobVersion;
-        for (uint8_t i = 0; i < MAX_MACROS; ++i) {
-            const Macro& m = t.m[i];
-            out[p++] = m.enabled ? 1 : 0;
-            out[p++] = (uint8_t)m.trigger;
-            for (uint8_t j = 0; j < Macro::MAX_MEMBERS; ++j) out[p++] = (uint8_t)m.keys[j];
-            out[p++] = m.members;
-            out[p++] = m.taps;
-            out[p++] = (uint8_t)(m.windowMs & 0xFF);
-            out[p++] = (uint8_t)(m.windowMs >> 8);
-            out[p++] = m.swallow ? 1 : 0;
-            out[p++] = (uint8_t)m.effect;
-            out[p++] = (uint8_t)m.action;
-            out[p++] = m.code;
-            out[p++] = m.dataLen;
-            for (uint8_t j = 0; j < Macro::MAX_DATA; ++j) out[p++] = m.data[j];
-            for (uint8_t j = 0; j < Macro::ARG_LEN;  ++j) out[p++] = (uint8_t)m.arg[j];
-            for (uint8_t j = 0; j < Macro::NAME_LEN; ++j) out[p++] = (uint8_t)m.name[j];
-        }
-    }
-
-    bool MacroEngine::fromBlob(MacroTable& t, const uint8_t* in, uint16_t len)
-    {
-        if (!in || len != BLOB_SIZE || in[0] != kBlobVersion) return false;
-
-        uint16_t p = 1;
-        for (uint8_t i = 0; i < MAX_MACROS; ++i) {
-            Macro m;
-            m.enabled = in[p++] != 0;
-            const uint8_t tr = in[p++];
-            m.trigger = tr < (uint8_t)Trigger::_Count ? (Trigger)tr : Trigger::Off;
-            for (uint8_t j = 0; j < Macro::MAX_MEMBERS; ++j) {
-                const uint8_t a = in[p++];
-                m.keys[j] = a < (uint8_t)Action::_Count ? (Action)a : Action::None;
-            }
-            m.members = in[p] <= Macro::MAX_MEMBERS ? in[p] : Macro::MAX_MEMBERS; ++p;
-            m.taps = in[p++];
-            if (m.taps < 2)  m.taps = 2;
-            if (m.taps > 10) m.taps = 10;
-            m.windowMs = (uint16_t)(in[p] | ((uint16_t)in[p + 1] << 8)); p += 2;
-            if (m.windowMs < 50) m.windowMs = 50;
-            m.swallow = in[p++] != 0;
-            const uint8_t ef = in[p++];
-            m.effect = ef < (uint8_t)Effect::_Count ? (Effect)ef : Effect::None;
-            const uint8_t ac = in[p++];
-            m.action = ac < (uint8_t)Action::_Count ? (Action)ac : Action::None;
-            m.code = in[p++];
-            m.dataLen = in[p] <= Macro::MAX_DATA ? in[p] : Macro::MAX_DATA; ++p;
-            for (uint8_t j = 0; j < Macro::MAX_DATA; ++j) m.data[j] = in[p++];
-            for (uint8_t j = 0; j < Macro::ARG_LEN;  ++j) m.arg[j]  = (char)in[p++];
-            for (uint8_t j = 0; j < Macro::NAME_LEN; ++j) m.name[j] = (char)in[p++];
-            // Force terminators on stored strings.
-            m.arg[Macro::ARG_LEN - 1] = '\0';
-            m.name[Macro::NAME_LEN - 1] = '\0';
-            t.m[i] = m;
-        }
-        return true;
     }
 }

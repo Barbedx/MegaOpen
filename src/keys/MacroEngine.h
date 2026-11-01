@@ -92,6 +92,8 @@ namespace Keys
         uint8_t  dataLen  = 0;
         char     arg[ARG_LEN]   = {0};
         char     name[NAME_LEN] = {0};
+        // The rule this row stands for (Vehicle::Rules::gestures); 0xFFFF = none.
+        uint16_t rule     = 0xFFFF;
 
         // Diagnostics, never persisted.
         uint32_t fires    = 0;
@@ -105,8 +107,6 @@ namespace Keys
         static constexpr uint8_t COUNT = 8;
         Macro m[COUNT];
 
-        // Two examples, both disabled: VOL+ & VOL- = SOURCE key code, MUTE x3 = popup.
-        void loadDefaults();
         void clear() { for (uint8_t i = 0; i < COUNT; ++i) m[i] = Macro{}; }
     };
 
@@ -117,7 +117,6 @@ namespace Keys
         // Macro::valid() accepts (10 taps), with a tap to spare. At 12 an 8- to
         // 10-tap macro overflowed on tap 7, replayed its taps and never fired.
         static constexpr uint8_t  PEND_MAX   = 2 * 10 + 2;
-        static constexpr uint16_t BLOB_SIZE  = 1 + MAX_MACROS * 82;
 
         using FireFn = void (*)(const Macro& m, void* ctx);
         // Re-dispatch with the filter bypassed (replayed taps, synthetic
@@ -133,8 +132,6 @@ namespace Keys
         static constexpr uint8_t count() { return MAX_MACROS; }
 
         void clear();
-        // Two disabled examples: VOL+ & VOL- = SOURCE key code, MUTE x3 = popup.
-        void loadDefaults();
 
         // Replace the configuration (a staged table becoming live). The fire
         // counts are diagnostics, not configuration: each row keeps its own.
@@ -149,10 +146,6 @@ namespace Keys
         // True when the event was consumed and must NOT reach the sinks.
         bool observe(const Event& e);
 
-        // Perform one row's effect with no trigger: separates "not recognised"
-        // from "sends the wrong thing". Leaves the counters alone.
-        void run(uint8_t i);
-
         // Expires sequence windows. The keys task calls it at nextDue().
         void tick(uint32_t nowMs);
         // When held taps are due to be replayed; false when none are held.
@@ -165,11 +158,6 @@ namespace Keys
         uint32_t downMask() const  { return _down; }
         uint8_t  progress(uint8_t i) const;
 
-        void toBlob(uint8_t* out) const;
-        bool fromBlob(const uint8_t* in, uint16_t len);
-        // The same format for a table on its own, for the web's staged copy.
-        static void toBlob(const MacroTable& t, uint8_t* out);
-        static bool fromBlob(MacroTable& t, const uint8_t* in, uint16_t len);
 
     private:
         struct Run {

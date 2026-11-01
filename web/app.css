@@ -129,13 +129,19 @@ td.num{font-family:var(--mono);text-align:right}
 details.sub>summary{padding:12px;cursor:pointer;font-weight:700;color:var(--mute);min-height:44px}
 .mac{border-top:1px solid var(--line);padding:10px 12px;display:grid;grid-template-columns:minmax(0,1fr);gap:8px}
 .mac.bad{box-shadow:inset 4px 0 0 var(--bad)}
-.mh{display:flex;gap:8px;align-items:center}
+.mh{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .mg{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
 .mg label{display:grid;gap:3px;font-size:12px;font-weight:700;color:var(--mute)}
 .mg label.ck{display:inline-flex;color:var(--text)}
 .mg .in{width:100%}
 .mf{display:flex;gap:8px;align-items:center}
 .mf .mw{flex:1;font-size:13px;color:var(--bad);font-weight:600}
+/* правила: дії рядками, формула на всю ширину */
+.rule .mh .in.grow{min-width:9em}   /* two chips beside it at 360 px: the chips wrap, the name stays a target */
+.rule .acts{display:grid;gap:6px}
+.act{display:flex;gap:8px;align-items:end}
+.act .mg{flex:1}
+.mg label.wide{grid-column:1/-1}
 .fr{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--line)}
 .fr .in{flex:1}
 .ask{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;background:var(--badB);color:var(--bad);border-top:1px solid var(--line);font-weight:700}

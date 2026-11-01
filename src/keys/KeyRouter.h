@@ -21,10 +21,9 @@ namespace Keys
             Tap,         // a press AND its release, as one item (knob button, web test)
             PanelKey,    // the panel's raw key: AffaKeySource maps it on the keys task
             Literal,     // a literal RAV4 code straight to the UART sink (web)
-            MacroRun,    // perform one macro's effect, no trigger (web)
         };
         Kind     kind = Kind::Event;
-        // PanelKey: 1 = hold. Literal: the state byte. MacroRun: the row.
+        // PanelKey: 1 = hold. Literal: the state byte.
         uint8_t  a = 0;
         // Literal: 1 = also send the release.
         uint8_t  b = 0;
@@ -153,7 +152,6 @@ namespace Keys
             // The UART sink's sendKey, with an optional release.
             void (*literal)(uint8_t code, uint8_t state, bool release, void* ctx) = nullptr;
             // MacroEngine::run.
-            void (*macroRun)(uint8_t idx, void* ctx) = nullptr;
             void* ctx = nullptr;
         };
         void begin(const Hooks& h) { _h = h; }

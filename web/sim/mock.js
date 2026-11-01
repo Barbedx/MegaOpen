@@ -55,11 +55,12 @@ let ctsMin=-1,huMin=-1;   /* servicePhoneClock: s_lastMin, лише нова х�
 /* AffaMap::loadDefaults */
 const AFFA_DEF=[['Load','Load'],['SrcNext','Mute'],['SrcPrev','SrcPrev'],['VolUp','VolUp'],['VolDown','VolDown'],['Ok','Ok'],['EncCw','None'],['EncCcw','None']];
 const defAffa=()=>WHEEL.flatMap((k,i)=>[0,1].map(h=>({index:i*2+h,key:k.id,wire:parseInt(k.wire,16),hold:!!h,action:AFFA_DEF[i][h],code:0,asLong:!!h&&AFFA_DEF[i][h]!=='None'&&i!==1})));
-/* MacroTable::loadDefaults: два приклади, обидва вимкнені; решта — порожні */
-const emptyMacro=()=>({enabled:false,name:'',trigger:'off',keys:['None','None','None'],taps:3,windowMs:600,swallow:true,effect:'none',action:'None',codeHex:'00',data:'',arg:''});
-const defMacros=()=>{const t=Array.from({length:8},emptyMacro);
- Object.assign(t[0],{name:'VOL+ & VOL-',trigger:'combo',keys:['VolUp','VolDown','None'],effect:'key',codeHex:'07'});
- Object.assign(t[1],{name:'MUTE x3',trigger:'sequence',keys:['Mute','None','None'],taps:3,windowMs:500,effect:'popup',arg:'MACRO'});return t};
+/* RuleSet::factory: три сповіщення 1.6; плюс один вимкнений жест для прикладу на сторінці */
+const defRules=()=>[
+ {name:'fuel_low',on:true,when:'rises(fuel_low)',pause:300,do:[{effect:'popup',arg:''}]},
+ {name:'drive_no_lights',on:true,when:'rises(drive_no_lights)',pause:60,do:[{effect:'popup',arg:'Lights off!'}]},
+ {name:'drive_handbrake',on:true,when:'rises(drive_handbrake)',pause:30,do:[{effect:'popup',arg:'Handbrake on!'}]},
+ {name:'VOL+ & VOL-',on:false,gesture:{trigger:'combo',keys:['VolUp','VolDown'],taps:3,windowMs:600,swallow:true},when:'',pause:0,do:[{effect:'key',codeHex:'07'}]}];
 const bind=a=>({action:a,code:0});
 const encDef=(on,a)=>({enabled:on,inverted:false,ppd:4,holdMs:600,cw:bind(a[0]),ccw:bind(a[1]),click:bind(a[2]),hold:bind(a[3])});
 const zone=(react)=>({count:5,react,anim:'breathe',leds:Array(8).fill('#00a0ff'),lo:'#00a0ff',hi:'#ff3000'});
@@ -102,7 +103,7 @@ const S={
  affa:defAffa(),unm:{count:0,last:0,hold:false,known:true},affaEvents:0,last:{seq:0},
  routing:{uart:0x0F,ams:0x01,hid:0x02,res:0,usb:0x03},
  kn:defKnobs(),knl:{enc:{detents:0,errors:0,btn:false,clicks:0,holds:0,a:false,b:false,key:false,edges:[0,0,0]},enc2:{detents:0,errors:0,btn:false,clicks:0,holds:0,a:false,b:false,key:false,edges:[0,0,0]},led:{ok:true,frames:0,mA:64,mAWanted:64,busy:0},dropped:0},
- mac:defMacros(),macFires:Array(8).fill(0),macLive:{fired:17,swallowed:21,replayed:4,down:[]},
+ rules:defRules(),ruleFires:{},ruleStats:{fired:0,shown:0,dropped:0},
  ntf:[{uid:1,category:'Social',app:'Telegram',appId:'ph.telegra.Telegraph',title:'Олег',message:'Буду о 19:30'},{uid:2,category:'Navigation',app:'Карти',appId:'com.apple.Maps',title:'Поворот',message:'Через 300 м праворуч'}],
  logs:{used:412000,total:2097152,files:[48211,120044,96500,22010,180330,7700,64000,51022].map((s,n)=>({n,size:s}))},
  msgs:[['doors',0x24,250,true,'high'],['speed',0x7D,500,true,'high'],['rpm',0x7D,333,true,'high'],['outside temp',0x28,5000,true,'medium'],['steering',0x29,200,false,'medium'],['rear radar',0x1E,100,false,'low']]
@@ -233,7 +234,7 @@ const RAISE={doorsLen:[x=>x,x=>x],cmd28:[x=>x?'ac':'temp',x=>x==='ac'?1:0],steer
  fuelUnit:[x=>FUELID[x],x=>byVal(FUELID,x)],tripUnit:[x=>TRIPID[x],x=>byVal(TRIPID,x)],tripFields:[x=>!!x,x=>x?1:0],histLen:[x=>x,x=>x],radarInvert:[x=>!!x,x=>x?1:0],
  version:[x=>String(x).trimEnd(),x=>String(x).padEnd(16,' ').slice(0,16)],titleCmd:[x=>x,x=>x],artistCmd:[x=>x,x=>x]};
 g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type!=='table'&&!(f.id in S.set))S.set[f.id]=regDef(f);
- const st=S.staged,o={...S.set,alerts:S.alerts.map(a=>a.slice()),fw:S.fw,build:S.build,cfgVer:S.cfgVer,cfgVerWas:0,wifiSleep:false,ssid2:S.wifi2.ssid};   /* ssid2 — НОВЕ */
+ const st=S.staged,o={...S.set,fw:S.fw,build:S.build,cfgVer:S.cfgVer,cfgVerWas:0,wifiSleep:false,ssid2:S.wifi2.ssid};   /* ssid2 — НОВЕ */
  for(const k of CAPK)o['cap.'+k]=S.cap.settings[k];
  o.logLevel=LVL[S.logLevel];   /* logLevel: лише в RAM, як у прошивці */
  for(const d of DESTS)o[mRouteId(d)]=S.routing[d]|0;   /* route*: маски призначень (S.routing, як destState) */
@@ -246,13 +247,6 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
  let rb=typeof q.mdnsOn==='boolean'&&q.mdnsOn!==s.mdnsOn;
  /* таблиці реєстру (WebUi.cpp): рядок = клітинки в порядку колонок; рядок чи клітинка, яких не прислали
     (або null), лишаються як були; ті самі тексти помилок */
- let AL=null;if(q.alerts!==undefined){if(!Array.isArray(q.alerts)||q.alerts.length>16)return fail(400,'alerts: rows_max 16');AL=[];
-  for(let i=0;i<q.alerts.length;i++){const a=q.alerts[i],id='alerts '+(i+1)+': ',old=S.alerts[i];if(!Array.isArray(a))return fail(400,id+'cells');
-   const[sig,cond,thr,cd,on]=old.map((x,k)=>a[k]==null?x:a[k]),m=META.find(x=>x[0]===sig);
-   if(sig&&!m)return fail(400,id+'sig: enum');if(!COND.some(c=>c[0]===cond))return fail(400,id+'cond: enum');
-   if(typeof thr!=='number')return fail(400,id+'thr: number');if(m&&(toInt(thr,m[2])<m[5]||toInt(thr,m[2])>m[6]))return fail(400,id+'thr: range');
-   if(!(isInt(cd)&&cd<=65535))return fail(400,id+'cooldownS: '+(typeof cd==='number'?'range':'number'));
-   if(typeof on!=='boolean')return fail(400,id+'on: bool');AL.push([sig,cond,thr,Math.max(5,cd),!!on&&!!sig])}}
  let MG=null;if(q.huMessages!==undefined){if(!Array.isArray(q.huMessages)||q.huMessages.length>S.msgs.length)return fail(400,'huMessages: rows_max '+S.msgs.length);
   MG=q.huMessages.map((a,i)=>Array.isArray(a)&&a[0]!=null?a[0]:S.msgs[i].enabled);
   const bad=MG.findIndex(x=>typeof x!=='boolean');if(bad>=0)return fail(400,'huMessages '+(bad+1)+': on: bool')}
@@ -275,7 +269,6 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
  if(q.uartEnabled===false)S.emitter=false;
  if(typeof q.bleMode==='string'&&C.bleModes.some(b=>b.id===q.bleMode)){rb=rb||q.bleMode!==s.bleMode;S.staged.bleMode=q.bleMode}
  if(ap){rb=rb||ap!==(S.staged.apPass||S.wifi.apPass);S.staged.apPass=ap}
- if(AL){S.alerts=S.alerts.map((old,i)=>AL[i]||old);emit(2,'CAN','[alert] rules saved: '+S.alerts.filter(a=>a[4]).length+' on')}
  if(MG)MG.forEach((x,i)=>S.msgs[i].enabled=x);
  emit(2,'NET',rb?'settings saved, pending reboot':'settings saved');return rb?{ok:true,pendingReboot:true}:ok});
 /* файл налаштувань (WebUi.cpp /api/config): налаштування без ro/volatile + ручки; POST — ті самі перевірки, ?dry=1 нічого не міняє */
@@ -314,7 +307,7 @@ function pressKey(wire,hold){const r=S.affa.find(x=>x.wire===wire&&x.hold===!!ho
  S.events++;S.affaEvents++;
  const a=C.actions.find(x=>x.id===r.action)||{},cl=a.class,isLong=r.asLong&&!/^Enc/.test(r.action),ds=destState(),
   to=DESTS.filter(d=>{const x=ds[d];return x&&x.live&&cl!=null&&(x.mask&(1<<cl))&&!(isLong&&x.press)&&(d!=='uart'||r.code||a.hu)&&(d!=='usb'||cl<2)});
- S.last={seq:S.last.seq+1,key,wire,hold:!!hold,action:r.action,dests:to};S.macLive.down=[r.action];
+ S.last={seq:S.last.seq+1,key,wire,hold:!!hold,action:r.action,dests:to};
  emit(2,'KEY','[panelkey] '+r.key+(hold?' H':'')+' > '+(to.includes('uart')?h2(r.code||parseInt(a.hu,16))+(isLong?' LONG':' PRESS'):'not routed'))}
 po('/api/display/key',q=>{if(q.code===undefined)return fail(400,'param code');const code=Number(q.code);
  /* НОВЕ: wire=1 — кадр у CAN B (KeySource::Wire); 409, поки зв'язку з панеллю нема (synced) */
@@ -371,7 +364,7 @@ function doBoot(){S.bootAt=now()+4000;++S.boots;S.heap=Math.round(rnd(79000,8200
  S.disp.registered=false;S.disp.resyncAt=now()+6000;S.cap.recording=S.cap.settings.autostart;S.emitter=false;S.tests={}}
 po('/api/reboot',()=>{setTimeout(doBoot,200);return ok});   /* НОВЕ */
 po('/api/factory',q=>{if(q.confirm!=='factory')return {__status:400,body:{ok:false,error:'confirm factory'}};
- S.set=defSet();S.set.ssid='';S.affa=defAffa();S.mac=defMacros();S.kn=defKnobs();S.tun=defTun();S.map=defMap();S.routing={uart:0x0F,ams:0x05,hid:0x02,res:0,usb:0x03};
+ S.set=defSet();S.set.ssid='';S.affa=defAffa();S.rules=defRules();S.kn=defKnobs();S.tun=defTun();S.map=defMap();S.routing={uart:0x0F,ams:0x05,hid:0x02,res:0,usb:0x03};
  S.wifi2={ssid:''};S.wifi.apPass='megaopen';S.ble={bonded:false,connected:false,address:''};S.staged={};setTimeout(doBoot,200);return {ok:true,note:'AP mode after reboot'}});
 g('/api/can2',()=>{const c=S.can2;return {live:!c.quiet,listenOnly:true,autobaud:c.setting?'manual':c.quiet?'searching':'locked',bitrate:c.bitrate,detected:c.quiet||c.setting?0:c.detected,setting:c.setting,saved:c.saved,fps:c.quiet?0:c.fps,frames:c.frames,
  fdDropped:0,rtrDropped:0,intKicks:0,maskMaxUs:0,hwOverflows:c.hwOverflows,ringPeak:c.ringPeak,rec:c.rec,tec:c.tec,errFlags:0,bdiag1:0,restarts:c.restarts,rounds:c.quiet?7:1,rejected:0,beginErr:0}});
@@ -408,8 +401,6 @@ const META=SIM_DECODE.meta||[],DERIVED=new Set(SIM_DECODE.derived||[]),BOUND=new
 const FACT_HYP=new Set(SIM_DECODE.rows.filter(r=>r.can&&r.can.hyp).map(r=>r.sig));S.conf={};
 const measured=n=>BOUND.has(n)&&(S.conf[n]??!FACT_HYP.has(n));
 const decStr=(v,d)=>d?(v/pow10(d)).toFixed(d):String(v);
-const COND=[['above','вище'],['below','нижче'],['rises','зʼявилось'],['falls','зникло'],['changes','змінилось']];
-S.alerts=Array.from({length:16},(_,i)=>i?['','rises',0,5,false]:['fuel_low','rises',0,300,true]);
 function liveVal(n,t){const s=t/1000,w=(p,a,b)=>a+(b-a)*(.5+.5*Math.sin(s/p));
  const v={speed:Math.round(w(9,0,9000)),rpm:Math.round(w(9,800,3200)),fuel_level:31,fuel_low:0,batt_v:Math.round(w(30,1380,1420)),eng_temp:89,out_temp:12,
   throttle:Math.round(w(5,0,400)),neutral:0,clutch:s%20<1?1:0,handbrake:0,door_fl:0,door_fr:0,door_rl:0,door_rr:0,boot:0,light_pos:1,light_dip:1,
@@ -424,7 +415,7 @@ g('/api/map',q=>{const o=mapBase();o.rows=q.live?[]:C.raise.map(t=>({id:t.id,...
  if(q.live){const t=Date.now();o.sigs=META.map(m=>{const v=liveVal(m[0],t),src=DERIVED.has(m[0])?'d':BOUND.has(m[0])?'c':'o';
   const ms=src==='c'&&measured(m[0]);
   return [v===undefined?null:decStr(v,m[2]),v===undefined?null:Math.floor(Math.random()*300),src,ms?1:0,src!=='c'?0:!ms?1:FACT_HYP.has(m[0])?2:0]});
-  o.alertStats={fired:0,shown:0,dropped:0}}
+  o.ruleStats=S.ruleStats}
  if(q.sig){const t=sigT(q.sig);if(!t)return fail(404,'not_found');o.rows=[{id:t.id,...bindOf(t.id),...mapVal(t),...(DERIVED.has(t.id)?{calc:true}:{})}]}
  if(q.meta)o.meta=META.map(m=>[m[0],m[1],m[2],m[3],m[4],decStr(m[5],m[2]),decStr(m[6],m[2]),m[7]]);
  return o});
@@ -520,24 +511,27 @@ po('/api/res/learn',q=>{const r=resSt();if(q.stop){r.learnUntil=[0,0];return ok}
 g('/api/knobs',()=>({board:'T-2CAN',pins:{},pullup:{},maxLeds:160,...deep(S.kn),enc:{fitted:true,...deep(S.kn.enc)},enc2:{fitted:true,...deep(S.kn.enc2)},pot:{mode:'off',inverted:false,zones:8,min:0,max:4095,up:bind('None'),down:bind('None')}}));
 g('/api/knobs/live',()=>deep(S.knl));
 po('/api/knobs',q=>{for(const k of ['enc','enc2'])if(q[k])Object.assign(S.kn[k],deep(q[k]));if(q.led){const l=deep(q.led);Object.assign(S.kn.led,l)}return ok});
-g('/api/macros',()=>({macros:S.mac.map((m,i)=>({...m,valid:macroWhy(m)==='',fires:S.macFires[i],progress:0}))}));
-g('/api/macros/live',()=>({...S.macLive,progress:S.mac.map(()=>0),fires:S.macFires.slice()}));
-/* Macro::valid() */
-function macroWhy(m){const keys=(m.keys||[]).filter(k=>k&&k!=='None'),fx=C.enums.macroEffects.find(e=>e.v===m.effect);
- if(!fx||m.effect==='none')return 'no effect';if(fx.field==='action'&&m.action==='None')return 'no action';if((fx.field==='code'||fx.field==='raw')&&!parseInt(m.codeHex,16))return 'code 00';
- if((fx.field==='text'||fx.field==='scene')&&!m.arg)return 'empty text';const hold=k=>k!=='EncCw'&&k!=='EncCcw';
- if(m.trigger==='combo')return keys.length<2||keys.some(k=>!hold(k))||new Set(keys).size!==keys.length?'combo needs 2-3 different keys that can be held':'';
- if(m.trigger==='sequence')return !keys.length||!(m.taps>=2&&m.taps<=10)||m.windowMs<50?'sequence needs a key, 2..10 taps, window >= 50 ms':'';
- if(m.trigger==='hold')return !keys.length||!hold(keys[0])?'hold needs one key that can be held':'';return 'trigger is off'}
-/* НОВЕ: помилка "<index>: <why>" */
-po('/api/macros',q=>{const ms=q.macros;if(!Array.isArray(ms))return fail(400,'param macros');
- for(let i=0;i<ms.length&&i<8;i++){const m=ms[i];if(!/^[0-9a-f\s,:-]*$/i.test(m.data||''))return fail(400,i+': macro_hex 8');const w=macroWhy(m);if(m.enabled&&w)return fail(400,i+': macro_incomplete')}
- S.mac=Array.from({length:8},(_,i)=>{const m=ms[i];if(!m)return emptyMacro();const keys=(m.keys||[]).filter(k=>k&&k!=='None').slice(0,3);while(keys.length<3)keys.push('None');
-  return {enabled:!!m.enabled,name:String(m.name||'').slice(0,19),trigger:m.trigger||'off',keys,taps:m.taps|0||3,windowMs:m.windowMs|0||600,swallow:m.swallow!==false,effect:m.effect||'none',action:m.action||'None',codeHex:h2(parseInt(m.codeHex,16)||0),data:m.data||'',arg:String(m.arg||'').slice(0,39)}});
- emit(2,'MAC','macros saved — '+S.mac.filter(m=>m.enabled).length+' active');return ok});
-po('/api/macros/defaults',()=>{S.mac=defMacros();return ok});
-po('/api/macros/test',q=>{if(q.id===undefined)return fail(400,'param id');const i=parseInt(q.id,10);if(!(i>=0&&i<8))return fail(400,'param id');if(S.mac[i].effect==='none')return fail(409,'row_no_effect');
- S.macFires[i]++;S.macLive.fired++;emit(2,'MAC','test "'+S.mac[i].name+'"');return {__status:202,body:{ok:true,queued:true}}});
+/* правила (src/vehicle/Rules.h, src/net/WebUiRules.cpp): перевірка як Rules::check, відмова «<назва>: <код>» */
+const RU_FNS=['min','max','abs','clamp','if','has','round','lookup','age','delta','changed','rises','falls','rate','integral','avg','held','and','or','not','true','false'];
+function ruleWhy(r){const n=String(r.name||'');if(!n||n.length>31)return n+': rule_name';const g=r.gesture,hold=k=>k!=='EncCw'&&k!=='EncCcw';
+ if(g){const keys=(g.keys||[]).filter(k=>k&&k!=='None');
+  const bad=g.trigger==='combo'?(keys.length<2||keys.some(k=>!hold(k))||new Set(keys).size!==keys.length):g.trigger==='sequence'?(!keys.length||!(g.taps>=2&&g.taps<=10)||g.windowMs<50):g.trigger==='hold'?(!keys.length||!hold(keys[0])):true;
+  if(bad)return n+': rule_gesture'}
+ else{if(!r.when)return n+': rule_when';if(!(r.pause>=5))return n+': rule_pause'}
+ const acts=r.do||[];if(!acts.length||acts.length>3)return n+': rule_action';
+ for(const a of acts){const fx=(C.enums.ruleEffects||[]).find(e=>e.v===a.effect);if(!fx||a.effect==='none')return n+': rule_action';
+  if(fx.field==='action'&&(!a.action||a.action==='None'))return n+': rule_action';if((fx.field==='code'||fx.field==='raw')&&!parseInt(a.codeHex,16))return n+': rule_action';
+  if((fx.field==='scene'||(fx.field==='text'&&a.effect==='text'))&&!a.arg)return n+': rule_action'}
+ if(r.when){const w=(r.when.match(/[a-z_][a-z0-9_]*/g)||[]).find(x=>!RU_FNS.includes(x)&&!META.some(m=>m[0]===x));if(w)return n+': expr_name '+r.when.indexOf(w)}
+ return ''}
+const ruleLive=(r,i)=>({on:r.on!==false&&!ruleWhy(r),holds:false,fires:S.ruleFires[i]||0,agoMs:null});
+g('/api/rules',()=>({rows:S.rules.map((r,i)=>({...deep(r),live:ruleLive(r,i)})),problem:null,stats:S.ruleStats}));
+po('/api/rules',q=>{if(q.reset){S.rules=defRules();S.ruleFires={};emit(2,'CAN','[rule] 3 rule(s), the factory\'s');return ok}
+ if(!Array.isArray(q.rows))return fail(400,'param rows');if(q.rows.length>128)return fail(400,'rules: rule_rows');
+ for(const r of q.rows){const w=ruleWhy(r);if(w)return fail(400,w)}
+ S.rules=q.rows.map(r=>deep(r));emit(2,'CAN','[rule] '+S.rules.length+' rule(s), '+S.rules.filter(r=>r.on!==false).length+' on');return ok});
+po('/api/rules/test',q=>{if(q.id===undefined)return fail(400,'param id');const i=parseInt(q.id,10);if(!(i>=0&&i<S.rules.length))return fail(400,'param id');
+ S.ruleFires[i]=(S.ruleFires[i]||0)+1;S.ruleStats.fired++;emit(2,'CAN','[rule] '+S.rules[i].name+' (test)');return {__status:202,body:{ok:true,queued:true}}});
 g('/ota/start',()=>'OK');
 /* GhOta (src/net/GhOta.cpp): check -> available (наступний патч), install -> у черзі за журналом (3 с) -> поступ -> перезавантаження */
 const ghNext=()=>{const p=S.fw.split('.').map(Number);p[2]++;return p.join('.')};
@@ -613,7 +607,6 @@ setInterval(()=>{
  if(S.emitter&&S.hu.connected)S.hu.txVeh+=4;
  if(S.disp.resyncAt&&now()>S.disp.resyncAt){S.disp.registered=true;S.disp.resyncAt=0;S.disp.phase='Ready';emit(2,'PNL','panel registered')}
  LV.speed=Math.max(0,Math.round(LV.speed+rnd(-3,3)));LV.rpm=Math.round(800+LV.speed*22+rnd(-40,40));LV.fuel_inst=+(5+rnd(0,4)).toFixed(1);LV.steering=+(LV.steering*.7+rnd(-20,20)).toFixed(1);
- S.macLive.down=[];
  if(WHEEL.length&&Math.random()<.08){const k=WHEEL[Math.floor(rnd(0,WHEEL.length))];pressKey(parseInt(k.wire,16),Math.random()<.25)}
  const e=S.knl.enc;if(Math.random()<.1){e.detents++;e.pos=(e.pos||0)+1;S.knl.led.mA=Math.round(rnd(60,140))}else S.knl.led.mA=Math.round(rnd(58,70));e.btn=e.key=Math.random()<.05;e.a=Math.random()<.3;e.b=Math.random()<.3;if(e.a)e.edges[0]++;if(e.b)e.edges[1]++;if(e.key)e.edges[2]++;S.knl.led.mAWanted=S.knl.led.mA;
  if(Math.random()<.35)emit(3,'CAN','[car] fps='+fmtN(c.fps)+' rec='+c.rec);

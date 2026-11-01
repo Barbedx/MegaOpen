@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include "Settings.h"
 #include "../knobs/KnobConfig.h"
-#include "../vehicle/AlertRules.h"
 #include "../capture/CanRecorder.h"
 
 // Every setting the user can change, described once: the web form and the
@@ -34,7 +33,6 @@ namespace Cfg
     struct Model {
         Settings*            s = nullptr;
         Knobs::Config*       k = nullptr;
-        Vehicle::AlertRules* a = nullptr;
         Capture::Settings*   c = nullptr;
         void*                hu = nullptr;
         bool*                msg = nullptr;
@@ -61,7 +59,6 @@ namespace Cfg
         AP_KEYS   = 0x02,  // keys task: timing, pulse, links, routing
         AP_KNOBS  = 0x04,  // knob service: lights, encoders (knobs blob)
         AP_MEDIA  = 0x08,  // media router / HU text learner
-        AP_CAR    = 0x10,  // car task: the alert rules (own NVS key)
         AP_CAP    = 0x20,  // capture recorder (own NVS namespace "cap")
         AP_HU     = 0x40,  // hu task: the emitter's tuning and message switches
         AP_REBOOT = 0x80,  // read once at boot: saved, applied by a reboot

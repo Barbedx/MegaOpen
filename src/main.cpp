@@ -1027,81 +1027,78 @@ static void macroRows(const char* arg, char* a, char* b, char* c, size_t cap)
 }
 #endif
 
-// One macro, performed, on the keys task. Each effect goes where
-// Keys::effectRoute() says: inline only for what this task owns (dispatch and
-// the UART key sink); the rest is a post. Effects this build lacks are logged.
-static void macroFire(const Keys::Macro& m, void*)
+// One of a rule's actions, performed from the car task: each goes where
+// Keys::effectRoute() says, as a post to the task that owns it (the keys
+// task's bus, the hu task's lanes, the ui task's requests). The popup is not
+// here: the car task queues it itself (one pending, when the glass is free).
+static void performAction(const Vehicle::RuleAction& a)
 {
-    const char* label = m.name[0] ? m.name : Keys::effectName(m.effect);
-    LOGI("macro", "%s", label);
-
-    // By route: Keys::effectRoute() is the table test_macro checks, so where
-    // each effect is performed is decided there, not only here.
-    switch (Keys::effectRoute(m.effect)) {
+    switch (Keys::effectRoute(a.effect)) {
         case Keys::EffectRoute::Keys:
-            if (m.effect == Keys::Effect::Action) {
+            if (a.effect == Keys::Effect::Action) {
                 // Through the routing matrix, like a real button.
                 Keys::Event e;
-                e.action   = m.action;
+                e.action   = a.action;
                 e.state    = Keys::State::Press;
                 e.tMs      = millis();
-                e.srcId    = 3;                 // 3 = macro; 0 matrix, 1 encoder, 2 web
-                e.codeHint = m.code;            // 0 = let the sink use its own profile
-                g_engine.dispatchRaw(e);
-                if (!Keys::isEncoder(m.action)) {
-                    e.state = Keys::State::Release;
-                    g_engine.dispatchRaw(e);
-                }
+                e.srcId    = 3;                 // 3 = a rule; 0 matrix, 1 encoder, 2 web
+                e.codeHint = a.code;            // 0 = let the sink use its own profile
+                if (Keys::isEncoder(a.action)) App::KeyBus::postEvent(e);   // a detent has no release
+                else                           App::KeyBus::postTap(e);
             } else {
-                // KeyCode: one literal code down the UART sink. Its release is
-                // scheduled MIN_GAP_MS later, not sent on the press's heels;
-                // a knob code carries a detent count and gets none.
-                g_keySink.sendTap(m.code, Canbox::KEY_PRESS);
+                // KeyCode: one literal code down the UART sink, its release
+                // MIN_GAP_MS later (IKeySink.h).
+                App::KeyBus::postLiteral(a.code, Canbox::KEY_PRESS, true);
             }
             break;
         case Keys::EffectRoute::UartOut: {
             uint8_t frame[Canbox::HU_FRAME_MAX];
-            const uint8_t len = Canbox::activeProtocol().frame(m.code, m.data, m.dataLen, frame);
+            const uint8_t len = Canbox::activeProtocol().frame(a.code, a.data, a.dataLen, frame);
             // The hu task's vehicle lane: an arbitrary frame is not a key, and
             // must not go in front of the next ack.
             if (!len)
-                LOGI("macro", "payload too long");
+                LOGI("rule", "payload too long");
             else if (!App::Hu::post(App::Hu::Kind::Raw, frame, len))
-                LOGI("macro", "uart queue full");
+                LOGI("rule", "uart queue full");
             break;
         }
         case Keys::EffectRoute::Hu:
             // Message: the hu task owns the emitter; it reports one with no data.
-            App::Hu::requestSendNow(m.code);
+            App::Hu::requestSendNow(a.code);
             break;
 #if FEATURE_DISPLAY_CAN
         case Keys::EffectRoute::Panel:
-            if (m.effect == Keys::Effect::Text) {
-                char a[MegaOpen::PanelOps::STR_MAX];
-                char b[MegaOpen::PanelOps::STR_MAX];
-                char c[MegaOpen::PanelOps::STR_MAX];
-                macroRows(m.arg, a, b, c, sizeof(a));
-                if (b[0] || c[0]) g_panelOps.postFullscreen(a, b, c);
-                else              g_panelOps.postText(a);
-            } else {
-                g_panelOps.postPopup(m.arg);
-                // Auto-hide, armed by the render owner: the deadline is its state.
-                App::Ui::armPopup(App::Ui::keyPopupMs());
+            if (a.effect == Keys::Effect::Text) {
+                // Static: the car task's stack is small, and it is the one caller.
+                static char l1[MegaOpen::PanelOps::STR_MAX];
+                static char l2[MegaOpen::PanelOps::STR_MAX];
+                static char l3[MegaOpen::PanelOps::STR_MAX];
+                macroRows(a.arg, l1, l2, l3, sizeof(l1));
+                if (l2[0] || l3[0]) g_panelOps.postFullscreen(l1, l2, l3);
+                else                g_panelOps.postText(l1);
             }
             break;
         case Keys::EffectRoute::Pane:
             // The pane is the ui task's render state: ask for it.
-            App::Ui::requestScene((uint8_t)MegaOpen::MediaPane::sceneFromName(m.arg));
+            App::Ui::requestScene((uint8_t)MegaOpen::MediaPane::sceneFromName(a.arg));
             break;
 #else
         case Keys::EffectRoute::Panel:
         case Keys::EffectRoute::Pane:
-            LOGI("macro", "this build has no panel - see FEATURE_DISPLAY_CAN");
+            LOGI("rule", "this build has no panel - see FEATURE_DISPLAY_CAN");
             break;
 #endif
         default:
             break;
     }
+}
+
+// A gesture MacroEngine detected on the keys task: the car task checks the
+// rule's "only if" and pause and performs its actions. Keys::Macro::rule is
+// the row the macro stands for (Vehicle::Rules::gestures).
+static void macroFire(const Keys::Macro& m, void*)
+{
+    if (m.rule != 0xFFFF) App::Car::fireRule(m.rule);
 }
 
 #if FEATURE_DISPLAY_CAN
@@ -1482,7 +1479,6 @@ static void keysStart()
         if (release) g_keySink.sendTap(code, state);
         else         g_keySink.sendKey(code, state);
     };
-    h.route.macroRun = [](uint8_t idx, void*) { g_macros.run(idx); };
     App::KeysTask::begin(h, &g_tx);
 }
 
@@ -2069,22 +2065,21 @@ void setup()
     g_engine.onEmit(matrixEmit, nullptr);
 #endif
 
-    // The macro filter sees every event before any sink; only it may stop one.
-    g_cfg.loadMacros(g_macros);
+    // The gesture filter sees every event before any sink; only it may stop
+    // one. Its table is the gesture rules of the car file (Rules::gestures);
+    // httpd rebuilds it on POST /api/rules.
     {
         Keys::MacroTable t;
-        g_macros.table(t);
+        Vehicle::RuleSet rs;
+        CarStore::loadRules(rs);
+        const uint8_t n = Vehicle::Rules::gestures(rs, t, Keys::MacroTable::COUNT);
+        g_macros.setTable(t);
         g_macroCfg.init(t);
+        LOGI("rule", "%u gesture rule(s) on the keys task", (unsigned)n);
     }
     g_macros.onFire(macroFire, nullptr);
     g_macros.onEmit(macroEmit, nullptr);
     g_engine.onFilter(macroFilter, nullptr);
-    {
-        uint8_t on = 0;
-        for (uint8_t i = 0; i < Keys::MacroEngine::count(); ++i)
-            if (g_macros.at(i).enabled && g_macros.at(i).valid()) ++on;
-        LOGI("macro", "%u of %u active", (unsigned)on, (unsigned)Keys::MacroEngine::count());
-    }
 
 #if FEATURE_KNOBS
     // After the macro filter: the knob task starts sampling inside begin().
@@ -2350,7 +2345,6 @@ void setup()
     memMark("wifi");
     g_web.attachWifi(&g_wifi);
     g_web.attachCounters(&g_ghosts, &g_encSteps);
-    g_web.attachMacros(&g_macros);
     {
         // What the web edits and another task applies (see g_routingCfg).
         WebUi::Staging st;
@@ -2416,12 +2410,12 @@ void setup()
         // Once the user signals have their names: the car screen's rows,
         // saved by name, find them.
         cs.signalsRenamed = [] { g_cfg.resolveCarSigs(); };
-        // The panel alert rules: NVS, else the low-fuel edge alone.
-        cs.alerts.factory();
-        const bool alertsNvs = g_cfg.loadAlerts(cs.alerts);
-        uint8_t alertsOn = 0;
-        for (const Vehicle::AlertRule& r : cs.alerts.r) alertsOn += r.on && r.sig < Vehicle::SIG_COUNT;
-        LOGI("alert", "%u rule(s) on, from %s", (unsigned)alertsOn, alertsNvs ? "NVS" : "factory");
+        // The rules (none in the file: the factory's three), and the hand that
+        // performs their actions (popups the car task queues itself).
+        Vehicle::RuleSet rules;
+        CarStore::loadRules(rules);
+        cs.rules = &rules;
+        cs.perform = performAction;
 #if FEATURE_DISPLAY_CAN
         // As a phone notification is drawn, but only while nothing holds the
         // glass: an alert never covers a menu (CarTask waits, newest wins).

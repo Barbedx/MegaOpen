@@ -222,7 +222,6 @@ namespace Cfg
                [](uint8_t i) { return T[i].name; }, DOM }
         const SEnum kReact = UI_NAMES_ENUM(Knobs::REACT_NAMES, "ledReact");
         const SEnum kAnim  = UI_NAMES_ENUM(Knobs::ANIM_NAMES, "ledIdle");
-        const SEnum kConds = UI_NAMES_ENUM(Vehicle::ALERT_COND, "cond");
         const SEnum kCapModes = UI_NAMES_ENUM(CapFormat::MODE_NAMES, "capModes");
 
         // Log levels: row i = LogLevel i, the id is also the name.
@@ -252,48 +251,6 @@ namespace Cfg
             },
         };
 #undef UI_NAMES_ENUM
-
-        // ---- the panel alerts (Vehicle::AlertRules) -------------------------
-        // A rule's signal: built-in signal i is row i, and the row after them,
-        // the last, is an empty rule ("", stored as SIG_COUNT). The user
-        // signals have no alert: rules take alerts over (rules.md, slice 4).
-        constexpr uint8_t ALERT_EMPTY = Vehicle::SIG_USER_0;
-        const SEnum kAlertSigs = {
-            [] { return (uint8_t)(ALERT_EMPTY + 1); },
-            [](uint8_t i) { return i < ALERT_EMPTY ? Vehicle::meta(i).name : ""; },
-            [](uint8_t i) -> const char* { return i >= ALERT_EMPTY ? "—" : nullptr; },
-            "sig",
-        };
-
-        // AlertRules::Col order. thr's range is its row's signal's (the
-        // table refuses the rest); the page offers any number.
-        const SColumn kAlertCols[] = {
-            {"sig",       SType::Enum, 0, 0, &kAlertSigs},
-            {"cond",      SType::Enum, 0, 0, &kConds},
-            {"thr",       SType::Int,  INT32_MIN, INT32_MAX, nullptr},
-            {"cooldownS", SType::Int,  Vehicle::ALERT_COOLDOWN_MIN_S, 65535, nullptr},
-            {"on",        SType::Bool, 0, 1, nullptr},
-        };
-        static_assert(sizeof(kAlertCols) / sizeof(kAlertCols[0]) == Vehicle::AlertRules::COLS,
-                      "kAlertCols is out of step with AlertRules::Col");
-
-        const STable kAlerts = {
-            [] { return Vehicle::AlertRules::ROWS; }, Vehicle::AlertRules::COLS, kAlertCols,
-            [](const Model& m, uint8_t r, uint8_t c) {
-                const int32_t v = m.a->get(r, c);
-                return c == Vehicle::AlertRules::C_SIG && v >= ALERT_EMPTY ? (int32_t)ALERT_EMPTY : v;
-            },
-            [](Model& m, uint8_t r, uint8_t c, int32_t v) {
-                if (c == Vehicle::AlertRules::C_SIG && v >= ALERT_EMPTY) v = Vehicle::SIG_COUNT;
-                // An empty rule is never on (the /api/map rule before).
-                if (c == Vehicle::AlertRules::C_ON && m.a->r[r].sig >= Vehicle::SIG_COUNT) v = 0;
-                return m.a->set(r, c, v);
-            },
-            [](const Model& m, uint8_t r, uint8_t c) -> uint8_t {
-                const uint8_t sig = m.a->r[r].sig;
-                return c == Vehicle::AlertRules::C_THR && sig < Vehicle::SIG_COUNT ? Vehicle::meta(sig).decimals : 0;
-            },
-        };
 
         // ---- the head-unit emitter's messages: row i = message i, on/off ----
         const SColumn kMsgCols[] = {
@@ -559,11 +516,6 @@ namespace Cfg
             {"cap.autoProtect", "Mark protects", "cap", SType::Bool, W, AP_CAP,
              0, 1, 0, nullptr, nullptr, C_GET(c.autoProtect), C_PUT(c.autoProtect = v != 0)},
 
-            // ---- the panel alerts: the whole table, row i = rule i ----------
-            // Drawn by the live-car page, not the settings card.
-            {"alerts", "Alerts", nullptr, SType::Table, W, AP_CAR,
-             0, 0, 0, nullptr, nullptr, nullptr, nullptr, &kAlerts},
-
             // ---- which Raise messages go to the head unit: RAM only ---------
             // A bench switch (every boot sends them all); drawn by the service
             // page next to each message's live bytes (/api/messages).
@@ -607,7 +559,6 @@ namespace Cfg
         bool available(const Model& m, const SEntry& e)
         {
             if (e.type == SType::Group) return true;
-            if (e.apply & AP_CAR) return m.a != nullptr;
             if (e.apply & AP_CAP) return m.c != nullptr;
             if (e.apply & AP_HU)  return m.hu != nullptr && m.msg != nullptr;
             return (e.apply & AP_KNOBS) ? m.k != nullptr : m.s != nullptr;

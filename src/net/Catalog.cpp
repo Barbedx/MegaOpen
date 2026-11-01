@@ -399,11 +399,11 @@ namespace Catalog
 
             names(j, "mapSrc", Vehicle::MAP_SRC);
 
-            j.k("macroTriggers").arr();
+            j.k("ruleTriggers").arr();
             for (const auto& t : Keys::TRIGGERS)
                 j.obj().ks("v", t.id).kso("name", t.name).kb("taps", t.taps).endObj();
             j.endArr();
-            j.k("macroEffects").arr();
+            j.k("ruleEffects").arr();
             for (const auto& e : Keys::EFFECTS)
                 j.obj().ks("v", e.id).kso("name", e.name).ks("field", e.field).endObj();
             j.endArr();

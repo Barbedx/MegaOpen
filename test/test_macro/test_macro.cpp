@@ -487,80 +487,9 @@ static void test_a_sequence_needs_at_least_two_taps()
 
 // ---- persistence -----------------------------------------------------------
 
-static void test_the_table_survives_a_round_trip()
-{
-    MacroEngine a; a.clear();
-    a.at(0).enabled = true;
-    a.at(0).trigger = Trigger::Combo;
-    a.at(0).keys[0] = Action::VolUp; a.at(0).keys[1] = Action::VolDown;
-    a.at(0).members = 2;
-    a.at(0).effect = Effect::Raw; a.at(0).code = 0x21;
-    a.at(0).dataLen = 3; a.at(0).data[0] = 0xAA; a.at(0).data[1] = 0xBB; a.at(0).data[2] = 0xCC;
-    strncpy(a.at(0).name, "both volume", Macro::NAME_LEN - 1);
-    a.at(3).enabled = true;
-    a.at(3).trigger = Trigger::Sequence;
-    a.at(3).keys[0] = Action::Mute; a.at(3).taps = 4; a.at(3).windowMs = 350;
-    a.at(3).effect = Effect::Text;
-    strncpy(a.at(3).arg, "ROW1|ROW2|ROW3", Macro::ARG_LEN - 1);
 
-    uint8_t blob[MacroEngine::BLOB_SIZE];
-    a.toBlob(blob);
 
-    MacroEngine b; b.clear();
-    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
 
-    TEST_ASSERT_TRUE(b.at(0).enabled);
-    TEST_ASSERT_EQUAL((int)Trigger::Combo, (int)b.at(0).trigger);
-    TEST_ASSERT_EQUAL(0x21, b.at(0).code);
-    TEST_ASSERT_EQUAL(3, b.at(0).dataLen);
-    TEST_ASSERT_EQUAL(0xBB, b.at(0).data[1]);
-    TEST_ASSERT_EQUAL_STRING("both volume", b.at(0).name);
-    TEST_ASSERT_EQUAL(4, b.at(3).taps);
-    TEST_ASSERT_EQUAL(350, b.at(3).windowMs);
-    TEST_ASSERT_EQUAL_STRING("ROW1|ROW2|ROW3", b.at(3).arg);
-}
-
-static void test_a_blob_from_another_layout_is_rejected()
-{
-    MacroEngine a; a.loadDefaults();
-    uint8_t blob[MacroEngine::BLOB_SIZE];
-    a.toBlob(blob);
-    blob[0] = 0x7F;                                   // a version nothing wrote
-
-    MacroEngine b; b.clear();
-    TEST_ASSERT_FALSE(b.fromBlob(blob, sizeof(blob)));
-    TEST_ASSERT_FALSE(b.fromBlob(blob, sizeof(blob) - 1));
-}
-
-// A blob is not a trusted document: it can come from an older layout, a partial
-// write, or a namespace another sketch used. Nothing out of it may become an
-// out-of-range enum that later indexes a name table.
-static void test_a_corrupt_blob_cannot_produce_an_out_of_range_enum()
-{
-    uint8_t blob[MacroEngine::BLOB_SIZE];
-    MacroEngine a; a.clear();
-    a.toBlob(blob);
-    blob[2]  = 200;                                   // trigger
-    blob[10] = 200;                                   // effect (offset within record 0)
-    for (uint16_t i = 3; i < 6; ++i) blob[i] = 200;   // member actions
-
-    MacroEngine b;
-    TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
-    TEST_ASSERT_EQUAL((int)Trigger::Off, (int)b.at(0).trigger);
-    TEST_ASSERT_EQUAL((int)Action::None, (int)b.at(0).keys[0]);
-    TEST_ASSERT_FALSE(b.at(0).valid());
-}
-
-static void test_the_shipped_defaults_are_switched_off()
-{
-    MacroEngine m; m.loadDefaults();
-    for (uint8_t i = 0; i < MacroEngine::count(); ++i)
-        TEST_ASSERT_FALSE_MESSAGE(m.at(i).enabled,
-                                  "a macro that arrives enabled is a button nobody asked for");
-    // ...and the two examples are nonetheless complete enough to switch on.
-    TEST_ASSERT_TRUE(m.at(0).valid());
-    TEST_ASSERT_TRUE(m.at(1).valid());
-}
 
 static void test_the_names_round_trip()
 {
@@ -609,34 +538,7 @@ static void test_a_new_table_drops_mutes_from_the_old_one()
     assertOut(1, Action::VolDown, State::Press);
 }
 
-static void test_a_table_round_trips_through_the_blob_on_its_own()
-{
-    MacroTable a; a.loadDefaults();
-    a.m[3].enabled = true; a.m[3].trigger = Trigger::Hold;
-    a.m[3].keys[0] = Action::Phone; a.m[3].effect = Effect::Message; a.m[3].code = 4;
-    strncpy(a.m[3].name, "hold phone", Macro::NAME_LEN - 1);
-    uint8_t blob[MacroEngine::BLOB_SIZE];
-    MacroEngine::toBlob(a, blob);
-    MacroTable b;
-    TEST_ASSERT_TRUE(MacroEngine::fromBlob(b, blob, sizeof(blob)));
-    TEST_ASSERT_TRUE(b.m[3].enabled);
-    TEST_ASSERT_EQUAL((int)Trigger::Hold, (int)b.m[3].trigger);
-    TEST_ASSERT_EQUAL_STRING("hold phone", b.m[3].name);
-    // And the engine reads the same bytes the same way.
-    MacroEngine e;
-    TEST_ASSERT_TRUE(e.fromBlob(blob, sizeof(blob)));
-    TEST_ASSERT_EQUAL(4, e.at(3).code);
-}
 
-static void test_run_performs_the_effect_without_touching_the_counters()
-{
-    MacroEngine m; reset(m); armCombo(m, true);
-    m.run(0);
-    TEST_ASSERT_EQUAL(1, g_fireN);
-    TEST_ASSERT_EQUAL(0x07, g_fired[0].code);
-    TEST_ASSERT_EQUAL(0, m.fired());
-    TEST_ASSERT_EQUAL(0, m.at(0).fires);
-}
 
 static void test_held_taps_tell_the_keys_task_when_to_wake()
 {
@@ -701,15 +603,9 @@ int main(int, char**)
     RUN_TEST(test_an_effect_with_nothing_to_send_is_invalid);
     RUN_TEST(test_a_sequence_needs_at_least_two_taps);
 
-    RUN_TEST(test_the_table_survives_a_round_trip);
-    RUN_TEST(test_a_blob_from_another_layout_is_rejected);
-    RUN_TEST(test_a_corrupt_blob_cannot_produce_an_out_of_range_enum);
-    RUN_TEST(test_the_shipped_defaults_are_switched_off);
     RUN_TEST(test_the_names_round_trip);
     RUN_TEST(test_a_new_table_keeps_each_rows_fire_count);
     RUN_TEST(test_a_new_table_drops_mutes_from_the_old_one);
-    RUN_TEST(test_a_table_round_trips_through_the_blob_on_its_own);
-    RUN_TEST(test_run_performs_the_effect_without_touching_the_counters);
     RUN_TEST(test_held_taps_tell_the_keys_task_when_to_wake);
     RUN_TEST(test_each_effect_names_the_task_that_performs_it);
     return UNITY_END();

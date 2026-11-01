@@ -26,12 +26,13 @@ namespace App
             constexpr uint32_t PUBLISH_MS = 250;
             constexpr uint32_t LOG_MS     = 10000;   // the [car] line
 
-            enum class Op : uint8_t { Pin, Unpin, Test };
+            enum class Op : uint8_t { Pin, Unpin, Test, Fire, Try };
             struct Cmd {
                 Op       op = Op::Pin;
                 uint8_t  sig = 0;
                 int32_t  value = 0;
                 uint32_t ms = 0;        // Test: how long
+                uint16_t row = 0;       // Fire, Try: the rule
             };
 
             // The tests running now: a few at once is plenty for one person
@@ -234,11 +235,15 @@ namespace App
             Snapshot<Expr::SigSet>      s_targetsPub;
             uint32_t                    s_formulaTick = 0;
             Expr::SigSet                s_changed;
-            // The panel alert rules: httpd stages, this task applies and evaluates.
-            Staged<Vehicle::AlertRules> s_alerts;
-            Vehicle::AlertEval s_eval;
-            uint32_t           s_alertAt = 0, s_shown = 0;
-            Snapshot<AlertStats> s_alertPub;
+            // The rules: httpd stages a set, this task applies it and runs it
+            // after the formulas (the same changed set and tick).
+            Staged<Vehicle::RuleSet> s_ruleSet;
+            Vehicle::Rules           s_rules;
+            RuleStats                s_ruleSt;
+            Snapshot<RuleStats>      s_rulePub;
+            // The one pending popup (newest wins), shown when the glass is free.
+            struct Pending { bool has = false, test = false; uint16_t row = 0; int32_t value = 0; char text[48] = ""; };
+            Pending                  s_pend;
             // The recent alerts, a ring under its own lock (alertsSince()).
             portMUX_TYPE s_logMux = portMUX_INITIALIZER_UNLOCKED;
             AlertEntry   s_log[ALERT_LOG];
@@ -308,6 +313,92 @@ namespace App
                     if (table.has(s) || f.has(s)) s_derived.setBound(s, true);
             }
 
+            // ---- the rules --------------------------------------------------------------
+            // One popup pending at a time, newest wins; shown when the glass is
+            // free, dropped if its rule no longer holds by then (a test shows
+            // regardless). The apps read the shown ones from the ring.
+            void queuePopup(uint16_t row, int32_t value, const char* text, bool test)
+            {
+                if (s_pend.has) ++s_ruleSt.overwritten;
+                s_pend.has = true;
+                s_pend.test = test;
+                s_pend.row = row;
+                s_pend.value = value;
+                snprintf(s_pend.text, sizeof(s_pend.text), "%s", text);
+            }
+
+            // The row's actions: the popup through the queue above, the rest
+            // posted to the task that owns each (main.cpp performAction).
+            void performRow(uint16_t row, bool test)
+            {
+                const Vehicle::RuleSet& set = s_ruleSet.live();
+                if (row >= set.rows.size() || !s_s.state) return;
+                const Vehicle::RuleRow& r = set.rows[row];
+                if (!test) ++s_ruleSt.fired;
+                LOGI("rule", "%s%s", r.name, test ? " (test)" : "");
+                for (uint8_t k = 0; k < r.nAct && k < Vehicle::RuleRow::MAX_ACTIONS; ++k) {
+                    const Vehicle::RuleAction& a = r.act[k];
+                    if (a.effect == Keys::Effect::Popup) {
+                        char text[48];
+                        const Expr::SigSet& in = s_rules.inputsOf(row);
+                        Vehicle::Rules::popupText(text, sizeof(text), r, a.arg, in, *s_s.state);
+                        queuePopup(row, Vehicle::Rules::popupValue(r, in, *s_s.state), text, test);
+                    } else if (s_s.perform) {
+                        s_s.perform(a);
+                    }
+                }
+                s_rulePub.publish(s_ruleSt);
+            }
+
+            void onFire(uint16_t row, void*) { performRow(row, false); }
+
+            void applyRules()
+            {
+                Vehicle::RuleProblem p;
+                if (!s_rules.apply(s_ruleSet.live(), p))
+                    LOGW("rule", "rule %u: %s at %u, that rule is off", (unsigned)(p.row + 1),
+                         p.e.code ? p.e.code : "?", (unsigned)p.e.pos);
+                // Every rule starts afresh: what it reads counts as changed.
+                for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) s_changed.set(s);
+                uint16_t on = 0, gestures = 0;
+                for (uint16_t i = 0; i < s_rules.rows(); ++i) {
+                    Vehicle::Rules::Live l;
+                    if (!s_rules.live(i, l) || !l.running) continue;
+                    ++on;
+                    if (l.gesture) ++gestures;
+                }
+                LOGI("rule", "%u rule(s) running, %u of them gestures", (unsigned)on, (unsigned)gestures);
+            }
+
+            void popups(uint32_t now)
+            {
+                if (!s_pend.has) return;
+                if (s_s.glassFree && !s_s.glassFree()) return;
+                const Vehicle::RuleSet& set = s_ruleSet.live();
+                const bool valid = s_pend.row < set.rows.size();
+                const bool holds = valid && (set.rows[s_pend.row].isGesture() || s_rules.holds(s_pend.row));
+                s_pend.has = false;
+                if (!valid || (!holds && !s_pend.test)) {
+                    ++s_ruleSt.dropped;
+                    s_rulePub.publish(s_ruleSt);
+                    return;
+                }
+                const Vehicle::RuleRow& r = set.rows[s_pend.row];
+                if (s_s.alert) s_s.alert(r.name, s_pend.text);
+                ++s_ruleSt.shown;
+                AlertEntry e;
+                e.ms = now;
+                e.row = s_pend.row;
+                e.value = s_pend.value;
+                snprintf(e.rule, sizeof(e.rule), "%s", r.name);
+                memcpy(e.text, s_pend.text, sizeof(e.text));
+                portENTER_CRITICAL(&s_logMux);
+                e.seq = ++s_logSeq;
+                s_log[(e.seq - 1) % ALERT_LOG] = e;
+                portEXIT_CRITICAL(&s_logMux);
+                s_rulePub.publish(s_ruleSt);
+            }
+
             void applyFormulas()
             {
                 Vehicle::FormulaProblem p;
@@ -333,6 +424,7 @@ namespace App
                 const bool tick = (uint32_t)(now - s_formulaTick) >= FORMULA_TICK_MS;
                 if (tick) s_formulaTick = now;
                 s_formulas.step(*s_s.state, s_changed, now, tick);
+                s_rules.step(*s_s.state, s_changed, now, tick, onFire, nullptr);
                 s_changed.clear();
             }
 
@@ -394,6 +486,13 @@ namespace App
                         st.pin(c.sig, c.value);
                         break;
                     }
+                    case Op::Fire:
+                        // A gesture the keys task saw: its "only if" and pause decide.
+                        if (s_rules.gestureFire(c.row, now)) performRow(c.row, false);
+                        return;
+                    case Op::Try:
+                        performRow(c.row, true);
+                        return;
                 }
                 s_testsPub.publish(s_tests);
                 refreshVerified();
@@ -434,43 +533,6 @@ namespace App
                 refreshVerified();
             }
 
-            // The panel alert rules, every ALERT_MS. One popup pending at a time
-            // (AlertEval): it waits for the glass, and goes if its condition
-            // clears first.
-            void alerts(uint32_t now)
-            {
-                s_alerts.applyIfDirty();
-                if ((uint32_t)(now - s_alertAt) < ALERT_MS) return;
-                s_alertAt = now;
-                const Vehicle::AlertRules& r = s_alerts.live();
-                s_eval.tick(r, *s_s.state, now);
-                Vehicle::AlertEval::Fire f;
-                const bool free = !s_s.glassFree || s_s.glassFree();
-                if (s_eval.take(r, *s_s.state, free, f)) {
-                    char text[48];
-                    Vehicle::AlertEval::text(text, sizeof(text), f.sig, f.value, Vehicle::verified(f.sig));
-                    if (s_s.alert) s_s.alert("Car alert", text);
-                    ++s_shown;
-                    LOGI("alert", "rule %u: %s", (unsigned)(f.row + 1), text);
-                    AlertEntry e;
-                    e.ms = now;
-                    e.sig = f.sig;
-                    e.row = f.row;
-                    e.value = f.value;
-                    memcpy(e.text, text, sizeof(e.text));
-                    portENTER_CRITICAL(&s_logMux);
-                    e.seq = ++s_logSeq;
-                    s_log[(e.seq - 1) % ALERT_LOG] = e;
-                    portEXIT_CRITICAL(&s_logMux);
-                }
-                AlertStats st;
-                st.fired = s_eval.fired();
-                st.shown = s_shown;
-                st.overwritten = s_eval.overwritten();
-                st.dropped = s_eval.dropped();
-                s_alertPub.publish(st);
-            }
-
             // The owner's chores between frames: commands, a staged table,
             // tests running out, the alert rules.
             void chores(uint32_t now)
@@ -480,8 +542,9 @@ namespace App
                 while (s_cmd && xQueueReceive(s_cmd, &c, 0) == pdTRUE) applyCmd(c, now);
                 if (s_table.applyIfDirty()) applyTable();
                 if (s_formulaSet.applyIfDirty()) applyFormulas();
+                if (s_ruleSet.applyIfDirty()) applyRules();
                 expireTests(now);
-                alerts(now);
+                popups(now);
             }
 
             void post(const Cmd& c)
@@ -681,7 +744,13 @@ namespace App
                 s_formulaSet.init(fs);
                 applyFormulas();
             }
-            s_alerts.init(s.alerts);
+            {
+                Vehicle::RuleSet rs;
+                if (s.rules) rs = *s.rules;
+                else         rs.factory();
+                s_ruleSet.init(rs);
+                applyRules();
+            }
             if (s_s.sniffer) {
                 // Off where the capture recorder is the tool (T-2CAN): a busy car
                 // bus then costs no table search per frame. /api/can/sniff.
@@ -777,22 +846,25 @@ namespace App
         Stats stats() { return s_stats.read(); }
         Staged<Vehicle::FormulaSet>& formulaSet() { return s_formulaSet; }
         Expr::SigSet formulaTargets() { return s_targetsPub.read(); }
-        Staged<Vehicle::AlertRules>& alertRules() { return s_alerts; }
-        AlertStats alertStats() { return s_alertPub.read(); }
+        Staged<Vehicle::RuleSet>& ruleSet() { return s_ruleSet; }
+        RuleStats ruleStats() { return s_rulePub.read(); }
+        bool ruleLive(uint16_t row, Vehicle::Rules::Live& out) { return s_rules.live(row, out); }
+        void fireRule(uint16_t row) { Cmd c; c.op = Op::Fire; c.row = row; post(c); }
+        void testRule(uint16_t row) { Cmd c; c.op = Op::Try;  c.row = row; post(c); }
 
-        void injectAlert(uint8_t sig, int32_t value, const char* text)
+        void injectAlert(const char* rule, int32_t value, const char* text)
         {
             AlertEntry e;
             e.ms = millis();
-            e.sig = sig;
-            e.row = 0xFF;                  // no rule: a test
+            snprintf(e.rule, sizeof(e.rule), "%s", rule ? rule : "");
+            e.row = 0xFFFF;                // no rule: a test
             e.value = value;
             snprintf(e.text, sizeof(e.text), "%s", text ? text : "");
             portENTER_CRITICAL(&s_logMux);
             e.seq = ++s_logSeq;
             s_log[(e.seq - 1) % ALERT_LOG] = e;
             portEXIT_CRITICAL(&s_logMux);
-            LOGI("alert", "test for the apps: %s", e.text);
+            LOGI("rule", "test for the apps: %s", e.text);
         }
 
         uint8_t alertsSince(uint32_t since, AlertEntry* out, uint8_t cap, uint32_t& last)

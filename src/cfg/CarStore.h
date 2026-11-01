@@ -3,6 +3,7 @@
 #include "../proto/canbox/FieldMap.h"
 #include "../proto/canbox/Protocol.h"
 #include "../vehicle/Formulas.h"
+#include "../vehicle/Rules.h"
 
 namespace Cfg { class Config; }
 
@@ -42,4 +43,13 @@ namespace CarStore
     bool saveFormulas(const Vehicle::FormulaSet& set);
     // Back to the factory set: the file's `formulas` is dropped.
     bool factoryFormulas();
+
+    // The rules; none in the file = the factory set (RuleSet::factory). A
+    // file from 1.6.9 (no `rules`) gets them on first read: 1.6's NVS alerts
+    // and macros carried over, else the factory's.
+    void loadRules(Vehicle::RuleSet& set);
+    bool saveRules(const Vehicle::RuleSet& set);
+    // The factory set, written as rows (not a missing key, which would read
+    // the NVS tables again).
+    bool factoryRules();
 }

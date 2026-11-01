@@ -6,7 +6,7 @@
 #include "../vehicle/VehicleState.h"
 #include "../vehicle/CanSniffer.h"
 #include "../vehicle/DecodeTable.h"
-#include "../vehicle/AlertRules.h"
+#include "../vehicle/Rules.h"
 #include "../vehicle/Formulas.h"
 #include "../utils/Staged.h"
 
@@ -65,12 +65,15 @@ namespace App
             // After a set of formulas is applied (the user signals renamed): on
             // the car task, must not block (main: the car screen's names).
             void (*signalsRenamed)() = nullptr;
-            // The panel alert rules (NVS "alerts", else factory: the low-fuel
-            // edge). Copied.
-            Vehicle::AlertRules  alerts;
-            // A rule fired: put it on the panel (the ui task's notification).
-            // Null = no panel in this image: rules are evaluated, nothing shown.
+            // The rules as the car file holds them (CarStore::loadRules),
+            // copied; null = the factory's.
+            const Vehicle::RuleSet*     rules = nullptr;
+            // A rule's popup, once the glass is free (the ui task's
+            // notification). Null = no panel in this image: evaluated, not shown.
             void (*alert)(const char* title, const char* text) = nullptr;
+            // A rule's other actions, performed by posting to the task that
+            // owns each (main.cpp performAction). Null = popups only.
+            void (*perform)(const Vehicle::RuleAction& a) = nullptr;
             // Whether a popup may go up now: false while a menu or a person's
             // screen holds the glass. Null = always.
             bool (*glassFree)() = nullptr;
@@ -121,30 +124,41 @@ namespace App
         // Which signals a formula feeds now: any task (a copy).
         Expr::SigSet formulaTargets();
 
-        // ---- the panel alert rules ---------------------------------------------------
-        // httpd edits (and persists, Config::saveAlerts); the car task applies
-        // them between two frames. Evaluated every ALERT_MS against State.
-        constexpr uint32_t ALERT_MS = 100;
-        Staged<Vehicle::AlertRules>& alertRules();
-        struct AlertStats { uint32_t fired = 0, shown = 0, overwritten = 0, dropped = 0; };
-        AlertStats alertStats();
+        // ---- the rules (Vehicle::Rules) -----------------------------------------------
+        // httpd stages a set (checked first: Rules::check) and persists it
+        // (CarStore::saveRules); the car task applies it between two passes
+        // and runs it after each pass's formulas (the same changed set and
+        // tick). One popup is pending at a time, newest wins: it waits for the
+        // glass and is dropped if its rule no longer holds by then.
+        Staged<Vehicle::RuleSet>& ruleSet();
+        // A gesture rule MacroEngine detected on the keys task: the car task
+        // checks its "only if" and pause and performs its actions. Any task.
+        void fireRule(uint16_t row);
+        // The page's «Спробувати»: the row's actions now, no trigger, no pause.
+        void testRule(uint16_t row);
+        // A row's state from the engine (plain fields of a row that stays
+        // put). Any task.
+        bool ruleLive(uint16_t row, Vehicle::Rules::Live& out);
+        struct RuleStats { uint32_t fired = 0, shown = 0, overwritten = 0, dropped = 0; };
+        RuleStats ruleStats();
 
-        // The last ALERT_LOG alerts shown, numbered from 1 since boot: what the
+        // The last ALERT_LOG popups shown, numbered from 1 since boot: what the
         // phone and tablet apps read (GET /api/alerts?since=N) to speak them.
         // Any task; a copy under a short lock.
         static constexpr uint8_t ALERT_LOG = 16;
         struct AlertEntry {
-            uint32_t seq = 0, ms = 0;     // number, and millis() when shown
-            uint8_t  sig = 0, row = 0;    // the signal and the rule (0-based)
-            int32_t  value = 0;
-            char     text[48] = "";       // what the panel showed
+            uint32_t seq = 0, ms = 0;               // number, and millis() when shown
+            char     rule[Vehicle::RULE_NAME + 1] = "";   // the rule's name (the apps' key)
+            uint16_t row = 0;                       // the rule (0-based); 0xFFFF = a test
+            int32_t  value = 0;                     // the formula's first input
+            char     text[48] = "";                 // what the panel showed
         };
         // Entries newer than `since` into out (oldest first, at most cap); how
         // many. `last` = the newest number (0 before any alert).
         uint8_t alertsSince(uint32_t since, AlertEntry* out, uint8_t cap, uint32_t& last);
         // A test entry, as if a rule had fired (POST /api/alerts/test): the
         // apps' voice is checked at the bench. Not shown on the panel.
-        void injectAlert(uint8_t sig, int32_t value, const char* text);
+        void injectAlert(const char* rule, int32_t value, const char* text);
 
         struct Stats {
             uint32_t frames = 0;        // since boot, all sources

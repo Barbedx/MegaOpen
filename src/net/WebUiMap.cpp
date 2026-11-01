@@ -9,6 +9,7 @@
 #include "../proto/canbox/Protocol.h"
 #include "../cfg/CarFile.h"
 #include "../cfg/CarStore.h"
+#include "../vehicle/Rules.h"
 #include "../vehicle/ExprState.h"
 #include "../utils/PsramJson.h"
 #include "../proto/canbox/FieldView.h"
@@ -104,8 +105,8 @@ namespace
                                     st.has(s) ? dec(v, sizeof(v), st.get(s), Vehicle::meta(s).decimals) : "null",
                                     a, h, Vehicle::verified(s) ? 1 : 0, (unsigned)conf[s]), sizeof(b)));
         }
-        const App::Car::AlertStats as = App::Car::alertStats();
-        out.put(b, fit(snprintf(b, sizeof(b), "],\"alertStats\":{\"fired\":%lu,\"shown\":%lu,\"dropped\":%lu}",
+        const App::Car::RuleStats as = App::Car::ruleStats();
+        out.put(b, fit(snprintf(b, sizeof(b), "],\"ruleStats\":{\"fired\":%lu,\"shown\":%lu,\"dropped\":%lu}",
                                 (unsigned long)as.fired, (unsigned long)as.shown, (unsigned long)as.dropped), sizeof(b)));
     }
 
@@ -600,10 +601,12 @@ void WebUi::routesMap()
 // ---------------------------------------------------------------------------
 // The map in the settings file (GET/POST /api/config, WebUi.cpp)
 // ---------------------------------------------------------------------------
-// `decode` and `hu` as the car file holds them (CarFile: the bindings, the
-// constants, the owner's ✓, the field map, all by signal name), plus hu.send.
-// A file without them leaves both alone. A 1.6.x file's base64 `decode` is
-// refused (decode: not_object): its rows are signal indexes, not names.
+// `decode`, `hu`, `formulas` and `rules` as the car file holds them (CarFile:
+// the bindings, the constants, the owner's ✓, the field map, the formulas, the
+// rules, all by signal name), plus hu.send. A file without a part leaves that
+// part alone. A 1.6.x file's base64 `decode` is refused (decode: not_object):
+// its rows are signal indexes, not names; its `alerts` rows are not read (the
+// rules came from NVS on the update).
 
 void WebUi::mapToFile(ChunkOut& out)
 {
@@ -624,16 +627,20 @@ void WebUi::mapToFile(ChunkOut& out)
     Scratch<Vehicle::FormulaSet> fs;
     const bool haveF = fs && App::Car::formulaSet().peek(*fs);
     if (haveF) CarFile::putFormulas(o, *fs);
+    Scratch<Vehicle::RuleSet> rs;
+    const bool haveR = rs && App::Car::ruleSet().peek(*rs);
+    if (haveR) CarFile::putRules(o, *rs);
     // serializeJson into a String replaces it: the key goes out on its own.
     String s;
     if (haveT) { out.put(",\"decode\":"); serializeJson(o["decode"], s); out.put(s.c_str(), s.length()); }
     if (haveC) { out.put(",\"hu\":");     serializeJson(o["hu"], s);     out.put(s.c_str(), s.length()); }
     if (haveF) { out.put(",\"formulas\":"); serializeJson(o["formulas"], s); out.put(s.c_str(), s.length()); }
+    if (haveR) { out.put(",\"rules\":");  serializeJson(o["rules"], s);  out.put(s.c_str(), s.length()); }
 }
 
-const char* WebUi::mapFromFile(JsonObjectConst file, bool dry, bool& changedMap, bool& changedHu)
+const char* WebUi::mapFromFile(JsonObjectConst file, bool dry, FileParts& in)
 {
-    changedMap = changedHu = false;
+    in = FileParts{};
     // Static: only the config POST uses it (httpd is one task).
     static Vehicle::DecodeTable table;
     if (!file["decode"].isNull()) {
@@ -642,7 +649,7 @@ const char* WebUi::mapFromFile(JsonObjectConst file, bool dry, bool& changedMap,
         if (const char* why = CarFile::getDecode(file, table, skipped)) return why;
         if (skipped) LOGW("map", "settings file: %u decode row(s) name a signal this firmware does not know: skipped",
                           (unsigned)skipped);
-        changedMap = true;
+        in.map = true;
     }
 
     Scratch<Canbox::HuConfig> cBox;   // not on httpd's stack (see the routes)
@@ -659,31 +666,44 @@ const char* WebUi::mapFromFile(JsonObjectConst file, bool dry, bool& changedMap,
             uint16_t skipped = 0;
             if (const char* why = CarFile::getFields(file, Canbox::activeProtocol(), c.fields, skipped)) return why;
         }
-        changedHu = true;
+        in.hu = true;
     }
     // The formulas: the whole set, checked like POST /api/formulas.
     Scratch<Vehicle::FormulaSet> fs;
-    bool changedF = false;
     if (!file["formulas"].isNull()) {
         if (!fs) return "no_memory";
         if (const char* why = CarFile::getFormulas(file, *fs)) return why;
         Vehicle::FormulaProblem pr;
         if (!Vehicle::Formulas::check(*fs, pr)) return pr.e.code ? pr.e.code : "formulas";
-        changedF = true;
+        in.formulas = true;
+    }
+    // The rules: the whole set, checked like POST /api/rules.
+    Scratch<Vehicle::RuleSet> rs;
+    if (!file["rules"].isNull()) {
+        if (!rs) return "no_memory";
+        if (const char* why = CarFile::getRules(file, *rs)) return why;
+        Vehicle::RuleProblem pr;
+        if (!Vehicle::Rules::check(*rs, pr)) return pr.e.code ? pr.e.code : "rules";
+        in.rules = true;
     }
     if (dry) return nullptr;
 
-    if (changedF) {
+    if (in.formulas) {
         if (!App::Car::formulaSet().edit([&](Vehicle::FormulaSet& f) { f = *fs; })) return "busy";
         if (!CarStore::saveFormulas(*fs)) return "file_failed";
         LOGI("map", "formulas from a settings file: %u row(s)", (unsigned)fs->rows.size());
     }
-    if (changedMap) {
+    if (in.rules) {
+        uint8_t gestures = 0;
+        if (const char* why = applyRules(*rs, false, gestures)) return why;
+        LOGI("map", "rules from a settings file: %u row(s), %u gesture(s)", (unsigned)rs->rows.size(), (unsigned)gestures);
+    }
+    if (in.map) {
         if (!App::Car::decodeTable().edit([&](Vehicle::DecodeTable& t) { t = table; })) return "busy";
         if (!CarStore::saveDecode(table)) return "file_failed";
         LOGI("map", "set from a settings file: %u rows, %u constants", (unsigned)table.row.size(), (unsigned)table.k.size());
     }
-    if (changedHu) {
+    if (in.hu) {
         // Send and the field map only: the protocol's tuning comes with the
         // file's settings (raise.*), applied on their own.
         if (!App::Hu::emitterCfg().edit([&](Canbox::HuConfig& e) { e.enabled = c.enabled; e.fields = c.fields; }))
@@ -816,8 +836,8 @@ void WebUi::routesAlerts()
             JsonObject o = a.add<JsonObject>();
             o["seq"]   = list[i].seq;
             o["agoMs"] = now - list[i].ms;
-            o["sig"]   = Vehicle::meta(list[i].sig).name;
-            o["rule"]  = list[i].row == 0xFF ? -1 : (int)list[i].row;
+            o["sig"]   = list[i].rule;                 // the rule's name: the app's phrase key
+            o["rule"]  = list[i].row == 0xFFFF ? -1 : (int)list[i].row;
             o["value"] = list[i].value;
             o["text"]  = list[i].text;
         }
@@ -843,12 +863,12 @@ void WebUi::routesAlerts()
     route("/api/alerts/test", HTTP_POST, [](PsychicRequest* r) {
         JsonDocument d;
         deserializeJson(d, r->body());
+        // `sig`: the rule's name, the key the app's phrases know (fuel_low ...).
         const char* name = d["sig"] | "drive_no_lights";
-        const uint8_t sig = Vehicle::sigByName(name);
-        if (sig >= Vehicle::SIG_COUNT) return r->reply(400, "text/plain", "param sig");
+        if (!name[0] || strlen(name) > Vehicle::RULE_NAME) return r->reply(400, "text/plain", "param sig");
         char text[48];
-        Vehicle::AlertEval::text(text, sizeof(text), sig, 1, true);
-        App::Car::injectAlert(sig, 1, text);
+        snprintf(text, sizeof(text), "%s: 1", name);
+        App::Car::injectAlert(name, 1, text);
         return r->reply(200, "application/json", "{\"ok\":true}");
     });
 }

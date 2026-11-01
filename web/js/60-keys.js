@@ -27,31 +27,12 @@ const knobCard=(e,z,name,pre,zi)=>card(name+' <span id="kl_'+pre+'" class="chip 
   ${row(t('kb.react'),`<input type="color" class="in" data-kf="led.zones.${zi}.lo" value="${z.lo}" aria-label="${esc(t('kb.from'))}"><input type="color" class="in" data-kf="led.zones.${zi}.hi" value="${z.hi}" aria-label="${esc(t('kb.to'))}">`)}
   ${row(t('kb.inverted'),sw('@'+pre+'.inverted',e.inverted))}${row(t('kb.ppd'),sel('@'+pre+'.ppd',[4,2,1],e.ppd))}${row(t('kb.holdMs'),num('@'+pre+'.holdMs',e.holdMs,'min="200" max="5000" step="50"'))}</details>`,'k_'+pre,'custom knob');
 const ledPick=(i,j,c)=>`<input type="color" class="in" data-kf="led.zones.${i}.leds.${j}" value="${esc(c)}" aria-label="${esc(t('kb.led',j+1))}">`;
-/* макрос: тригер і ефект з каталогу; яке поле потрібне ефекту, каже macroEffects[].field */
-const macHTML=(x,i)=>{const keys=x.keys.filter(k=>realActions().some(a=>a.id===k)),fx=enumOf('macroEffects',x.effect)||{},fld=fx.field||'';return `<div class="mac${x.valid===false&&x.enabled?' bad':''}" data-i="${i}">
- <div class="mh">${sw('#enabled',x.enabled,`aria-label="${esc(t('kb.enabled'))}"`)}<input class="in grow" data-f="name" value="${esc(x.name)}" maxlength="19" aria-label="${esc(t('kb.name'))}"><span class="chip off" data-fires>${x.fires||0}×</span></div>
- <div class="multi" data-f="keys" data-v="${esc(keys.join(','))}">${realActions().map(a=>`<button type="button" data-key="${esc(a.id)}" class="${keys.includes(a.id)?'on':''}">${esc(a.name)}</button>`).join('')}</div>
- <div class="mg"><label>${t('kb.trigger')}${sel('#trigger',enumOpts('macroTriggers'),x.trigger,'data-str')}</label>
- <label>${t('kb.taps')}${num('#taps',x.taps,'min="2" max="10"')}</label><label>${t('kb.window')}${num('#windowMs',x.windowMs,'min="50" max="2000" step="50"')}</label>
- <label>${t('kb.effect')}${sel('#effect',enumOpts('macroEffects'),x.effect,'data-str')}</label>
- <label data-show="action">${t('kb.action')}${sel('#action',CAT.actions.map(a=>[a.id,a.name]),x.action,'data-str')}</label>
- <label data-show="code raw">${t('kb.codeHex')}${txt('#codeHex',fld==='code'||fld==='raw'?x.codeHex:'','07','in code')}</label>
- <label data-show="raw">${t('kb.dataHex')}${txt('#data',x.data||'','01 00','in')}</label>
- <label data-show="text">${t('kb.text')}${txt('#arg',fld==='text'?x.arg:'','MEGANE','in','text','maxlength="39"')}</label>
- <label data-show="scene">${t('kb.scene')}${sel('#argScene',CAT.scenes.map(s=>[s.id,s.name]),fld==='scene'?x.arg:'','data-str')}</label>
- <label class="ck"><input type="checkbox" class="cb" data-f="swallow"${x.swallow?' checked':''}> ${t('kb.swallow')}</label></div>
- <div class="mf"><span class="mw"></span><button class="btn sm" type="button" data-test>${t('kb.try')}</button><button class="btn sm dng" type="button" data-del>${t('kb.del')}</button></div></div>`};
-const macVis=c=>{const fx=enumOf('macroEffects',$('[data-f="effect"]',c).value)||{},tg=enumOf('macroTriggers',$('[data-f="trigger"]',c).value)||{};
- $$('[data-show]',c).forEach(l=>l.hidden=!l.dataset.show.split(' ').includes(fx.field||'-'));$('[data-f="taps"]',c).closest('label').hidden=!tg.taps;$('[data-f="windowMs"]',c).closest('label').hidden=!tg.taps};
-/* порожній рядок таблиці прошивки: тригер вимк, без назви, без ефекту */
-const macEmpty=x=>!x.name&&!x.enabled&&!(enumOf('macroEffects',x.effect)||{}).field;
 SCR.keys={title:'nav.keys',async render(m){
  const D=has('display'),K=has('knobs'),MX=has('matrix'),RS=has('res');
- const[am,rt,se,kn,mc,km,rs]=await Promise.all([getIf(D,'/api/affamap'),API.get('/api/health').then(kRt),API.get('/api/settings'),getIf(K,'/api/knobs'),API.get('/api/macros'),getIf(MX,'/api/keymap'),getIf(RS,'/api/res')]);
- this.kn=kn;this.seq=((am||{}).last||{}).seq;this.macCap=mc.macros.length;
+ const[am,rt,se,kn,km,rs]=await Promise.all([getIf(D,'/api/affamap'),API.get('/api/health').then(kRt),API.get('/api/settings'),getIf(K,'/api/knobs'),getIf(MX,'/api/keymap'),getIf(RS,'/api/res')]);
+ this.kn=kn;this.seq=((am||{}).last||{}).seq;
  const DS=CAT.dests,off=d=>!d.built||!rt.dest[d.id];
- const shown=mc.macros.map((x,i)=>({...x,i})).filter(x=>!macEmpty(x));
- m.innerHTML=`<div class="jump">${[...(D?[['kWheel',t('kb.wheel')]]:[]),...(MX?[['kMat',t('kb.matrix')]]:[]),['kRoute',t('kb.where')],...(RS?[['kRes','KEY1/KEY2']]:[]),...(K?[['k_enc2',t('kb.knobs')]]:[]),['kMac',t('kb.macros')]].map(([id,lb])=>`<button class="btn sm" type="button" data-jump="${id}">${lb}</button>`).join('')}</div>`+
+ m.innerHTML=`<div class="jump">${[...(D?[['kWheel',t('kb.wheel')]]:[]),...(MX?[['kMat',t('kb.matrix')]]:[]),['kRoute',t('kb.where')],...(RS?[['kRes','KEY1/KEY2']]:[]),...(K?[['k_enc2',t('kb.knobs')]]:[]),['kGest',t('kb.gestures')]].map(([id,lb])=>`<button class="btn sm" type="button" data-jump="${id}">${lb}</button>`).join('')}</div>`+
  (D?card(t('kb.wheelCard'),
   `<div class="row"><div class="l"><b>${t('kb.last')}</b>${hintBtn(t('kb.lastH'))}<small id="kLastW">${t('kb.pressWheel')}</small><small class="hint" hidden>${esc(t('kb.lastH'))}</small></div><div class="c"><span id="kLast" class="chip off">—</span></div></div>`+
   `<div class="krow" id="kHead" style="padding-top:4px;padding-bottom:4px"><div class="kgrid muted" style="font-size:12px;font-weight:800;text-transform:uppercase"><span>${t('kb.colClick')}</span><span>${t('kb.colHold')}</span></div></div>`+
@@ -66,7 +47,7 @@ SCR.keys={title:'nav.keys',async render(m){
   row(t('kb.current'),'<span id="kMa" class="chip off">…</span>'+num('@led.maxMilliamps',kn.led.maxMilliamps,'min="0" max="20000" step="50"'))+
   `<details class="sub"><summary>${t('kb.fine')}</summary>${row(t('kb.order'),sel('@led.order',enumOpts('ledOrder'),kn.led.order,'data-str'))}${row(t('kb.rightFirst'),sw('@led.rightFirst',kn.led.rightFirst))}${row(t('kb.ringRev'),sw('@led.ringReverse',!!kn.led.ringReverse),'',t('kb.ringRevH'))}${row(t('kb.holdReact'),num('@led.holdMs',kn.led.holdMs,'min="0" max="5000" step="50"'),t('kb.hold0'))}${row(t('kb.levelSteps'),num('@led.levelSteps',kn.led.levelSteps,'min="4" max="64"'))}${row(t('kb.animPeriod'),num('@led.animPeriod',kn.led.animPeriod,'min="10" max="255"'))}</details>`+
   `<details class="sub"><summary>${t('kb.feet')}</summary>${row(t('kb.leds'),num('@led.feet.count',kn.led.feet.count,`min="0" max="${kn.led.feet.max||144}"`))}${row(t('kb.colour'),`<input type="color" class="in" data-kf="led.feet.color" value="${kn.led.feet.color}" aria-label="${esc(t('kb.colour'))}">`)}${row(t('kb.idle'),sel('@led.feet.anim',enumOpts('ledIdle'),kn.led.feet.anim,'data-str'))}${row(t('kb.brightness'),`<input type="range" min="0" max="255" data-kf="led.feet.brightness" value="${kn.led.feet.brightness}" aria-label="${esc(t('kb.feetBright'))}">`)}</details>`,'kLed','custom knob'):'')+
- card(t('kb.macros'),row(t('kb.downNow'),'<span id="mDown" class="chips"><span class="muted">—</span></span>','<span id="mCnt"></span>')+`<div id="macs">${shown.map(x=>macHTML(x,x.i)).join('')}</div><div class="fr"><button class="btn" type="button" id="mAdd">${t('kb.addMacro')}</button><button class="btn dng" type="button" id="mDef">${t('kb.macDef')}</button></div>`,'kMac','custom full');
+ card(t('kb.gestures'),row(t('kb.gestWhere'),`<a class="btn" href="#map:rules">${t('kb.gestGo')}</a>`,'',t('kb.gestH')),'kGest');
  $$('[data-jump]',m).forEach(b=>b.onclick=()=>$('#'+b.dataset.jump).scrollIntoView({behavior:'smooth',block:'start'}));
  // кермо
  if(D){const affa=$('#affa');
@@ -88,26 +69,6 @@ SCR.keys={title:'nav.keys',async render(m){
   const cols=this.kn.led.zones[i].leds.slice();$$('input[type=color]',box).forEach((c,j)=>{cols[j]=c.value;c.remove()});box.insertAdjacentHTML('afterbegin',cols.slice(0,n).map((c,j)=>ledPick(i,j,c)).join(''))});
  m.addEventListener('click',e=>{const bt=e.target.closest('[data-beep]');if(bt){bt.setAttribute('aria-pressed',bt.getAttribute('aria-pressed')==='true'?'false':'true');bt.classList.toggle('on');tick(900)}});
  m.addEventListener('click',e=>{const b=e.target.closest('[data-same]');if(!b)return;const ps=$$('input[type=color]',b.parentElement);if(!ps.length)return;ps.forEach(p=>p.value=ps[0].value);ps[0].dispatchEvent(new Event('input',{bubbles:true}))});
- // макроси: таблиця прошивки — суцільний список; рядки, яких не надіслано, стираються
- const macs=$('#macs');$$('.mac',macs).forEach(macVis);
- const macCollect=()=>$$('.mac',macs).map(c=>{const g=f=>val($(`[data-f="${f}"]`,c));const fld=(enumOf('macroEffects',g('effect'))||{}).field;
-  return {enabled:g('enabled'),name:g('name'),trigger:g('trigger'),keys:g('keys'),taps:g('taps')||2,windowMs:g('windowMs')||600,swallow:g('swallow'),effect:g('effect'),
-   action:fld==='action'?g('action'):noneAction(),codeHex:fld==='code'||fld==='raw'?g('codeHex')||'00':'00',data:fld==='raw'?g('data'):'',arg:fld==='scene'?g('argScene'):fld==='text'?g('arg'):''}});
- const mAddOk=()=>{$('#mAdd').disabled=$$('.mac',macs).length>=this.macCap};
- const macSave=async()=>{$$('.mac',macs).forEach(c=>{c.classList.remove('bad');$('.mw',c).textContent=''});
-  try{const r=await API.post('/api/macros',{macros:macCollect()});$$('.mac',macs).forEach((c,i)=>c.dataset.i=i);mAddOk();return r}
-  /* помилка «<номер>: <код>»: позначаємо рядок із цим номером і кажемо чому (e.<код>) */
-  catch(e){const mm=/^(\d+):\s*(.*)$/.exec(e.message||'');if(mm){const c=$$('.mac',macs)[+mm[1]];if(c){c.classList.add('bad');$('.mw',c).textContent=errLine(mm[2])}}throw e}};
- saver(macs,macSave,'[data-f]');
- macs.addEventListener('change',e=>{const c=e.target.closest('.mac');if(c&&/effect|trigger/.test(e.target.dataset.f||''))macVis(c)});
- macs.addEventListener('click',e=>{const b=e.target.closest('[data-test],[data-del]');if(!b)return;const c=b.closest('.mac');
-  if(b.dataset.test!==undefined)run(b,()=>API.post('/api/macros/test?id='+c.dataset.i),t('kb.started'));
-  else ask(b,t('kb.delAsk',$('[data-f="name"]',c).value),()=>{c.remove();run($('#mAdd'),macSave,t('kb.deleted'))})});
- $('#mAdd').onclick=()=>{const tg=enumList('macroTriggers').find(x=>x.taps)||{},fx=enumList('macroEffects').find(f=>f.field==='action')||{},d=document.createElement('div');
-  d.innerHTML=macHTML({enabled:true,name:t('kb.new'),trigger:tg.v,keys:[],taps:2,windowMs:400,effect:fx.v,action:(realActions()[0]||{}).id,codeHex:'',data:'',arg:'',swallow:true,fires:0},$$('.mac',macs).length);
-  const c=d.firstElementChild;macs.append(c);macVis(c);mAddOk();$('[data-f="name"]',c).focus();sv(svOf(macs),'bad',t('kb.pickKey'))};
- mAddOk();
- $('#mDef').onclick=e=>ask(e.target,t('kb.macDefAsk'),()=>run(e.target,()=>API.post('/api/macros/defaults')).then(()=>route()));
  /* підсвітка натискань: окреме швидке опитування, лише поки відкрита вкладка */
  /* лише коли сторінку видно і картка на екрані: інакше ~9 запитів/с без потреби */
  if(D||K||RS){const fast=setInterval(()=>{if(document.hidden)return;
@@ -131,12 +92,9 @@ knobTest(kl){this.kt=this.kt||{};for(const pre of['enc','enc2']){const el=$('#kt
 why(rt){const w=Object.entries(rt.dest).filter(([d,x])=>!x.live&&(byId(CAT.dests,d)||{}).built).map(([d,x])=>`<div class="row"><div class="l"><b>${esc(destName(d))}: ${esc(destWhy(x.code))}</b></div>${d==='uart'?'':`<div class="c"><a href="#board">${t('kb.board')}</a></div>`}</div>`).join('')+((rt.dest.ams||{}).volFallback?row(t('kb.vol'),`<span class="chip warn">${t('kb.fallback')}</span>`,t('kb.fallbackH')):'');const el=$('#rtWhy');if(el)el.innerHTML=w;
  CAT.dests.forEach(d=>{const c=$(`[data-live="${d.id}"]`),x=rt.dest[d.id];if(c)setChip(c,x&&x.live?'ok':'off',!d.built||!x?t('kb.none'):x.live?t('kb.live'):t('kb.dead'))})},
 async tick(){
- this.n++;const[kl,ml]=await Promise.all([getIf(has('knobs'),'/api/knobs/live'),API.get('/api/macros/live')]);if(!$('#mDown'))return;
+ this.n++;const kl=await getIf(has('knobs'),'/api/knobs/live');if(!$('#kRoute'))return;
  if(kl&&$('#kMa')){const kc=(id,k,l)=>setChip(id,!k.fitted?'off':k.enabled?'ok':'off',!k.fitted?t('kb.notFitted'):k.enabled?t('kb.clicks',l.detents)+(l.btn?t('kb.pressed'):''):t('kb.off'));
  kc('#kl_enc',this.kn.enc,kl.enc||{});kc('#kl_enc2',this.kn.enc2,kl.enc2||{});
  const led=kl.led||{};setChip('#kMa',led.mA>this.kn.led.maxMilliamps*.9?'warn':led.ok?'ok':'bad',led.ok?t('kb.mA',led.mA):t('kb.stripDead'))}
- $('#mDown').innerHTML=(ml.down||[]).length?ml.down.map(k=>chipH('ok',actName(k))).join(''):'<span class="muted">—</span>';
- $('#mCnt').textContent=t('kb.counts',ml.fired,ml.swallowed,ml.replayed);
- $$('#macs .mac').forEach(c=>{const f=$('[data-fires]',c),n=(ml.fires||[])[+c.dataset.i];if(f&&n!=null)f.textContent=n+'×'});
  if(this.n%3===0)this.why(kRt(await API.get('/api/health')));
 }};

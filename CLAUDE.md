@@ -62,7 +62,7 @@ map; this file is the "where do I look" index for a session in the car.
 | `[usb]` | USB link: host SOFs / addressed / configured (link up), bus reset, suspend; the app's frames |
 | `[page]` | the web page's own errors, sent by the page: which screen, the text, the request that failed |
 | `[push]` | log push to GitHub: file sent, bytes queued, GitHub's refusal |
-| `[alert]` | panel alert rules |
+| `[rule]` | rules (docs/design/rules.md): each fire, popups shown/dropped, the gestures on the keys task |
 | `[mem]`, `[win]`, `[stk]`, `[task]`, `[stall]` | heap, stacks, task ages, loop gaps |
 
 Raise the log level for one session through `/api/settings` `{"logLevel":"DBG"}`
@@ -83,7 +83,7 @@ Raise the log level for one session through `/api/settings` `{"logLevel":"DBG"}`
 | iPhone: no track / clock / notifications | health `phone`, `media`, `clock`, `ancs`; `[ble]` | `src/ble/*`, `src/apple_*_service.cpp`, `src/current_time_service.cpp`, `src/media/AmsMediaSource.*` |
 | car value wrong / missing | «Мапа» page `#map` (`/api/map?live=1`), `[car]`, `[can2]` | `src/vehicle/decode_defaults.inc` (factory rows), `CanDecode.*`, `Signals.*`, `Derived.*` (gear, consumption, range); ids in `docs/megane-can-ids.md`, `docs/signal-glossary.md`; car checklist `docs/car-test-can-signals.md` |
 | new signals not shown | saved map hides new factory rows | press **«Заводські прив'язки»** on «Мапа» › Сигнали |
-| alert popup wrong / spam | `[alert]`; rules in `/api/settings` `alerts` | `src/vehicle/AlertRules.*` |
+| a rule does not fire / popup spam | `[rule]`; `GET /api/rules` (each row's live state) | `src/vehicle/Rules.*` (engine), `src/app/CarTask.cpp` (popups, fire), `main.cpp` performAction, `src/net/WebUiRules.cpp` |
 | car CAN silent | `[can2]` autobaud, `ab=searching` | `src/bus/Mcp2518Source.*`, `Autobaud.*`, `src/app/CarTask.*` |
 | a setting does not apply / save | `POST /api/settings` answers 400 with key + reason | `src/cfg/SettingsRegistry.cpp` (every setting, its range and apply bit), `Config.cpp` (NVS) |
 | web page broken | browser console | `web/js/*.js` (built into the image by `tools/gen_pages.py`), `src/net/WebUi*.cpp` |

@@ -11,6 +11,14 @@ namespace CarFile
         const char* nameOf(uint8_t sig) { return sig < Vehicle::SIG_COUNT ? Vehicle::meta(sig).name : ""; }
         uint8_t     sigOf(JsonVariantConst v) { return Vehicle::sigByName(v | ""); }
 
+        // A char[N] member of a const struct reaches ArduinoJson as a `const char
+        // (&)[N]`, which 7.x takes for a string literal: the document keeps the
+        // POINTER (StringAdapter<const char(&)[N]>, "static"), and the car
+        // document (CarStore, alive for the whole boot) reads freed memory once
+        // the struct is gone: 1.6.9 put the formulas in that way, 1.7.0's first
+        // bench boot wrote sixteen garbage rule names. Through a plain pointer
+        // the text is copied (test_carfile: the document owns its strings).
+        const char* copied(const char* s) { return s; }
     }
 
     void putDecode(JsonObject car, const Vehicle::DecodeTable& t)
@@ -75,9 +83,9 @@ namespace CarFile
 
     void formulaRowTo(JsonObject o, const Vehicle::FormulaRow& r)
     {
-        o["name"] = r.name;
-        o["f"]    = r.src;
-        o["unit"] = r.unit;
+        o["name"] = copied(r.name);
+        o["f"]    = copied(r.src);
+        o["unit"] = copied(r.unit);
         o["dec"]  = r.decimals;
         o["bool"] = r.boolean;
         o["on"]   = r.on;
@@ -152,7 +160,7 @@ namespace CarFile
                     break;
                 }
                 default:
-                    o["arg"] = a.arg;      // Text, Popup, Pane
+                    o["arg"] = copied(a.arg);   // Text, Popup, Pane
                     break;
             }
         }
@@ -204,7 +212,7 @@ namespace CarFile
 
     void ruleRowTo(JsonObject o, const Vehicle::RuleRow& r)
     {
-        o["name"] = r.name;
+        o["name"] = copied(r.name);
         o["on"]   = r.on;
         if (r.isGesture()) {
             JsonObject g = o["gesture"].to<JsonObject>();
@@ -218,7 +226,7 @@ namespace CarFile
             }
             g["swallow"] = r.gesture.swallow;
         }
-        o["when"]  = r.when;
+        o["when"]  = copied(r.when);
         o["pause"] = r.pauseS;
         JsonArray d = o["do"].to<JsonArray>();
         for (uint8_t k = 0; k < r.nAct && k < Vehicle::RuleRow::MAX_ACTIONS; ++k) actionTo(d.add<JsonObject>(), r.act[k]);

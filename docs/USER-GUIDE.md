@@ -57,8 +57,9 @@ Do not use the menu while driving.
 
 **Авто → Мапа → Відкрити.** The whole chain «CAN row → signal → head-unit
 field» on one page, in three tabs: **Сигнали** (where a signal comes from),
-**Поля ГУ** (what the head unit gets) and **Сповіщення** (alerts on the
-display). The tab is in the address: `#map`, `#map:fields`, `#map:alerts`.
+**Поля ГУ** (what the head unit gets), **Формули** (signals computed from
+others) and **Правила** (when this, do that). The tab is in the address:
+`#map`, `#map:fields`, `#map:formulas`, `#map:rules`.
 
 **Сигнали** lists every signal the board reads from the car's CAN
 (listen-only): value, age, where it comes from, and **✓** (checked in a car)
@@ -93,24 +94,33 @@ and «Прогін селектора».
 If the list looks short after an update, see
 [«Заводські прив'язки»](#after-an-update).
 
-### Alerts on the display
+### Rules
 
-The **🔔** beside a signal adds a rule and opens the tab **Сповіщення**
-with the new row. Up to 16 rules:
+The tab **Правила** is one mechanism for «when this, do that»: a rule has a
+name, a switch, a trigger, a pause and up to three actions.
 
-| condition | fires when |
-| --- | --- |
-| **вище** / **нижче** | the value crosses the threshold; it fires again only after coming back past it |
-| **зʼявилось** | the value goes up (for a yes/no: switches on) |
-| **зникло** | the value goes down |
-| **змінилось** | any change |
+- **За сигналом**: the trigger is a formula over the car's signals, written
+  as on **Формули** (`rises(fuel_low)`, `speed > 100 && !light_dip`,
+  `held(handbrake && speed > 5, 2)`). It fires when the formula becomes true
+  (true the first time it is seen counts: the lamp already lit at ignition),
+  re-arms when it goes false, and fires again no sooner than **Пауза**
+  (5 s at least). The **🔔** beside a signal on **Сигнали** starts such a rule.
+- **За жестом**: the trigger is a key combination the board sees before the
+  head unit does: **разом** (2-3 keys held at once), **натиски** (one key
+  N times inside a window) or **утримання**. **Тільки якщо** is an optional
+  formula; the gesture fires only while it holds. **не пускати натискання
+  далі** keeps the presses from the head unit and the phone.
+- **Дії**, in order: a **popup** on the display (its text can carry
+  `{speed}`-style placeholders; empty = the signal and its value), three rows
+  of **text** (`row1|row2|row3`), a pane **scene**, a **key** through the
+  routing matrix, a literal head-unit **code**, a raw **frame**, a head-unit
+  **message**. **▶ спробувати** performs a rule's actions now.
 
-**Пауза** is the least time between two popups of one rule: at least 5 s
-(a smaller number is saved as 5). Press **Зберегти правила**.
-
-The one rule out of the box: the cluster's low-fuel lamp coming on, with a
-5-minute pause. A popup never covers the open menu; it waits, and is dropped
-if the condition is over by then.
+A popup never covers the open menu; it waits, and is dropped if the rule no
+longer holds by then. The three rules out of the box: the cluster's low-fuel
+lamp (5-minute pause), driving without lights («Lights off!»), driving with
+the handbrake up («Handbrake on!»). The rules live in the car file with the
+signals; the alerts and macros of 1.6 came over on the update.
 
 ## The car screen
 
@@ -157,7 +167,8 @@ takes the groups it has commands for. The knobs' turns, presses and holds are
 bound on the same page (**Ручка ліва**, **Ручка права**).
 
 Defaults: the left knob is volume (press = mute), the right knob is the
-menu's knob (hold = menu).
+menu's knob (hold = menu). Key combinations (two keys together, several
+presses, a hold) are rules «за жестом» on **Мапа › Правила**.
 
 When the head unit is silent (switched off, or its wire to the board is
 loose), volume keys go to the iPhone instead, after the board's first minute

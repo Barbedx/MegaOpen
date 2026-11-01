@@ -67,7 +67,10 @@ void test_the_factory_rules_are_the_old_alerts()
     TEST_ASSERT_EQUAL_STRING("rises(fuel_low)", set.rows[0].when);
     TEST_ASSERT_EQUAL_UINT16(300, set.rows[0].pauseS);
     TEST_ASSERT_EQUAL_STRING("drive_no_lights", set.rows[1].name);
+    TEST_ASSERT_EQUAL_STRING("Lights off!", set.rows[1].act[0].arg);       // the reminders' words stay
     TEST_ASSERT_EQUAL_STRING("drive_handbrake", set.rows[2].name);
+    TEST_ASSERT_EQUAL_STRING("Handbrake on!", set.rows[2].act[0].arg);
+    TEST_ASSERT_EQUAL_STRING("", set.rows[0].act[0].arg);                  // the default text
     RuleProblem p;
     TEST_ASSERT_TRUE(Rules::check(set, p));
     Rules r;
@@ -177,10 +180,18 @@ void test_a_gesture_rule_is_armed_by_its_formula_and_becomes_a_macro()
     TEST_ASSERT_FALSE(r.armed(1));
     // The detector's table: two macros, standing for rows 1 and 2.
     Keys::MacroTable t;
-    uint16_t rowOf[Keys::MacroTable::COUNT];
-    TEST_ASSERT_EQUAL_UINT8(2, Rules::gestures(set, t, rowOf, Keys::MacroTable::COUNT));
-    TEST_ASSERT_EQUAL_UINT16(1, rowOf[0]);
-    TEST_ASSERT_EQUAL_UINT16(2, rowOf[1]);
+    TEST_ASSERT_EQUAL_UINT8(2, Rules::gestures(set, t, Keys::MacroTable::COUNT));
+    TEST_ASSERT_EQUAL_UINT16(1, t.m[0].rule);
+    TEST_ASSERT_EQUAL_UINT16(2, t.m[1].rule);
+    TEST_ASSERT_EQUAL_UINT16(0xFFFF, t.m[2].rule);
+    // The keys task saw the combo: armed and the pause decide, and it counts.
+    TEST_ASSERT_FALSE(r.gestureFire(1, 3000));             // speed 30: not armed
+    s.set(SIG_SPEED, 0, 3);
+    pass(r, s, 3000);
+    TEST_ASSERT_TRUE(r.gestureFire(1, 3100));
+    TEST_ASSERT_TRUE(r.gestureFire(1, 3200));              // pause 0: again at once
+    Rules::Live lg;
+    TEST_ASSERT_TRUE(r.live(1, lg) && lg.fires == 2 && lg.gesture);
     TEST_ASSERT_TRUE(t.m[0].enabled && t.m[0].valid());
     TEST_ASSERT_EQUAL(Keys::Trigger::Combo, t.m[0].trigger);
     TEST_ASSERT_EQUAL(Keys::Action::VolDown, t.m[0].keys[1]);
@@ -325,6 +336,46 @@ void test_the_old_tables_carry_into_rules()
     TEST_ASSERT_EQUAL_UINT16(5, set.rows.size());
 }
 
+// 1.7.0's first bench boot: a version-1 blob (up to 1.6.3) marks an empty row
+// with the saving build's SIG_COUNT, fuel_pct's or service_calc's index today;
+// those rows are empty, not sixteen rules on service_calc. Version 2 marks them
+// 0xFF. A cond or on byte out of range is not this blob at all.
+void test_a_legacy_alert_blob_carries_no_empty_rows()
+{
+    uint8_t blob[1 + 16 * 9] = {1};
+    auto row = [&](uint8_t i, uint8_t sig, uint8_t cond, uint8_t on) {
+        uint8_t* b = blob + 1 + i * 9;
+        memset(b, 0, 9);
+        b[0] = sig; b[1] = cond; b[6] = 5; b[8] = on;
+    };
+    for (uint8_t i = 0; i < 16; ++i) row(i, (uint8_t)(SIG_FUEL_PCT + 1), 2, 0);   // 1.6.3's empty row
+    row(0, SIG_FUEL_PCT, 2, 0);                                                  // 1.6.2's
+    row(5, SIG_SPEED, 0, 1);                                                     // speed > 0, on
+    RuleSet set;
+    TEST_ASSERT_TRUE(Rules::fromAlertBlob(blob, sizeof(blob), set));
+    TEST_ASSERT_EQUAL_UINT16(1, set.rows.size());
+    TEST_ASSERT_EQUAL_STRING("speed", set.rows[0].name);
+    TEST_ASSERT_EQUAL_STRING("speed > 0", set.rows[0].when);
+    TEST_ASSERT_TRUE(set.rows[0].on);
+    // Version 2: 0xFF is the empty row, fuel_pct a signal again.
+    blob[0] = 2;
+    for (uint8_t i = 0; i < 16; ++i) row(i, 0xFF, 2, 0);
+    row(1, SIG_FUEL_PCT, 1, 1);
+    set.rows.clear();
+    TEST_ASSERT_TRUE(Rules::fromAlertBlob(blob, sizeof(blob), set));
+    TEST_ASSERT_EQUAL_UINT16(1, set.rows.size());
+    TEST_ASSERT_EQUAL_STRING("fuel_pct", set.rows[0].name);
+    TEST_ASSERT_EQUAL_STRING("fuel_pct < 0", set.rows[0].when);
+    RuleProblem p;
+    TEST_ASSERT_TRUE(Rules::check(set, p));
+    // Not this blob: a sixth condition, an `on` past 1. Nothing appended.
+    row(2, SIG_SPEED, 5, 1);
+    TEST_ASSERT_FALSE(Rules::fromAlertBlob(blob, sizeof(blob), set));
+    row(2, SIG_SPEED, 0, 2);
+    TEST_ASSERT_FALSE(Rules::fromAlertBlob(blob, sizeof(blob), set));
+    TEST_ASSERT_EQUAL_UINT16(1, set.rows.size());
+}
+
 // The car file: every field of both kinds round-trips by name.
 void test_rules_round_trip_through_the_car_file()
 {
@@ -406,6 +457,7 @@ int main(int, char**)
     RUN_TEST(test_check_says_which_row_and_why);
     RUN_TEST(test_the_popup_text);
     RUN_TEST(test_the_old_tables_carry_into_rules);
+    RUN_TEST(test_a_legacy_alert_blob_carries_no_empty_rows);
     RUN_TEST(test_rules_round_trip_through_the_car_file);
     return UNITY_END();
 }

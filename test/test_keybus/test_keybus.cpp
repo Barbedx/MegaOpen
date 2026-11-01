@@ -348,15 +348,13 @@ static void test_detents_are_never_down()
 
 static uint16_t g_panelCode = 0; static bool g_panelHold = false; static uint32_t g_panelT = 0;
 static uint8_t  g_litCode = 0, g_litState = 0; static bool g_litRel = false;
-static int      g_macro = -1;
 
-static void test_panel_literal_and_macro_messages_reach_their_hooks()
+static void test_panel_and_literal_messages_reach_their_hooks()
 {
     KeyRouter r = router();
     KeyRouter::Hooks h;
     h.panelKey = [](uint16_t c, bool hold, uint32_t t, void*) { g_panelCode = c; g_panelHold = hold; g_panelT = t; };
     h.literal  = [](uint8_t c, uint8_t s, bool rel, void*) { g_litCode = c; g_litState = s; g_litRel = rel; };
-    h.macroRun = [](uint8_t i, void*) { g_macro = i; };
     r.begin(h);
 
     KeyMsg m;
@@ -372,9 +370,6 @@ static void test_panel_literal_and_macro_messages_reach_their_hooks()
     TEST_ASSERT_EQUAL(1, g_litState);
     TEST_ASSERT_TRUE(g_litRel);
 
-    m = KeyMsg{}; m.kind = KeyMsg::Kind::MacroRun; m.a = 5;
-    r.handle(m);
-    TEST_ASSERT_EQUAL(5, g_macro);
 }
 
 // ---- the release deadline ----------------------------------------------------
@@ -507,7 +502,7 @@ int main(int, char**)
     RUN_TEST(test_a_lost_release_is_ready_once_everything_older_is_handled);
     RUN_TEST(test_lost_releases_past_the_list_release_every_key_down);
     RUN_TEST(test_detents_are_never_down);
-    RUN_TEST(test_panel_literal_and_macro_messages_reach_their_hooks);
+    RUN_TEST(test_panel_and_literal_messages_reach_their_hooks);
     RUN_TEST(test_a_fresh_key_releases_a_pulse_after_its_source_time);
     RUN_TEST(test_a_queued_key_never_gets_a_release_sooner_than_the_minimum_gap);
     RUN_TEST(test_the_deadline_rule_survives_the_millis_wrap);

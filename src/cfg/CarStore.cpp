@@ -72,11 +72,39 @@ namespace CarStore
         void dropNvs(Cfg::Config& cfg)
         {
             if (onTrial()) {
-                LOGI("car", "NVS decode/huFmap kept until this image is confirmed (rollback-safe)");
+                LOGI("car", "NVS decode/huFmap/alerts/macros kept until this image is confirmed (rollback-safe)");
                 return;
             }
-            if (cfg.eraseDecode() && cfg.eraseFieldMap()) return;
-            LOGW("car", "NVS decode/huFmap NOT erased: again next boot");
+            if (cfg.eraseDecode() && cfg.eraseFieldMap() && cfg.eraseAlerts() && cfg.eraseMacros()) return;
+            LOGW("car", "NVS decode/huFmap/alerts/macros NOT erased: again next boot");
+        }
+
+        // 1.6's panel alerts (NVS "alerts") and key macros (NVS "macros") become
+        // rules once, into `car["rules"]`; none there = the factory rules.
+        // True when something came from NVS.
+        bool rulesFromNvs(JsonObject car, Cfg::Config& cfg)
+        {
+            Vehicle::RuleSet set;
+            bool any = false;
+            uint8_t blob[1 + 8 * 82];
+            size_t n = cfg.loadAlertBlob(blob, sizeof(blob));
+            if (n && Vehicle::Rules::fromAlertBlob(blob, n, set)) any = true;
+            else if (n) LOGW("car", "NVS alerts (%u B) do not read: not carried over", (unsigned)n);
+            n = cfg.loadMacroBlob(blob, sizeof(blob));
+            if (n && Vehicle::Rules::fromMacroBlob(blob, n, set)) any = true;
+            else if (n) LOGW("car", "NVS macros (%u B) do not read: not carried over", (unsigned)n);
+            // Never a set the reader refuses next boot: checked as POST /api/rules checks.
+            Vehicle::RuleProblem pr;
+            if (set.rows.size() && !Vehicle::Rules::check(set, pr)) {
+                LOGW("car", "NVS alerts/macros make no rule set (row %u: %s): not carried over",
+                     (unsigned)pr.row, pr.e.code ? pr.e.code : "?");
+                set.rows.clear();
+                any = false;
+            }
+            if (!set.rows.size()) set.factory();
+            CarFile::putRules(car, set);
+            LOGI("car", "rules: %u row(s)%s", (unsigned)set.rows.size(), any ? " from NVS alerts/macros" : ", the factory's");
+            return any;
         }
 
         // 1.6.x kept the tables as NVS blobs, keyed by signal index. Read
@@ -99,6 +127,7 @@ namespace CarStore
                 CarFile::putFields(car, Canbox::activeProtocol(), m);
                 any = true;
             }
+            if (rulesFromNvs(car, cfg)) any = true;
             if (!write()) {
                 LOGW("car", "%s not written: the NVS tables stay, read again next boot", PATH);
                 return;
@@ -124,8 +153,16 @@ namespace CarStore
         g_doc = new (m) JsonDocument(&PsramJson::instance());
         if (!LittleFS.exists(DIR)) LittleFS.mkdir(DIR);
         g_ready = true;
-        if (read()) LOGI("car", "%s: %u B, version %d", PATH, (unsigned)measureJson(*g_doc), (int)((*g_doc)["v"] | 0));
-        else        migrate(cfg);
+        if (read()) {
+            LOGI("car", "%s: %u B, version %d", PATH, (unsigned)measureJson(*g_doc), (int)((*g_doc)["v"] | 0));
+            // A 1.6.9 file: the rules come in once, from NVS or the factory.
+            if (!(*g_doc)["rules"].is<JsonArrayConst>()) {
+                rulesFromNvs(g_doc->as<JsonObject>(), cfg);
+                if (!write()) LOGW("car", "%s not written: the rules are read again next boot", PATH);
+            }
+        } else {
+            migrate(cfg);
+        }
         if (LittleFS.exists(PATH)) dropNvs(cfg);
     }
 
@@ -205,6 +242,34 @@ namespace CarStore
         const bool ok = write();
         g_lock.give();
         return ok;
+    }
+
+    void loadRules(Vehicle::RuleSet& set)
+    {
+        const char* why = "rules: missing";
+        if (g_ready && g_lock.take(LOCK_WAIT_MS)) {
+            why = CarFile::getRules(g_doc->as<JsonObjectConst>(), set);
+            g_lock.give();
+        }
+        if (!why) return;
+        if (strcmp(why, "rules: missing")) LOGW("car", "rules in %s refused (%s): factory", PATH, why);
+        set.factory();
+    }
+
+    bool saveRules(const Vehicle::RuleSet& set)
+    {
+        if (!g_ready || !g_lock.take(LOCK_WAIT_MS)) return false;
+        CarFile::putRules(g_doc->as<JsonObject>(), set);
+        const bool ok = write();
+        g_lock.give();
+        return ok;
+    }
+
+    bool factoryRules()
+    {
+        Vehicle::RuleSet set;
+        set.factory();
+        return saveRules(set);
     }
 
     bool saveFields(const Canbox::Protocol& p, const Canbox::FieldMap& m)

@@ -38,8 +38,6 @@ namespace App
         bool postPanelKey(uint16_t code, bool hold, uint32_t tMs, uint32_t pollGapUs);
         // Web: a literal RAV4 code, optionally with its release.
         bool postLiteral(uint8_t code, uint8_t state, bool release);
-        // Web: perform macro row `idx`.
-        bool postMacroRun(uint8_t idx);
 
         // Wake the keys task with nothing queued: a staged config changed and
         // should apply now rather than at its next deadline.

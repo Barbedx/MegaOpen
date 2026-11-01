@@ -1,8 +1,12 @@
 #include "Rules.h"
 #include <new>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "ExprState.h"
+#ifndef NATIVE
+#include <esp_heap_caps.h>
+#endif
 
 namespace Vehicle
 {
@@ -32,6 +36,15 @@ namespace Vehicle
             return n;
         }
 
+        // What 1.6's alerts said on the glass for the two reminders; the rest
+        // have the default text (the signal, its value and unit).
+        const char* reminderText(uint8_t sig)
+        {
+            if (sig == SIG_DRIVE_NO_LIGHTS) return "Lights off!";
+            if (sig == SIG_DRIVE_HANDBRAKE) return "Handbrake on!";
+            return "";
+        }
+
         void putAlert(RuleSet& set, uint8_t sig, uint16_t pauseS, bool on)
         {
             RuleRow r;
@@ -40,18 +53,55 @@ namespace Vehicle
             snprintf(r.when, sizeof(r.when), "rises(%s)", meta(sig).name);
             r.pauseS = pauseS;
             r.act[0].effect = Keys::Effect::Popup;
+            snprintf(r.act[0].arg, sizeof(r.act[0].arg), "%s", reminderText(sig));
             r.nAct = 1;
             set.rows.push(r);
         }
 
+        // The first identifier in a formula, for a default popup's subject.
         const char* firstName(const char* s, size_t& len)
         {
-            // The first identifier in a formula, for a default popup's subject.
             while (*s && !((*s >= 'a' && *s <= 'z') || *s == '_')) ++s;
             const char* b = s;
             while ((*s >= 'a' && *s <= 'z') || (*s >= '0' && *s <= '9') || *s == '_') ++s;
             len = (size_t)(s - b);
             return b;
+        }
+
+        // The subject of a default popup: the formula's first name when it is
+        // one of its inputs (not a function's), else the lowest input.
+        uint8_t subject(const RuleRow& r, const Expr::SigSet& inputs)
+        {
+            size_t nl = 0;
+            const char* fn = firstName(r.when, nl);
+            uint8_t s = SIG_COUNT;
+            if (nl && nl < RULE_NAME + 1) {
+                char name[RULE_NAME + 1];
+                memcpy(name, fn, nl);
+                name[nl] = 0;
+                s = sigByName(name);
+                if (s >= SIG_COUNT || !inputs.has(s)) s = SIG_COUNT;
+            }
+            for (uint8_t k = 0; s >= SIG_COUNT && k < SIG_COUNT; ++k) if (inputs.has(k)) s = k;
+            return s;
+        }
+
+        void* bigAlloc(size_t n)
+        {
+#ifdef NATIVE
+            return malloc(n);
+#else
+            void* m = heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            return m ? m : heap_caps_malloc(n, MALLOC_CAP_8BIT);
+#endif
+        }
+        void bigFree(void* p)
+        {
+#ifdef NATIVE
+            free(p);
+#else
+            heap_caps_free(p);
+#endif
         }
     }
 
@@ -103,7 +153,20 @@ namespace Vehicle
 
     Rules::~Rules()
     {
-        for (Row*& r : _row) { delete r; r = nullptr; }
+        if (!_rows) return;
+        for (uint16_t i = 0; i < RuleSet::MAX_ROWS; ++i) _rows[i].~Row();
+        bigFree(_rows);
+        _rows = nullptr;
+    }
+
+    bool Rules::rowsReady()
+    {
+        if (_rows) return true;
+        void* m = bigAlloc(sizeof(Row) * RuleSet::MAX_ROWS);
+        if (!m) return false;
+        _rows = static_cast<Row*>(m);
+        for (uint16_t i = 0; i < RuleSet::MAX_ROWS; ++i) new (&_rows[i]) Row();
+        return true;
     }
 
     bool Rules::check(const RuleSet& set, RuleProblem& p)
@@ -134,40 +197,43 @@ namespace Vehicle
     {
         p = RuleProblem{};
         const bool ok = check(set, p);
-        for (Row*& r : _row) { delete r; r = nullptr; }
+        if (!rowsReady()) return fail(p, 0, "no_memory");
+        // Rows past the new set are off before the count moves, and every row
+        // starts afresh: counters are the row's, not the rule's.
+        for (uint16_t i = 0; i < RuleSet::MAX_ROWS; ++i) _rows[i].on = false;
         _n = set.rows.size() < RuleSet::MAX_ROWS ? set.rows.size() : RuleSet::MAX_ROWS;
         for (uint16_t i = 0; i < _n; ++i) {
             const RuleRow& s = set.rows[i];
-            Row* r = new (std::nothrow) Row();
-            if (!r) return fail(p, i, "no_memory");
-            _row[i] = r;
-            r->gesture = s.isGesture();
-            r->pauseS = s.pauseS;
-            r->holds = !s.when[0];          // a formula-less gesture is always armed
+            Row& r = _rows[i];
+            r.prog.clear();
+            r.gesture = s.isGesture();
+            r.pauseS = s.pauseS;
+            r.seen = false;
+            r.fires = 0;
+            r.lastFireMs = 0;
+            r.holds = !s.when[0];           // a formula-less gesture is always armed
+            bool compiled = true;
             if (s.when[0]) {
                 Expr::Error e;
-                if (!r->prog.compile(s.when, exprResolve, nullptr, e) || !r->prog.reset(r->st)) {
-                    r->prog.clear();
-                    continue;               // off: check() said why
-                }
+                compiled = r.prog.compile(s.when, exprResolve, nullptr, e) && r.prog.reset(r.st);
+                if (!compiled) r.prog.clear();
             }
-            RuleProblem q;
-            RuleSet one;
-            // A row that does not check stays off; the cheap per-row test is the
-            // same rules check() applies, without the whole-set caps.
-            r->on = s.on && (s.isGesture() ? s.gesture.valid() : (s.when[0] && s.pauseS >= RuleRow::PAUSE_MIN_S)) &&
-                    s.nAct && s.nAct <= RuleRow::MAX_ACTIONS;
-            for (uint8_t k = 0; r->on && k < s.nAct; ++k) r->on = s.act[k].valid();
-            (void)q; (void)one;
+            // The same per-row rules as check(), without the whole-set caps:
+            // a row that does not check stays off, the others run.
+            bool on = s.on && compiled && (s.isGesture() ? s.gesture.valid() : (s.when[0] && s.pauseS >= RuleRow::PAUSE_MIN_S)) &&
+                      s.nAct && s.nAct <= RuleRow::MAX_ACTIONS;
+            for (uint8_t k = 0; on && k < s.nAct; ++k) on = s.act[k].valid();
+            r.on = on;
         }
         return ok;
     }
 
     void Rules::step(const State& st, const Expr::SigSet& changed, uint32_t now, bool tick, FireFn fire, void* ctx)
     {
+        if (!_rows) return;
         ExprCtx c{&st, now};
         for (uint16_t i = 0; i < _n; ++i) {
-            Row& r = *_row[i];
+            Row& r = _rows[i];
             if (!r.on || r.prog.empty()) continue;
             if (r.seen && !r.prog.inputs().any(changed) && !(tick && r.prog.timed())) continue;
             const bool was = r.holds;
@@ -182,20 +248,31 @@ namespace Vehicle
         }
     }
 
+    bool Rules::gestureFire(uint16_t row, uint32_t now)
+    {
+        if (!_rows || row >= _n) return false;
+        Row& r = _rows[row];
+        if (!r.on || !r.gesture || !r.holds) return false;
+        if (r.fires && r.pauseS && (uint32_t)(now - r.lastFireMs) < (uint32_t)r.pauseS * 1000u) return false;
+        ++r.fires;
+        r.lastFireMs = now;
+        return true;
+    }
+
     bool Rules::holds(uint16_t row) const
     {
-        return row < _n && _row[row] && _row[row]->on && _row[row]->holds;
+        return _rows && row < _n && _rows[row].on && _rows[row].holds;
     }
 
     const Expr::SigSet& Rules::inputsOf(uint16_t row) const
     {
-        return row < _n && _row[row] ? _row[row]->prog.inputs() : _none;
+        return _rows && row < _n ? _rows[row].prog.inputs() : _none;
     }
 
     bool Rules::live(uint16_t row, Live& out) const
     {
-        if (row >= _n || !_row[row]) return false;
-        const Row& r = *_row[row];
+        if (!_rows || row >= _n) return false;
+        const Row& r = _rows[row];
         out.on = r.on;
         out.gesture = r.gesture;
         out.holds = r.on && r.holds;
@@ -231,18 +308,7 @@ namespace Vehicle
             return (int)n;
         }
         // The default: the formula's first input, as 1.6's alerts said it.
-        size_t nl = 0;
-        const char* fn = firstName(r.when, nl);
-        uint8_t s = SIG_COUNT;
-        if (nl && nl < RULE_NAME + 1) {
-            char name[RULE_NAME + 1];
-            memcpy(name, fn, nl);
-            name[nl] = 0;
-            s = sigByName(name);
-            // A function's name (rises, held...): the first input instead.
-            if (s >= SIG_COUNT || !inputs.has(s)) s = SIG_COUNT;
-        }
-        for (uint8_t k = 0; s >= SIG_COUNT && k < SIG_COUNT; ++k) if (inputs.has(k)) s = k;
+        const uint8_t s = subject(r, inputs);
         if (s >= SIG_COUNT) return snprintf(b, cap, "%s", r.name);
         const Meta& m = meta(s);
         if (!st.has(s)) return snprintf(b, cap, "%s: --", m.name);
@@ -251,7 +317,13 @@ namespace Vehicle
         return snprintf(b, cap, "%s: %s%s%s%s", m.name, num, unit ? " " : "", unit ? m.unit : "", verified(s) ? "" : " ?");
     }
 
-    uint8_t Rules::gestures(const RuleSet& set, Keys::MacroTable& out, uint16_t* rowOf, uint8_t cap)
+    int32_t Rules::popupValue(const RuleRow& r, const Expr::SigSet& inputs, const State& st)
+    {
+        const uint8_t s = subject(r, inputs);
+        return s < SIG_COUNT && st.has(s) ? st.get(s) : 0;
+    }
+
+    uint8_t Rules::gestures(const RuleSet& set, Keys::MacroTable& out, uint8_t cap)
     {
         out.clear();
         uint8_t n = 0;
@@ -276,7 +348,7 @@ namespace Vehicle
                 strncpy(m.arg, a.arg, sizeof(m.arg) - 1);
             }
             strncpy(m.name, r.name, sizeof(m.name) - 1);
-            if (rowOf) rowOf[n] = i;
+            m.rule = i;
             ++n;
         }
         return n;
@@ -284,18 +356,31 @@ namespace Vehicle
 
     // ---- 1.6's tables -----------------------------------------------------------
 
+    // 1.6's alert table (AlertRules::toBlob): a version byte, then 16 rows of
+    // {sig, cond, thr i32, cooldownS u16, on}. Version 2 (1.6.4 on) marks an
+    // empty row SIG_SAVED_NONE; version 1 (up to 1.6.3) wrote the saving
+    // build's SIG_COUNT there, which is a signal's index today (1.7.0's first
+    // bench boot made sixteen rules on service_calc of them): sigFromSaved.
+    // Read as 1.6.9's reader did: a cond or on byte out of range is not this
+    // blob; an empty row, or one on a signal this build has no name for, is
+    // skipped.
     bool Rules::fromAlertBlob(const uint8_t* in, size_t n, RuleSet& set)
     {
-        constexpr uint8_t ROWS = 16, ROW_BYTES = 9;
-        if (!in || n != 1 + ROWS * ROW_BYTES || in[0] != 1) return false;
-        static const char* const OP[] = {">", "<", "rises", "falls", "changed"};
+        constexpr uint8_t ROWS = 16, ROW_BYTES = 9, CONDS = 5;
+        if (!in || n != 1 + ROWS * ROW_BYTES || (in[0] != 1 && in[0] != 2)) return false;
+        const bool legacy = in[0] == 1;
+        static const char* const OP[CONDS] = {">", "<", "rises", "falls", "changed"};
         for (uint8_t i = 0; i < ROWS; ++i) {
             const uint8_t* b = in + 1 + i * ROW_BYTES;
-            const uint8_t sig = b[0], cond = b[1];
+            if (b[1] >= CONDS || b[8] > 1) return false;
+        }
+        for (uint8_t i = 0; i < ROWS; ++i) {
+            const uint8_t* b = in + 1 + i * ROW_BYTES;
+            const uint8_t sig = sigFromSaved(b[0], legacy), cond = b[1];
             const int32_t thr = (int32_t)((uint32_t)b[2] | ((uint32_t)b[3] << 8) | ((uint32_t)b[4] << 16) | ((uint32_t)b[5] << 24));
             const uint16_t pause = (uint16_t)(b[6] | (b[7] << 8));
             const bool on = b[8] != 0;
-            if (sig >= SIG_USER_0 || cond > 4 || !exists(sig)) continue;   // an empty row, or one this firmware cannot read
+            if (!exists(sig)) continue;   // empty (SIG_COUNT), or a user slot without a name
             RuleRow r;
             const char* name = meta(sig).name;
             // A second rule on the same signal: its name says which.
@@ -314,6 +399,7 @@ namespace Vehicle
             }
             r.pauseS = pause < RuleRow::PAUSE_MIN_S ? RuleRow::PAUSE_MIN_S : pause;
             r.act[0].effect = Keys::Effect::Popup;
+            snprintf(r.act[0].arg, sizeof(r.act[0].arg), "%s", reminderText(sig));
             r.nAct = 1;
             if (!set.rows.push(r)) return false;
         }
