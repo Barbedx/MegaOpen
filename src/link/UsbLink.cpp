@@ -5,6 +5,7 @@
 #include <string.h>
 #include "esp32-hal-tinyusb.h"
 #include "USB.h"
+#include "soc/usb_dwc_struct.h"
 #include "lwip/sockets.h"
 #include "freertos/stream_buffer.h"
 #include "LinkFrame.h"
@@ -72,6 +73,11 @@ namespace UsbLink
         uint8_t       s_tx[Link::MAX_FRAME];
         uint8_t       s_body[Link::MAX_PAYLOAD];
         bool          s_mounted = false;
+        bool          s_bus = false;          // SOFs lately
+        bool          s_addr = false;         // tud_connected()
+        bool          s_sofSeen = false;
+        uint32_t      s_sof = 0;              // the last DSTS.SOFFN read
+        uint32_t      s_sofAt = 0;
         bool          s_hello = false;
         uint32_t      s_evSeq = 0;
         uint32_t      s_evAt = 0;
@@ -390,6 +396,31 @@ namespace UsbLink
                 ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(busy ? 2 : 50));
                 const uint32_t t0 = micros();
                 const uint32_t now = millis();
+                // The bus itself, whatever TinyUSB reports. In the car (boots
+                // 196-204, 2026-10-30/31) every counter below stayed at zero
+                // for days and could not say whether a host was even there.
+                // DSTS.SOFFN moves once a millisecond while a host drives the
+                // bus, enumeration or not: still, there is no host, no data
+                // wire, or a dead port. tud_connected(): the host gave us an
+                // address, so it read our descriptors; addressed and never
+                // configured is a host that refused them.
+                const uint32_t sof = USB_DWC.dsts_reg.soffn;
+                if (sof != s_sof) { s_sof = sof; s_sofAt = now; s_sofSeen = true; }
+                const bool bus = s_sofSeen && now - s_sofAt < BUS_IDLE_MS;
+                if (bus != s_bus) {
+                    s_bus = bus;
+                    if (bus) { ++s_st.busUps; LOGI("usb", "host: SOFs on the bus, a host drives it"); }
+                    else      LOGI("usb", "host: bus idle, no SOF for %lu ms", (unsigned long)(now - s_sofAt));
+                }
+                const bool addr = tud_connected();
+                if (addr != s_addr) {
+                    s_addr = addr;
+                    LOGI("usb", addr ? "host: addressed the device (it reads our descriptors)" : "host: address gone");
+                }
+                s_st.sof       = bus;
+                s_st.addressed = addr;
+                s_st.suspended = tud_suspended();
+                s_st.sofAgoMs  = s_sofSeen ? now - s_sofAt : UINT32_MAX;
                 const bool m = tud_vendor_n_mounted(ITF);
                 if (m != s_mounted) {
                     s_mounted = m;
@@ -422,6 +453,8 @@ namespace UsbLink
     void begin(const char* name)
     {
         s_name = name ? name : "";
+        // The frame number as it stands: a change from here on is a host.
+        s_sof = USB_DWC.dsts_reg.soffn;
         App::TaskSpec spec;
         spec.name  = "usblink";
         spec.fn    = run;

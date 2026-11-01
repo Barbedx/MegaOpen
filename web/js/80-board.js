@@ -26,7 +26,7 @@ SCR.board={title:'nav.board',async render(m){
   row(t('bd.apPass'),txt('rb:/api/settings|apPass','',un,'in','password',rbA('rb:','',t('bd.apPassLbl'))+' minlength="8"'),t('bd.min8')),'cWifi')+
  (B?card('Bluetooth',row(t('bd.role'),sel('rb:/api/settings|bleMode',CAT.bleModes.map(b=>[b.id,b.name]),se.bleMode,'data-str'+rbA('rb:',se.bleMode,t('bd.roleLbl'))),`<span id="bHint">${esc(bleHint(se.bleMode))}</span>`)+
   `<div id="bLive"${se.bleMode==='off'?' hidden':''}>${row(t('bd.state'),'<span id="bSt" class="chip off">…</span>','<span id="bName"></span>')}<div class="fr"><button class="btn dng" type="button" id="bForget">${t('bd.forget')}</button></div></div>`):'')+
- card(t('bd.update'),`<div class="kv"><div><small>${t('bd.fw')}</small><b>${esc(se.fw)}</b></div><div><small>${t('bd.build')}</small><b>${esc(se.build)}</b></div></div>`+
+ card(t('bd.update'),`<div class="kv"><div><small>${t('bd.fw')}</small><b>${esc(se.fw)}</b></div><div><small>${t('bd.build')}</small><b>${esc(se.build)}</b></div><div><small>${t('bd.boot')}</small><b>${esc(st.boots)}</b></div></div>`+
   (has('ghota')?row(t('bd.gh'),'<span id="ghSt" class="chip off">…</span>','<span id="ghW"></span>',t('bd.ghH'))+
    row(t('bd.ghPre'),sw('/api/fw/channel|pre',fw&&fw.pre),'',t('bd.ghPreH'))+
    `<div class="fr"><button class="btn" type="button" id="ghChk">${t('bd.check')}</button><button class="btn pri" type="button" id="ghGo" hidden>${t('bd.updateBtn')}</button><button class="btn pri" type="button" id="ghBoot" hidden>${t('bd.restart')}</button></div><div class="pad" id="ghP" hidden><div class="bar big"><i id="ghBar"></i></div></div>`+row('','',t('bd.orFile')):'')+

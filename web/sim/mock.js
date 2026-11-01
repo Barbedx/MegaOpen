@@ -80,7 +80,7 @@ const defMap=()=>{const M={};C.raise.forEach(t=>M[t.id]={src:'off',can:null,k:0}
  return M};
 const day=(d,h,m)=>Math.floor(new Date(2026,9,d,h,m).getTime()/1000);
 const S={
- bootAt:now()-(3*3600+12*60)*1000,fw:'0.9.3',build:'acc5ace 2026-10-15',heap:80312,cfgVer:7,events:1342,logLevel:2,
+ bootAt:now()-(3*3600+12*60)*1000,boots:187,fw:'0.9.3',build:'acc5ace 2026-10-15',heap:80312,cfgVer:7,events:1342,logLevel:2,
  wifi:{mode:'sta',ssid:'HomeWiFi',ip:'192.168.1.50',rssi:-58,apName:'MegaOpen-1A2B',apPass:'megaopen'},
  wifi2:{ssid:'iPhone'},
  nets:[{ssid:'HomeWiFi',rssi:-58,secure:true},{ssid:'iPhone',rssi:-47,secure:true},{ssid:'KYIVSTAR_7F2A',rssi:-79,secure:true}],
@@ -215,7 +215,7 @@ function health(){
  return {fw:S.fw,build:S.build,chains:ch,bleMode:S.set.bleMode};
 }
 g('/api/catalog',()=>deep(CATALOG));
-g('/api/status',()=>{const w=S.wifi;return {ip:w.ip,mode:w.mode,ssid:w.mode==='sta'?w.ssid:w.apName,rssi:w.mode==='sta'?w.rssi:0,uptimeMs:now()-S.bootAt,framesSent:S.hu.txKey,events:S.events,ghosts:0,encSteps:0,heap:S.heap,
+g('/api/status',()=>{const w=S.wifi;return {ip:w.ip,mode:w.mode,ssid:w.mode==='sta'?w.ssid:w.apName,rssi:w.mode==='sta'?w.rssi:0,uptimeMs:now()-S.bootAt,boots:S.boots,framesSent:S.hu.txKey,events:S.events,ghosts:0,encSteps:0,heap:S.heap,
  fw:S.fw,build:S.build,apName:w.apName}});   /* fw, build, apName — НОВЕ */
 g('/api/health',health);
 /* прошивка зберігає в cfg одразу, тож GET бачить збережене; діє воно після перезавантаження */
@@ -360,7 +360,7 @@ po('/api/wifi',q=>{const h1=typeof q.ssid==='string',h2=typeof q.ssid2==='string
  const w1=S.staged.wifi||{ssid:S.set.ssid,pass:S.wifi.pass||''},ch=h1&&(q.ssid!==w1.ssid||!!q.pass&&q.pass!==w1.pass);
  if(h1)S.staged.wifi={ssid:q.ssid,pass:q.pass||(q.ssid===w1.ssid?w1.pass:'')};if(h2)S.wifi2.ssid=q.ssid2;
  emit(2,'NET',ch?'wifi saved, pending reboot':'wifi saved');return ch?{ok:true,pendingReboot:true}:ok});
-function doBoot(){S.bootAt=now()+4000;S.heap=Math.round(rnd(79000,82000));const st=S.staged;
+function doBoot(){S.bootAt=now()+4000;++S.boots;S.heap=Math.round(rnd(79000,82000));const st=S.staged;
  if(st.wifi){S.set.ssid=st.wifi.ssid;S.wifi.pass=st.wifi.pass}
  if(st.bleMode)S.set.bleMode=st.bleMode;
  if(st.apPass)S.wifi.apPass=st.apPass;if(st.dispType)S.disp.type=st.dispType;if(st.funcReg!==undefined)S.disp.funcReg=st.funcReg;S.staged={};

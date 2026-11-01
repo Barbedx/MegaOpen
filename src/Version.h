@@ -1,13 +1,14 @@
 #pragma once
+#include <stdint.h>
 
 // The single firmware version string (not the NVS config schema number).
 // Semver against the head unit: the major moves when the Raise/canbox protocol
 // changes in a way a head unit would have to follow.
-#define MEGAOPEN_VERSION "1.6.9"
+#define MEGAOPEN_VERSION "1.6.10"
 
 // Wire field: Rav4Emitter's MSG_VERSION is exactly 16 bytes, space-padded.
 // Written out literally so it cannot overrun the field.
-#define MEGAOPEN_VERSION_WIRE "MegaOpen 1.6.9  "
+#define MEGAOPEN_VERSION_WIRE "MegaOpen 1.6.10 "
 static_assert(sizeof(MEGAOPEN_VERSION_WIRE) == 17,
               "MSG_VERSION is a fixed 16-byte field plus its NUL");
 
@@ -24,4 +25,10 @@ namespace MegaOpen
     // PlatformIO's env this image was built as ("t2can"): the GitHub update
     // fetches megaopen-<env>-<ver>.bin. Stamped the same way as buildId().
     const char* envName();
+    // WHICH BOOT this is: the NVS boot counter, the N of the log's "[boot]
+    // ... boots=N" and of the pushed log's folder boot-NNNNN. Set once by
+    // main's logBootReason(); shown with the address on the panel, in the
+    // page's footer and in /api/status, so a report can name the boot.
+    uint32_t bootNo();
+    void     setBootNo(uint32_t n);
 }

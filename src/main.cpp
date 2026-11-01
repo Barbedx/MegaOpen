@@ -1503,13 +1503,14 @@ static bool hkWifiSeen()
 }
 
 // WiFi, then the board's address on the panel once per connection
-// (src/net/IpNotice.h): "IP 192.168.1.15 / megaopen.local" on the home
-// network, "AP MegaOpen-XXXX / 192.168.4.1" on our own. Polite: it waits out
-// the menu and a glass hold (App::Ui::queueNotice).
+// (src/net/IpNotice.h): "IP 192.168.1.15 / megaopen.local boot 204" on the
+// home network, "AP MegaOpen-XXXX / 192.168.4.1 boot 204" on our own. Polite:
+// it waits out the menu and a glass hold (App::Ui::queueNotice).
 #if FEATURE_DISPLAY_CAN
-// The address as the panel shows it, two rows: "IP 192.168.1.15" over the
-// mDNS name (empty with mDNS off), or "AP MegaOpen-XXXX" over 192.168.4.1.
-// The connect notice (net_svc) and the panel menu's address row (ui task).
+// The address as the panel shows it: "IP 192.168.1.15" over the mDNS name
+// (empty with mDNS off) and the boot number, or "AP MegaOpen-XXXX" over
+// 192.168.4.1 and the boot number. The connect notice (net_svc) and the
+// panel menu's address row (ui task; the row shows the head alone).
 static void addressText(char* head, size_t hn, char* body, size_t bn)
 {
     body[0] = 0;
@@ -1524,6 +1525,11 @@ static void addressText(char* head, size_t hn, char* body, size_t bn)
     } else {
         snprintf(head, hn, "WiFi down");
     }
+    // The boot number after the name or address ("megaopen.local boot 204"):
+    // read off the panel for a report, it names the pushed log's folder
+    // (boot-00204). Its own row when the first is full (wrapTwoEllipsis).
+    const size_t n = strlen(body);
+    snprintf(body + n, bn - n, "%sboot %lu", n ? " " : "", (unsigned long)MegaOpen::bootNo());
 }
 #endif
 #if FEATURE_LOG_PUSH
@@ -1772,6 +1778,7 @@ static void logBootReason()
     p.begin("sys", false);
     const uint32_t boots = p.getUInt("boots", 0) + 1;
     p.putUInt("boots", boots);
+    MegaOpen::setBootNo(boots);
     // Abnormal resets counted separately: a number that should stay at zero.
     const bool bad = r == ESP_RST_PANIC || r == ESP_RST_INT_WDT || r == ESP_RST_TASK_WDT ||
                      r == ESP_RST_WDT || r == ESP_RST_BROWNOUT;

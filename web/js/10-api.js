@@ -34,12 +34,15 @@ async function call(m,path,params){
   if(o.body instanceof URLSearchParams){o.headers['Content-Type']='application/x-www-form-urlencoded';o.body=o.body.toString()}
   const r=await linkFetch(m,path,o.headers,o.body);
   const body=r.ct.includes('json')?JSON.parse(r.text||'null'):r.text;
-  if(r.status>=400)throw Object.assign(new Error(errMsg(body,r.status)),{status:r.status,body});
+  if(r.status>=400)throw Object.assign(new Error(errMsg(body,r.status)),{status:r.status,body,req:m+' '+path});
   return body;
  }
- const r=await fetch(path,o);const ct=r.headers.get('content-type')||'';
+ /* нема відповіді (плата перезавантажується, інша мережа): словами сторінки, не «Failed to fetch»;
+    без status, тож тік показує «нема зв’язку». req — метод і шлях: картка помилки сторінки називає, що впало */
+ let r;try{r=await fetch(path,o)}catch(e){throw Object.assign(new Error(t('c.noBoard')),{req:m+' '+path})}
+ const ct=r.headers.get('content-type')||'';
  const body=ct.includes('json')?await r.json():await r.text();
- if(!r.ok)throw Object.assign(new Error(errMsg(body,r.status)),{status:r.status,body});
+ if(!r.ok)throw Object.assign(new Error(errMsg(body,r.status)),{status:r.status,body,req:m+' '+path});
  return body;
 }
 const API={get:p=>call('GET',p),post:(p,params)=>call('POST',p,params)};

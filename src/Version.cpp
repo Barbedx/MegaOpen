@@ -12,4 +12,8 @@ namespace MegaOpen
 {
     const char* buildId() { return MEGAOPEN_BUILD; }
     const char* envName() { return MEGAOPEN_ENV; }
+
+    static uint32_t s_bootNo = 0;
+    uint32_t bootNo() { return s_bootNo; }
+    void     setBootNo(uint32_t n) { s_bootNo = n; }
 }

@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.6.10] - 2026-11-01
+
+### Added
+- The boot number, the N of the log's `[boot] ... boots=N` and of the pushed log's folder `boot-00N`: on the panel with the address after a connect (`IP 192.168.1.15 / megaopen.local boot 204`, and on Select of the panel menu's address row), in the page's footer and «Плата › Оновлення», and in `/api/status` `boots`. Say it when reporting.
+- USB link diagnostics that do not depend on TinyUSB's events (docs/design/usb-link.md «Diagnostics»): `/api/status` `usb` says whether a host drives the bus at all (`sof`: a start-of-frame in the last 2 s, read from the S3's DSTS register; `sofAgoMs`, `busUps`), whether the host gave the device an address, i.e. read its descriptors (`addressed`), and `suspended`. The log says when SOFs start and stop and when the host addresses the device. In the car on 1.6.9 (boots 196-204) every TinyUSB counter stayed at zero for days and could not tell a dead cable or port from a host that talked and refused the configuration.
+
+### Changed
+- A page that fails to open names the request that failed (method and path) under the error, and a request that gets no answer says «немає зв’язку з платою» instead of the browser's «Failed to fetch».
+
 ## [1.6.9] - 2026-10-29
 
 ### Added

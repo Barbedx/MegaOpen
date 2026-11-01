@@ -10,10 +10,10 @@ async function doRoute(){
  $('#title').textContent=t(cur.title);$$('#tabs a').forEach(a=>a.classList.toggle('on',a.dataset.t===curId));$('#back').hidden=!cur.hidden;
  if(curId==='service')$('#tabSvc').hidden=false;
  const m=$('#main');m.innerHTML='<div class="row muted">…</div>';window.scrollTo(0,0);
- try{await cur.render(m)}catch(e){if(my===gen)m.innerHTML=card(t('c.errTitle'),row(esc(errT(e)),`<button class="btn" type="button" onclick="route()">${t('c.retry')}</button>`))}
+ try{await cur.render(m)}catch(e){if(my===gen)m.innerHTML=card(t('c.errTitle'),row(esc(errT(e)),`<button class="btn" type="button" onclick="route()">${t('c.retry')}</button>`,e.req?esc(e.req):''))}
 }
 let busy=false,tickN=0;
-async function foot(){const st=await API.get('/api/status');$('#foot').textContent=[st.fw,st.build.split(' ')[0],t('m.up',fmtUp(st.uptimeMs)),t('m.mem',Math.round(st.heap/1024)),st.ip].join(' · ')}
+async function foot(){const st=await API.get('/api/status');$('#foot').textContent=[st.fw,st.build.split(' ')[0],t('m.boot',st.boots),t('m.up',fmtUp(st.uptimeMs)),t('m.mem',Math.round(st.heap/1024)),st.ip].join(' · ')}
 setInterval(async()=>{const L=$('#link');if(REBOOTING){setChip(L,'warn',t('m.restarting'));L.hidden=false;return}if(!cur||busy||document.hidden)return;busy=true;const my=gen;
  try{if(cur.tick&&my===gen)await cur.tick(true);if(tickN++%5===0)await foot();L.hidden=true}catch(e){if(!e.status){setChip(L,'bad',t('c.noLink'));L.hidden=false}}busy=false},1000);
 window.addEventListener('hashchange',()=>{if(CAT)route()});

@@ -221,3 +221,21 @@ Tests: `node tools/test_webusb.mjs` (CI, the Pages workflow) runs `link.js`
 against a fake board. `node tools/webusb_e2e.mjs` runs the whole page in
 headless Chrome with a fake device, the real `PAGE_APP_GZ` and the simulator's
 mock board behind it.
+
+## Diagnostics
+
+`/api/status` `usb` (also in the status snapshot the log push sends every 10
+minutes) and the `[usb]` log lines say what the bus did, in three layers:
+
+| layer | fields | means |
+| --- | --- | --- |
+| the bus | `sof`, `sofAgoMs`, `busUps` | a host drives the bus: the S3's DSTS.SOFFN moves once a millisecond once a host has reset the bus and enabled the port, enumerated or not. Still: no cable, no data wires, a dead or latched port. Read by the usblink task every pass, no TinyUSB callback needed. |
+| enumeration | `addressed`, `mounts`, `unmounts`, `suspends`, `resumes`, `mounted` | `addressed` (`tud_connected`): the host read the descriptors and set an address; `mounted`: it chose a configuration. Addressed and never mounted: a host that refused the composite. |
+| the app | `alive`, `hello`, `open`, `reqs`, `fails`, `dropped`, `rx`, `tx`, `bad` | frames and requests from MegaOpen Companion or the WebUSB page. |
+
+In the car on 1.6.9 (boots 196-204, 2026-10-30/31) the second and third layers
+stayed at zero for days and could not say whether a host was even there; the
+first was added for that (1.6.10). The log: `host: SOFs on the bus`, `host:
+bus idle, no SOF for N ms`, `host: addressed the device`, `host: bus reset or
+unplugged`, `host: bus suspended` / `resumed`, `link up: a host configured the
+device`, `link down`.

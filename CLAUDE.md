@@ -42,7 +42,8 @@ map; this file is the "where do I look" index for a session in the car.
    live in `web/i18n/*.json` as `w.<code>`; error replies are codes too, `e.<code>`):
    `panel`, `media`, `clock`, `keys` (+ `dest` masks), `ancs`, `hu`, `knobs`,
    `lights`, `phone`. Start from the `code`.
-2. `GET /api/status` — build hash, uptime, heap, RSSI.
+2. `GET /api/status` — build hash, boot number (`boots`), uptime, heap, RSSI;
+   `usb` — the link in three layers (bus `sof`, `addressed`, `mounted`, the app).
 3. `GET /api/logs?since=0` — live log ring; `GET /api/logs/file` — the flash
    log (survives reboots, written on warnings and before a reboot).
 4. Periodic lines every 10 s tell the story without a debugger:
@@ -58,6 +59,7 @@ map; this file is the "where do I look" index for a session in the car.
 | `[ui]`, `[media]` | glass policy, now-playing source |
 | `[ble]` | iPhone link, AMS/HID queues |
 | `[ota]` | trial / CONFIRMED / rolling back |
+| `[usb]` | USB link: host SOFs / addressed / configured (link up), bus reset, suspend; the app's frames |
 | `[push]` | log push to GitHub: file sent, bytes queued, GitHub's refusal |
 | `[alert]` | panel alert rules |
 | `[mem]`, `[win]`, `[stk]`, `[task]`, `[stall]` | heap, stacks, task ages, loop gaps |

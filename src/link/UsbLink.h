@@ -13,6 +13,7 @@ namespace UsbLink
     constexpr uint8_t  CHANS = 2;
     constexpr uint32_t IDLE_MS = 15000;    // a channel this quiet is closed
     constexpr uint32_t ALIVE_MS = 3000;    // a frame this recent: the app is there
+    constexpr uint32_t BUS_IDLE_MS = 2000; // no SOF this long: no host drives the bus
 
     struct Stats {
         bool     mounted = false;     // a host configured the device
@@ -30,6 +31,16 @@ namespace UsbLink
         // ALIVE_MS); what the host did to the bus (configured, reset or
         // unplugged, suspended, resumed).
         uint32_t dropped = 0, mounts = 0, unmounts = 0, suspends = 0, resumes = 0;
+        // The bus itself, whatever TinyUSB reports: the host's SOFs
+        // (DSTS.SOFFN moves once a millisecond while a host drives the bus,
+        // enumerated or not), the device addressed (the host read our
+        // descriptors), suspended. A dead cable or port leaves all three off;
+        // a host that refused the configuration leaves `addressed` on.
+        bool     sof = false;         // an SOF in the last BUS_IDLE_MS
+        bool     addressed = false;
+        bool     suspended = false;
+        uint32_t sofAgoMs = 0;        // UINT32_MAX: never
+        uint32_t busUps = 0;          // the bus went from idle to SOFs
     };
 
     // ---- the app's internet ------------------------------------------------

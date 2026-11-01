@@ -2330,6 +2330,7 @@ void WebUi::statusJson(JsonObject d)
         d["uptimeMs"]  = millis();
         d["fw"]        = MEGAOPEN_VERSION;
         d["build"]     = MegaOpen::buildId();
+        d["boots"]     = MegaOpen::bootNo();
         d["apName"]    = _wifi ? _wifi->apSsid() : String();
         d["framesSent"]= _uart->framesSent();
         d["events"]    = _engine->events();
@@ -2360,6 +2361,14 @@ void WebUi::statusJson(JsonObject d)
             o["unmounts"]    = u.unmounts;
             o["suspends"]    = u.suspends;
             o["resumes"]     = u.resumes;
+            // The bus itself, whatever TinyUSB reported (UsbLink.h Stats,
+            // docs/design/usb-link.md "Diagnostics").
+            o["sof"]         = u.sof;
+            if (u.sofAgoMs == UINT32_MAX) o["sofAgoMs"] = nullptr;
+            else                          o["sofAgoMs"] = u.sofAgoMs;
+            o["busUps"]      = u.busUps;
+            o["addressed"]   = u.addressed;
+            o["suspended"]   = u.suspended;
         }
 #endif
 }
