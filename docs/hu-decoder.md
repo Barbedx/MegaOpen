@@ -296,8 +296,10 @@ Two more tables widen the search: `0x2A [code][state]` (`f3158q`, adds actions
 ## 6. Bench list this produces, cheapest first
 
 1. `0x24` len 2 with D1 = 0 — does a bonnet icon that was there go away?
-2. `0x7D 04` with D4-D5 ≠ `F2 08` — which dashboard number moves? (Ready:
-   the "пальне в 7D04" experiment.)
+2. `0x7D 04` with D4-D5 ≠ `F2 08` — which dashboard number moves? **Answered
+   in the car (1.6.1):** the per cent in DUDU's status bar beside the range
+   («518 km ▬ 84%»); `F2 08` = 229 % is why nobody sees it. Our «Бак, %»
+   (`fuel_pct`) feeds it, off by default.
 3. `0x7D 09 [00][coolant+40]` — does a temperature appear? (Ready: the
    "t° ОР" experiment.)
 4. `0x7D 05` — same icons as `0x24`, plus bonnet?

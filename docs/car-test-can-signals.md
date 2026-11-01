@@ -80,9 +80,7 @@ something else opens it (write down what the car was doing).
   through 0…15, 3, 5 or 8 s a value. Note the D2 at which the tablet shows P,
   R, N or D. This sends only to the tablet, never to the car.
 
-- **Напруга АКБ у полі ГУ:** battery volts x10 in a field the tablet
-  already shows; pick the field next to it (0x21 range, 0x7D 04, 0x23).
-  Engine off, ~12.6 V: **which field shows 126 (or 12.6)?** Write down the
-  field and the screen it is on; with the engine running it should read
-  ~138-145 (13.8-14.5 V). It takes the field from «розрах. витрата» (0x21,
-  0x23) or «пальне в 7D04» (0x7D 04), so those switch off while it is on.
+- **Напруга АКБ:** protocol 112 has no voltage field and the head unit reads
+  none from a canbox (`0x7D 0B` is not decoded): the volts on its screen are
+  its own measurement. Nothing to test; the row on «Поля ГУ» shows the
+  car's value alone.

@@ -234,7 +234,7 @@
  "k.raise.fuel_pct": "Tank, %",
  "k.raise.eng_temp": "Coolant temperature",
  "k.raise.batt_v": "Battery voltage",
- "k.raise.batt_v.why": "protocol 112 has no field of its own; another can carry it: «From» → another signal, batt_v ÷10, on range, average consumption or tank %",
+ "k.raise.batt_v.why": "protocol 112 has no voltage field and the head unit reads none from a canbox (0x7D 0B is not decoded): the volts on its screen are its own measurement; the value alone here",
  "k.raise.out_temp": "Outside temperature",
  "k.raise.ac_on": "Air conditioning",
  "k.raise.ac_compressor": "Compressor",

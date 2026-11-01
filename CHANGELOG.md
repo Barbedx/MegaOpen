@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+- «Напруга АКБ» on «Поля ГУ» says what is so: protocol 112 has no voltage field and the head unit reads none from a canbox, the volts on its screen are its own measurement. It no longer suggests sending the battery in another field's place. The guide says where «Бак, %» shows (`0x7D 04` bytes 4-5, the head unit's status bar beside the range) and that it starts off.
+
 ## [1.6.11] - 2026-11-01
 
 ### Added

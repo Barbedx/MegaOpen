@@ -79,9 +79,13 @@ the bus, do the thing (open a door), and the IDs that changed are listed.
 
 **What the head unit gets** is the tab **Поля ГУ**: each field's
 **«Звідки»** is its own signal (the default), another signal scaled
-(× ÷ +, e.g. the battery `batt_v` ÷10 into the range field), a constant, or
-off. Coolant, the P/R/N/D probe and «Бак, %» start off; switch one on with
-«Звідки» → свій сигнал. «змінити в таблиці сигналів» (and the name of the
+(× ÷ +), a constant, or off. Coolant, the P/R/N/D probe and «Бак, %» start
+off; switch one on with «Звідки» → свій сигнал. «Бак, %» is `0x7D 04`
+bytes 4-5: the head unit draws it in its status bar beside the range
+(«518 km ▬ 84%»). Protocol 112 has **no battery-voltage field**, and the
+head unit reads none from a canbox: the volts it shows are its own
+measurement; the row «Напруга АКБ» is on the page for the value alone.
+«змінити в таблиці сигналів» (and the name of the
 other signal) goes back to **Сигнали** with that signal's source editor open.
 The tab also holds the protocol, «Слати в ГУ», the units, ▶ (a test value)
 and «Прогін селектора».
