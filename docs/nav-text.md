@@ -52,10 +52,15 @@ the panel registers) and the bytes as typed; `styled` is the text frame with
 its four header bytes exposed. Photograph every result and note the console's
 answer (the panel's ACK or the refusal).
 
-1. **The declared length.** The same text frame, the length saying 22 or more
-   content bytes: `raw` on `151`, `10 16 77 55 55 FF 60 01` + 22 bytes of
-   text (`>LITOMSKA, ULICA TEST` in hex). If the panel shows more than 8
-   cells, note the font and the rows. Then `0x1C` (28) and `0x24` (36).
+1. **The declared length.** The content the length counts is the six header
+   bytes (`77 <icon> <bank2> <src> <fmt> 01`) plus the text cells: `0x0E` =
+   6 + 8, which is why eight cells show. The same frame declaring all
+   fourteen, `raw` on `151`:
+   `10 14 77 55 55 FF 60 01 3E 4C 49 54 4F 4D 53 4B 41 2C 20 55 4C 49`
+   (`>LITOMSKA, ULI`). Then 22 cells, `0x1C`:
+   `10 1C 77 55 55 FF 60 01 3E 4C 49 54 4F 4D 53 4B 41 2C 20 55 4C 49 43 41 20 54 45 53 54 20`
+   (`>LITOMSKA, ULICA TEST `). If the panel shows more than eight cells,
+   note the font and the rows.
 2. **The format byte.** `styled`, 14 characters of text, `fmt` swept over
    `0x59..0x7F` and `0x19..0x3F`: a value may select the small font.
 3. **The icon byte's bit 7.** `styled` with `icon` `D5` (`0x55 | 0x80`).
