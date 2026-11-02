@@ -292,13 +292,15 @@ po('/api/display',q=>{const st=S.staged,t0=st.dispType||S.disp.type,f0=st.funcRe
  const t=q.type===undefined?t0:q.type,f=q.funcReg===undefined?f0:!!q.funcReg;
  if(!C.panels.some(p=>p.id===t))return fail(400,'param type');
  st.dispType=t;st.funcReg=f;return t!==t0||f!==f0?{ok:true,pendingReboot:true}:ok});
-for(const k of ['text','clock','power','menu','highlight','popup','confirm','msgbox','selectbutton','styled','info','fullscreen','abort'])po('/api/display/'+k,q=>{
+for(const k of ['text','clock','power','menu','highlight','popup','confirm','msgbox','selectbutton','styled','info','fullscreen','abort','raw'])po('/api/display/'+k,q=>{
  if(k==='text'&&q.text===undefined)return fail(400,'param text');if(k==='clock'&&q.time===undefined)return fail(400,'param time');if(k==='popup'&&q.text===undefined&&!B(q.hide))return fail(400,'param text');
  if(k==='menu'&&q.scroll!==undefined&&!ARROWS.includes(+q.scroll))return fail(400,SCROLL_WHY);
  /* НОВЕ: справжній HHMM записує джерело manual (WebUi → App::Ui::noteManualClock) */
  if(k==='clock'&&/^\d{4}$/.test(q.time)&&+q.time.slice(0,2)<24&&+q.time.slice(2)<60)clockFrom('manual',q.time.slice(0,2)+':'+q.time.slice(2));
  emit(2,'PNL',k+' '+JSON.stringify(q));return queued()});
 for(const k of ['release','notify','clear'])po('/api/display/'+k,()=>ok);
+/* вердикти пошуку екрана навігації (WebUi.cpp /api/display/sweep): рядок у лог */
+po('/api/display/sweep',q=>{if(!q.step)return fail(400,'param step');emit(2,'PNL','sweep '+q.step+' = '+q.verdict+(q.note?' '+q.note:''));return ok});
 /* НОВЕ: last у /api/affamap, як publishKeyLast у main.cpp: key — рядок таблиці (і порожній), action — id дії;
    рядок без дії (None) не відображено, свій код без дії теж; dests — маска і живий приймач, ГУ ще й має код */
 function pressKey(wire,hold){const r=S.affa.find(x=>x.wire===wire&&x.hold===!!hold),key=r?r.key:'';

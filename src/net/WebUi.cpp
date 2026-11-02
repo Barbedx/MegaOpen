@@ -1355,6 +1355,19 @@ void WebUi::routesDisplay()
         return posted(r, _ops->postRaw((uint16_t)id, box->b, (uint16_t)n));
     });
 
+    // The nav-text sweep's verdicts («Пошук екрана навігації» on Сервіс,
+    // docs/nav-text.md): one log line each, so a result reaches the pushed log
+    // with the frame that made it. step: the card's id; verdict: yes / other /
+    // no / lost; note: the owner's words, 60 bytes at most.
+    route("/api/display/sweep", HTTP_POST, [](PsychicRequest* r) {
+        const String step = paramStr(r, "step", ""), verdict = paramStr(r, "verdict", ""), note = paramStr(r, "note", "");
+        if (!step.length() || step.length() > 16) return r->reply(400, "text/plain", "param step");
+        if (verdict != "yes" && verdict != "other" && verdict != "no" && verdict != "lost")
+            return r->reply(400, "text/plain", "param verdict");
+        LOGI("disp", "sweep %s = %s%s%.60s", step.c_str(), verdict.c_str(), note.length() ? " " : "", note.c_str());
+        return r->reply(200, "application/json", "{\"ok\":true}");
+    });
+
     // The three-row info list: three messages on the wire, one per row, not
     // coalesced. No hide command is known; draw the next screen instead.
     route("/api/display/info", HTTP_POST, [this, posted](PsychicRequest* r) {

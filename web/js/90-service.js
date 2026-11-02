@@ -19,6 +19,7 @@ SCR.service={title:'nav.service',async render(m){
  (D?card(t('sv.console'),row(t('sv.power'),`<button class="btn sm" type="button" data-pw="1">${t('sv.on')}</button><button class="btn sm" type="button" data-pw="0">${t('sv.off')}</button>`)+
   '<div class="fr">'+`<select class="in" id="cK" style="flex:1">${CAT.console.map(c=>`<option value="${esc(c.cmd)}">${esc(c.name)}</option>`).join('')}</select>`+`</div><div class="pad"><div class="mg" id="cF"></div></div><div class="fr"><button class="btn pri" type="button" id="cGo">${t('sv.send')}</button></div>`+
   '<div class="kv" id="caps"></div>','cCon','custom')+
+ nsCard()+
  card(t('sv.sweep'),row('','',t('sv.sweepH'))+`<div class="fr"><button class="btn pri" type="button" id="swGo">${t('sv.start')}</button><button class="btn" type="button" id="swEnd">${t('sv.reset')}</button></div><div class="pad"><b class="mono" id="swN">—</b> <span id="swW" class="muted"></span></div>`,'','custom')+
  card(t('sv.wire'),row('','',t('sv.wireH'))+
   `<div class="fr">${sel('wK',PK.map(a=>[a.wire,a.name]),PK.length?PK[0].wire:'','data-nosave data-str id="wK"')}<button class="btn" type="button" data-wire="0">${t('sv.click')}</button><button class="btn" type="button" data-wire="1">${t('sv.hold')}</button></div>`,'','custom')+
@@ -73,6 +74,7 @@ SCR.service={title:'nav.service',async render(m){
  const wH=()=>{$('[data-wire="1"]',m).disabled=(PK.find(k=>k.wire===$('#wK').value)||{}).wireHold===false};$('#wK').addEventListener('change',wH);wH();
  $('#iGo').onclick=e=>run(e.target,()=>API.post('/api/media',{title:$('#iT').value,artist:$('#iA').value,elapsed:+$('#iE').value,duration:+$('#iD').value}));
  $('#spGo').onclick=e=>run(e.target,()=>API.post('/api/media',{splashNow:true}));
+ nsBind(m);
  $('#huF').onclick=e=>ask(e.target,t('sv.forgetAsk'),()=>run(e.target,()=>API.post('/api/settings',{huForget:true}),t('sv.forgotten')))}
  /* таблиця реєстру huMessages: рядок i = повідомлення i, [увімк]; лише в RAM, тож шлемо всі рядки */
  $('#msgs').addEventListener('change',e=>{if(e.target.dataset.en===undefined)return;

@@ -71,6 +71,23 @@ answer (the panel's ACK or the refusal).
    header varied (the capture has zeros; the library's header carries `0x25`
    at byte 3): a flag there may switch the text area's mode.
 
+## The sweep card («Сервіс › Пошук екрана навігації»)
+
+Nothing is typed in the car. The card (`web/js/89-navsweep.js`) holds every
+hypothesis above as a row: **▶** sends its frame or frames (`/api/display/raw`
+with the bytes in the form body, `/api/display/styled` for the header
+variants), the panel's registration is checked 1.5 s later and shown in the
+chip, and four verdict buttons record what the glass did: **✓** small font in
+two rows, **~** something else (the note field beside), **✗** no change,
+**⚡** the link dropped. A verdict goes to the board's log as
+`[disp] sweep <id> = <verdict> <note>` (so it reaches the pushed log with the
+frames before it) and into the browser (`localStorage` `mo-navsweep`), so the
+rows keep their verdicts across reloads. The format byte is a timed sweep: a
+new value every 3/5/8 s, the text on glass starting with `F<hex>` so a photo
+names the value; «Це воно» records the one on glass at that moment.
+«Відновити зв'язок» re-runs the handshake, «Повернути медіа» hands the glass
+back. The arrow bitmap in the E and F rows is the OEM one from `navi start`.
+
 What works goes into AffaDisplay first (a `showNavText()` with its constants
 and a test), then MegaOpen takes it as a layout of the media screen: two small
 rows for the title and the artist, the clock kept, the pane as now.
