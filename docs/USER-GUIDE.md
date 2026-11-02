@@ -210,8 +210,8 @@ the three colours have in common.
 
 1. **Перевірити** shows the latest release and whether it is newer.
 2. **Оновити** downloads it and checks its SHA-256.
-3. When it is written, **Перезавантажити**. This is refused while the car is
-   moving; when the car stops, the board reboots into it by itself.
+3. When it is written and its SHA-256 matches, the board reboots into it at
+   once, as after a file; the trial confirms it after 60 s healthy.
 
 **From a file:** download `megaopen-t2can-<ver>.bin` from
 [Releases](https://github.com/Barbedx/MegaOpen/releases) (`-rcN`

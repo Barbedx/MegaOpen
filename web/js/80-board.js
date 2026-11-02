@@ -29,7 +29,7 @@ SCR.board={title:'nav.board',async render(m){
  card(t('bd.update'),`<div class="kv"><div><small>${t('bd.fw')}</small><b>${esc(se.fw)}</b></div><div><small>${t('bd.build')}</small><b>${esc(se.build)}</b></div><div><small>${t('bd.boot')}</small><b>${esc(st.boots)}</b></div></div>`+
   (has('ghota')?row(t('bd.gh'),'<span id="ghSt" class="chip off">…</span>','<span id="ghW"></span>',t('bd.ghH'))+
    row(t('bd.ghPre'),sw('/api/fw/channel|pre',fw&&fw.pre),'',t('bd.ghPreH'))+
-   `<div class="fr"><button class="btn" type="button" id="ghChk">${t('bd.check')}</button><button class="btn pri" type="button" id="ghGo" hidden>${t('bd.updateBtn')}</button><button class="btn pri" type="button" id="ghBoot" hidden>${t('bd.restart')}</button></div><div class="pad" id="ghP" hidden><div class="bar big"><i id="ghBar"></i></div></div>`+row('','',t('bd.orFile')):'')+
+   `<div class="fr"><button class="btn" type="button" id="ghChk">${t('bd.check')}</button><button class="btn pri" type="button" id="ghGo" hidden>${t('bd.updateBtn')}</button></div><div class="pad" id="ghP" hidden><div class="bar big"><i id="ghBar"></i></div></div>`+row('','',t('bd.orFile')):'')+
   `<div class="fr"><input type="file" id="otaF" accept=".bin" class="in" style="flex:1"><button class="btn pri" type="button" id="otaGo">${t('bd.updateBtn')}</button></div><div class="pad" id="otaP" hidden><div class="bar big"><i id="otaBar"></i></div></div>`,'cOta','custom')+
  /* логи в GitHub (LogPush): токен ніколи не повертається, лише hasToken */
  (lp?card(t('bd.push'),row(t('bd.pushSt'),'<span id="pSt" class="chip off">…</span>','<span id="pW"></span>',t('bd.pushH'))+
@@ -65,8 +65,7 @@ SCR.board={title:'nav.board',async render(m){
   const onP=p=>{$('#otaBar').style.width=p+'%';sv(s,'busy');s.textContent=p+'%'};
   try{await reboot(()=>upload(f,onP),undefined,t('bd.newFw',f.name))}catch(err){sv(s,'bad',errT(err))}b.disabled=false};
  if(has('ghota')){saver($('#cOta'),genericSave,'[data-k]');$('#ghChk').onclick=e=>run(e.target,async()=>{await API.post('/api/fw/check');await this.gh()},t('bd.checking'));
-  $('#ghGo').onclick=e=>ask(e.target,t('bd.ghAsk',this.ghTag),()=>run(e.target,async()=>{await API.post('/api/fw/install');await this.gh()},t('bd.downloading')));
-  $('#ghBoot').onclick=e=>ask(e.target,t('bd.bootAsk',this.ghTag),()=>run(e.target,async()=>{await API.post('/api/fw/reboot');await this.gh()},t('bd.restarting')))}
+  $('#ghGo').onclick=e=>ask(e.target,t('bd.ghAsk',this.ghTag),()=>run(e.target,async()=>{await API.post('/api/fw/install');await this.gh()},t('bd.downloading')))}
  if(has('logfs'))$('#logs').onclick=e=>{const b=e.target.closest('[data-n]');if(b)run(b,()=>download('/api/logs/file?n='+b.dataset.n,'boot-'+b.dataset.n+'.log'))};
  this.fw=se.fw;this.cfgBind();
  $('#rbt').onclick=e=>ask(e.target,t('bd.rebootAsk'),()=>reboot().catch(err=>sv(svOf(e.target),'bad',errT(err))));
@@ -98,7 +97,7 @@ cfgBind(){
    if(part.length)prev.innerHTML=row(t('bd.partial'),chipH('warn',String(part.length)),part.map(errLine).map(esc).join('<br>'));
    if(r&&r.pendingReboot){prev.innerHTML+=row(t('bd.applied'),`<button class="btn" type="button" id="cfgRb">${t('bd.restart')}</button>`,t('bd.appliedH'));$('#cfgRb').onclick=x=>reboot().catch(err=>sv(svOf(x.target),'bad',errT(err)))}
    return {note:part.length?t('bd.notePartial'):t('bd.noteApplied')}})}},
-/* GhOta: стан з /api/fw; phase -> чип, підпис, кнопка, смуга. rebooting -> та сама заставка, що й після файлу.
+/* GhOta: стан з /api/fw; phase -> чип, підпис, смуга. written триває мить: плата перезавантажується сама, як після файлу.
    queued: натиснуте чекає, поки журнал на GitHub допише свою частину, і йде наступним, саме */
 async gh(){const v=await API.get('/api/fw');if(!$('#ghSt'))return;this.ghTag=v.latest;
  const busy=v.phase==='checking'||v.phase==='downloading',pct=v.size?Math.floor(v.got/v.size*100):0;
@@ -107,7 +106,6 @@ async gh(){const v=await API.get('/api/fw');if(!$('#ghSt'))return;this.ghTag=v.l
   written:['warn',t('bd.gh.written',v.latest),t('bd.gh.writtenW')],
   rebooting:['ok',t('bd.gh.rebooting'),t('bd.gh.rebootingW',v.latest)],failed:['bad',t('bd.gh.failed'),v.err?errLine(v.err):'']}[v.phase]||['off',v.phase,''];
  setChip('#ghSt',st,tx);$('#ghW').textContent=w;$('#ghChk').disabled=busy||v.phase==='written'||v.phase==='rebooting';
- $('#ghBoot').hidden=v.phase!=='written';
  const go=$('#ghGo');go.hidden=v.phase!=='available';go.textContent=t('bd.gh.updateTo',v.latest);
  $('#ghP').hidden=v.phase!=='downloading'||!!v.queued;$('#ghBar').style.width=pct+'%';
  if(v.phase==='rebooting'&&!REBOOTING)reboot(async()=>{},undefined,t('bd.gh.from',v.latest))},

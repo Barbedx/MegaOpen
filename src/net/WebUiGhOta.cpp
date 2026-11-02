@@ -8,9 +8,8 @@
 // ---------------------------------------------------------------------------
 // /api/fw — firmware updates from GitHub Releases (src/net/GhOta.h)
 // ---------------------------------------------------------------------------
-// GET is the state the Плата page polls; check, install and reboot are POST
-// and only ever start or release a job, so httpd never waits on the network.
-// Never automatic, and never with the car moving (GhOta::moving()).
+// GET is the state the Плата page polls; check and install are POST and only
+// ever start a job, so httpd never waits on the network. Never automatic.
 
 static int fwBusy(PsychicRequest* r, const char* why)
 {
@@ -69,18 +68,10 @@ void WebUi::routesGhOta()
         return why ? fwBusy(r, why) : r->reply(200, "application/json", "{\"ok\":true}");
     });
 
-    route("/api/fw/install", HTTP_POST, [this](PsychicRequest* r) {
+    route("/api/fw/install", HTTP_POST, [](PsychicRequest* r) {
         if (!WiFi.isConnected())
             return fwBusy(r, "fw_ap");   // on its own AP: join a WiFi network with internet
-        GhOta::attachCar(_state);
         const char* why = GhOta::install();
-        return why ? fwBusy(r, why) : r->reply(200, "application/json", "{\"ok\":true}");
-    });
-
-    // After a good install the board waits for a standing car or this.
-    route("/api/fw/reboot", HTTP_POST, [this](PsychicRequest* r) {
-        GhOta::attachCar(_state);
-        const char* why = GhOta::reboot();
         return why ? fwBusy(r, why) : r->reply(200, "application/json", "{\"ok\":true}");
     });
 
@@ -91,7 +82,7 @@ void WebUi::routesGhOta()
         GhOta::View v;
         GhOta::view(v);
         return fwBusy(r, v.phase == GhOta::Phase::Written
-                             ? "fw_written"     // a GitHub update waits for its reboot
+                             ? "fw_written"     // a GitHub update is rebooting
                              : "fw_running");   // a GitHub check or download is running
     };
     route("/ota/start", HTTP_GET, refused);

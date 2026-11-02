@@ -16,7 +16,6 @@
 #include "../Version.h"
 #include "../app/TaskPlan.h"
 #include "../utils/LogBus.h"
-#include "../vehicle/VehicleState.h"
 
 #ifndef GH_OTA_REPO
 #define GH_OTA_REPO "Barbedx/MegaOpen"
@@ -38,14 +37,11 @@ namespace GhOta
         constexpr size_t   CHUNK      = 1024;
         constexpr size_t   SUMS_MAX   = 4096;    // three envs x two images: ~600 bytes
         constexpr uint32_t PAGE_SEES_REBOOT_MS = 1500;
-        constexpr uint32_t WAIT_POLL_MS = 500;     // Written: how often the gates are read
 
         portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
         View s_v;                              // under s_mux
         bool s_busy = false;                   // under s_mux: a job task exists
         GhRelease::Release s_rel;              // the last check's pick; the job owns it
-        volatile bool s_rebootAsked = false;   // the page confirmed, Written only
-        const Vehicle::State* s_car = nullptr;
         // ElegantOTA's session: open, and when it last showed signs of life.
         volatile bool     s_local   = false;
         volatile uint32_t s_localAt = 0;
@@ -75,14 +71,6 @@ namespace GhOta
             const String t = p.getString("tag", "");
             p.end();
             snprintf(out, n, "%s", t.c_str());
-        }
-
-        // Speed fresh and exactly 0: the one state the reboot may take by itself.
-        bool parked()
-        {
-            const uint32_t now = millis();
-            return s_car && s_car->fresh(Vehicle::SIG_SPEED, now, SPEED_FRESH_MS) &&
-                   s_car->get(Vehicle::SIG_SPEED) == 0;
         }
 
         enum class Job : uint8_t { Check, Install };
@@ -489,13 +477,12 @@ namespace GhOta
             // The done line never comes after a good install: the stack's
             // headroom is reported here, at the deepest point it will reach.
             const uint32_t stackFree = uxTaskGetStackHighWaterMark(nullptr);
-            s_rebootAsked = false;
             portENTER_CRITICAL(&s_mux);
             s_v.phase     = Phase::Written;
             s_v.stackFree = stackFree;
             portEXIT_CRITICAL(&s_mux);
             LOGI("ota", "github: %s written, SHA-256 matches; internal heap min %u of %u; "
-                           "stack %u of %u unused; reboot when parked or from the page",
+                           "stack %u of %u unused; rebooting into the trial",
                            s_rel.tag, (unsigned)s_v.heapMin, (unsigned)s_v.heapStart,
                            (unsigned)stackFree, (unsigned)App::Plan::GHOTA_STACK);
             // Into the flash log now, not at the reboot: the car turned off
@@ -503,19 +490,14 @@ namespace GhOta
             LogBus::flushAndWait(500);
         }
 
-        // After a good install, with mbedTLS back on its own allocator: never a
-        // reboot mid-drive. The page's confirm (refused while moving), or the
-        // car standing with a fresh speed of 0.
-        [[noreturn]] void waitAndReboot()
+        // After a good install, with mbedTLS back on its own allocator: the
+        // reboot into the trial at once, as after a file upload. No gate on
+        // the car moving (the owner's call, 2026-11-02: he updates on the
+        // move, and the trial runs anywhere).
+        [[noreturn]] void rebootNow()
         {
-            const char* why = nullptr;
-            while (!why) {
-                if (s_rebootAsked)  why = "from the page";
-                else if (parked())  why = "the car is standing";
-                else vTaskDelay(pdMS_TO_TICKS(WAIT_POLL_MS));
-            }
             setPhase(Phase::Rebooting);
-            LOGI("ota", "github: rebooting into the trial (%s)", why);
+            LOGI("ota", "github: rebooting into the trial");
             vTaskDelay(pdMS_TO_TICKS(PAGE_SEES_REBOOT_MS));   // the page's next poll shows it
             LogBus::flushAndWait(300);
             ESP.restart();
@@ -572,7 +554,7 @@ namespace GhOta
             TlsJob::release();   // mbedTLS is back on its own allocator
             View v;
             view(v);
-            if (v.phase == Phase::Written) waitAndReboot();
+            if (v.phase == Phase::Written) rebootNow();
             // ESP-IDF counts the high-water mark in bytes.
             const uint32_t stackFree = uxTaskGetStackHighWaterMark(nullptr);
             LOGI("ota", "github: %s done; internal heap %u, task created %u, running %u, "
@@ -697,7 +679,6 @@ namespace GhOta
 
     const char* install()
     {
-        if (moving()) return "fw_moving";
         if (Update.isRunning()) {
             // A /ota/start with no upload after it holds Update open for ever.
             if (s_local && (uint32_t)(millis() - s_localAt) < LOCAL_STALE_MS)
@@ -707,25 +688,6 @@ namespace GhOta
             LOGI("ota", "github: cleared a local upload session left open");
         }
         return start(Job::Install);
-    }
-
-    const char* reboot()
-    {
-        View v;
-        view(v);
-        if (v.phase != Phase::Written) return "fw_nothing";
-        if (moving()) return "fw_moving";
-        s_rebootAsked = true;
-        return nullptr;
-    }
-
-    void attachCar(const Vehicle::State* car) { s_car = car; }
-
-    bool moving()
-    {
-        const uint32_t now = millis();
-        return s_car && s_car->fresh(Vehicle::SIG_SPEED, now, SPEED_FRESH_MS) &&
-               s_car->get(Vehicle::SIG_SPEED) > MOVING_KMH_X100;
     }
 
     bool busy()

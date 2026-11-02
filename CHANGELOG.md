@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.7.3] - 2026-11-02
+
+### Removed
+- **The GitHub update's gate on a moving car.** Once the image is written and its SHA-256 matches, the board reboots into the trial at once, as after a file upload: no waiting for a standing car, no «Перезавантажити» button, no `POST /api/fw/reboot`, no `fw_moving` / `fw_nothing` refusal. The owner's call: he updates on the move, and the trial runs anywhere.
+
 ## [1.7.2] - 2026-11-02
 
 ### Added
