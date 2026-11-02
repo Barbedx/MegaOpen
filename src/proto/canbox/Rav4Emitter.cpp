@@ -278,7 +278,12 @@ namespace Canbox
                 // change of them pops the unit's climate overlay.
                 const bool temp = s.has(SIG_OUT_TEMP);
                 const bool ac = acTrusted(s);
-                if (!temp && !ac) return false;
+                // The heated rear window is the car's own signal (0x625): it
+                // rides along in D4 b6 whenever it is measured or pinned, with
+                // or without the panel.
+                const bool rear = s.has(SIG_REAR_DEFROST) &&
+                                  (s.pinned(SIG_REAR_DEFROST) || Vehicle::verified(SIG_REAR_DEFROST));
+                if (!temp && !ac && !rear) return false;
                 cmd = 0x28; len = 12;
                 for (uint8_t i = 0; i < 12; ++i) p[i] = 0;
                 if (temp) {
@@ -288,6 +293,7 @@ namespace Canbox
                     int32_t t = State::clamp(SIG_OUT_TEMP, s.pinned(SIG_OUT_TEMP) || !_temp.have() ? raw : _temp.shown());
                     p[5] = (uint8_t)((t + 40) * 2);
                 }
+                if (rear && s.get(SIG_REAR_DEFROST)) p[4] = 0x40;
                 if (!ac) return true;
                 p[0] = (uint8_t)((s.get(SIG_AC_ON)         ? 0x80 : 0) |
                                  (s.get(SIG_AC_COMPRESSOR) ? 0x40 : 0) |
@@ -310,7 +316,7 @@ namespace Canbox
                 // rear window, b5 AQS, b4 ECO, b0 the unit. (The vendor sheet
                 // puts AQS/ECO one bit higher; the unit does not.)
                 p[4] = (uint8_t)((s.get(SIG_AC_DEFOG)     ? 0x80 : 0) |
-                                 (s.get(SIG_REAR_DEFROST) ? 0x40 : 0) |
+                                 p[4] |
                                  (s.get(SIG_AC_AQS)       ? 0x20 : 0) |
                                  (s.get(SIG_AC_ECO)       ? 0x10 : 0) |
                                  (s.get(SIG_AC_UNIT_F)    ? 0x01 : 0));

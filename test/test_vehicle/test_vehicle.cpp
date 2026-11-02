@@ -502,6 +502,15 @@ void test_one_0x28_carries_the_panel_and_the_outside_temperature()
     TEST_ASSERT_EQUAL_HEX8(0x00, f[3 + 0]);
     TEST_ASSERT_EQUAL_HEX8(0x00, f[3 + 2]);
     TEST_ASSERT_EQUAL_HEX8((21 + 40) * 2, f[3 + 5]);
+    // The heated rear window rides along, panel or not: D4 b6 and nothing else.
+    t.pin(SIG_REAR_DEFROST, 1);
+    TEST_ASSERT_TRUE(e.preview(E::MSG_CLIMATE, t, f, n));
+    TEST_ASSERT_EQUAL_HEX8(0x40, f[3 + 4]);
+    TEST_ASSERT_EQUAL_HEX8(0x00, f[3 + 2]);
+    State r;
+    r.pin(SIG_REAR_DEFROST, 0);                          // alone, and off: still a frame
+    TEST_ASSERT_TRUE(e.preview(E::MSG_CLIMATE, r, f, n));
+    TEST_ASSERT_EQUAL_HEX8(0x00, f[3 + 4]);
 }
 
 // D0-D4 as the head unit's own decoder reads them (docs/hu-decoder.md §2d):
