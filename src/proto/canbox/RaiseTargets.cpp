@@ -18,25 +18,11 @@ namespace Canbox
 
         // The Raise command each message goes out as (Rav4Emitter::Msg order).
         const char* const kMsgCmd[] = {
-            "24", "28", "28 A/C", "29", "7D 01", "7D 03", "7D 04", "7D 0A", "21", "22", "23",
+            "24", "28", "29", "7D 01", "7D 03", "7D 04", "7D 0A", "21", "22", "23",
             "1E", "1D", "25", "26", "31", "32", "50", "52", "58", "1F", "30", "7D 09",
             "7D 06",
         };
         static_assert(sizeof(kMsgCmd) / sizeof(kMsgCmd[0]) == M::MSG_COUNT, "kMsgCmd is out of step with Msg");
-
-        // A car value the owner looks for on the tablet that protocol 112
-        // has no field for: the page shows the value and says why it does not
-        // go out (the command column is empty).
-        enum : uint8_t { NF_BATT = 0, NF_NONE = 0xFF };
-        // "": the words are the page's (k.raise.<id>.why); non-null says "not sent".
-        const char* const kNoFw[] = {
-            // 0x41 02 is VW's; this head unit decodes 0x41 into Toyota codes
-            // and 0x7D 0B not at all (docs/hu-decoder.md §2b-2c). The volts the
-            // head unit shows are its own measurement, not a canbox's. The row
-            // is on the page for the value; another field could carry the
-            // number («Звідки» → batt_v ÷10) but then reads as that field.
-            "",
-        };
 
         // A row: the name, the signal, the message that carries it, the section.
         // Every row is a field the protocol sends: a car value it has no field
@@ -77,26 +63,27 @@ namespace Canbox
 
             T(SIG_ENG_TEMP, MSG_COOLANT, G_ENGINE, nullptr),
 
-            T(SIG_OUT_TEMP, MSG_TEMP, G_CLIMATE, nullptr),
-            T(SIG_AC_ON, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_COMPRESSOR, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_RECIRC, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_AUTO_HI, MSG_AC, G_CLIMATE, "AUTO"),
-            T(SIG_AC_AUTO_LO, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_DUAL, MSG_AC, G_CLIMATE, "DUAL"),
-            T(SIG_AC_MAX_FRONT, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_REAR, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_VENT_UP, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_VENT_FACE, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_VENT_FLOOR, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_DISPLAY_REQ, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_FAN, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_TEMP_DRV, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_TEMP_PASS, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_DEFOG, MSG_AC, G_CLIMATE, nullptr),
-            T(SIG_AC_AQS, MSG_AC, G_CLIMATE, "AQS"),
-            T(SIG_AC_ECO, MSG_AC, G_CLIMATE, "ECO"),
-            T(SIG_AC_UNIT_F, MSG_AC, G_CLIMATE, nullptr),
+            T(SIG_OUT_TEMP, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_ON, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_COMPRESSOR, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_RECIRC, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_AUTO_HI, MSG_CLIMATE, G_CLIMATE, "AUTO"),
+            T(SIG_AC_AUTO_LO, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_DUAL, MSG_CLIMATE, G_CLIMATE, "DUAL"),
+            T(SIG_AC_MAX_FRONT, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_REAR, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_VENT_UP, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_VENT_FACE, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_VENT_FLOOR, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_DISPLAY_REQ, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_FAN, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_TEMP_DRV, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_TEMP_PASS, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_AC_DEFOG, MSG_CLIMATE, G_CLIMATE, nullptr),
+            T(SIG_REAR_DEFROST, MSG_CLIMATE, G_CLIMATE, nullptr),   // D4 b6, the car's own signal
+            T(SIG_AC_AQS, MSG_CLIMATE, G_CLIMATE, "AQS"),
+            T(SIG_AC_ECO, MSG_CLIMATE, G_CLIMATE, "ECO"),
+            T(SIG_AC_UNIT_F, MSG_CLIMATE, G_CLIMATE, nullptr),
             T(SIG_SEAT_HEAT_DRV, MSG_SEATS, G_CLIMATE, nullptr),
             T(SIG_SEAT_HEAT_PASS, MSG_SEATS, G_CLIMATE, nullptr),
             T(SIG_SEAT_VENT_DRV, MSG_SEATS, G_CLIMATE, nullptr),

@@ -100,6 +100,21 @@ changes on the unit. «Версія коробки» left empty is the firmware'
 version, so the string the head unit shows under «CANBUS Info» follows every
 update; a text typed there stays.
 
+**The climate panel on the head unit.** The Mégane broadcasts nothing of
+its climate panel, so the board reads the climate ECU: switch on «Читати
+клімат» and «Опитування в сесії 10 C0» on **Авто › Діагностика клімату**
+(this ECU answers only in that session; the check of 2026-10-28 showed the
+cluster does not mind it). Every interval the board asks `21 C1` (the cabin
+temperature, the sun) and `21 90` (the setpoint, blower, distribution,
+recirculation, A/C, the screen button): the `clim_*` signals on **Сигнали**,
+source «діагностика». The factory formulas on **Формули** turn them into the
+head unit's fields (`ac_on`, `ac_fan`, `ac_temp_drv`…), and `0x28` carries
+them with the outside temperature, so the unit's climate overlay pops when a
+knob on the panel is turned, as in a car it was made for. A car file saved
+before 1.7.2 keeps its own formula rows: press «Заводські» on **Формули**
+once to get the climate rows. The ECU's codes are in the rows; a vent shown
+wrong is fixed there.
+
 If the list looks short after an update, see
 [«Заводські прив'язки»](#after-an-update).
 

@@ -123,6 +123,7 @@ namespace Diag
         v.dist   = (uint8_t)(r[3] >> 4);
         v.blower = (uint8_t)(r[3] & 0x0F);
         v.ac     = (uint8_t)(r[4] & 0x0F);
+        v.clear  = (uint8_t)((r[4] >> 4) & 1);
         return true;
     }
 }

@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-11-02
+
+### Added
+- **The climate panel on the head unit.** The climate ECU answers `21 90` in the `10 C0` session (the car, 2026-10-28: `61 90 0A 00 …` = AUTO, 20.0 °C; not in the DDT file of our software version, in its sister's), so «Читати клімат» now asks it right after `21 C1`, every interval: six new signals on «Сигнали», source «діагностика» (`clim_set` °C, `clim_blower`, `clim_dist`, `clim_recirc`, `clim_ac_req`, `clim_clear`, the ECU's codes). Eleven factory formulas (`ac_on`, `ac_compressor`, `ac_recirc`, `ac_auto_hi`, `ac_vent_up/face/floor`, `ac_fan`, `ac_temp_drv/pass`, `ac_defog`) turn them into the head unit's climate fields, so the mapping is on «Формули», editable in the car; a car file from before keeps its rows until «Заводські» is pressed there once. `/api/diag` and the card on **Авто** show the setpoint; the log says `[diag] climate 2190: …` once a minute. A refused `21 90` leaves the pass for the run; `21 C1` refused still stops the polling.
+
+### Changed
+- **One `0x28`.** The two forms (`raise.cmd28`: the outside temperature in 12 bytes, or the A/C panel in 5) are one 12-byte frame, as the head unit's own decoder reads it (docs/hu-decoder.md §2d): D5 the outside temperature, D0-D4 the panel when one of its fields is measured or pinned, else zeros as before. The setting `raise.cmd28` is gone (its blob byte stays 0, the temperature form, for a rollback); `ac_temp_drv` / `ac_temp_pass` are °C now (x10), the emitter writes the unit's table (LO, 15-32 by 0.5, HI; no value = "NO"); D4 follows the unit, not the vendor sheet: b7 front demist, **b6 the heated rear window** (the car's `rear_defrost`, a new field), b5 AQS, b4 ECO.
+- A signal read from an ECU (`cabin_temp`, `clim_sun`, `clim_*`) counts as measured (✓) and sits on the «Авто» side of «Сигнали» (it was «Лише ГУ»: the side knew CAN rows, Derived and formulas only).
+
 ## [1.7.1] - 2026-11-02
 
 ### Added

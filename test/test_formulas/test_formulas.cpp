@@ -56,6 +56,53 @@ void test_the_factory_formulas_replace_derived()
     TEST_ASSERT_FALSE(f.inputsOf(SIG_SPEED, in));
 }
 
+// The factory's climate rows: the panel's state (clim_*, the ECU's codes)
+// becomes the head unit's fields; nothing while that read is off.
+void test_the_factory_climate_rows_fill_the_panel_fields()
+{
+    FormulaSet set;
+    set.factory();
+    Formulas f;
+    FormulaProblem p;
+    TEST_ASSERT_TRUE(f.apply(set, p));
+    State s;
+    pass(f, s, 10);
+    TEST_ASSERT_FALSE(s.has(SIG_AC_ON));
+    TEST_ASSERT_FALSE(s.has(SIG_AC_TEMP_DRV));
+    s.set(SIG_CLIM_SET, 215, 20);       // 21.5 C
+    s.set(SIG_CLIM_BLOWER, 4, 20);      // speed 3
+    s.set(SIG_CLIM_DIST, 2, 20);        // feet + face
+    s.set(SIG_CLIM_RECIRC, 1, 20);
+    s.set(SIG_CLIM_AC_REQ, 2, 20);
+    s.set(SIG_CLIM_CLEAR, 0, 20);
+    pass(f, s, 20);
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_AC_ON));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_AC_COMPRESSOR));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_AC_RECIRC));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_AC_AUTO_HI));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_AC_VENT_UP));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_AC_VENT_FACE));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_AC_VENT_FLOOR));
+    TEST_ASSERT_EQUAL_INT32(3, s.get(SIG_AC_FAN));
+    TEST_ASSERT_EQUAL_INT32(215, s.get(SIG_AC_TEMP_DRV));
+    TEST_ASSERT_EQUAL_INT32(215, s.get(SIG_AC_TEMP_PASS));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_AC_DEFOG));
+    // AUTO at 20.0 (the car on 2026-10-28), then the OFF key.
+    s.set(SIG_CLIM_SET, 200, 30);
+    s.set(SIG_CLIM_BLOWER, 0, 30);
+    s.set(SIG_CLIM_DIST, 0, 30);
+    s.set(SIG_CLIM_AC_REQ, 0, 30);
+    pass(f, s, 30);
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_AC_AUTO_HI));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_AC_FAN));
+    TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_AC_COMPRESSOR));
+    TEST_ASSERT_EQUAL_INT32(200, s.get(SIG_AC_TEMP_DRV));
+    s.set(SIG_CLIM_BLOWER, 1, 40);
+    pass(f, s, 40);
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_AC_ON));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_AC_COMPRESSOR));
+}
+
 // A new name takes a user slot with its unit and decimals, and reads like any
 // signal: in a later formula, in the same pass.
 void test_a_user_signal_is_a_signal()
@@ -199,6 +246,7 @@ int main(int, char**)
 {
     UNITY_BEGIN();
     RUN_TEST(test_the_factory_formulas_replace_derived);
+    RUN_TEST(test_the_factory_climate_rows_fill_the_panel_fields);
     RUN_TEST(test_a_user_signal_is_a_signal);
     RUN_TEST(test_a_name_keeps_its_slot);
     RUN_TEST(test_a_bound_target_stands_down);

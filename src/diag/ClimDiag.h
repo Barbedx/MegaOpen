@@ -9,10 +9,9 @@
 //
 // THE ONLY TRANSMIT ON THE CAR BUS. CAN A is listen-only (CLAUDE.md) except
 // for what this file lets out, all of it to 0x744:
-//   * the read `21 C1` (allowed()), and for the owner's one-shot sweep
-//     (App::CarDiag::sweep()) the other reads DDT lists for this ECU:
-//     `21 80`, `21 C0`, `21 C2`, `21 90` (trame déportée, Clim_X84_SERIE),
-//     `21 A0` (trame étude);
+//   * the polling reads `21 C1` and `21 90` (allowed()), and for the owner's
+//     one-shot sweep (App::CarDiag::sweep()) the other reads DDT lists for
+//     this ECU: `21 80`, `21 C0`, `21 C2`, `21 A0` (trame étude);
 //   * `10 C0` (open the extended session, as PyRen and DDT4all do first,
 //     "ECU uses SDS 10C0"), `3E 01` (tester present), `10 81` (back to the
 //     default session): the sweep, and the polling read when diag.session
@@ -99,14 +98,18 @@ namespace Diag
     };
     bool decode21C1(const uint8_t* r, uint8_t n, ClimValues& out);
 
-    // `61 90 ...`, "trame déportée LDB vers LDA" in Clim_X84_SERIE (other
-    // software versions than ours; a hypothesis until it answers): byte 3 bits
-    // 7-5 recirculation (0 auto, 1 recycle, 2 outside), bits 4-0 the driver's
-    // setpoint (x+30)/2 °C; byte 4 high nibble distribution (0 auto, 1 vent,
-    // 2 feet/vent, 3 tri, 4 feet/demist, 5 demist), low nibble blower (0 auto,
-    // 1 stop, 2..9 = 1..8); byte 5 low nibble A/C request (0 auto, 1 off, 2 on).
+    // `61 90 ...`, "trame déportée LDB vers LDA" in Clim_X84_SERIE: the
+    // panel's own state. Not in the DDT file of our software version
+    // (Redesign_P0), but the car's ECU answered it on 2026-10-28, in the
+    // 10 C0 session: `61 90 0A 00 00 ...` = AUTO, 20.0 °C. DDT's bit 0 is
+    // the MSB (21 C2's lamp bits read right only that way): byte 3 bits 7-5
+    // recirculation (0 auto, 1 recycle, 2 outside), bits 4-0 the setpoint
+    // (x+30)/2 °C; byte 4 high nibble distribution (0 auto, 1 face, 2
+    // feet/face, 3 all, 4 feet/screen, 5 screen), low nibble blower (0 auto,
+    // 1 stop, 2..9 = 1..8); byte 5 high nibble «voir clair», low nibble the
+    // A/C request (0 auto, 1 off, 2 on).
     struct Clim2190 {
-        uint8_t  recirc = 0, dist = 0, blower = 0, ac = 0;
+        uint8_t  recirc = 0, dist = 0, blower = 0, ac = 0, clear = 0;
         uint16_t setX10 = 0;        // °C x10
     };
     bool decode2190(const uint8_t* r, uint8_t n, Clim2190& out);

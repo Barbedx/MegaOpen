@@ -10,11 +10,11 @@
    Правила — GET/POST /api/rules (рядки як у файлі авто, CarFile::ruleRowTo), жива
    частина раз на 2 с, лише коли вкладка відкрита; «спробувати» — POST /api/rules/test. */
 /* група сигналу (meta[4]) — lv.grp.<n>; джерело — lv.src.<літера> і колір чипа */
-const LV_SRC={c:'ok',k:'warn',p:'warn',d:'ok',f:'ok',o:'off'};
+const LV_SRC={c:'ok',k:'warn',p:'warn',d:'ok',f:'ok',r:'ok',o:'off'};
 /* клас джерела (docs/design/rules.md, крок 1): CAN, перевірений чи ні; плата; стала (або закріплено); нема */
 const LV_CLS=['all','canOk','canHyp','board','user','const','none'];
 /* формула: свій сигнал (група GRP_USER, meta[4] === 12) — «Свої», вбудований — «Плата» */
-const lvCls=(src,ok,m)=>src==='c'?(ok?'canOk':'canHyp'):src==='f'?(m&&m[4]===12?'user':'board'):src==='d'?'board':src==='k'||src==='p'?'const':'none';
+const lvCls=(src,ok,m)=>src==='c'?(ok?'canOk':'canHyp'):src==='f'?(m&&m[4]===12?'user':'board'):src==='d'||src==='r'?'board':src==='k'||src==='p'?'const':'none';
 /* meta: [name, unit, decimals, yes/no, group, min, max, label]; sigs: [value, ageMs, src, verified, confirm, car]
    car: 1 — бік авто (CAN-рядок, розрахунок, формула), 0 — лише ГУ (стала, закріплено, нічого): рахує прошивка (Vehicle::fromCar).
    confirm: 1 — гіпотеза на CAN, можна «✓ підтвердити»; 2 — підтверджено тут, можна «↺ скасувати».

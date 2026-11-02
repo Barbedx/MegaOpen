@@ -15,7 +15,8 @@ namespace App
         namespace
         {
             constexpr uint32_t SUMMARY_MS = 60000;   // the [diag] line while polling
-            const uint8_t REQ[] = {0x21, 0xC1};
+            // The pass: 21 C1, then 21 90 right after it (chained), each interval.
+            const uint8_t REQ_C1[] = {0x21, 0xC1}, REQ_90[] = {0x21, 0x90};
 
             bool sendFrame(uint32_t id, const uint8_t* d, uint8_t len, void*)
             {
@@ -42,7 +43,7 @@ namespace App
                 {{0x21, 0xC0}, "21 C0, no session"},
                 {{0x21, 0xC1}, "21 C1, no session"},
                 {{0x21, 0xC2}, "21 C2, no session"},
-                {{0x21, 0x90}, "21 90 (the driver's setpoint?), no session"},
+                {{0x21, 0x90}, "21 90 (the panel's state), no session"},
                 {{0x21, 0xA0}, "21 A0, no session"},
                 {{0x10, 0xC0}, "10 C0, open the extended session"},
                 {{0x21, 0x80}, "21 80 in the session"},
@@ -83,6 +84,10 @@ namespace App
             uint32_t s_nextAt = 0, s_summaryAt = 0, s_resultAt = 0;
             bool     s_stopped = false, s_probing = false, s_backoff = false;
             uint8_t  s_timeoutsInRow = 0;
+            bool     s_was90 = false;        // the read out is 21 90
+            bool     s_chain90 = false;      // 21 C1 answered: 21 90 next, now
+            bool     s_no90 = false;         // 21 90 refused this run: dropped from the pass
+            uint32_t s_summary90At = 0;
 
             portMUX_TYPE s_mux = portMUX_INITIALIZER_UNLOCKED;
             View s_v;                                // under s_mux
@@ -92,6 +97,23 @@ namespace App
                 size_t k = 0;
                 out[0] = 0;
                 for (uint8_t i = 0; i < n && k + 4 < cap; ++i) k += snprintf(out + k, cap - k, "%s%02X", i ? " " : "", b[i]);
+            }
+
+            // The panel's state, to the view and the clim_* signals.
+            void apply2190(const Diag::Clim2190& d, uint32_t now)
+            {
+                portENTER_CRITICAL(&s_mux);
+                s_v.have90 = true;
+                s_v.setX10 = d.setX10; s_v.blower = d.blower; s_v.dist = d.dist;
+                s_v.recirc = d.recirc; s_v.ac = d.ac; s_v.clear = d.clear;
+                portEXIT_CRITICAL(&s_mux);
+                if (!s_state) return;
+                s_state->set(Vehicle::SIG_CLIM_SET, d.setX10, now);
+                s_state->set(Vehicle::SIG_CLIM_BLOWER, d.blower, now);
+                s_state->set(Vehicle::SIG_CLIM_DIST, d.dist, now);
+                s_state->set(Vehicle::SIG_CLIM_RECIRC, d.recirc, now);
+                s_state->set(Vehicle::SIG_CLIM_AC_REQ, d.ac, now);
+                s_state->set(Vehicle::SIG_CLIM_CLEAR, d.clear, now);
             }
 
             void result(uint32_t now)
@@ -126,8 +148,12 @@ namespace App
                     s_ex.clear();
                     return;
                 }
+                const bool was90 = s_was90;
+                s_was90 = false;
                 Diag::ClimValues cv;
-                const bool good = st == S::Ok && Diag::decode21C1(s_ex.reply(), s_ex.replyLen(), cv);
+                Diag::Clim2190 d90;
+                const bool good = st == S::Ok && (was90 ? Diag::decode2190(s_ex.reply(), s_ex.replyLen(), d90)
+                                                        : Diag::decode21C1(s_ex.reply(), s_ex.replyLen(), cv));
                 char b[3 * 24 + 1];
                 hex(b, sizeof(b), s_ex.reply(), s_ex.replyLen() < 24 ? s_ex.replyLen() : 24);
 
@@ -136,7 +162,8 @@ namespace App
                 s_v.nrc = s_ex.nrc();
                 s_v.replyLen = s_ex.replyLen() < sizeof(s_v.reply) ? s_ex.replyLen() : sizeof(s_v.reply);
                 memcpy(s_v.reply, s_ex.reply(), s_v.replyLen);
-                if (good) { ++s_v.ok; s_v.cabinX10 = cv.cabinX10; s_v.sunWm2 = cv.sunWm2; s_v.haveValues = true; }
+                if (good && !was90) { ++s_v.ok; s_v.cabinX10 = cv.cabinX10; s_v.sunWm2 = cv.sunWm2; s_v.haveValues = true; }
+                else if (good) ++s_v.ok;
                 else if (st == S::Timeout) ++s_v.timeouts;
                 else if (st == S::Negative) ++s_v.negatives;
                 else ++s_v.bad;
@@ -146,7 +173,8 @@ namespace App
                 if (good) {
                     s_timeoutsInRow = 0;
                     s_backoff = false;
-                    if (s_state) {
+                    if (was90) apply2190(d90, now);
+                    else if (s_state) {
                         s_state->set(Vehicle::SIG_CABIN_TEMP, cv.cabinX10, now);
                         s_state->set(Vehicle::SIG_CLIM_SUN, cv.sunWm2, now);
                     }
@@ -159,28 +187,41 @@ namespace App
                                        (unsigned)(BACKOFF_MS / 1000));
                     }
                 } else if (st == S::Negative) {
-                    // The ECU said no: asking again changes nothing.
-                    s_stopped = true;
+                    // The ECU said no: asking again changes nothing. 21 90 alone
+                    // leaves the pass; 21 C1 refused stops the polling.
+                    if (was90) s_no90 = true;
+                    else       s_stopped = true;
                 }
+                // 21 C1 answered: 21 90 follows at once, unless it was refused
+                // this run. After 21 90 (or without it) the pass is over.
+                s_chain90 = !was90 && st == S::Ok && !s_no90;
 
                 // A probe, and the first result of a polling run or any
                 // failure, says everything; a good poll only once a minute.
-                if (s_probing || !good || s_summaryAt == 0 || (uint32_t)(now - s_summaryAt) >= SUMMARY_MS) {
-                    if (good)
+                uint32_t& at = was90 ? s_summary90At : s_summaryAt;
+                if (s_probing || !good || at == 0 || (uint32_t)(now - at) >= SUMMARY_MS) {
+                    const char* what = was90 ? "21 90" : "21C1";
+                    if (good && was90)
+                        LOGI("diag", "climate 2190: setpoint %u.%u C, blower %u, distribution %u, recirc %u, "
+                                       "A/C %u, clear %u (DDT codes); reply %s", (unsigned)(d90.setX10 / 10),
+                                       (unsigned)(d90.setX10 % 10), (unsigned)d90.blower, (unsigned)d90.dist,
+                                       (unsigned)d90.recirc, (unsigned)d90.ac, (unsigned)d90.clear, b);
+                    else if (good)
                         LOGI("diag", "climate 21C1: cabin %d.%d C, evaporator %d.%d C, sun %u W/m2, "
                                        "outside %d C, coolant %d C, battery %u.%02u V; reply %s",
                                        cv.cabinX10 / 10, abs(cv.cabinX10 % 10), cv.evapX10 / 10, abs(cv.evapX10 % 10),
                                        (unsigned)cv.sunWm2, cv.outsideC, cv.coolantC, (unsigned)(cv.battX100 / 100),
                                        (unsigned)(cv.battX100 % 100), b);
                     else if (st == S::Negative)
-                        LOGW("diag", "climate 21C1 refused: 7F 21 %02X%s; polling stopped", s_ex.nrc(),
-                                       s_ex.nrc() == 0x80 || s_ex.nrc() == 0x7F ? " (not in this session)" : "");
+                        LOGW("diag", "climate %s refused: 7F 21 %02X%s; %s", what, s_ex.nrc(),
+                                       s_ex.nrc() == 0x80 || s_ex.nrc() == 0x7F ? " (not in this session)" : "",
+                                       was90 ? "the panel's state is not read this run" : "polling stopped");
                     else
-                        LOGW("diag", "climate 21C1: %s%s%s", Diag::Exchange::statusId(st),
+                        LOGW("diag", "climate %s: %s%s%s", what, Diag::Exchange::statusId(st),
                                        s_ex.replyLen() ? "; reply " : "", s_ex.replyLen() ? b : "");
-                    if (!s_probing) s_summaryAt = now;
+                    if (!s_probing) at = now;
                 }
-                s_probing = false;
+                if (!s_chain90) s_probing = false;
                 s_ex.clear();
             }
 
@@ -259,11 +300,13 @@ namespace App
                                    (unsigned)SWEEP_N, st.req[0], st.req[1], Diag::Exchange::statusId(r),
                                    s_ex.replyLen() ? ", reply " : "", s_ex.replyLen() ? b : "");
                 Diag::Clim2190 d90;
-                if (r == S::Ok && Diag::decode2190(s_ex.reply(), s_ex.replyLen(), d90))
+                if (r == S::Ok && Diag::decode2190(s_ex.reply(), s_ex.replyLen(), d90)) {
                     LOGI("diag", "sweep: 2190 setpoint %u.%u C, blower %u, distribution %u, recirc %u, "
-                                   "A/C %u (raw codes, Clim_X84_SERIE)", (unsigned)(d90.setX10 / 10),
+                                   "A/C %u, clear %u (DDT codes, Clim_X84_SERIE)", (unsigned)(d90.setX10 / 10),
                                    (unsigned)(d90.setX10 % 10), (unsigned)d90.blower, (unsigned)d90.dist,
-                                   (unsigned)d90.recirc, (unsigned)d90.ac);
+                                   (unsigned)d90.recirc, (unsigned)d90.ac, (unsigned)d90.clear);
+                    apply2190(d90, now);
+                }
                 Diag::ClimValues cv;
                 if (r == S::Ok && Diag::decode21C1(s_ex.reply(), s_ex.replyLen(), cv)) {
                     LOGI("diag", "sweep: cabin %d.%d C, sun %u W/m2", cv.cabinX10 / 10, abs(cv.cabinX10 % 10),
@@ -349,6 +392,10 @@ namespace App
                 s_seenGen = gen;
                 s_stopped = false;
                 s_sesRefused = false;
+                s_no90 = false;
+                s_chain90 = false;
+                s_was90 = false;
+                s_summary90At = 0;
                 s_timeoutsInRow = 0;
                 s_backoff = false;
                 s_summaryAt = 0;
@@ -359,7 +406,7 @@ namespace App
             const bool probe = s_probe.load(std::memory_order_relaxed);
             const bool waiting = s_ex.status() == S::Waiting;
 
-            if (!on && !probe && !waiting) {
+            if (!on && !probe && !waiting && !s_chain90) {   // a probe's pass finishes first
                 if (s_inSes && bus.transmitting() && s_anyFrame && (uint32_t)(now - s_lastFrameMs) < BUS_QUIET_MS) {
                     static const uint8_t END[] = {0x10, 0x81};
                     s_inSes = false;
@@ -398,7 +445,7 @@ namespace App
                 return publish(now, "waiting");
             }
             if (!s_session.load(std::memory_order_relaxed)) s_inSes = false;
-            const bool due = probe || (on && !s_stopped && (int32_t)(now - s_nextAt) >= 0);
+            const bool due = probe || s_chain90 || (on && !s_stopped && (int32_t)(now - s_nextAt) >= 0);
             if (!due) {
                 // A probe done with polling off: back to listen-only.
                 if (!on && bus.transmitting()) bus.setTransmit(false, now);
@@ -409,15 +456,17 @@ namespace App
                 s_nextAt = now + 5000;
                 return publish(now, "refused");   // the rate is not locked yet
             }
-            s_probing = probe;
+            if (probe) s_probing = true;
             s_probe.store(false);
             s_pend = Pend::Read;
-            if (s_ex.start(REQ, sizeof(REQ), now)) {
+            s_was90 = s_chain90;
+            s_chain90 = false;
+            if (s_ex.start(s_was90 ? REQ_90 : REQ_C1, 2, now)) {
                 portENTER_CRITICAL(&s_mux);
                 ++s_v.sent;
                 portEXIT_CRITICAL(&s_mux);
             }
-            if ((int32_t)(s_nextAt - now) <= 0)
+            if (!s_was90 && (int32_t)(s_nextAt - now) <= 0)
                 s_nextAt = now + (uint32_t)s_interval.load(std::memory_order_relaxed) * 1000u;
             publish(now, "waiting");
         }

@@ -17,7 +17,7 @@ on different cars."
 | gear, consumption, range, avg speed, `fuel_pct` | `Derived.cpp` | gear table only | C++ math (integration, matching): stays C++ |
 
 The signals are a compile-time enum (`Vehicle::Sig`, ~170) mixing car signals,
-head-unit-only ones (radar, TPMS, the 0x28 A/C form) and the board's computed
+head-unit-only ones (radar, TPMS, the 0x28 climate panel) and the board's computed
 ones; saved tables store the enum index, which already bit us once (1.6.3:
 `SIG_COUNT` moved and empty rows became `fuel_pct`).
 

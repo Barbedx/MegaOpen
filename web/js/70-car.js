@@ -52,7 +52,7 @@ SCR.car={title:'nav.car',async render(m){
  (C2?card('CAN A',row(t('ca.bus'),'<span id="cSt" class="chip off">…</span>','<span id="cStW"></span>')+
   `<div class="kv"><div><small>${t('ca.fps')}</small><b id="cFps"></b></div><div><small>${t('ca.total')}</small><b id="cFr"></b></div><div><small>rec / tec</small><b id="cErr"></b></div><div><small>${t('ca.overflows')}</small><b id="cOv"></b></div></div>`+
   row(t('ca.speed'),sel('/api/can2|bitrate',enumOpts('canRates'),c2.setting||0),'',t('ca.speedH'))):notBuilt('CAN A','CAN A'))+
- /* діагностика клімату (CarDiag): 21 C1 на CAN A, лише за вмикачем; проба — один запит */
+ /* діагностика клімату (CarDiag): 21 C1 і 21 90 на CAN A, лише за вмикачем; проба — один прохід */
  (dg?card(t('ca.diag'),row(t('ca.diagOn'),sw('/api/diag|on',dg.on),t('ca.diagOnSub'),t('ca.diagH'))+row(t('ca.diagIv'),num('/api/diag|interval',dg.interval,'min="2" max="60"'))+(dg.session!==undefined?row(t('ca.diagSes'),sw('/api/diag|session',dg.session),'',t('ca.diagSesH')):'')+
   row(t('ca.diagSt'),'<span id="dSt" class="chip off">…</span>','<span id="dW"></span>')+`<div class="fr"><button class="btn" type="button" id="dProbe">${t('ca.diagProbe')}</button><button class="btn" type="button" id="dSweep">${t('ca.diagSweep')}</button></div>`+row('','',t('ca.diagSweepH')),'cDiag'):'')+
  (CP?card(t('ca.rec'),`<div class="fr"><button class="btn rec big" id="cRec" type="button" style="flex:1">…</button></div>`+
@@ -92,7 +92,7 @@ async files(force){const l=(await API.get('/api/cap/list')).files||[];const sig=
 async diag(){if(!has('diag')||!$('#dSt'))return;const v=await API.get('/api/diag');if(!$('#dSt'))return;
  const ok=v.last==='ok',bad=v.state==='fault'||v.state==='stopped'||v.last==='negative';
  setChip('#dSt',bad?'bad':ok?'ok':v.state==='off'?'off':'warn',t('ca.diag.'+v.state));
- $('#dW').textContent=(v.cabin!==undefined?t('ca.diagCabin',v.cabin.toFixed(1),v.sun):'')+(v.last?' · '+v.last+(v.nrc?' 7F 21 '+v.nrc.toString(16).toUpperCase().padStart(2,'0'):''):'')+(v.reply?' · '+v.reply:'')},
+ $('#dW').textContent=(v.cabin!==undefined?t('ca.diagCabin',v.cabin.toFixed(1),v.sun):'')+(v.set!==undefined?' · '+t('ca.diagSet',v.set.toFixed(1)):'')+(v.last?' · '+v.last+(v.nrc?' 7F 21 '+v.nrc.toString(16).toUpperCase().padStart(2,'0'):''):'')+(v.reply?' · '+v.reply:'')},
 /* картка передач: значення наживо, таблиця з налаштувань, піки навчання */
 async gears(){if(!$('#gT'))return;const g=await API.get('/api/gears');if(!$('#gT'))return;const nv=v=>v===null||v===undefined?DASH:v;
  $('#gV').textContent=g.speed===null?DASH:(g.speed/100).toFixed(1);$('#gR').textContent=nv(g.rpm);$('#gK').textContent=nv(g.ratio);

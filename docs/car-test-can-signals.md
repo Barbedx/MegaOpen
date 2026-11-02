@@ -64,10 +64,20 @@ lamp's rising edge. To try one without driving: add "Педаль гальма
 **Climate popup on the tablet.** Note `climateChanges` in `/api/health`
 (chain `hu`) before and after a 10-minute drive, and count how often the
 tablet's climate overlay pops up on its own. Each change of the `0x28`
-frame may pop it; the outside temperature in it is now held for 60 s
-against flicker, and the A/C form is sent only from measured or pinned
-signals. Expect 0-2 changes and as many pops; more pops than changes means
-something else opens it (write down what the car was doing).
+frame may pop it; the outside temperature in it is held for 60 s against
+flicker, and the panel bytes come only from measured or pinned signals.
+With «Читати клімат» off expect 0-2 changes and as many pops; more pops
+than changes means something else opens it (write down what the car was
+doing).
+
+**The climate panel on the tablet (1.7.2).** «Читати клімат» and «Опитування
+в сесії 10 C0» on, every 5 s. Turn the setpoint knob one step: within ~10 s
+the overlay pops with the new value (the `clim_set` row on «Сигнали» moves
+first). Then the fan, the distribution, recirculation, A/C, the screen
+button, OFF, AUTO: each should show on the overlay as on the panel. A
+mismatch is a code in the factory formula on «Формули» (`ac_vent_*`,
+`ac_fan`…): fix it there, no firmware needed, and note the code the car sent
+(the `[diag] climate 2190` line in the log).
 
 **Head-unit fields that start off** (Авто → мапа ГУ, «Звідки» → свій
 сигнал). Switch one on at a time and note what changes on the tablet's dashboard.

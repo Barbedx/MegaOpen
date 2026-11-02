@@ -90,10 +90,7 @@ counts. `shift`/`bits` are LSB-based inside the big-endian word that the field s
 - **SIG_AVG_SPEED**: Computed in MegaOpen from SPEED over the trip.
 - **SIG_FUEL_AVG**: Computed in MegaOpen from the 0x551 fuel counter over the trip distance.
 - **SIG_TRIP_ELAPSED**: MegaOpen's own clock since key-on.
-- **SIG_AC_ON**: The climate panel may talk to the HVAC unit directly, off the CAN bus. Check the capture first: if nothing moves when the panel does, poll.
-- **SIG_AC_COMPRESSOR**: 3 = unavailable, so map it to 0. It is a copy of something the ECM broadcasts, so a broadcast row probably exists.
-- **SIG_AC_RECIRC**: 0 = outside air, 1 = recirculation, 2 = flap moving (hold the last value), 3 = unavailable.
-- **SIG_AC_FAN**: PWM % into 0-7 steps, with the thresholds measured per panel position. The fan state gates 0.
+- **SIG_AC_ON**, **SIG_AC_COMPRESSOR**, **SIG_AC_RECIRC**, **SIG_AC_FAN**, the vents, the setpoints: nothing on the bus moves when the panel does (checked 2026-10). Since 1.7.2 the panel's state is read from the climate ECU's `21 90` (src/app/CarDiag.h: the `clim_*` signals, DDT's codes) and the factory formulas make these fields from it; the ECU answers only in the `10 C0` session.
 - **SIG_AC_VENT_FACE**: Distribution flap % into face/floor/up ranges, measured per panel position. The same item feeds VENT_FLOOR and VENT_UP.
 - **SIG_AC_TEMP_DRV**: Only the BLOWN-AIR setpoint exists, not the temperature the driver chose. The blend flap ('Position volet mixage') is the nearest proxy.
 - **SIG_AC_DEFOG**: LARC is the heated REAR window. Whether the RAV4 bit means that is open (raise-protocol.md).

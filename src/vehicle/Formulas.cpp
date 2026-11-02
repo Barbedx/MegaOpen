@@ -70,6 +70,34 @@ namespace Vehicle
         // How far what is left goes at the average so far.
         put(r, "range_calc", "fuel_level * 100 / cons_avg");
         rows.push(r);
+        // The head unit's climate panel (0x28 D0-D4, docs/hu-decoder.md §2d)
+        // from the car's panel state, read from the climate ECU (clim_*,
+        // App::CarDiag): no value while that read is off. The codes are
+        // DDT's: blower 0 auto, 1 off, 2..9 = 1..8; distribution 0 auto,
+        // 1 face, 2 feet+face, 3 all, 4 feet+screen, 5 screen; recirculation
+        // 0 auto, 1 on, 2 outside; A/C 0 auto, 1 off, 2 on.
+        put(r, "ac_on",         "clim_blower != 1");
+        rows.push(r);
+        put(r, "ac_compressor", "clim_ac_req != 1 && clim_blower != 1");   // the A/C lamp
+        rows.push(r);
+        put(r, "ac_recirc",     "clim_recirc == 1");
+        rows.push(r);
+        put(r, "ac_auto_hi",    "clim_blower == 0 && clim_dist == 0");
+        rows.push(r);
+        put(r, "ac_vent_up",    "clim_dist >= 3");
+        rows.push(r);
+        put(r, "ac_vent_face",  "clim_dist >= 1 && clim_dist <= 3");
+        rows.push(r);
+        put(r, "ac_vent_floor", "clim_dist >= 2 && clim_dist <= 4");
+        rows.push(r);
+        put(r, "ac_fan",        "clamp(clim_blower - 1, 0, 7)");
+        rows.push(r);
+        put(r, "ac_temp_drv",   "clim_set");
+        rows.push(r);
+        put(r, "ac_temp_pass",  "clim_set");
+        rows.push(r);
+        put(r, "ac_defog",      "clim_clear");
+        rows.push(r);
     }
 
     bool Formulas::check(const FormulaSet& set, FormulaProblem& p)

@@ -19,7 +19,7 @@ namespace Vehicle
         GRP_BODY,        // doors, ignition, brakes, temperature
         GRP_LIGHTS,      // exterior lighting + indicators
         GRP_TRIP,        // trip computer and fuel
-        GRP_CLIMATE,     // 0x28 A/C form + 0x58 seats
+        GRP_CLIMATE,     // the climate panel (0x28), 0x58 seats
         GRP_RADAR,       // 0x1D / 0x1E parking sensors
         GRP_TPMS,        // 0x25
         GRP_AUDIO,       // 0x31 amplifier + 0x32 node presence
@@ -38,12 +38,13 @@ namespace Vehicle
 
     // Which side of «Сигнали» a signal is on, from where its value comes from
     // (the live row's src letter, WebUiMap putLive): the car's when a CAN row,
-    // Derived or a formula makes it; the head unit's alone when only a constant,
+    // Derived, a formula or a diagnostic read (fromDiag, 'r') makes it; the
+    // head unit's alone when only a constant,
     // a pin or nothing does: a field of the head unit's protocol the Mégane has
     // no data for (the radar, the tyres, the amplifier, its settings, the A/C
     // panel, the hybrid, the selector). Computed, never declared, so a new
     // signal cannot land on the wrong side.
-    constexpr bool fromCar(char src) { return src == 'c' || src == 'd' || src == 'f'; }
+    constexpr bool fromCar(char src) { return src == 'c' || src == 'd' || src == 'f' || src == 'r'; }
 
     enum Sig : uint8_t {
         // ---- drive ---------------------------------------------------------
@@ -86,7 +87,9 @@ namespace Vehicle
         SIG_FUEL_INST,     // instantaneous consumption, L/100km x10
         SIG_FUEL_AVG,      // current-trip average consumption, L/100km x10
 
-        // ---- climate: 0x28 in its A/C form, D0/D1/D4 ------------------------
+        // ---- the head unit's climate panel: 0x28 D0-D4 as its own decoder
+        // reads them (docs/hu-decoder.md §2d). The factory formulas fill them
+        // from the car's clim_* below (FormulaSet::factory). ----------------
         SIG_AC_ON,
         SIG_AC_COMPRESSOR,
         SIG_AC_RECIRC,
@@ -100,11 +103,11 @@ namespace Vehicle
         SIG_AC_VENT_FLOOR,     // D1 b5
         SIG_AC_DISPLAY_REQ,    // D1 b4 — asks the HU to pop the climate overlay up
         SIG_AC_FAN,            // D1 b3-0, 0-7
-        SIG_AC_TEMP_DRV,       // D2 RAW WIRE BYTE (0x00 LO, 0x1F HI, 0x20-0x23 = 16-19 °C)
-        SIG_AC_TEMP_PASS,      // D3 RAW WIRE BYTE, same encoding
-        SIG_AC_DEFOG,          // D4
-        SIG_AC_AQS,            // D4
-        SIG_AC_ECO,            // D4
+        SIG_AC_TEMP_DRV,       // D2 the setpoint, °C x10 (the emitter writes the wire's table)
+        SIG_AC_TEMP_PASS,      // D3 the same
+        SIG_AC_DEFOG,          // D4 b7 front demist (b6 is rear_defrost)
+        SIG_AC_AQS,            // D4 b5
+        SIG_AC_ECO,            // D4 b4
         SIG_AC_UNIT_F,         // D4 b0: 0 = °C, 1 = °F
         // 0x58 seat heat/vent. Crown-gated in the HU; may be inert on a RAV4 profile.
         SIG_SEAT_HEAT_DRV,     // 0-15
@@ -198,8 +201,8 @@ namespace Vehicle
         SIG_BATT_V,            // V x100
         SIG_OIL_PRESS_SW,      // oil-pressure switch
         SIG_BATT_LAMP,         // charge warning lamp
-        SIG_AC_COMP_UPC,       // A/C compressor as the UPC reports it; not
-                               // ac_compressor, which would start the 0x28 A/C form
+        SIG_AC_COMP_UPC,       // A/C compressor as the UPC reports it (cycles:
+                               // not the panel's A/C lamp, ac_compressor)
         SIG_REAR_DEFROST,      // heated rear window on
         SIG_THROTTLE,          // accelerator pedal, % x10
         SIG_CLUTCH,            // clutch switch
@@ -262,6 +265,15 @@ namespace Vehicle
         // km to the service to the km (Vehicle::Derived): service_km is 0x715's
         // step of 150 km; this one counts the km down from the step's edge.
         SIG_SERVICE_CALC,
+        // From the climate ECU's `21 90` (src/app/CarDiag.h): the panel's own
+        // state, which no broadcast frame carries. Read on the car 2026-10-28
+        // (AUTO, 20.0 °C). The codes are DDT's (Clim_X84_SERIE).
+        SIG_CLIM_SET,          // the setpoint, °C x10 (15.0 .. 30.5)
+        SIG_CLIM_BLOWER,       // 0 auto, 1 off, 2..9 = speed 1..8
+        SIG_CLIM_DIST,         // 0 auto, 1 face, 2 feet+face, 3 all, 4 feet+screen, 5 screen
+        SIG_CLIM_RECIRC,       // 0 auto, 1 recirculation, 2 outside air
+        SIG_CLIM_AC_REQ,       // 0 auto, 1 off, 2 on
+        SIG_CLIM_CLEAR,        // «voir clair»: the screen demist button
 
         // The owner's own signals (docs/design/rules.md, slice 3): slots named
         // at run time by their formulas (setUserSignal). An unnamed slot does
@@ -275,6 +287,12 @@ namespace Vehicle
     constexpr uint8_t USER_SIGNALS = SIG_USER_LAST - SIG_USER_0 + 1;
     static_assert(SIG_COUNT <= 255, "a signal id is a byte, and 255 is no signal");
     constexpr bool isUser(uint8_t s) { return s >= SIG_USER_0 && s < SIG_COUNT; }
+    // Read from an ECU by a diagnostic request (App::CarDiag), not decoded
+    // from a broadcast frame: the live row's source 'r', verified as read.
+    constexpr bool fromDiag(uint8_t s)
+    {
+        return s == SIG_CABIN_TEMP || s == SIG_CLIM_SUN || (s >= SIG_CLIM_SET && s <= SIG_CLIM_CLEAR);
+    }
 
     // "No signal" as it is SAVED (the alert blob, the car screen's NVS keys).
     // In RAM an empty row is SIG_COUNT, but SIG_COUNT moves each time a

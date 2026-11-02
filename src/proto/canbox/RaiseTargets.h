@@ -12,10 +12,6 @@
 // name, unit, range and decimals come from the signal's own metadata
 // (Signals.cpp), so only the wire command is here; the page has the words (k.raise.*).
 // ADDING A TOYOTA FUNCTION: a Sig, a builder in Rav4Emitter, and one row here.
-//
-// A row with fw=false is a car value protocol 112 has no field for (the
-// battery): listed with its signal so the page shows the value and `why`, and
-// points at the experiment that borrows another field for it.
 namespace Canbox
 {
     namespace RaiseTargets

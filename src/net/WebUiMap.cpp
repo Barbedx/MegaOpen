@@ -81,7 +81,7 @@ namespace
         uint8_t how[Vehicle::SIG_COUNT], conf[Vehicle::SIG_COUNT] = {};
         for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) {
             const uint8_t* in = nullptr;
-            how[s] = Vehicle::Derived::inputs(s, in) ? 'd' : 'o';
+            how[s] = Vehicle::fromDiag(s) ? 'r' : Vehicle::Derived::inputs(s, in) ? 'd' : 'o';
         }
         // A formula over Derived's math; a row or a constant over both.
         const Expr::SigSet ft = App::Car::formulaTargets();
@@ -719,7 +719,7 @@ const char* WebUi::mapFromFile(JsonObjectConst file, bool dry, FileParts& in)
 
 #if FEATURE_DIAG
 // ---------------------------------------------------------------------------
-// /api/diag — the climate ECU's 21 C1 on CAN A (src/app/CarDiag.h)
+// /api/diag — the climate ECU's 21 C1 and 21 90 on CAN A (src/app/CarDiag.h)
 // ---------------------------------------------------------------------------
 // GET: the switches, what it is doing, the last reply. POST {on?, interval?,
 // probe?}: on/interval are saved (switching on clears a latched bus fault);
@@ -752,6 +752,14 @@ void WebUi::routesDiag()
         if (v.haveValues) {
             d["cabin"] = v.cabinX10 / 10.0;
             d["sun"]   = v.sunWm2;
+        }
+        if (v.have90) {               // the panel's state, DDT codes (Diag::Clim2190)
+            d["set"]    = v.setX10 / 10.0;
+            d["blower"] = v.blower;
+            d["dist"]   = v.dist;
+            d["recirc"] = v.recirc;
+            d["ac"]     = v.ac;
+            d["clear"]  = v.clear;
         }
         String out;
         serializeJson(d, out);

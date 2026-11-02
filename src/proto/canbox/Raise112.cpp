@@ -25,8 +25,6 @@ namespace Canbox
         Tuning&       tun(Model& m)       { return *static_cast<Tuning*>(m.hu); }
 
         // ---- the settings rows (raise.*), HuConfig::tuning as a Tuning ----------
-        // 0x28 carries one of two messages: the row is the stored value.
-        const char* const kCmd28[] = {"temp", "ac"};
         // FUEL_UNITS / TRIP_UNITS rows, with ASCII ids; the row stores its `v`.
         const char* const kFuelIds[] = {"l100km", "kml", "mpg"};
         const char* const kTripIds[] = {"km", "miles", "hide"};
@@ -37,12 +35,6 @@ namespace Canbox
         constexpr uint8_t FUEL_ROWS = sizeof(kFuelIds) / sizeof(kFuelIds[0]);
         constexpr uint8_t TRIP_ROWS = sizeof(kTripIds) / sizeof(kTripIds[0]);
 
-        const SEnum kCmd28E = {
-            [] { return (uint8_t)2; },
-            [](uint8_t i) { return kCmd28[i < 2 ? i : 0]; },
-            [](uint8_t) -> const char* { return nullptr; },
-            "cmd28",
-        };
         const SEnum kFuelE = {
             [] { return FUEL_ROWS; },
             [](uint8_t i) { return kFuelIds[i < FUEL_ROWS ? i : 0]; },
@@ -95,8 +87,6 @@ namespace Canbox
              0, 0, 0, nullptr, nullptr, nullptr, nullptr},
             {"raise.doorsLen", "Doors len", "raise", SType::Int, W, HU,
              1, 2, 1, nullptr, nullptr, T_GET(t.doorsLen), T_PUT(t.doorsLen = (uint8_t)v)},
-            {"raise.cmd28", "0x28 carries", "raise", SType::Enum, W, HU,
-             0, 0, 0, nullptr, &kCmd28E, T_GET(t.cmd28 ? 1 : 0), T_PUT(t.cmd28 = (uint8_t)v)},
             {"raise.steerInvert", "Steer invert", "raise", SType::Bool, W, HU,
              0, 1, 0, nullptr, nullptr, T_GET(t.steerInvert != 0), T_PUT(t.steerInvert = v ? 1 : 0)},
             // 10 = whole degrees, 1 = the x10 value.
@@ -229,15 +219,6 @@ namespace Canbox
             uint8_t     fieldCount() const override { return RaiseTargets::count(); }
             TargetView  field(uint8_t i) const override { return RaiseTargets::at(i); }
             const FieldMap& defaults() const override { return Rav4Emitter::defaults(); }
-
-            // 0x28 carries one form at a time: a field in the other is not sent.
-            const char* messageBlocked(uint8_t msg, const HuConfig& c) const override
-            {
-                const uint8_t cmd28 = c.tuningAs<Tuning>().cmd28;
-                if (msg == Rav4Emitter::MSG_TEMP && cmd28)  return "form_ac";
-                if (msg == Rav4Emitter::MSG_AC && !cmd28)   return "form_temp";
-                return nullptr;
-            }
 
             uint8_t     messageCount() const override { return Rav4Emitter::messageCount(); }
             MessageView message(uint8_t i) const override

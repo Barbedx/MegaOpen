@@ -173,7 +173,7 @@ void test_pinned_temperature_is_emitted_with_the_documented_encoding()
     E e;
     e.begin(capture, nullptr);
 
-    TEST_ASSERT_TRUE(e.sendNow(E::MSG_TEMP, s));
+    TEST_ASSERT_TRUE(e.sendNow(E::MSG_CLIMATE, s));
     // 2E 28 0C ... payload[5] = (t + 40) * 2 = 34
     TEST_ASSERT_EQUAL_UINT8(0x2E, g_last[0]);
     TEST_ASSERT_EQUAL_UINT8(0x28, g_last[1]);
@@ -474,9 +474,11 @@ void test_instant_fuel_matches_the_worked_example()
 
 // ---- the new half of the protocol -------------------------------------------
 
-// Both 0x28 forms carry the same command byte and the head unit drops the one
-// whose length it did not expect, so they must never both be on the schedule.
-void test_the_two_0x28_forms_are_mutually_exclusive()
+// One 0x28 per tick, 12 bytes: the outside temperature in D5 and, when a
+// panel field is trusted, the panel in D0-D4. The unit's decoder reads both
+// from one frame (docs/hu-decoder.md §2d); the vendor's 5-byte form is never
+// sent. g_lenByCmd, not g_last: tick() emits the whole table.
+void test_one_0x28_carries_the_panel_and_the_outside_temperature()
 {
     resetCapture();
     State s;
@@ -484,25 +486,27 @@ void test_the_two_0x28_forms_are_mutually_exclusive()
     s.pin(SIG_AC_ON, 1);
     E e;
     e.begin(capture, nullptr);
-
-    // Exactly ONE 0x28 per tick, and it is the selected form. g_lenByCmd, not
-    // g_last: tick() emits the whole table and the last frame written is always
-    // the version string.
-    e.setCmd28(E::Cmd28::OutsideTemp);
     e.tick(s, 1000);
     TEST_ASSERT_EQUAL_INT(1, g_byCmd[0x28]);
     TEST_ASSERT_EQUAL_UINT8(12, g_lenByCmd[0x28]);
-
-    resetCapture();
-    E e2;
-    e2.begin(capture, nullptr);
-    e2.setCmd28(E::Cmd28::AirCon);
-    e2.tick(s, 1000);
-    TEST_ASSERT_EQUAL_INT(1, g_byCmd[0x28]);
-    TEST_ASSERT_EQUAL_UINT8(5, g_lenByCmd[0x28]);
+    uint8_t f[64], n = 0;
+    TEST_ASSERT_TRUE(e.preview(E::MSG_CLIMATE, s, f, n));
+    TEST_ASSERT_EQUAL_UINT8(12, f[2]);
+    TEST_ASSERT_EQUAL_HEX8(0x80, f[3 + 0]);              // the panel: A/C on
+    TEST_ASSERT_EQUAL_HEX8((21 + 40) * 2, f[3 + 5]);     // the outside temperature
+    // The temperature alone: the panel bytes stay 0 (the unit reads "A/C off").
+    State t;
+    t.pin(SIG_OUT_TEMP, 21);
+    TEST_ASSERT_TRUE(e.preview(E::MSG_CLIMATE, t, f, n));
+    TEST_ASSERT_EQUAL_UINT8(12, f[2]);
+    TEST_ASSERT_EQUAL_HEX8(0x00, f[3 + 0]);
+    TEST_ASSERT_EQUAL_HEX8(0x00, f[3 + 2]);
+    TEST_ASSERT_EQUAL_HEX8((21 + 40) * 2, f[3 + 5]);
 }
 
-void test_aircon_packs_the_documented_bits()
+// D0-D4 as the head unit's own decoder reads them (docs/hu-decoder.md §2d):
+// the setpoints in °C through its table, D4 with the heated rear window at b6.
+void test_the_panel_packs_the_units_bits()
 {
     resetCapture();
     State s;
@@ -510,19 +514,32 @@ void test_aircon_packs_the_documented_bits()
     s.pin(SIG_AC_RECIRC, 1);        // D0 b5
     s.pin(SIG_AC_VENT_FACE, 1);     // D1 b6
     s.pin(SIG_AC_FAN, 5);           // D1 b3-0
-    s.pin(SIG_AC_TEMP_DRV, 0x1F);   // HI
+    s.pin(SIG_AC_TEMP_DRV, 325);    // 32.5 C: HI
+    s.pin(SIG_REAR_DEFROST, 1);     // D4 b6
     s.pin(SIG_AC_UNIT_F, 1);        // D4 b0
     E e;
     e.begin(capture, nullptr);
-    TEST_ASSERT_TRUE(e.sendNow(E::MSG_AC, s));
+    TEST_ASSERT_TRUE(e.sendNow(E::MSG_CLIMATE, s));
 
     TEST_ASSERT_EQUAL_UINT8(0x28, g_last[1]);
-    TEST_ASSERT_EQUAL_UINT8(5,    g_last[2]);
+    TEST_ASSERT_EQUAL_UINT8(12,   g_last[2]);
     TEST_ASSERT_EQUAL_UINT8(0xA0, g_last[3]);   // b7 | b5
     TEST_ASSERT_EQUAL_UINT8(0x45, g_last[4]);   // b6 | fan 5
-    TEST_ASSERT_EQUAL_UINT8(0x1F, g_last[5]);
-    TEST_ASSERT_EQUAL_UINT8(0x00, g_last[6]);   // passenger setpoint unpinned
-    TEST_ASSERT_EQUAL_UINT8(0x01, g_last[7]);
+    TEST_ASSERT_EQUAL_UINT8(0x1F, g_last[5]);   // HI
+    TEST_ASSERT_EQUAL_UINT8(0xFF, g_last[6]);   // passenger setpoint unknown: "NO", not LO
+    TEST_ASSERT_EQUAL_UINT8(0x41, g_last[7]);   // rear window | °F
+    TEST_ASSERT_EQUAL_UINT8(0x00, g_last[8]);   // no outside temperature
+    // The setpoint byte: the unit's table, to the nearest half degree.
+    TEST_ASSERT_EQUAL_HEX8(0x00, E::setpointByte(140));   // LO
+    TEST_ASSERT_EQUAL_HEX8(0x24, E::setpointByte(150));
+    TEST_ASSERT_EQUAL_HEX8(0x25, E::setpointByte(155));
+    TEST_ASSERT_EQUAL_HEX8(0x20, E::setpointByte(160));
+    TEST_ASSERT_EQUAL_HEX8(0x23, E::setpointByte(175));
+    TEST_ASSERT_EQUAL_HEX8(0x01, E::setpointByte(180));
+    TEST_ASSERT_EQUAL_HEX8(0x05, E::setpointByte(200));   // the car's AUTO 20.0
+    TEST_ASSERT_EQUAL_HEX8(0x06, E::setpointByte(203));
+    TEST_ASSERT_EQUAL_HEX8(0x1D, E::setpointByte(320));
+    TEST_ASSERT_EQUAL_HEX8(0x1F, E::setpointByte(330));   // HI
 }
 
 // Front radar is ordered right-to-left and rear left-to-right. The asymmetry is
@@ -656,9 +673,8 @@ void test_send_by_cmd_answers_a_request()
     TEST_ASSERT_FALSE(e.sendByCmd(0x99, s));      // no builder for this command
 }
 
-// 0x28 is two rows in the table with one command byte; the responder must honour
-// the selected form rather than putting the other one on the wire behind our back.
-void test_send_by_cmd_honours_the_selected_0x28_form()
+// The head unit's 0x90 asks for 0x28 by command: the one 12-byte frame.
+void test_send_by_cmd_0x28_is_the_one_frame()
 {
     resetCapture();
     State s;
@@ -666,14 +682,10 @@ void test_send_by_cmd_honours_the_selected_0x28_form()
     s.pin(SIG_AC_ON, 1);
     E e;
     e.begin(capture, nullptr);
-
-    e.setCmd28(E::Cmd28::AirCon);
-    TEST_ASSERT_TRUE(e.sendByCmd(0x28, s));
-    TEST_ASSERT_EQUAL_UINT8(5, g_last[2]);
-
-    e.setCmd28(E::Cmd28::OutsideTemp);
     TEST_ASSERT_TRUE(e.sendByCmd(0x28, s));
     TEST_ASSERT_EQUAL_UINT8(12, g_last[2]);
+    TEST_ASSERT_EQUAL_HEX8(0x80, g_last[3]);
+    TEST_ASSERT_EQUAL_HEX8((21 + 40) * 2, g_last[3 + 5]);
 }
 
 void test_a_disabled_message_leaves_the_schedule_but_not_the_button()
@@ -732,7 +744,7 @@ void test_every_message_has_a_name_and_a_command()
 void test_tuning_survives_a_blob_round_trip()
 {
     Canbox::Tuning a;
-    a.cmd28 = 1; a.doorsLen = 2; a.steerInvert = 1; a.steerDiv = 1;
+    a.doorsLen = 2; a.steerInvert = 1; a.steerDiv = 1;
     a.steerClamp = 380; a.fuelUnit = 1;
     a.tripUnit = 1; a.tripFields = 0; a.histLen = 3; a.radarInvert = 1;
     for (int i = 0; i < 16; ++i) a.version[i] = "ABCDEFGHIJKLMNOP"[i];
@@ -743,7 +755,6 @@ void test_tuning_survives_a_blob_round_trip()
 
     Canbox::Tuning b;
     TEST_ASSERT_TRUE(b.fromBlob(blob, sizeof(blob)));
-    TEST_ASSERT_EQUAL_UINT8(1, b.cmd28);
     TEST_ASSERT_EQUAL_UINT8(2, b.doorsLen);
     TEST_ASSERT_EQUAL_UINT8(1, b.steerInvert);
     TEST_ASSERT_EQUAL_UINT8(1, b.steerDiv);
@@ -1039,15 +1050,17 @@ void test_every_sent_raise_target_changes_its_message()
     }
     // And every signal the emitter reads has a row (only the 8 it does not
     // send are missing). The Mégane broadcast signals from SIG_FUEL_LEVEL on
-    // have no Raise field, except the selector probe, SIG_PRND, the bonnet
-    // and the tank in per cent (the battery's volts have no field: not a row).
+    // have no Raise field, except the selector probe, SIG_PRND, the bonnet,
+    // the tank in per cent and the heated rear window (0x28 D4 b6); the
+    // battery's volts have no field: not a row.
     bool listed[SIG_COUNT] = {};
     uint8_t n = 0;
     for (uint8_t i = 0; i < RT::count(); ++i) {
         const uint8_t sg = RT::at(i).sig;
         if (sg < SIG_COUNT && !listed[sg]) { listed[sg] = true; ++n; }
     }
-    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LEVEL - 7 + 3, n);
+    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LEVEL - 7 + 4, n);
+    TEST_ASSERT_TRUE(listed[SIG_REAR_DEFROST]);
     TEST_ASSERT_TRUE(listed[SIG_FUEL_PCT]);
     TEST_ASSERT_TRUE(listed[SIG_PRND]);
     TEST_ASSERT_TRUE(listed[SIG_BONNET]);
@@ -1259,30 +1272,30 @@ void test_climate_frame_changes_only_on_a_lasting_value()
     // A pinned test value goes at once.
     s.pin(SIG_OUT_TEMP, 20);
     uint8_t f[64], n = 0;
-    TEST_ASSERT_TRUE(e.preview(E::MSG_TEMP, s, f, n));
+    TEST_ASSERT_TRUE(e.preview(E::MSG_CLIMATE, s, f, n));
     TEST_ASSERT_EQUAL_HEX8((20 + 40) * 2, f[3 + 5]);
 }
 
-// The A/C form never goes out on guessed rows: only a measured signal or a
-// hand-pinned one may open the overlay.
+// The panel bytes never go out on guessed rows: only a measured signal or a
+// hand-pinned one may open the overlay. With nothing trusted and no outside
+// temperature there is no 0x28 at all.
 void test_ac_form_needs_a_trusted_signal()
 {
     State s;
     E e;
-    e.setCmd28(E::Cmd28::AirCon);
     uint8_t f[64], n = 0;
     s.set(SIG_AC_ON, 1, 10);                                     // decoded, not measured
     Vehicle::setVerified(SIG_AC_ON, false);
     TEST_ASSERT_FALSE(E::acTrusted(s));
-    TEST_ASSERT_FALSE(e.preview(E::MSG_AC, s, f, n));
+    TEST_ASSERT_FALSE(e.preview(E::MSG_CLIMATE, s, f, n));
     Vehicle::setVerified(SIG_AC_ON, true);                       // measured in the car
-    TEST_ASSERT_TRUE(e.preview(E::MSG_AC, s, f, n));
+    TEST_ASSERT_TRUE(e.preview(E::MSG_CLIMATE, s, f, n));
     TEST_ASSERT_EQUAL_HEX8(0x80, f[3]);
     Vehicle::setVerified(SIG_AC_ON, false);
     State p;
     p.pin(SIG_AC_FAN, 3);                                        // a test or a constant
     TEST_ASSERT_TRUE(E::acTrusted(p));
-    TEST_ASSERT_TRUE(e.preview(E::MSG_AC, p, f, n));
+    TEST_ASSERT_TRUE(e.preview(E::MSG_CLIMATE, p, f, n));
 }
 
 int main(int, char**)
@@ -1324,8 +1337,8 @@ int main(int, char**)
     RUN_TEST(test_trip_is_big_endian_and_history_is_thirteen_bytes);
     RUN_TEST(test_instant_fuel_matches_the_worked_example);
 
-    RUN_TEST(test_the_two_0x28_forms_are_mutually_exclusive);
-    RUN_TEST(test_aircon_packs_the_documented_bits);
+    RUN_TEST(test_one_0x28_carries_the_panel_and_the_outside_temperature);
+    RUN_TEST(test_the_panel_packs_the_units_bits);
     RUN_TEST(test_radar_front_is_mirrored_relative_to_rear);
     RUN_TEST(test_rear_radar_is_scheduled_before_front);
     RUN_TEST(test_tpms_unknown_wheels_are_no_data_not_zero);
@@ -1334,7 +1347,7 @@ int main(int, char**)
     RUN_TEST(test_odometer_matches_the_worked_example);
 
     RUN_TEST(test_send_by_cmd_answers_a_request);
-    RUN_TEST(test_send_by_cmd_honours_the_selected_0x28_form);
+    RUN_TEST(test_send_by_cmd_0x28_is_the_one_frame);
     RUN_TEST(test_a_disabled_message_leaves_the_schedule_but_not_the_button);
     RUN_TEST(test_preview_matches_what_is_sent);
     RUN_TEST(test_every_message_has_a_name_and_a_command);

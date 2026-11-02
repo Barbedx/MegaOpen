@@ -10,8 +10,8 @@ namespace Canbox
     // Short local aliases for the public table in the header.
     using M = Rav4Emitter;
     enum : uint8_t {
-        M_DOORS = M::MSG_DOORS,   M_TEMP = M::MSG_TEMP,
-        M_AC = M::MSG_AC,         M_STEER = M::MSG_STEER,
+        M_DOORS = M::MSG_DOORS,   M_CLIMATE = M::MSG_CLIMATE,
+        M_STEER = M::MSG_STEER,
         M_LIGHTS = M::MSG_LIGHTS, M_SPEED = M::MSG_SPEED,
         M_ODO = M::MSG_ODO,       M_RPM = M::MSG_RPM,
         M_TRIP = M::MSG_TRIP,     M_FUEL_INST = M::MSG_FUEL_INST,
@@ -30,7 +30,7 @@ namespace Canbox
                   "Rav4Emitter::MAX_MESSAGES is smaller than the message table");
 
     static const char* const kNames[M_COUNT] = {
-        "doors+ign 0x24", "out_temp 0x28", "aircon 0x28", "steering 0x29",
+        "doors+ign 0x24", "climate 0x28", "steering 0x29",
         "lights 0x7D01", "speed 0x7D03", "odometer 0x7D04", "rpm 0x7D0A",
         "trip+range 0x21", "fuel_inst 0x22", "fuel_hist 0x23",
         "radar_rear 0x1E", "radar_front 0x1D", "tpms 0x25", "settings 0x26",
@@ -40,20 +40,20 @@ namespace Canbox
     };
 
     static const uint8_t kCmd[M_COUNT] = {
-        0x24, 0x28, 0x28, 0x29, 0x7D, 0x7D, 0x7D, 0x7D,
+        0x24, 0x28, 0x29, 0x7D, 0x7D, 0x7D, 0x7D,
         0x21, 0x22, 0x23, 0x1E, 0x1D, 0x25, 0x26, 0x31,
         0x32, 0x50, 0x52, 0x58, 0x1F, 0x30, 0x7D, 0x7D,
     };
 
     static const uint32_t kInterval[M_COUNT] = {
-        250, 5000, 1000, 200, 200, 500, 10000, 333,
+        250, 5000, 200, 200, 500, 10000, 333,
         5000, 1000, 5000, 100, 100, 5000, 5000, 5000,
         5000, 10000, 5000, 5000, 1000, 10000, 5000, 1000,
     };
 
     // On-change messages go out as soon as their payload changes, not on the timer.
     static const bool kOnChange[M_COUNT] = {
-        true, false, true, false, true, false, false, false,
+        true, true, false, true, false, false, false,
         false, false, false, true, true, false, true, true,
         true, false, true, true, false, false, true, true,
     };
@@ -124,7 +124,7 @@ namespace Canbox
     {
         for (uint8_t i = 0; i < BLOB_SIZE; ++i) out[i] = 0;
         out[0]  = 2;                       // layout version
-        out[1]  = cmd28;
+        out[1]  = 0;                       // was cmd28: 0 = the outside-temperature form, for a rollback
         out[2]  = doorsLen;
         out[3]  = steerInvert;
         out[4]  = steerDiv;
@@ -148,7 +148,6 @@ namespace Canbox
         const bool v1 = in && len == BLOB_SIZE_V1 && in[0] == 1;
         const bool v2 = in && len == BLOB_SIZE && in[0] == 2;
         if (!v1 && !v2) return false;
-        cmd28       = in[1];
         doorsLen    = (in[2] == 2) ? 2 : 1;
         // ONE-TIME MIGRATION. len 1 was the default until 2026-10-17 and is known
         // bad: the head unit reads D1 whatever the length, so it shows the
@@ -271,31 +270,25 @@ namespace Canbox
                 }
                 return true;
             }
-            case M_TEMP: {
-                if (!s.has(SIG_OUT_TEMP)) return false;
+            case M_CLIMATE: {
+                // One 12-byte frame, as the head unit's own decoder reads it
+                // (docs/hu-decoder.md §2d): D0-D4 the climate panel, D5 the
+                // outside temperature, D6-D11 the rear (none here). The panel
+                // bytes are filled only from a trusted field (acTrusted): any
+                // change of them pops the unit's climate overlay.
+                const bool temp = s.has(SIG_OUT_TEMP);
+                const bool ac = acTrusted(s);
+                if (!temp && !ac) return false;
                 cmd = 0x28; len = 12;
                 for (uint8_t i = 0; i < 12; ++i) p[i] = 0;
-                // The held value (TempHold.h), so a flickering reading does not
-                // change the climate frame; a pinned test value goes at once.
-                const int32_t raw = s.get(SIG_OUT_TEMP);
-                int32_t t = State::clamp(SIG_OUT_TEMP, s.pinned(SIG_OUT_TEMP) || !_temp.have() ? raw : _temp.shown());
-                p[5] = (uint8_t)((t + 40) * 2);
-                return true;
-            }
-            case M_AC: {
-                static const uint8_t kAcSigs[] = {
-                    SIG_AC_ON, SIG_AC_COMPRESSOR, SIG_AC_RECIRC, SIG_AC_AUTO_HI,
-                    SIG_AC_AUTO_LO, SIG_AC_DUAL, SIG_AC_MAX_FRONT, SIG_AC_REAR,
-                    SIG_AC_VENT_UP, SIG_AC_VENT_FACE, SIG_AC_VENT_FLOOR,
-                    SIG_AC_DISPLAY_REQ, SIG_AC_FAN, SIG_AC_TEMP_DRV,
-                    SIG_AC_TEMP_PASS, SIG_AC_DEFOG, SIG_AC_AQS, SIG_AC_ECO,
-                    SIG_AC_UNIT_F,
-                };
-                bool any = false;
-                for (uint8_t i = 0; i < sizeof(kAcSigs) && !any; ++i) any = s.has(kAcSigs[i]);
-                if (!any || !acTrusted(s)) return false;
-
-                cmd = 0x28; len = 5;
+                if (temp) {
+                    // The held value (TempHold.h), so a flickering reading does not
+                    // change the climate frame; a pinned test value goes at once.
+                    const int32_t raw = s.get(SIG_OUT_TEMP);
+                    int32_t t = State::clamp(SIG_OUT_TEMP, s.pinned(SIG_OUT_TEMP) || !_temp.have() ? raw : _temp.shown());
+                    p[5] = (uint8_t)((t + 40) * 2);
+                }
+                if (!ac) return true;
                 p[0] = (uint8_t)((s.get(SIG_AC_ON)         ? 0x80 : 0) |
                                  (s.get(SIG_AC_COMPRESSOR) ? 0x40 : 0) |
                                  (s.get(SIG_AC_RECIRC)     ? 0x20 : 0) |
@@ -309,14 +302,18 @@ namespace Canbox
                                  (s.get(SIG_AC_VENT_FLOOR)  ? 0x20 : 0) |
                                  (s.get(SIG_AC_DISPLAY_REQ) ? 0x10 : 0) |
                                  nib(s.get(SIG_AC_FAN), 7));
-                // Raw wire bytes: the sources disagree on the setpoint
-                // encoding, so the conversion lives in the UI.
-                p[2] = (uint8_t)nib(s.get(SIG_AC_TEMP_DRV), 255);
-                p[3] = (uint8_t)nib(s.get(SIG_AC_TEMP_PASS), 255);
-                p[4] = (uint8_t)((s.get(SIG_AC_DEFOG)  ? 0x80 : 0) |
-                                 (s.get(SIG_AC_AQS)    ? 0x40 : 0) |
-                                 (s.get(SIG_AC_ECO)    ? 0x20 : 0) |
-                                 (s.get(SIG_AC_UNIT_F) ? 0x01 : 0));
+                // The setpoints, °C x10 into the unit's table; a field with no
+                // value is 0xFF, which the unit shows as "NO", not as LO.
+                p[2] = s.has(SIG_AC_TEMP_DRV)  ? setpointByte(s.get(SIG_AC_TEMP_DRV))  : 0xFF;
+                p[3] = s.has(SIG_AC_TEMP_PASS) ? setpointByte(s.get(SIG_AC_TEMP_PASS)) : 0xFF;
+                // D4 as the unit's decoder has it: b7 front demist, b6 the heated
+                // rear window, b5 AQS, b4 ECO, b0 the unit. (The vendor sheet
+                // puts AQS/ECO one bit higher; the unit does not.)
+                p[4] = (uint8_t)((s.get(SIG_AC_DEFOG)     ? 0x80 : 0) |
+                                 (s.get(SIG_REAR_DEFROST) ? 0x40 : 0) |
+                                 (s.get(SIG_AC_AQS)       ? 0x20 : 0) |
+                                 (s.get(SIG_AC_ECO)       ? 0x10 : 0) |
+                                 (s.get(SIG_AC_UNIT_F)    ? 0x01 : 0));
                 return true;
             }
             case M_STEER: {
@@ -629,11 +626,6 @@ namespace Canbox
         const FieldView s(in.state(), &_map);   // the owner's field map on
         for (uint8_t i = 0; i < M_COUNT; ++i) {
             if (kCmd[i] != cmd) continue;
-            // 0x28 maps to two rows; send only the selected form.
-            if (cmd == 0x28) {
-                const uint8_t want = _t.cmd28 ? M_AC : M_TEMP;
-                if (i != want) continue;
-            }
             if (sendNow(i, s)) return true;
         }
         return false;
@@ -654,6 +646,18 @@ namespace Canbox
         return false;
     }
 
+    // docs/hu-decoder.md §2d: 0x00 LO below 15, 0x24/0x25 = 15/15.5,
+    // 0x20..0x23 = 16..17.5, 0x01..0x1D = 18..32 by 0.5, 0x1F HI above.
+    uint8_t Rav4Emitter::setpointByte(int32_t cx10)
+    {
+        if (cx10 < 150) return 0x00;
+        if (cx10 > 320) return 0x1F;
+        const int32_t h = (cx10 + 2) / 5;                    // half degrees, 30..64
+        if (h < 32) return (uint8_t)(0x24 + (h - 30));       // 15, 15.5
+        if (h < 36) return (uint8_t)(0x20 + (h - 32));       // 16 .. 17.5
+        return (uint8_t)(0x01 + (h - 36));                   // 18 .. 32
+    }
+
     void Rav4Emitter::tick(const FieldView& in, uint32_t nowMs)
     {
         const FieldView s(in.state(), &_map);   // the owner's field map on
@@ -663,9 +667,6 @@ namespace Canbox
 
         for (uint8_t i = 0; i < M_COUNT; ++i) {
             if (!_msgOn[i]) continue;
-            // The two 0x28 forms are mutually exclusive on the wire.
-            if (i == M_TEMP && _t.cmd28 != 0) continue;
-            if (i == M_AC   && _t.cmd28 == 0) continue;
 
             uint8_t cmd = 0, len = 0, p[MAX_PAYLOAD];
             if (!build(i, s, cmd, p, len)) continue;

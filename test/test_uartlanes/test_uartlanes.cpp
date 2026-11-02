@@ -109,11 +109,10 @@ static uint8_t lmax()
     Vehicle::State s;
     for (uint8_t i = 0; i < Vehicle::SIG_COUNT; ++i) s.pin(i, 1);
     uint8_t best = 0;
-    for (uint8_t form = 0; form < 4; ++form) {
+    for (uint8_t form = 0; form < 2; ++form) {
         Canbox::Rav4Emitter em;
         Canbox::Tuning t;
-        t.cmd28    = form & 1;
-        t.doorsLen = (form & 2) ? 2 : 1;
+        t.doorsLen = form ? 2 : 1;
         t.histLen  = 13;
         em.setTuning(t);
         for (uint8_t m = 0; m < Canbox::Rav4Emitter::messageCount(); ++m) {

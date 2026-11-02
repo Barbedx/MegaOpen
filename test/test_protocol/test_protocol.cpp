@@ -288,12 +288,10 @@ void test_raise_112_through_the_interface_sends_the_same_bytes()
     c.enabled = true;
     Tuning& t = c.tuningAs<Tuning>();
     TEST_ASSERT_EQUAL_UINT8(10, t.steerDiv);            // Tuning's defaults
-    t.cmd28 = 1;
     t.histLen = 3;
     Made m(p);
     Rav4Emitter direct;
     Tuning dt;
-    dt.cmd28 = 1;
     dt.histLen = 3;
     direct.setTuning(dt);
     State s;
@@ -323,7 +321,6 @@ void test_raise_112_through_the_interface_sends_the_same_bytes()
     HuConfig d;
     p.initConfig(d);
     TEST_ASSERT_TRUE(p.tuningFromBlob(d.tuning, blob, p.tuningBlobSize()));
-    TEST_ASSERT_EQUAL_UINT8(1, d.tuningAs<Tuning>().cmd28);
     TEST_ASSERT_EQUAL_UINT8(3, d.tuningAs<Tuning>().histLen);
     // A layout-1 blob (before the text channels) still reads, channels 0.
     uint8_t v1[Tuning::BLOB_SIZE_V1];
@@ -334,11 +331,8 @@ void test_raise_112_through_the_interface_sends_the_same_bytes()
     TEST_ASSERT_EQUAL_UINT8(3, d.tuningAs<Tuning>().histLen);
     TEST_ASSERT_EQUAL_UINT8(0, d.tuningAs<Tuning>().titleCmd);
     TEST_ASSERT_FALSE(p.tuningFromBlob(d.tuning, blob, sizeof(v1)));   // version 2 with layout 1's length
-    // 0x28 carries one form: the other one's fields are blocked, with why.
-    TEST_ASSERT_EQUAL_STRING("form_ac", p.messageBlocked(Rav4Emitter::MSG_TEMP, c));
-    TEST_ASSERT_NULL(p.messageBlocked(Rav4Emitter::MSG_AC, c));
-    t.cmd28 = 0;
-    TEST_ASSERT_EQUAL_STRING("form_temp", p.messageBlocked(Rav4Emitter::MSG_AC, c));
+    // 0x28 is one message (1.7.2): no form blocks a field.
+    TEST_ASSERT_NULL(p.messageBlocked(Rav4Emitter::MSG_CLIMATE, c));
     TEST_ASSERT_NULL(p.messageBlocked(Rav4Emitter::MSG_SPEED, c));
 }
 
@@ -475,7 +469,7 @@ void test_the_registry_takes_the_protocol_settings()
     TEST_ASSERT_EQUAL_STRING("raise", p.setting(0).id);
     const size_t n = Cfg::Registry::count();
     TEST_ASSERT_EQUAL_STRING(p.setting(p.settingCount() - 1).id, Cfg::Registry::at(n - 1).id);
-    const Cfg::SEntry* e = Cfg::Registry::find("raise.cmd28");
+    const Cfg::SEntry* e = Cfg::Registry::find("raise.steerInvert");
     TEST_ASSERT_NOT_NULL(e);
     // Its get/put edit HuConfig::tuning through Model::hu.
     HuConfig c;
@@ -484,7 +478,7 @@ void test_the_registry_takes_the_protocol_settings()
     Cfg::Model m{&s, nullptr, nullptr, c.tuning, c.msgOn};
     TEST_ASSERT_TRUE(Cfg::Registry::available(m, *e));
     TEST_ASSERT_TRUE(Cfg::Registry::set(m, *e, 1));
-    TEST_ASSERT_EQUAL_UINT8(1, c.tuningAs<Tuning>().cmd28);
+    TEST_ASSERT_EQUAL_UINT8(1, c.tuningAs<Tuning>().steerInvert);
     Cfg::Model none{&s, nullptr};
     TEST_ASSERT_FALSE(Cfg::Registry::available(none, *e));
     // The protocol is a setting, read at boot.

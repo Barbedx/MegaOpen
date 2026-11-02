@@ -71,7 +71,7 @@ const defKnobs=()=>({enc:encDef(true,['EncCw','EncCcw','Ok','SrcNext']),enc2:enc
 const defSet=()=>({pulseMs:120,uartEnabled:true,uartBaud:'38400',ssid:'HomeWiFi',bleMode:'ams',autoTime:true,ancsPopup:true,mdnsOn:true,wifiAuto:false,remindLightsKmh:10,remindBrakeKmh:5,logTags:'',logWeb:'TRC',logFlash:'DBG',logPush:'TRC',logSerial:'INF',mediaLayout:'info',mediaSource:'auto',
  huTitleFirst:true,keyPopup:true,keyPopupMs:1200});
 /* Canbox::Tuning */
-const defTun=()=>({cmd28:0,doorsLen:2,steerInvert:0,steerDiv:10,steerClamp:540,fuelUnit:2,tripUnit:2,tripFields:1,histLen:13,radarInvert:0,version:'raise-rav4-1.2   ',titleCmd:0,artistCmd:0});
+const defTun=()=>({doorsLen:2,steerInvert:0,steerDiv:10,steerClamp:540,fuelUnit:2,tripUnit:2,tripFields:1,histLen:13,radarInvert:0,version:'raise-rav4-1.2   ',titleCmd:0,artistCmd:0});
 /* DecodeTable::factory у формі /api/map: рядок за id поля (= ім'я сигналу) */
 const pow10=d=>Math.pow(10,d);
 /* RaiseTargets::toInt: lround (половина — від нуля), не Math.round */
@@ -230,7 +230,7 @@ const CAPK=['ring','fill','fileMB','autoProtect','mode','autostart'];
 const mRouteId=d=>'route'+d[0].toUpperCase()+d.slice(1);
 /* raise.* реєстру = S.tun (Canbox::Tuning): [ключ S.tun, у значення реєстру, назад] */
 const FUELID={2:'l100km',1:'kml',0:'mpg'},TRIPID={2:'km',1:'miles',0:'hide'},byVal=(o,v)=>+Object.keys(o).find(k=>o[k]===v);
-const RAISE={doorsLen:[x=>x,x=>x],cmd28:[x=>x?'ac':'temp',x=>x==='ac'?1:0],steerInvert:[x=>!!x,x=>x?1:0],steerDiv:[x=>x,x=>x],steerClamp:[x=>x,x=>x],
+const RAISE={doorsLen:[x=>x,x=>x],steerInvert:[x=>!!x,x=>x?1:0],steerDiv:[x=>x,x=>x],steerClamp:[x=>x,x=>x],
  fuelUnit:[x=>FUELID[x],x=>byVal(FUELID,x)],tripUnit:[x=>TRIPID[x],x=>byVal(TRIPID,x)],tripFields:[x=>!!x,x=>x?1:0],histLen:[x=>x,x=>x],radarInvert:[x=>!!x,x=>x?1:0],
  version:[x=>String(x).trimEnd(),x=>String(x).padEnd(16,' ').slice(0,16)],titleCmd:[x=>x,x=>x],artistCmd:[x=>x,x=>x]};
 g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type!=='table'&&!(f.id in S.set))S.set[f.id]=regDef(f);
@@ -398,7 +398,7 @@ function mapVal(t){const r=S.map[t.id],ts=S.tests[t.id];if(ts&&ts.until>now())re
  const v=t.id in LV?LV[t.id]:(t.kind==='b'?0:+(t.min+(t.max-t.min)*.3).toFixed(t.dec));return {v,how:'can',raw:r.can.id+': '+canBytes(r.can.id).map(h2).join(' ')}}
 /* WebUiMap.cpp: назву, одиницю й межі поля сторінка бере з каталогу; тут — лише прив'язка і значення */
 /* ?live=1 / ?meta=1 (WebUiMap.cpp putLive/putMeta): живі сигнали — вигадана поїздка; правила — AlertRules */
-const META=SIM_DECODE.meta||[],DERIVED=new Set(SIM_DECODE.derived||[]),BOUND=new Set(SIM_DECODE.rows.map(r=>r.sig));
+const META=SIM_DECODE.meta||[],DERIVED=new Set(SIM_DECODE.derived||[]),DIAG=new Set(SIM_DECODE.diag||[]),BOUND=new Set(SIM_DECODE.rows.map(r=>r.sig));
 /* DecodeTable::factoryMeasured / measured: заводський рядок без hyp; S.conf — ✓/↺ власника (POST {confirm}) */
 const FACT_HYP=new Set(SIM_DECODE.rows.filter(r=>r.can&&r.can.hyp).map(r=>r.sig));S.conf={};
 const measured=n=>BOUND.has(n)&&(S.conf[n]??!FACT_HYP.has(n));
@@ -414,9 +414,9 @@ const sigT=id=>C.raise.find(x=>x.id===id)||(m=>m&&{id:m[0],dec:m[2],min:+decStr(
 const bindOf=id=>S.map[id]||(r=>r&&r.can?{src:'can',can:r.can,k:0}:{src:'off',can:null,k:0})(SIM_DECODE.rows.find(x=>x.sig===id));
 const mapBase=()=>({send:S.emitter,uart:S.set.uartEnabled});
 g('/api/map',q=>{const o=mapBase();o.rows=q.live?[]:C.raise.map(t=>({id:t.id,...S.map[t.id],...mapVal(t)}));
- if(q.live){const t=Date.now();o.sigs=META.map(m=>{const v=liveVal(m[0],t),src=DERIVED.has(m[0])?'d':BOUND.has(m[0])?'c':'o';
+ if(q.live){const t=Date.now();o.sigs=META.map(m=>{const v=liveVal(m[0],t),src=DIAG.has(m[0])?'r':DERIVED.has(m[0])?'d':BOUND.has(m[0])?'c':'o';
   const ms=src==='c'&&measured(m[0]);
-  return [v===undefined?null:decStr(v,m[2]),v===undefined?null:Math.floor(Math.random()*300),src,ms?1:0,src!=='c'?0:!ms?1:FACT_HYP.has(m[0])?2:0,(src==='c'||src==='d'||src==='f')?1:0]});
+  return [v===undefined?null:decStr(v,m[2]),v===undefined?null:Math.floor(Math.random()*300),src,ms?1:0,src!=='c'?0:!ms?1:FACT_HYP.has(m[0])?2:0,(src==='c'||src==='d'||src==='f'||src==='r')?1:0]});
   o.ruleStats=S.ruleStats}
  if(q.sig){const t=sigT(q.sig);if(!t)return fail(404,'not_found');o.rows=[{id:t.id,...bindOf(t.id),...mapVal(t),...(DERIVED.has(t.id)?{calc:true}:{})}]}
  if(q.meta)o.meta=META.map(m=>[m[0],m[1],m[2],m[3],m[4],decStr(m[5],m[2]),decStr(m[6],m[2]),m[7]]);
@@ -445,12 +445,10 @@ po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(
  for(const[r,t]of E){const c=r.can||{};S.map[r.id]={src:r.src,can:r.src==='can'?{id:'0x'+hexV(c.id).toString(16).toUpperCase().padStart(3,'0'),byte:c.byte,len:c.len??1,shift:c.shift??0,mask:hexV(c.mask).toString(16).toUpperCase(),mul:c.mul??1,div:c.div??1,add:c.add??0,le:!!c.le,signed:!!c.signed}:null,k:r.src==='const'?toInt(r.k,t.dec)/pow10(t.dec):0}}
  if(q.reset||E.length)emit(2,'CAN','[map] '+(q.reset?'back to factory':'saved')+': '+E.length+' field(s)');
  return ok});
-const frameFor=(t,v)=>{const[c,sub0]=t.cmd.split(' '),sub=sub0&&sub0!=='A/C'?sub0:'',n=Math.round(+v*pow10(t.dec))&0xFFFF;return ('2E '+c+' 0'+(sub?3:2)+' '+(sub?sub+' ':'')+h2(n)+' '+h2(n>>8)+' CS').toUpperCase()};
-/* WebUiMap.cpp: перед тестом — чи носить 0x28 цю форму; ворота повідомлень (одометр, TPMS…) мок не моделює */
+const frameFor=(t,v)=>{const[c,sub0]=t.cmd.split(' '),sub=sub0||'',n=Math.round(+v*pow10(t.dec))&0xFFFF;return ('2E '+c+' 0'+(sub?3:2)+' '+(sub?sub+' ':'')+h2(n)+' '+h2(n>>8)+' CS').toUpperCase()};
+/* WebUiMap.cpp: ворота повідомлень (одометр, TPMS…) мок не моделює */
 po('/api/map/test',q=>{const t=C.raise.find(x=>x.id===q.id);if(!t)return fail(404,'not_found');if(!S.set.uartEnabled)return fail(409,'uart_off');
- if(t.cmd==='28'&&S.tun.cmd28)return fail(409,t.id+': form_ac');
  if(fmOff(t.id))return fail(409,t.id+': field_off');
- if(t.cmd==='28 A/C'&&!S.tun.cmd28)return fail(409,t.id+': form_temp');
  const v=q.value;if(typeof v!=='number'||!(v>=t.min&&v<=t.max)||(t.kind==='b'&&v!==0&&v!==1))return fail(400,t.id+': value: between '+t.min+' '+t.max);
  S.tests[t.id]={v,until:now()+30000};const b=frameFor(t,v);uart('T',b);S.hu.txVeh++;emit(2,'HU','[map] test '+t.id+' = '+v+' -> '+b);return {ok:true,bytes:b}});
 g('/api/canbox/last',q=>({total:S.hu.count,baud:S.set.uartBaud,frames:S.uartRing.slice().reverse().filter(e=>!(q&&q.in==='1')||e.dir==='R'||e.dir==='J').slice(0,14).map(e=>({...e,ageMs:now()-e.at}))}));
@@ -578,7 +576,7 @@ g('/api/logs/tags',()=>({tags:['boot','wifi','hu','key','car','push','ota'].map(
 g('/api/gears',()=>{const v=S.car&&S.car.speed!==undefined?S.car.speed:4250,r=2100,k=Math.round(v/r*100);
  return {speed:v,rpm:r,ratio:k,gear:k>230?4:3,clutch:0,neutral:0,table:[80,147,207,275,359,431],peaks:[[147,40],[207,95]]}});
 /* CarDiag (src/app/CarDiag.cpp): 21 C1 клімату; проба — одна відповідь, опитування — салон повільно гріється */
-const dgView=()=>{const v=S.dg||(S.dg={on:false,session:false,interval:5,ok:0,sent:0,last:'',at:0,cabin:9.5});
+const dgView=()=>{const v=S.dg||(S.dg={on:false,session:false,interval:5,ok:0,sent:0,last:'',at:0,cabin:9.5,set:20,blower:0,dist:0,recirc:0,ac:0,clear:0});
  if(v.on&&now()-v.at>v.interval*1000){v.at=now();v.sent++;v.ok++;v.last='ok';v.cabin=Math.min(24,v.cabin+0.5)}
  const b=Math.round((v.cabin+40)*2);return {on:v.on,session:v.session,inSession:v.on&&v.session,interval:v.interval,state:v.on?'idle':'off',last:v.last,nrc:0,
   reply:v.last?'61 C1 01 31 02 82 03 64 '+b.toString(16).toUpperCase().padStart(2,'0')+' 14 00 B0':'',lastAgoMs:v.at?now()-v.at:0,ok:v.ok,timeouts:0,negatives:0,bad:0,sent:v.sent,tx:v.on,

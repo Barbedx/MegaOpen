@@ -66,8 +66,8 @@ namespace Vehicle
         {"ac_vent_floor", "",       0,       1, 0, true,  GRP_CLIMATE},
         {"ac_display_req","",       0,       1, 0, true,  GRP_CLIMATE},
         {"ac_fan",        "0-7",    0,       7, 0, false, GRP_CLIMATE},
-        {"ac_temp_drv",   "raw",    0,     255, 0, false, GRP_CLIMATE},
-        {"ac_temp_pass",  "raw",    0,     255, 0, false, GRP_CLIMATE},
+        {"ac_temp_drv",   "C",    100,     350, 1, false, GRP_CLIMATE},
+        {"ac_temp_pass",  "C",    100,     350, 1, false, GRP_CLIMATE},
         {"ac_defog",      "",       0,       1, 0, true,  GRP_CLIMATE},
         {"ac_aqs",        "",       0,       1, 0, true,  GRP_CLIMATE},
         {"ac_eco",        "",       0,       1, 0, true,  GRP_CLIMATE},
@@ -197,6 +197,12 @@ namespace Vehicle
         {"drive_handbrake", "",       0,       1, 0, true,  GRP_SAFETY},
         {"fuel_pct",        "%",      0,    1000, 1, false, GRP_TRIP},
         {"service_calc",    "km",     0,   63750, 0, false, GRP_ENGINE},
+        {"clim_set",        "C",    150,     305, 1, false, GRP_CLIMATE},
+        {"clim_blower",     "0-9",    0,       9, 0, false, GRP_CLIMATE},
+        {"clim_dist",       "0-5",    0,       5, 0, false, GRP_CLIMATE},
+        {"clim_recirc",     "0-2",    0,       2, 0, false, GRP_CLIMATE},
+        {"clim_ac_req",     "0-2",    0,       2, 0, false, GRP_CLIMATE},
+        {"clim_clear",      "",       0,       1, 0, true,  GRP_CLIMATE},
     };
 
     static_assert(sizeof(kMeta) / sizeof(kMeta[0]) == SIG_USER_0,

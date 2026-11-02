@@ -282,7 +282,7 @@ namespace App
                     const uint8_t n = Vehicle::Derived::inputs(s, in);
                     bool ok = !pinned(s);
                     if (n) for (uint8_t i = 0; i < n; ++i) ok = ok && t.measured(in[i]) && !pinned(in[i]);
-                    else   ok = ok && t.measured(s);
+                    else   ok = ok && (t.measured(s) || Vehicle::fromDiag(s));   // read from the ECU: as good as measured
                     Vehicle::setVerified(s, ok);
                 }
                 // A formula's target, not fed by a row: as good as its inputs

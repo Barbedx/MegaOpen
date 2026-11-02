@@ -26,9 +26,9 @@ namespace Canbox
     // Every value the protocol sources disagree on, settable from the web UI and
     // persisted (they get resolved in a car). Defaults are the best-attested reading.
     struct Tuning {
-        // 0x28 carries two incompatible messages under one command byte and the
-        // head unit drops the length it did not expect. Only one may be live.
-        uint8_t cmd28        = 0;    // 0 = outside temp (12 B), 1 = A/C (5 B)
+        // (Blob byte 1 was cmd28, the choice between two 0x28 forms, up to
+        // 1.7.1; one 12-byte frame carries both since 1.7.2. The byte stays 0
+        // so an OTA rollback reads the outside-temperature form.)
 
         // len 2, D1 = 0: the head unit's decoder reads D1 unconditionally (b7 =
         // bonnet), so with len 1 it reads the checksum byte there and shows the
@@ -94,8 +94,7 @@ namespace Canbox
         // Message table index, public: the web UI and tests address messages by it.
         enum Msg : uint8_t {
             MSG_DOORS = 0,   // 0x24        doors (+ ignition, see setDoorsWithIgnition)
-            MSG_TEMP,        // 0x28  12 B  outside temperature
-            MSG_AC,          // 0x28   5 B  air conditioning — EXCLUSIVE with MSG_TEMP
+            MSG_CLIMATE,     // 0x28  12 B  the climate panel (D0-D4) + the outside temperature (D5)
             MSG_STEER,       // 0x29        steering angle
             MSG_LIGHTS,      // 0x7D 01     lights + indicators
             MSG_SPEED,       // 0x7D 03     road speed + average
@@ -120,12 +119,6 @@ namespace Canbox
             MSG_COUNT
         };
 
-        // 0x28 carries two incompatible messages and the head unit drops a frame
-        // of unexpected length, so only one may be scheduled. 12-byte outside
-        // temp is what the DUDU displays for us (attested by mikescotland); 5-byte
-        // A/C is the vendor spec and what the head-unit Java parses.
-        enum class Cmd28 : uint8_t { OutsideTemp = 0, AirCon = 1 };
-
         // ---- Emitter -------------------------------------------------------
         void begin(WriteFn write, void* ctx) override { _write = write; _ctx = ctx; }
         // Enabled, HuConfig::tuning as a Tuning, the switches, the field map.
@@ -137,9 +130,6 @@ namespace Canbox
         // The uncertain-value block: what the web UI edits and NVS stores.
         void setTuning(const Tuning& t) { _t = t; }
         const Tuning& tuning() const { return _t; }
-
-        void setCmd28(Cmd28 m) { _t.cmd28 = (m == Cmd28::AirCon) ? 1 : 0; }
-        Cmd28 cmd28() const { return _t.cmd28 ? Cmd28::AirCon : Cmd28::OutsideTemp; }
 
         // 0x24 length. mikescotland (source of our 0x7D messages, proven on this
         // unit) sends len 1, doors only. The vendor spec sends len 2 with the
@@ -183,10 +173,13 @@ namespace Canbox
         // 0x28 frames sent whose payload differed from the 0x28 before: each
         // may pop the head unit's climate overlay. Any task (a counter).
         uint32_t climateChanges() const { return _climateChanges; }
-        // The A/C form of 0x28 goes out only when one of its signals is
-        // trusted: measured in a car (Vehicle::verified) or pinned by hand (a
-        // test, a constant). A guessed row alone never opens the overlay.
+        // 0x28's panel bytes (D0-D4) are filled only when one of the panel's
+        // fields is trusted: measured in a car (Vehicle::verified; a formula
+        // over measured or ECU-read signals counts) or pinned by hand (a test,
+        // a constant). A guessed row alone never opens the overlay.
         static bool acTrusted(const FieldView& s);
+        // The head unit's setpoint byte from °C x10 (docs/hu-decoder.md §2d).
+        static uint8_t setpointByte(int32_t cx10);
 
         // Build one message into a caller-owned buffer without transmitting it.
         bool preview(uint8_t msgIndex, const FieldView& s,

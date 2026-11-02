@@ -54,8 +54,9 @@ void test_only_the_sweeps_four_requests_are_allowed_and_nothing_else_leaves()
 
 void test_decode_2190_setpoint_blower_distribution()
 {
-    // byte 3: recirc 1 (0b001), setpoint x=14 -> 22.0 C; byte 4: dist 5, blower 4 (= 3); byte 5: AC on.
-    const uint8_t r[] = {0x61, 0x90, (uint8_t)(1 << 5 | 14), 0x54, 0x02, 0, 0};
+    // byte 3: recirc 1 (0b001), setpoint x=14 -> 22.0 C; byte 4: dist 5, blower 4 (= 3);
+    // byte 5: voir clair on, AC on.
+    const uint8_t r[] = {0x61, 0x90, (uint8_t)(1 << 5 | 14), 0x54, 0x12, 0, 0};
     Clim2190 v;
     TEST_ASSERT_TRUE(decode2190(r, sizeof(r), v));
     TEST_ASSERT_EQUAL(1, v.recirc);
@@ -63,6 +64,16 @@ void test_decode_2190_setpoint_blower_distribution()
     TEST_ASSERT_EQUAL(5, v.dist);
     TEST_ASSERT_EQUAL(4, v.blower);
     TEST_ASSERT_EQUAL(2, v.ac);
+    TEST_ASSERT_EQUAL(1, v.clear);
+    // The car's own reply (2026-10-28, in the 10 C0 session): AUTO, 20.0 C.
+    const uint8_t car[] = {0x61, 0x90, 0x0A, 0x00, 0x00, 0x00, 0xF0, 0x00, 0x00, 0x38, 0x33, 0x2B};
+    TEST_ASSERT_TRUE(decode2190(car, sizeof(car), v));
+    TEST_ASSERT_EQUAL(200, v.setX10);
+    TEST_ASSERT_EQUAL(0, v.blower);
+    TEST_ASSERT_EQUAL(0, v.dist);
+    TEST_ASSERT_EQUAL(0, v.recirc);
+    TEST_ASSERT_EQUAL(0, v.ac);
+    TEST_ASSERT_EQUAL(0, v.clear);
     const uint8_t c1[] = {0x61, 0xC1, 0, 0, 0};
     TEST_ASSERT_FALSE(decode2190(c1, sizeof(c1), v));
 }

@@ -62,12 +62,11 @@ namespace Canbox
             "Door icons confirmed on our unit at LENGTH 1. The length-2 form adds the "
             "ignition bit, which per the spec gates the trip/fuel/history/TPMS panels — "
             "and risks the icons, because the unit guards on exact length."},
-        /* MSG_TEMP        */ {Conf::Confirmed,
-            "The 12-byte form is what displays for us. Conflicts with the A/C form below: "
-            "same command byte, different length, only one may be live."},
-        /* MSG_AC          */ {Conf::Conflict,
-            "The vendor spec's 5-byte reading of 0x28, and what the leaked head-unit Java "
-            "parses (it drops any 0x28 whose length is not 5). Never confirmed here."},
+        /* MSG_CLIMATE     */ {Conf::Confirmed,
+            "One 12-byte frame: D5 the outside temperature (what displayed first), D0-D4 "
+            "the climate panel as the head unit's own decoder reads them (docs/hu-decoder.md "
+            "2d), filled only from a measured or pinned field. The vendor's 5-byte form is "
+            "not sent: this unit reads the 12."},
         /* MSG_STEER       */ {Conf::Confirmed,
             "Working. Sign is still open: the head unit's own code negates before clamping, "
             "the spec does not. If the camera guidelines bend the wrong way, flip the switch."},

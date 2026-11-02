@@ -536,6 +536,10 @@ static void writeForTheSimulator(const DecodeTable& t)
     const uint8_t* in = nullptr;
     for (uint8_t i = 0, n = 0; i < SIG_COUNT; ++i)
         if (Derived::inputs(i, in)) j += std::string(n++ ? "," : "") + "\"" + meta(i).name + "\"";
+    // ... and which are read from an ECU (the live row's source 'r').
+    j += "],\"diag\":[";
+    for (uint8_t i = 0, n = 0; i < SIG_COUNT; ++i)
+        if (fromDiag(i)) j += std::string(n++ ? "," : "") + "\"" + meta(i).name + "\"";
     j += "]}\n";
     std::filesystem::path dir = std::filesystem::current_path() / "build";
     std::filesystem::create_directories(dir);

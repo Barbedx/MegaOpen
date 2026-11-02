@@ -6,14 +6,19 @@
 
 namespace Vehicle { class State; }
 
-// The climate ECU's `21 C1`, read on CAN A (src/diag/ClimDiag.h): the cabin
-// temperature and the sun sensor, which no broadcast frame carries.
+// The climate ECU read on CAN A (src/diag/ClimDiag.h): `21 C1`, the cabin
+// temperature and the sun sensor, then `21 90`, the panel's own state (the
+// setpoint, blower, distribution, recirculation, A/C, «voir clair»: the
+// clim_* signals, which the factory formulas turn into the head unit's
+// climate panel). Neither is in a broadcast frame.
 //
 // OFF UNLESS THE OWNER SWITCHES IT ON (NVS "diag": on, interval). Two ways in:
-//   * a probe: one request now, its reply in the log ([diag]), then back to
-//     listen-only;
-//   * polling: one request every `interval` seconds while the car's bus is
-//     alive; the controller stays in normal mode while it runs.
+//   * a probe: one pass now (21 C1, then 21 90), its replies in the log
+//     ([diag]), then back to listen-only;
+//   * polling: one pass every `interval` seconds while the car's bus is
+//     alive; the controller stays in normal mode while it runs. A refused
+//     21 90 is dropped from the pass for the run (the ECU does not have it,
+//     or wants the session); a refused 21 C1 stops the polling.
 // Never while the rate is being searched, never on a quiet bus (no frame for
 // BUS_QUIET_MS: the car is off, and nobody would ACK), never after a bus fault
 // (Mcp2518Source::txFault(), cleared by switching the read on again). A
@@ -69,6 +74,9 @@ namespace App
             int16_t  cabinX10 = 0;        // the last good values
             uint16_t sunWm2 = 0;
             bool     haveValues = false;
+            bool     have90 = false;      // 21 90 answered this run
+            uint16_t setX10 = 0;          // the panel's setpoint, °C x10
+            uint8_t  blower = 0, dist = 0, recirc = 0, ac = 0, clear = 0;   // its codes (Diag::Clim2190)
         };
         void view(View& out);
     }
