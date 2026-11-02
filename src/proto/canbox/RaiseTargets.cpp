@@ -38,19 +38,17 @@ namespace Canbox
             "",
         };
 
-        // 8 B a row: the name, the signal, the message, the section, and why
-        // it is not sent.
+        // A row: the name, the signal, the message that carries it, the section.
+        // Every row is a field the protocol sends: a car value it has no field
+        // for (the battery's volts) is a signal on «Сигнали», not a row here.
         struct Row {
             const char* name;
             uint8_t     sig;
             uint8_t     msg;
             uint8_t     group;
-            uint8_t     nofw;
         };
 
-        // A signal the emitter sends; a car value it has no field for.
-        #define T(sig, msg, g, name)   {name, sig, M::msg, g, NF_NONE}
-        #define X(sig, g, name, nf)    {name, sig, NO_MSG, g, nf}
+        #define T(sig, msg, g, name)   {name, sig, M::msg, g}
 
         const Row kRows[] = {
             T(SIG_DOOR_FL, MSG_DOORS, G_DOORS, nullptr),
@@ -78,7 +76,6 @@ namespace Canbox
             T(SIG_FUEL_PCT, MSG_ODO, G_FUEL, nullptr),       // 0x7D 04 D4-D5, off by default
 
             T(SIG_ENG_TEMP, MSG_COOLANT, G_ENGINE, nullptr),
-            X(SIG_BATT_V, G_ENGINE, nullptr, NF_BATT),
 
             T(SIG_OUT_TEMP, MSG_TEMP, G_CLIMATE, nullptr),
             T(SIG_AC_ON, MSG_AC, G_CLIMATE, nullptr),
@@ -170,8 +167,7 @@ namespace Canbox
 
         };
         #undef T
-        #undef X
-
+        
         constexpr uint8_t kCount = (uint8_t)(sizeof(kRows) / sizeof(kRows[0]));
     }
 
@@ -186,9 +182,7 @@ namespace Canbox
             TargetView v;
             v.group   = kGroups[r.group];
             v.name    = r.name;
-            v.cmd     = r.msg != NO_MSG ? kMsgCmd[r.msg] : "";
-            v.why     = r.nofw != NF_NONE ? kNoFw[r.nofw] : nullptr;
-            v.fw      = r.msg != NO_MSG;
+            v.cmd     = kMsgCmd[r.msg];
             v.sig     = r.sig;
             v.msg     = r.msg;
             v.id      = m.name;

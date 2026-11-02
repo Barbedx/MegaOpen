@@ -64,7 +64,16 @@ namespace Canbox
         // 0x30, exactly 16 ASCII bytes on the wire; identifies the build on the
         // head unit's screen. Defaulted from Version.h; a booted board keeps
         // what it stored.
-        char    version[17]  = MEGAOPEN_VERSION_WIRE;
+        // 0x30's 16 ASCII bytes. Empty (or all spaces) = the firmware's own
+        // MEGAOPEN_VERSION_WIRE, so the string the head unit shows under
+        // «CANBUS Info» follows every update; a text typed here is the owner's
+        // and stays.
+        char    version[17]  = "";
+        bool    ownVersion() const
+        {
+            for (char c : version) { if (!c) break; if (c != ' ') return true; }
+            return false;
+        }
 
         // The head unit's track text (RaiseText): the commands carrying the
         // title and the artist. 0 = learn them.

@@ -9,6 +9,7 @@
 #include "Rav4Emitter.h"
 #include "Rav4Profile.h"
 #include "../../cfg/SettingsRegistry.h"
+#include "../../Version.h"
 
 namespace Canbox
 {
@@ -80,6 +81,7 @@ namespace Canbox
                 for (size_t i = 0; i < VERSION_LEN; ++i) t.version[i] = i < n ? v[i] : ' ';
                 t.version[VERSION_LEN] = 0;
             },
+            "MegaOpen " MEGAOPEN_VERSION,   // empty = the firmware's own: 0x30 follows every update
         };
 
 #define T_GET(expr) [](const Model& m) -> int32_t { const Tuning& t = tun(m); return (int32_t)(expr); }

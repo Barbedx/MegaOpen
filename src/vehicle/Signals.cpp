@@ -238,6 +238,20 @@ namespace Vehicle
         const Meta kFreeUser = {"", "", 0, 0, 0, false, GRP_USER};
     }
 
+    namespace
+    {
+        struct GroupRow { const char* id; const char* tag; };
+        const GroupRow kGroups[GRP_COUNT] = {
+            {"drive", "Drive"},           {"body", "Body"},       {"lights", "Lights"},   {"trip", "Trip"},
+            {"climate", "Climate"},       {"radar", "Parking"},   {"tpms", "Tyres"},      {"audio", "Audio"},
+            {"settings", "Car settings"}, {"engine", "Engine"},   {"safety", "Safety"},   {"dynamics", "Dynamics"},
+            {"user", "Own"},
+        };
+    }
+
+    const char* groupId(uint8_t g)  { return g < GRP_COUNT ? kGroups[g].id : ""; }
+    const char* groupTag(uint8_t g) { return g < GRP_COUNT ? kGroups[g].tag : ""; }
+
     const Meta& meta(uint8_t s)
     {
         if (s < SIG_USER_0) return kMeta[s];

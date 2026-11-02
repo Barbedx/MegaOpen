@@ -942,6 +942,33 @@ void test_the_version_string_is_settable_and_always_sixteen_bytes()
     for (uint8_t i = 7; i < 19; ++i) TEST_ASSERT_EQUAL_UINT8(' ', g_last[i]);
 }
 
+// Empty: the firmware's own version goes out, so the string the head unit
+// shows follows every update. A 1.7.0 blob holds that build's default
+// ("MegaOpen 1.7.0  "): it reads back empty. The owner's own text stays.
+void test_the_version_string_follows_the_firmware_unless_the_owner_wrote_one()
+{
+    resetCapture();
+    State s;
+    E e;
+    e.begin(capture, nullptr);
+    Canbox::Tuning t;
+    TEST_ASSERT_FALSE(t.ownVersion());
+    e.setTuning(t);
+    TEST_ASSERT_TRUE(e.sendNow(E::MSG_VERSION, s));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY((const uint8_t*)MEGAOPEN_VERSION_WIRE, g_last + 3, 16);
+    uint8_t blob[Canbox::Tuning::BLOB_SIZE];
+    strcpy(t.version, "MegaOpen 1.7.0  ");
+    t.toBlob(blob);
+    Canbox::Tuning u;
+    TEST_ASSERT_TRUE(u.fromBlob(blob, sizeof(blob)));
+    TEST_ASSERT_FALSE(u.ownVersion());
+    strcpy(t.version, "my box          ");
+    t.toBlob(blob);
+    TEST_ASSERT_TRUE(u.fromBlob(blob, sizeof(blob)));
+    TEST_ASSERT_TRUE(u.ownVersion());
+    TEST_ASSERT_EQUAL_STRING("my box          ", u.version);
+}
+
 
 // ---- RaiseTargets: the page's rows -------------------------------------------
 // The page, /api/map and /api/map/test all address a field by its row: an id
@@ -958,23 +985,33 @@ void test_raise_targets_ids_are_unique_and_name_real_signals()
         TEST_ASSERT_TRUE_MESSAGE(t.min <= t.max, t.id);
         // The name is the page's (k.raise.<id>); a row keeps one only when it is
         // the protocol's own word (AUTO, ECO).
-        TEST_ASSERT_TRUE_MESSAGE(t.group && *t.group && t.cmd && (*t.cmd || !t.fw), t.id);
+        TEST_ASSERT_TRUE_MESSAGE(t.group && *t.group && t.cmd && *t.cmd, t.id);
         TEST_ASSERT_EQUAL_INT_MESSAGE(i, Canbox::raise112().findField(t.id), t.id);          // unique
         if (t.sig < SIG_COUNT) TEST_ASSERT_EQUAL_STRING(meta(t.sig).name, t.id);
-        // A field the firmware sends has a signal to hold its value.
-        if (t.fw) TEST_ASSERT_TRUE_MESSAGE(t.sig < SIG_COUNT && t.msg < E::MSG_COUNT, t.id);
-        else      TEST_ASSERT_EQUAL_UINT8_MESSAGE(Canbox::NO_MSG, t.msg, t.id);
+        // Every row is a field the firmware sends, with a signal to hold its value.
+        TEST_ASSERT_TRUE_MESSAGE(t.sig < SIG_COUNT && t.msg < E::MSG_COUNT, t.id);
     }
     TEST_ASSERT_EQUAL_INT(-1, Canbox::raise112().findField("nope"));
-    // The bonnet goes out in 0x24 D1 b7. The battery is the one row not sent:
-    // protocol 112 has no field for it, and the page says so (`why`).
-    TEST_ASSERT_TRUE(RT::at((uint8_t)Canbox::raise112().findField("bonnet")).fw);
-    for (uint8_t i = 0; i < RT::count(); ++i) {
-        const Canbox::TargetView t = RT::at(i);
-        TEST_ASSERT_EQUAL_MESSAGE(t.fw, t.why == nullptr, t.id);
-        TEST_ASSERT_TRUE_MESSAGE(t.sig < SIG_COUNT, t.id);
-        if (!t.fw) TEST_ASSERT_EQUAL_STRING("batt_v", t.id);
+    // The bonnet goes out in 0x24 D1 b7. A car value the protocol has no field
+    // for (the battery's volts: the head unit measures its own) is not a row
+    // here but a signal on «Сигнали».
+    TEST_ASSERT_TRUE(Canbox::raise112().findField("bonnet") >= 0);
+    TEST_ASSERT_EQUAL_INT(-1, Canbox::raise112().findField("batt_v"));
+}
+
+// Every group has an id for the catalog and a tag for the panel menu, each
+// unique. The side of «Сигнали» is computed from the source: the car's for a
+// CAN row, Derived or a formula; the head unit's alone for a constant, a pin
+// or nothing.
+void test_signal_groups_have_ids_and_the_side_is_computed()
+{
+    for (uint8_t g = 0; g < GRP_COUNT; ++g) {
+        TEST_ASSERT_TRUE_MESSAGE(groupId(g)[0] && groupTag(g)[0], groupId(g));
+        for (uint8_t h = 0; h < g; ++h) TEST_ASSERT_TRUE_MESSAGE(strcmp(groupId(g), groupId(h)) != 0, groupId(g));
     }
+    TEST_ASSERT_EQUAL_STRING("", groupId(GRP_COUNT));
+    for (char c : {'c', 'd', 'f'}) TEST_ASSERT_TRUE(fromCar(c));
+    for (char c : {'k', 'p', 'o', '?'}) TEST_ASSERT_FALSE(fromCar(c));
 }
 
 void test_every_sent_raise_target_changes_its_message()
@@ -986,7 +1023,6 @@ void test_every_sent_raise_target_changes_its_message()
     e.setFieldMap(fields({own(SIG_PRND), own(SIG_ENG_TEMP), own(SIG_FUEL_PCT)}));   // the fields that start off
     for (uint8_t i = 0; i < RT::count(); ++i) {
         const Canbox::TargetView t = RT::at(i);
-        if (!t.fw) continue;
         State s;
         // The fields that gate a message (trips ride on the odometer's 0x7D 04):
         // /api/map/test answers 409 until the gate has a value.
@@ -1003,19 +1039,19 @@ void test_every_sent_raise_target_changes_its_message()
     }
     // And every signal the emitter reads has a row (only the 8 it does not
     // send are missing). The Mégane broadcast signals from SIG_FUEL_LEVEL on
-    // have no Raise field, except the selector probe, SIG_PRND, the bonnet,
-    // the tank in per cent, and the battery (listed, not sent).
+    // have no Raise field, except the selector probe, SIG_PRND, the bonnet
+    // and the tank in per cent (the battery's volts have no field: not a row).
     bool listed[SIG_COUNT] = {};
     uint8_t n = 0;
     for (uint8_t i = 0; i < RT::count(); ++i) {
         const uint8_t sg = RT::at(i).sig;
         if (sg < SIG_COUNT && !listed[sg]) { listed[sg] = true; ++n; }
     }
-    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LEVEL - 7 + 4, n);
+    TEST_ASSERT_EQUAL_UINT8(SIG_FUEL_LEVEL - 7 + 3, n);
     TEST_ASSERT_TRUE(listed[SIG_FUEL_PCT]);
     TEST_ASSERT_TRUE(listed[SIG_PRND]);
     TEST_ASSERT_TRUE(listed[SIG_BONNET]);
-    TEST_ASSERT_TRUE(listed[SIG_BATT_V]);
+    TEST_ASSERT_FALSE(listed[SIG_BATT_V]);   // no field: not a row since 1.7.1
 }
 
 void test_raise_values_place_the_decimal_point()
@@ -1311,5 +1347,7 @@ int main(int, char**)
     RUN_TEST(test_trip_fields_can_be_blanked);
     RUN_TEST(test_radar_polarity_inverts_but_leaves_no_display_alone);
     RUN_TEST(test_the_version_string_is_settable_and_always_sixteen_bytes);
+    RUN_TEST(test_the_version_string_follows_the_firmware_unless_the_owner_wrote_one);
+    RUN_TEST(test_signal_groups_have_ids_and_the_side_is_computed);
     return UNITY_END();
 }

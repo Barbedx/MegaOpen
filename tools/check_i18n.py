@@ -30,7 +30,7 @@ LANGS = ("uk", "en")
 # Keys built at run time ('w.'+code, 's.'+state, 'e.'+code, a screen's title key).
 KEY_PREFIXES = ("w.", "ca.diag.", "s.", "e.", "k.", "nav.", "dr.t.", "kb.why.", "sc.panelHint.", "sc.clk.", "bd.ble.",
                 "kb.cw", "kb.ccw", "kb.click", "kb.hold", "ca.hu.", "ca.hucmd.", "ca.hufld.", "ca.exp.",
-                "ca.battAt.", "lv.grp.", "lv.src.", "lv.cls.")
+                "ca.battAt.", "lv.src.", "lv.cls.")
 CATALOG = os.path.join(ROOT, "build", "catalog.json")
 SRC = os.path.join(ROOT, "src")
 
@@ -60,6 +60,7 @@ def catalog_keys(c):
                 out.append((("k.%s.%s" % (dom, v)) if dom else ("%s.%s" % (base, v)), r.get("name", NEED)))
     for st in c.get("settings", []):
         out.append(("k.set." + st["id"], NEED))   # no label in the catalog: the page has the words
+        out.append(("k.set." + st["id"] + ".h", None))   # its hint, where the page has one (setField)
         rows(st.get("enum"), st.get("dom"), "k.set." + st["id"])
         for col in st.get("cols") or []:
             out.append(("k.set.%s.%s" % (st["id"], col["id"]), NEED))
@@ -72,7 +73,7 @@ def catalog_keys(c):
             out.append(("k.layout.%s.%s" % (l["id"], prm["n"]), prm.get("label", NEED)))
             out.append(("k.layout.%s.%s.h" % (l["id"], prm["n"]), prm.get("hint")))
     for lst, d in (("styles", "style"), ("scenes", "scene"), ("bleModes", "ble"), ("panels", "panel"),
-                   ("dests", "dest"), ("actions", "action"), ("panelKeys", "pkey")):
+                   ("dests", "dest"), ("actions", "action"), ("panelKeys", "pkey"), ("sigGroups", "grp")):
         for x in c.get(lst, []):
             out.append(("k.%s.%s" % (d, x["id"]), x.get("name", NEED)))
     for x in c.get("classes", []):
@@ -83,7 +84,6 @@ def catalog_keys(c):
             out.append(("k.con.%s.%s" % (x["cmd"], f["n"]), f.get("label", NEED)))
     for x in c.get("raise", []):
         out.append(("k.raise." + x["id"], x.get("name", NEED)))
-        out.append(("k.raise.%s.why" % x["id"], x.get("why")))
         out.append(("k.rgroup." + x["group"], NEED))
         if x.get("unit"):
             out.append(("k.unit." + x["unit"], NEED))

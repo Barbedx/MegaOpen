@@ -5,6 +5,16 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-11-02
+
+### Changed
+- **«Сигнали» in two sides.** «Авто» is what the car gives: every signal a CAN row, a computed value (Derived) or a formula makes. «Лише ГУ» is the rest: fields of the head unit's protocol the Mégane has no data for (the parking radar, the tyres, the amplifier, its settings, the A/C panel, the hybrid, the selector, the unit's own trip computer), settable with a constant or a formula. The side is computed from the signal's source by the firmware (`Vehicle::fromCar`; the live row's sixth element), never declared, so a new signal cannot land on the wrong side and a signal bound to a CAN row moves to «Авто» by itself. The tab filters by side, by group and by class, and is laid out like «Формули» and «Правила»: what it is, the filters, the table, the action at the end. The groups come by id (`sigGroups` in `/api/catalog`, words `k.grp.<id>`): one table for the page and the panel menu.
+- **«Поля ГУ»** holds fields only: «Напруга АКБ», the one row protocol 112 has no field for, is gone with its mechanism (`fw` / `why`); the car's volts are on «Сигнали», the head unit measures its own. An intro row says what the tab is, and every protocol setting (`raise.*`) has a **?** with what it changes on the unit (`k.set.<id>.h`: a hint any setting may have now).
+- The head unit is «ГУ» in every Ukrainian text; «магнітола» stays for the stock radio on the panel bus alone.
+
+### Fixed
+- **«Версія коробки»** stayed at the version of the build that first saved the protocol settings: the string the head unit shows under «CANBUS Info» never followed an update. Empty now means the firmware's own version (the default), so it follows every update; a text typed there stays. A saved default («MegaOpen X.Y.Z») is cleared once. A text setting's placeholder says what empty means (`empty` in the catalog).
+
 ## [1.7.0] - 2026-11-01
 
 ### Added

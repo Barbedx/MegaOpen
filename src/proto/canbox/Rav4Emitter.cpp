@@ -1,4 +1,5 @@
 #include "Rav4Emitter.h"
+#include <string.h>
 #include <initializer_list>
 #include "RaiseFramer.h"
 
@@ -169,6 +170,10 @@ namespace Canbox
         radarInvert = in[15];
         for (uint8_t i = 0; i < 16; ++i) version[i] = (char)in[16 + i];
         version[16] = '\0';
+        // A build up to 1.7.0 saved its own default here ("MegaOpen X.Y.Z"), so
+        // the string the head unit showed stayed at the version of the save.
+        // Such a value is nobody's choice: it follows the firmware again.
+        if (!strncmp(version, "MegaOpen ", 9)) memset(version, 0, sizeof(version));
         titleCmd    = v2 ? in[32] : 0;
         artistCmd   = v2 ? in[33] : 0;
         return true;
@@ -587,8 +592,12 @@ namespace Canbox
             case M_VERSION: {
                 // Liveness: shown in the unit's "Display CANBUS Info" screen.
                 cmd = 0x30; len = 16;
-                for (uint8_t i = 0; i < 16; ++i)
-                    p[i] = _t.version[i] ? (uint8_t)_t.version[i] : (uint8_t)' ';
+                const char* v = _t.ownVersion() ? _t.version : MEGAOPEN_VERSION_WIRE;
+                bool end = false;
+                for (uint8_t i = 0; i < 16; ++i) {
+                    end = end || !v[i];
+                    p[i] = end ? (uint8_t)' ' : (uint8_t)v[i];
+                }
                 return true;
             }
             default: return false;

@@ -114,28 +114,7 @@ namespace App
             constexpr uint32_t IDLE_MS    = 45000;
 
             // ---- the car's signals, for "Car data" -----------------------------------
-            const char* groupTag(void*, uint8_t g)
-            {
-                switch (g) {
-                    case Vehicle::GRP_DRIVE:    return "Drive";
-                    case Vehicle::GRP_BODY:     return "Body";
-                    case Vehicle::GRP_LIGHTS:   return "Lights";
-                    case Vehicle::GRP_TRIP:     return "Trip";
-                    case Vehicle::GRP_CLIMATE:  return "Climate";
-                    case Vehicle::GRP_RADAR:    return "Parking";
-                    case Vehicle::GRP_TPMS:     return "Tyres";
-                    case Vehicle::GRP_AUDIO:    return "Audio";
-                    case Vehicle::GRP_SETTINGS: return "Car settings";
-                    case Vehicle::GRP_ENGINE:   return "Engine";
-                    case Vehicle::GRP_SAFETY:   return "Safety";
-                    case Vehicle::GRP_DYNAMICS: return "Dynamics";
-                    default: {
-                        static char b[12];
-                        snprintf(b, sizeof(b), "Group %u", (unsigned)g);
-                        return b;
-                    }
-                }
-            }
+            const char* groupTag(void*, uint8_t g) { return Vehicle::groupTag(g); }
 
             uint8_t groups(void*) { return Vehicle::GRP_COUNT; }
 

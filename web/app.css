@@ -82,6 +82,7 @@ input[type=range]{width:150px;accent-color:var(--acc)}
 .seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--panel2)}
 .seg button{min-height:40px;padding:0 12px;border:0;background:none;color:var(--text);font:inherit;font-size:14px;font-weight:600;border-right:1px solid var(--line);cursor:pointer}
 .seg button:last-child{border-right:0}
+.seg button[hidden]{display:none}   /* a group with no row on this side */
 .seg button.on,.multi button.on{background:var(--acc);color:var(--accT);border-color:var(--acc)}
 .seg.wrap,.multi{display:flex;flex-wrap:wrap;gap:6px;border:0;background:none;overflow:visible}
 .seg.wrap button,.multi button{border:1px solid var(--line);border-radius:999px;background:var(--panel2);min-height:40px;padding:0 12px;color:var(--text);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
@@ -197,7 +198,6 @@ canvas.glassC{display:block;width:100%;height:auto;border-radius:8px;border:2px 
 .mapEd .mg{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
 .tcell{display:flex;gap:4px;align-items:center}
 .tcell .in{width:84px}
-tr.nofw td{color:var(--mute)}
 .row.hl,tr.hl{outline:2px solid var(--acc);outline-offset:-2px;border-radius:8px}
 /* «→ поле ГУ» під сигналом і посилання редактора поля на сигнал (72-map.js): цілі для пальця, як .row .c>a */
 .fmk{display:block}.fmk a,a[data-goto]{display:inline-flex;align-items:center;justify-content:center;min-height:40px;min-width:40px}

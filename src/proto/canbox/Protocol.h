@@ -31,12 +31,10 @@ namespace Canbox
         const char* group;
         const char* name;
         const char* unit;
-        const char* cmd;      // "" when not sent
-        const char* why;      // fw=false: why not, for the page; else null
+        const char* cmd;      // the message that carries it, for the page
         bool        boolean;
         int32_t     min, max;
         uint8_t     dec;
-        bool        fw;       // false: a car value the protocol has no field for
         uint8_t     sig;
         uint8_t     msg;      // the protocol's message that carries it, NO_MSG none
     };

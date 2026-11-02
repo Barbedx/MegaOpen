@@ -31,6 +31,20 @@ namespace Vehicle
         GRP_COUNT
     };
 
+    // A group's id (the catalog's `sigGroups`, the page's k.grp.<id>) and its
+    // English tag (the panel menu): one table, in the enum's order (Signals.cpp).
+    const char* groupId(uint8_t g);
+    const char* groupTag(uint8_t g);
+
+    // Which side of «Сигнали» a signal is on, from where its value comes from
+    // (the live row's src letter, WebUiMap putLive): the car's when a CAN row,
+    // Derived or a formula makes it; the head unit's alone when only a constant,
+    // a pin or nothing does: a field of the head unit's protocol the Mégane has
+    // no data for (the radar, the tyres, the amplifier, its settings, the A/C
+    // panel, the hybrid, the selector). Computed, never declared, so a new
+    // signal cannot land on the wrong side.
+    constexpr bool fromCar(char src) { return src == 'c' || src == 'd' || src == 'f'; }
+
     enum Sig : uint8_t {
         // ---- drive ---------------------------------------------------------
         SIG_SPEED = 0,     // km/h x100

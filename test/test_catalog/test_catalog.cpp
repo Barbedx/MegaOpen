@@ -124,7 +124,7 @@ static void test_parses()
 static void test_required_keys()
 {
     for (const char* k : {"layouts", "styles", "scenes", "panels", "bleModes", "classes",
-                          "dests", "actions", "panelKeys", "huKeys", "console", "raise", "logTags"})
+                          "dests", "actions", "panelKeys", "huKeys", "console", "raise", "logTags", "sigGroups"})
         list(k);
     // The head-unit protocol and the group of its own settings (raise.*).
     for (const char* k : {"proto", "protoSet"}) {
@@ -174,6 +174,7 @@ static void test_ids_unique()
     unique("panels", "id");    unique("bleModes", "id"); unique("classes", "bit");
     unique("dests", "id");     unique("actions", "id");  unique("panelKeys", "id");
     unique("huKeys", "code");  unique("console", "cmd");   unique("raise", "id");
+    unique("sigGroups", "id");
     for (const auto& kv : cat().get("enums")->o) {
         std::set<std::string> seen;
         for (const auto& r : kv.second->a)
@@ -248,7 +249,9 @@ static void test_raise_rows_are_complete()
             TEST_ASSERT_TRUE_MESSAGE(v && v->t == V::Num, (id + ": " + k).c_str());
         }
         TEST_ASSERT_TRUE_MESSAGE(r->get("min")->n <= r->get("max")->n, id.c_str());
-        TEST_ASSERT_TRUE_MESSAGE(r->get("fw") && r->get("fw")->t == V::Bool, id.c_str());
+        // Every row is a field the protocol sends: no fw / why since 1.7.1.
+        TEST_ASSERT_NULL_MESSAGE(r->get("fw"), id.c_str());
+        TEST_ASSERT_NULL_MESSAGE(r->get("why"), id.c_str());
     }
 }
 

@@ -414,7 +414,7 @@ const mapBase=()=>({send:S.emitter,uart:S.set.uartEnabled});
 g('/api/map',q=>{const o=mapBase();o.rows=q.live?[]:C.raise.map(t=>({id:t.id,...S.map[t.id],...mapVal(t)}));
  if(q.live){const t=Date.now();o.sigs=META.map(m=>{const v=liveVal(m[0],t),src=DERIVED.has(m[0])?'d':BOUND.has(m[0])?'c':'o';
   const ms=src==='c'&&measured(m[0]);
-  return [v===undefined?null:decStr(v,m[2]),v===undefined?null:Math.floor(Math.random()*300),src,ms?1:0,src!=='c'?0:!ms?1:FACT_HYP.has(m[0])?2:0]});
+  return [v===undefined?null:decStr(v,m[2]),v===undefined?null:Math.floor(Math.random()*300),src,ms?1:0,src!=='c'?0:!ms?1:FACT_HYP.has(m[0])?2:0,(src==='c'||src==='d'||src==='f')?1:0]});
   o.ruleStats=S.ruleStats}
  if(q.sig){const t=sigT(q.sig);if(!t)return fail(404,'not_found');o.rows=[{id:t.id,...bindOf(t.id),...mapVal(t),...(DERIVED.has(t.id)?{calc:true}:{})}]}
  if(q.meta)o.meta=META.map(m=>[m[0],m[1],m[2],m[3],m[4],decStr(m[5],m[2]),decStr(m[6],m[2]),m[7]]);
@@ -445,7 +445,7 @@ po('/api/map',q=>{if(q.send!==undefined&&q.send&&!S.set.uartEnabled)return fail(
  return ok});
 const frameFor=(t,v)=>{const[c,sub0]=t.cmd.split(' '),sub=sub0&&sub0!=='A/C'?sub0:'',n=Math.round(+v*pow10(t.dec))&0xFFFF;return ('2E '+c+' 0'+(sub?3:2)+' '+(sub?sub+' ':'')+h2(n)+' '+h2(n>>8)+' CS').toUpperCase()};
 /* WebUiMap.cpp: перед тестом — чи носить 0x28 цю форму; ворота повідомлень (одометр, TPMS…) мок не моделює */
-po('/api/map/test',q=>{const t=C.raise.find(x=>x.id===q.id);if(!t)return fail(404,'not_found');if(!t.fw)return fail(409,t.id+': no_field_112');if(!S.set.uartEnabled)return fail(409,'uart_off');
+po('/api/map/test',q=>{const t=C.raise.find(x=>x.id===q.id);if(!t)return fail(404,'not_found');if(!S.set.uartEnabled)return fail(409,'uart_off');
  if(t.cmd==='28'&&S.tun.cmd28)return fail(409,t.id+': form_ac');
  if(fmOff(t.id))return fail(409,t.id+': field_off');
  if(t.cmd==='28 A/C'&&!S.tun.cmd28)return fail(409,t.id+': form_temp');
@@ -559,7 +559,7 @@ g('/api/logpush',lpView);
 /* поля, що спершу вимкнені (Rav4Emitter::defaults) */
 const FM_DEF={eng_temp:1,prnd:1,fuel_pct:1},fmDef=id=>FM_DEF[id]?{from:'off',src:'',mul:1,div:1,add:0}:null;
 function fmOff(id){const r=(S.fm||{})[id]||fmDef(id);return !!r&&r.from==='off'}
-g('/api/hu/fields',()=>({proto:'raise112',rows:(C.raise||[]).filter(x=>x.fw).map(x=>({id:x.id,sig:x.id,v:fmOff(x.id)?null:mapVal(x).v??null,rule:(S.fm||{})[x.id]||null,def:fmDef(x.id)}))}));
+g('/api/hu/fields',()=>({proto:'raise112',rows:(C.raise||[]).map(x=>({id:x.id,sig:x.id,v:fmOff(x.id)?null:mapVal(x).v??null,rule:(S.fm||{})[x.id]||null,def:fmDef(x.id)}))}));
 po('/api/hu/fields',q=>{S.fm=S.fm||{};for(const r of q.rows||[]){if(r.from==='auto')delete S.fm[r.id];else S.fm[r.id]={from:r.from,src:r.from==='own'?r.id:r.src||'',mul:r.mul||1,div:r.div||1,add:r.add||0}}return ok});
 /* формули (src/vehicle/Formulas.h): заводські fuel_pct і range_calc; /api/expr — лише синтаксис на словах, значення з S.car */
 const fmFactory=()=>[{name:'fuel_pct',f:'fuel_level * 100 / 60',unit:'',dec:0,bool:false,on:true},{name:'range_calc',f:'fuel_level * 100 / cons_avg',unit:'',dec:0,bool:false,on:true}];

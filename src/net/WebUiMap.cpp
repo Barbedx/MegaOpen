@@ -70,11 +70,12 @@ namespace
     }
 
     // ?live=1: every signal, in enum order (the meta's order), as
-    // [value, ageMs, src, verified, confirm]: value null when there is none,
+    // [value, ageMs, src, verified, confirm, car]: value null when there is none,
     // age null when CAN never set it; src c=can k=const p=pinned d=derived
     // f=a formula o=off; confirm 1 = a CAN hypothesis the owner may ✓, 2 = ✓ by the owner
-    // (the factory row is a hypothesis), may be taken back, 0 = neither.
-    // Compact on purpose: the live page polls it every 1.5 s.
+    // (the factory row is a hypothesis), may be taken back, 0 = neither; car 1 =
+    // the car's side of «Сигнали» (Vehicle::fromCar of the binding, a pin aside),
+    // 0 = the head unit's alone. Compact on purpose: the live page polls it every 1.5 s.
     void putLive(ChunkOut& out, const Vehicle::State& st, uint32_t now)
     {
         uint8_t how[Vehicle::SIG_COUNT], conf[Vehicle::SIG_COUNT] = {};
@@ -101,9 +102,10 @@ namespace
             const uint32_t age = st.ageMs(s, now);
             if (age == Vehicle::State::NEVER) snprintf(a, sizeof(a), "null");
             else snprintf(a, sizeof(a), "%lu", (unsigned long)age);
-            out.put(b, fit(snprintf(b, sizeof(b), "%s[%s,%s,\"%c\",%d,%u]", s ? "," : "",
+            out.put(b, fit(snprintf(b, sizeof(b), "%s[%s,%s,\"%c\",%d,%u,%d]", s ? "," : "",
                                     st.has(s) ? dec(v, sizeof(v), st.get(s), Vehicle::meta(s).decimals) : "null",
-                                    a, h, Vehicle::verified(s) ? 1 : 0, (unsigned)conf[s]), sizeof(b)));
+                                    a, h, Vehicle::verified(s) ? 1 : 0, (unsigned)conf[s],
+                                    Vehicle::fromCar((char)how[s]) ? 1 : 0), sizeof(b)));
         }
         const App::Car::RuleStats as = App::Car::ruleStats();
         out.put(b, fit(snprintf(b, sizeof(b), "],\"ruleStats\":{\"fired\":%lu,\"shown\":%lu,\"dropped\":%lu}",
@@ -254,7 +256,7 @@ void WebUi::routesMap()
         bool first = true;
         for (uint8_t i = 0; i < P.fieldCount(); ++i) {
             const TargetView t = P.field(i);
-            if (t.sig >= Vehicle::SIG_COUNT || !t.fw) continue;
+            if (t.sig >= Vehicle::SIG_COUNT) continue;
             const bool has = fv.has(t.sig);
             out.put(b, fit(snprintf(b, sizeof(b), "%s{\"id\":\"%s\",\"sig\":\"%s\",\"v\":%s,\"rule\":",
                                 first ? "" : ",", t.id, Vehicle::meta(t.sig).name,
@@ -544,7 +546,6 @@ void WebUi::routesMap()
         const int ti = P.findField(id);
         if (ti < 0) return bad(r, 404, nullptr, "not_found");
         const TargetView t = P.field((uint8_t)ti);
-        if (!t.fw) return bad(r, 409, id, "no_field_112");
         if (!_cfg->s().uartEnabled) return r->reply(409, "text/plain", "uart_off");
         // ~450 B with the field map: per request (Scratch), not on httpd's 4 kB stack.
         Scratch<Canbox::HuConfig> cfgBox;

@@ -27,7 +27,8 @@ function i18nCat(c){
   for(const x of c[l]||[])tr('k.'+d+'.'+x.id,x,'name',x.id);
  for(const x of c.classes||[])tr('k.class.'+x.bit,x,'name',x.bit);
  for(const x of c.console||[]){tr('k.con.'+x.cmd,x,'name',x.cmd);for(const f of x.fields||[])tr('k.con.'+x.cmd+'.'+f.n,f,'label',f.n)}
- for(const x of c.raise||[]){tr('k.raise.'+x.id,x,'name',x.id);tr('k.raise.'+x.id+'.why',x,'why');tr('k.rgroup.'+x.group,x,'group');tr('k.unit.'+x.unit,x,'unit')}
+ for(const g of c.sigGroups||[])tr('k.grp.'+g.id,g,'name',g.id);
+ for(const x of c.raise||[]){tr('k.raise.'+x.id,x,'name',x.id);tr('k.rgroup.'+x.group,x,'group');tr('k.unit.'+x.unit,x,'unit')}
  return c;
 }
 /* що є в цій збірці (CAT.features): екран питає лише маршрути, які прошивка зібрала,
@@ -127,7 +128,7 @@ function fieldCtrl(f,k,v){
  if(f.enum){const o=enumOpts(f.enum);return sel(k,o,v===undefined&&o[0]?o[0][0]:v,o.every(x=>typeof x[0]==='number')?'':'data-str')}
  if(f.num){if(f.max-f.min<=8){const o=[];for(let i=f.min;i<=f.max;i++)o.push(i);return sel(k,o,v===undefined?f.min:v)}
   return num(k,v===undefined?'':v,`min="${f.min}" max="${f.max}"${f.step?` step="${f.step}"`:''}`)}
- return txt(k,v===undefined?'':v,'','in','text','maxlength="'+f.max+'"');
+ return txt(k,v===undefined?'':v,f.empty||'','in','text','maxlength="'+f.max+'"');
 }
 /* один параметр реєстру рядком (той самий вигляд, що в «Усіх налаштуваннях») */
 const setField=(se,f,hint='')=>{
@@ -135,9 +136,10 @@ const setField=(se,f,hint='')=>{
  if(f.ro)c=`<span class="mono">${esc(f.enum?((f.enum.find(o=>o.v===v)||{}).name||v):v)}${f.unit?' '+esc(unitT(f.unit)):''}</span>`;
  else if(f.type==='bool')c=sw(k,v,ex);
  else if(f.type==='enum')c=sel(k,f.enum.map(o=>[o.v,o.name]),v,'data-str'+ex);
- else if(f.type==='str')c=txt(k,v,'','in','text',`maxlength="${f.max}"${ex}`);
+ else if(f.type==='str')c=txt(k,v,f.empty||'','in','text',`maxlength="${f.max}"${ex}`);
  else c=num(k,v,`min="${f.min}" max="${f.max}"${f.step?` step="${f.step}"`:''}${ex}`);
- return row(esc(f.label),c,f.volatile?t('bd.volatile'):'',hint)};
+ /* підказка: з виклику або зі словника, k.set.<id>.h (усі raise.* її мають) */
+ return row(esc(f.label),c,f.volatile?t('bd.volatile'):'',hint||(tHas('k.set.'+f.id+'.h')?t('k.set.'+f.id+'.h'):''))};
 /* налаштування протоколу ГУ (CAT.protoSet, raise.*) рядками: усі, без своїх копій на сторінках */
 const protoSettings=se=>(CAT.settings||[]).filter(f=>f.parent===CAT.protoSet&&f.id in se).map(f=>setField(se,f)).join('');
 const fieldLabel=f=>esc(f.label)+(f.max&&!f.num&&!f.enum?' · '+f.max:'');

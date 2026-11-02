@@ -9,6 +9,7 @@
 #include "../keys/MacroEngine.h"
 #include "../knobs/KnobConfig.h"
 #include "../cfg/SettingsRegistry.h"
+#include "../vehicle/Signals.h"
 #include "../media/MediaRouter.h"
 #include "../capture/CapFormat.h"
 #include "../bus/Autobaud.h"
@@ -272,7 +273,10 @@ namespace Catalog
                     if (e.unit) j.ks("unit", e.unit);
                 }
                 if (e.type == SType::Enum && e.en) enumRows(j, *e.en);
-                if (e.type == SType::Str && e.str) j.kn("max", e.str->maxLen);
+                if (e.type == SType::Str && e.str) {
+                    j.kn("max", e.str->maxLen);
+                    if (e.str->empty) j.ks("empty", e.str->empty);   // what an empty value means (the placeholder)
+                }
                 if (e.type == SType::Table && e.tab) {
                     j.kn("rows", e.tab->rows()).k("cols").arr();
                     for (uint8_t c = 0; c < e.tab->cols; ++c) {
@@ -532,6 +536,12 @@ namespace Catalog
         const Canbox::Protocol& P = Canbox::activeProtocol();
         j.ks("proto", P.id());
         if (P.settingCount()) j.ks("protoSet", P.setting(0).id);
+        // The signals' groups (Signals.h Group) in index order: a live row
+        // carries the index (putMeta); the words are the page's (k.grp.<id>).
+        j.k("sigGroups").arr();
+        for (uint8_t g = 0; g < Vehicle::GRP_COUNT; ++g) j.obj().ks("id", Vehicle::groupId(g)).kso("name", nullptr).endObj();
+        j.endArr();
+
         j.k("raise").arr();
         for (uint8_t i = 0; i < P.fieldCount(); ++i) {
             const Canbox::TargetView t = P.field(i);
@@ -540,8 +550,7 @@ namespace Catalog
                 .ks("cmd", t.cmd).ks("kind", t.boolean ? "b" : "n")
                 .k("min").lit(Canbox::fmtFixed(lo, sizeof(lo), t.min, t.dec))
                 .k("max").lit(Canbox::fmtFixed(hi, sizeof(hi), t.max, t.dec))
-                .kn("dec", t.dec).kb("fw", t.fw);
-            j.kso("why", t.why);
+                .kn("dec", t.dec);
             j.endObj();
         }
         j.endArr();

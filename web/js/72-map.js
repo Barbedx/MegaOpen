@@ -15,10 +15,14 @@ const LV_SRC={c:'ok',k:'warn',p:'warn',d:'ok',f:'ok',o:'off'};
 const LV_CLS=['all','canOk','canHyp','board','user','const','none'];
 /* формула: свій сигнал (група GRP_USER, meta[4] === 12) — «Свої», вбудований — «Плата» */
 const lvCls=(src,ok,m)=>src==='c'?(ok?'canOk':'canHyp'):src==='f'?(m&&m[4]===12?'user':'board'):src==='d'?'board':src==='k'||src==='p'?'const':'none';
-/* meta: [name, unit, decimals, yes/no, group, min, max, label]; sigs: [value, ageMs, src, verified, confirm]
+/* meta: [name, unit, decimals, yes/no, group, min, max, label]; sigs: [value, ageMs, src, verified, confirm, car]
+   car: 1 — бік авто (CAN-рядок, розрахунок, формула), 0 — лише ГУ (стала, закріплено, нічого): рахує прошивка (Vehicle::fromCar).
    confirm: 1 — гіпотеза на CAN, можна «✓ підтвердити»; 2 — підтверджено тут, можна «↺ скасувати».
    POST /api/map {confirm:{sig,on}}; «Заводські прив'язки» повертають гіпотези. Назва — k.sig, k.raise */
 const lvName=m=>tHas('k.sig.'+m[0])?t('k.sig.'+m[0]):((CAT.raise||[]).find(r=>r.id===m[0])||{}).name||m[7]||m[0];
+const lvSide=x=>x[5]===0?'hu':'car';
+/* назва групи сигналу за індексом (CAT.sigGroups, слова k.grp.<id>) */
+const grpName=i=>{const g=(CAT.sigGroups||[])[i];return g?(g.name||g.id):''};
 const lvUnit=m=>m[1]&&!/^-?\d|^raw$/.test(m[1])?' '+unitT(m[1]):'';
 const lvVal=(m,v)=>v==null?DASH:m[3]?(+v?t('lv.yes'):t('lv.no')):v+lvUnit(m);
 const lvAge=a=>a==null?DASH:a<1000?t('lv.lt1s'):a<60000?t('lv.sec',Math.round(a/1000)):t('lv.min',Math.round(a/60000));
@@ -30,8 +34,8 @@ const ruleLbl=ru=>ru.from==='own'?t('ca.fromOwnL'):ru.from==='sig'?t('ca.fromSig
 const fieldSig=f=>{const ru=f.rule||f.def;return !ru||ru.from==='own'?f.sig||f.id:ru.from==='sig'?ru.src:null};
 const srcBtn=r=>r.rule?`<button class="srcb k" type="button" data-ed>${esc(ruleLbl(r.rule))}</button>`:r.def?`<button class="srcb" type="button" data-ed>${esc(t('ca.fromDefL',ruleLbl(r.def)))}</button>`:r.src==='can'?`<button class="srcb can" type="button" data-ed>${esc(t('ca.byte',r.can.id,r.can.byte))}${r.can.len>1?'–'+(r.can.byte+r.can.len-1):''}</button>`:r.src==='const'?`<button class="srcb k" type="button" data-ed>${esc(t('ca.const',r.k))}</button>`:r.calc&&r.src==='off'?`<button class="srcb k" type="button" data-ed title="${esc(t('ca.calcT'))}">${t('ca.calc')}</button>`:`<button class="srcb" type="button" data-ed>${t('ca.bind')}</button>`;
 const vCell=r=>(r.rule||r.def?(r.sent==null?DASH:String(r.sent)):fmtV(r))+(r.how==='test'?t('ca.testLeft',r.left):'');
-const mapRow=r=>`<tr data-id="${r.id}" data-g="${esc(r.group)}"${r.def?' data-def="1"':''} class="${r.fw?'':'nofw'}${r.how==='test'?' testing':''}"><td>${esc(r.name)}<small>${r.fw?r.cmd:esc(r.why||'')}</small></td><td class="num" data-v>${esc(vCell(r))}</td><td>${srcBtn(r)}</td>
- <td>${!r.fw?'':`<div class="tcell">${r.kind==='b'?`<select class="in" data-t aria-label="${esc(t('ca.testVal'))}"><option value="1">${t('ca.yes')}</option><option value="0">${t('ca.no')}</option></select>`:`<input class="in" type="number" data-t step="${r.dec?Math.pow(10,-r.dec):1}" min="${r.min}" max="${r.max}" placeholder="${r.min}…${r.max}" aria-label="${esc(t('ca.testVal'))}">`}<button class="btn sm" type="button" data-send title="${esc(t('ca.sendT'))}">▶</button></div>`}</td></tr>`;
+const mapRow=r=>`<tr data-id="${r.id}" data-g="${esc(r.group)}"${r.def?' data-def="1"':''} class="${r.how==='test'?'testing':''}"><td>${esc(r.name)}<small>${r.cmd}</small></td><td class="num" data-v>${esc(vCell(r))}</td><td>${srcBtn(r)}</td>
+ <td>${`<div class="tcell">${r.kind==='b'?`<select class="in" data-t aria-label="${esc(t('ca.testVal'))}"><option value="1">${t('ca.yes')}</option><option value="0">${t('ca.no')}</option></select>`:`<input class="in" type="number" data-t step="${r.dec?Math.pow(10,-r.dec):1}" min="${r.min}" max="${r.max}" placeholder="${r.min}…${r.max}" aria-label="${esc(t('ca.testVal'))}">`}<button class="btn sm" type="button" data-send title="${esc(t('ca.sendT'))}">▶</button></div>`}</td></tr>`;
 /* редактор «Звідки» поля ГУ; посилання [data-goto] — до сигналу на вкладці «Сигнали», з відкритою прив'язкою */
 const mapEd=(r,sigs)=>{const ru=r.rule||{from:'auto',src:'',mul:1,div:1,add:0},cs=ru.src||((sigs||[])[0]||[])[0]||'';return `<tr class="mapEd" data-for="${r.id}"><td colspan="4"><div class="mg">
  <label>${t('ca.from')}${sel('#from',[['auto',r.def?t('ca.fromDefL',ruleLbl(r.def)):t('ca.fromOwn')],...(r.def?[['own',t('ca.fromOwnL')]]:[]),['sig',t('ca.fromSig')],['k',t('ca.fromK')],['off',t('ca.fromOff')]],ru.from,'data-str')}</label>
@@ -80,11 +84,16 @@ SCR.map={title:'map.title',hidden:true,async render(m){
  card(t('fm.card'),row('','',t('fm.h'))+
   `<div class="tw"><table class="fmt"><thead><tr><th>${t('fm.thName')}</th><th>${t('fm.thF')}</th><th>${t('fm.thUnit')}</th><th>${t('fm.thDec')}</th><th>${t('fm.thBool')}</th><th>${t('fm.thOn')}</th><th>${t('fm.thNow')}</th><th></th></tr></thead><tbody id="fmT"></tbody></table></div>`+
   `<div class="fr"><button class="btn" type="button" id="fmAdd">${t('fm.add')}</button><button class="btn pri" type="button" id="fmSave">${t('fm.save')}</button><button class="btn" type="button" id="fmFac">${t('fm.factory')}</button></div>`,'fmCard','custom full')+
- card(t('lv.signals'),row(t('lv.auto'),sw('#lvAuto',true,'data-nosave'),t('lv.autoSub'))+
+ card(t('lv.signals'),row('','',t('lv.h'))+
+  `<div class="pad">${seg('#lvSide',[['car',t('lv.side.car')],['hu',t('lv.side.hu')],['all',t('lv.side.all')]],'car','wrap')}</div>`+
+  `<div class="pad">${seg('#lvGrp',[['all',t('ca.all')],...(CAT.sigGroups||[]).map((g,i)=>[String(i),grpName(i)])],'all','wrap')}</div>`+
+  `<div class="pad">${seg('#lvCls',LV_CLS.map(c=>[c,t('lv.cls.'+c)]),'all','wrap')}</div>`+
+  row(t('lv.auto'),sw('#lvAuto',true,'data-nosave'),t('lv.autoSub'))+
   row(t('lv.only'),sw('#lvOnly',true,'data-nosave'))+
-  `<div class="pad">${seg('#lvCls',LV_CLS.map(c=>[c,t('lv.cls.'+c)]),'all','wrap')}</div>`+row(t('lv.alerts'),`<span id="lvAl" class="muted">${DASH}</span>`,t('lv.alertsSub'))+
-  `<div class="fr"><button class="btn" type="button" id="lvReset">${t('ca.factory')}</button></div><datalist id="idl"></datalist><div class="tw"><table><thead><tr><th>${t('lv.thSig')}</th><th>${t('lv.thNow')}</th><th>${t('lv.thAge')}</th><th>${t('lv.thSrc')}</th><th title="${esc(t('lv.checkedT'))}">✓</th><th></th></tr></thead><tbody id="lvT"></tbody></table></div>`,'lvCard','custom full')+
- card(t('ca.rav4'),
+  row(t('lv.alerts'),`<span id="lvAl" class="muted">${DASH}</span>`,t('lv.alertsSub'))+
+  `<datalist id="idl"></datalist><div class="tw"><table><thead><tr><th>${t('lv.thSig')}</th><th>${t('lv.thNow')}</th><th>${t('lv.thAge')}</th><th>${t('lv.thSrc')}</th><th title="${esc(t('lv.checkedT'))}">✓</th><th></th></tr></thead><tbody id="lvT"></tbody></table></div>`+
+  `<div class="fr"><button class="btn" type="button" id="lvReset">${t('ca.factory')}</button></div>`,'lvCard','custom full')+
+ card(t('ca.rav4'),row('','',t('ca.h'))+
   row(t('ca.proto'),`<b>${esc(tHas('k.proto.'+CAT.proto)?t('k.proto.'+CAT.proto):CAT.proto||'')}</b>`,t('ca.protoSub'))+
   row(t('ca.send'),sw('/api/map|send',mp.send),t('ca.kept'),t('ca.sendH'))+
   `<div id="cProto">${protoSettings(se)}</div>`+
@@ -107,6 +116,8 @@ SCR.map={title:'map.title',hidden:true,async render(m){
  $('#lvReset').onclick=e=>ask(e.target,t('ca.resetAsk'),()=>run(e.target,()=>API.post('/api/map',{reset:true}),t('ca.factoryDone')).then(async()=>this.draw(await API.get('/api/map?live=1'))));
  $('[data-f="lvOnly"]').onchange=()=>this.draw(this.last);
  $('[data-f="lvCls"]').addEventListener('change',()=>this.draw(this.last));
+ $('[data-f="lvSide"]').addEventListener('change',()=>this.draw(this.last));
+ $('[data-f="lvGrp"]').addEventListener('change',()=>this.draw(this.last));
  $('#lvT').onclick=e=>{const c=e.target.closest('[data-conf]');
   if(c){const mm=this.M[+c.dataset.conf],on=c.dataset.on==='1';
    ask(c,lvName(mm)+'. '+(on?t('lv.confOn'):t('lv.confOff')),()=>run(c,()=>API.post('/api/map',{confirm:{sig:mm[0],on}}),on?t('lv.confirmed'):t('lv.hypothesis')).then(async()=>this.draw(await API.get('/api/map?live=1'))));return}
@@ -171,24 +182,30 @@ go(tb){this.tb=tb;put($('[data-f="mTab"]'),tb);for(const[k,id]of Object.entries(
 /* поле ГУ: вкладка «Поля ГУ»; фільтр групи знято, якщо ховає рядок */
 goField(id){this.go('fields');const tr=$(`#map tr[data-id="${id}"]`);if(!tr)return;if(tr.hidden){put($('#mGrp'),'all');this.group('all')}hlRow(tr)},
 /* сигнал: вкладка «Сигнали», «Лише з даними» вимкнено, його прив'язка відкрита */
-async goSig(id){const i=this.M.findIndex(x=>x[0]===id);if(i<0)return;this.go('sig');$('[data-f="lvOnly"]').checked=false;
+async goSig(id){const i=this.M.findIndex(x=>x[0]===id);if(i<0)return;this.go('sig');$('[data-f="lvOnly"]').checked=false;put($('[data-f="lvSide"]'),'all');put($('[data-f="lvGrp"]'),'all');
  $$('#lvT tr.bindEd,#lvT .ask').forEach(x=>x.remove());this.draw(this.last);await this.bind(i,id);const ed=$('#lvT tr.bindEd');if(ed)ed.scrollIntoView({block:'center'})},
 group(g){this.grp=g;$$('#map tr[data-id]').forEach(tr=>{const hide=g!=='all'&&tr.dataset.g!==g;tr.hidden=hide;const ed=$(`#map tr[data-for="${tr.dataset.id}"]`);if(ed)ed.hidden=hide})},
 /* /api/hu/fields: правила полів (this.fl за id) і поля на кожен сигнал (this.fs: сигнал → [поле]) */
 setFl(hf){const rows=(hf&&hf.rows)||[];this.fl=Object.fromEntries(rows.map(x=>[x.id,x]));this.fs={};
  for(const f of rows){const s=fieldSig(f);if(s)(this.fs[s]=this.fs[s]||[]).push(f.id)}},
 draw(r){if(r)this.last=r;const tb=$('#lvT');if(!tb||!r||!r.sigs||$('.ask',tb)||$('.bindEd',tb))return;const only=$('[data-f="lvOnly"]').checked;let h='',g=-1;
- const cs=$('[data-f="lvCls"]'),cl=cs?cs.dataset.v:'all',n={};
+ const cs=$('[data-f="lvCls"]'),cl=cs?cs.dataset.v:'all',n={},ss=$('[data-f="lvSide"]'),side=ss?ss.dataset.v:'car',gs=$('[data-f="lvGrp"]'),ng={};
  /* вільний слот свого сигналу (ім'я "") не існує: його не видно й не лічать */
  const live=this.M.map((m,i)=>i).filter(i=>this.M[i][0]);
- for(const i of live){const x=r.sigs[i],c=lvCls(x[2],x[3],this.M[i]);n[c]=(n[c]||0)+1}
- if(cs)$$('button',cs).forEach(b=>{const c=b.dataset.val;b.textContent=t('lv.cls.'+c)+' · '+(c==='all'?live.length:(n[c]||0))});
- const idx=live.filter(i=>(!only||r.sigs[i][0]!=null)&&(cl==='all'||lvCls(r.sigs[i][2],r.sigs[i][3],this.M[i])===cl)).sort((a,b)=>this.M[a][4]-this.M[b][4]||a-b);
+ /* бік — від прошивки (sigs[5]); групи й класи лічаться в межах вибраного боку */
+ const onSide=i=>side==='all'||lvSide(r.sigs[i])===side;
+ for(const i of live){if(!onSide(i))continue;const x=r.sigs[i],c=lvCls(x[2],x[3],this.M[i]);n[c]=(n[c]||0)+1;const k=String(this.M[i][4]);ng[k]=(ng[k]||0)+1}
+ if(ss){const ns={car:0,hu:0};for(const i of live)ns[lvSide(r.sigs[i])]++;$$('button',ss).forEach(b=>{const v=b.dataset.val;b.textContent=t('lv.side.'+v)+' · '+(v==='all'?live.length:ns[v])})}
+ const onSideN=Object.values(n).reduce((a,b)=>a+b,0);
+ if(cs)$$('button',cs).forEach(b=>{const c=b.dataset.val;b.textContent=t('lv.cls.'+c)+' · '+(c==='all'?onSideN:(n[c]||0))});
+ let grp=gs?gs.dataset.v:'all';
+ if(gs){$$('button',gs).forEach(b=>{const v=b.dataset.val;if(v==='all')return;b.hidden=!ng[v];b.textContent=grpName(+v)+' · '+(ng[v]||0)});if(grp!=='all'&&!ng[grp]){grp='all';put(gs,'all')}}
+ const idx=live.filter(i=>onSide(i)&&(grp==='all'||String(this.M[i][4])===grp)&&(!only||r.sigs[i][0]!=null)&&(cl==='all'||lvCls(r.sigs[i][2],r.sigs[i][3],this.M[i])===cl)).sort((a,b)=>this.M[a][4]-this.M[b][4]||a-b);
  for(const i of idx){const m=this.M[i],[v,age,src,ok,cf]=r.sigs[i],fs=this.fs[m[0]];
   const vh=(ok?'✓':`<span class="muted" title="${esc(src==='d'?t('lv.computedT'):t('lv.uncheckedT'))}">?</span>`)+
    (cf===1?` <button class="btn sm" type="button" data-conf="${i}" data-on="1" title="${esc(t('lv.confirmT'))}">${t('lv.confirm')}</button>`:
     cf===2?` <button class="btn sm" type="button" data-conf="${i}" data-on="0" title="${esc(t('lv.undoT'))}">${t('lv.undo')}</button>`:'');
-  if(m[4]!==g){g=m[4];h+=`<tr><th colspan="6">${esc(tHas('lv.grp.'+g)?t('lv.grp.'+g):'')}</th></tr>`}
+  if(m[4]!==g){g=m[4];h+=`<tr><th colspan="6">${esc(grpName(g))}</th></tr>`}
   const stale=src==='c'&&age!=null&&age>3000,sk=LV_SRC[src]?src:'o',hyp=src==='c'&&!ok;
   h+=`<tr${stale?' class="muted"':''}><td>${esc(lvName(m))} <small class="mono muted">${esc(m[0])}</small>${fs?`<small class="muted fmk">${t('map.toFld')} ${fs.map(f=>`<a href="#" data-fld="${f}">${esc(nameOf(CAT.raise,f))}</a>`).join(', ')}</small>`:''}</td><td class="num">${esc(lvVal(m,v))}</td><td class="num">${lvAge(age)}</td><td><button class="srcb" type="button" data-bind="${i}" title="${esc(t('lv.bindT'))}">${chipH(hyp?'warn':LV_SRC[sk],hyp?t('lv.cls.canHyp'):t('lv.src.'+sk))}</button></td><td style="white-space:nowrap">${vh}</td><td><button class="btn sm" type="button" data-add="${i}" title="${esc(t('lv.alertT'))}">🔔</button></td></tr>`}
  tb.innerHTML=h||`<tr><td colspan="6" class="muted">${esc(t('lv.noValues'))}</td></tr>`;

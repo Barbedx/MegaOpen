@@ -106,6 +106,7 @@ namespace Cfg
         uint8_t maxLen;
         void (*get)(const Model&, char* out, size_t cap);
         void (*put)(Model&, const char* v);
+        const char* empty = nullptr;   // what an empty value means, if anything (the page's placeholder)
     };
 
     struct SEntry {

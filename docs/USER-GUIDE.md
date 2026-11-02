@@ -61,11 +61,17 @@ field» on one page, in three tabs: **Сигнали** (where a signal comes fro
 others) and **Правила** (when this, do that). The tab is in the address:
 `#map`, `#map:fields`, `#map:formulas`, `#map:rules`.
 
-**Сигнали** lists every signal the board reads from the car's CAN
-(listen-only): value, age, where it comes from, and **✓** (checked in a car)
-or **?** (positioned from Renault's data, not yet checked). It refreshes
-every 2 s. Under a signal's name, **→ поле ГУ** names the head-unit fields
-that take it; press one to land on that field in **Поля ГУ**.
+**Сигнали** has two sides. **Авто** is what the car gives: every signal a
+CAN row (listen-only), a computed value or a formula makes, with its value,
+age, source, and **✓** (checked in a car) or **?** (positioned from Renault's
+data, not yet checked). **Лише ГУ** is the rest: fields of the head unit's
+protocol the Mégane has no data for (the parking radar, the tyres, the
+amplifier, its settings, the A/C panel, the hybrid, the selector); set one
+with a constant or a formula, else it stays empty. The board decides the side
+from the signal's source, so a signal you bind to a CAN row moves to **Авто**
+by itself. Filter by side, by group and by class; the table refreshes every
+2 s. Under a signal's name, **→ поле ГУ** names the head-unit fields that take
+it; press one to land on that field in **Поля ГУ**.
 
 When you have checked a **?** signal in the car (the steps are in
 `docs/car-test-can-signals.md`), press **✓ підтвердити** on its row. The `?`
@@ -83,13 +89,16 @@ the bus, do the thing (open a door), and the IDs that changed are listed.
 (× ÷ +), a constant, or off. Coolant, the P/R/N/D probe and «Бак, %» start
 off; switch one on with «Звідки» → свій сигнал. «Бак, %» is `0x7D 04`
 bytes 4-5: the head unit draws it in its status bar beside the range
-(«518 km ▬ 84%»). Protocol 112 has **no battery-voltage field**, and the
+(«518 km ▬ 84%»). Protocol 112 has **no battery-voltage field** and the
 head unit reads none from a canbox: the volts it shows are its own
-measurement; the row «Напруга АКБ» is on the page for the value alone.
+measurement, and the car's `batt_v` is on **Сигнали**, not here.
 «змінити в таблиці сигналів» (and the name of the
 other signal) goes back to **Сигнали** with that signal's source editor open.
 The tab also holds the protocol, «Слати в ГУ», the units, ▶ (a test value)
-and «Прогін селектора».
+and «Прогін селектора». Every protocol setting has a **?** with what it
+changes on the unit. «Версія коробки» left empty is the firmware's own
+version, so the string the head unit shows under «CANBUS Info» follows every
+update; a text typed there stays.
 
 If the list looks short after an update, see
 [«Заводські прив'язки»](#after-an-update).

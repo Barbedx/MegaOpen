@@ -77,7 +77,6 @@ namespace
             TargetView v{};
             v.id  = i ? "eng_temp" : "speed";
             v.sig = i ? SIG_ENG_TEMP : SIG_SPEED;
-            v.fw  = true;
             v.msg = i ? NO_MSG : 0;
             return v;
         }
