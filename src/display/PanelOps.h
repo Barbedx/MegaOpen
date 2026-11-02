@@ -46,6 +46,10 @@ namespace MegaOpen
             Resync, Clear,
             // The 48x48 pane from r.img; the library copies it at the call.
             NavBitmap,
+            // Any message on a registered function id (r.u16: 0x151 the text,
+            // 0x1F1 the nav pane), r.len bytes from r.img, as given: the service
+            // console's sweep tool (docs/nav-text.md). Copied at the call.
+            Raw,
         };
 
         static constexpr uint8_t STR_MAX = 33;   // 32 chars + NUL
@@ -74,8 +78,9 @@ namespace MegaOpen
             // The caller reports the verdict itself (the ui task): a refusal
             // is not logged here.
             bool     quiet = false;
-            // NavBitmap: MediaPane::BYTES of image.
+            // NavBitmap: MediaPane::BYTES of image. Raw: `len` bytes of message.
             const uint8_t* img = nullptr;
+            uint16_t       len = 0;
         };
 
         // setup(), before any task renders. `carminat` is the same object
@@ -114,6 +119,10 @@ namespace MegaOpen
         bool postTextStyled(const char* text, uint8_t icon, uint8_t srcIcon,
                             uint8_t fmt, uint8_t iconBank2);
         bool postInfoPopup(const char* l1, const char* l2, const char* l3);
+        // Any message on a registered function id (0x151, 0x1F1), the bytes as
+        // given: the library segments it (ISO-TP) and copies it at the call, so
+        // `data` is the caller's again when this returns.
+        bool postRaw(uint16_t funcId, const uint8_t* data, uint16_t len);
         // wire=false: as if the panel sent it (KeySource::Local). wire=true:
         // transmit the panel's key frame on the bus (KeySource::Wire), for a
         // factory radio sharing it; carried in p[0].

@@ -49,9 +49,9 @@ static int hexNibble(char c)
 
 // "7D 03 39 30" / "7d033930" -> bytes. -1 on a stray character or odd nibble
 // count: a half-parsed payload would get a valid checksum over the wrong bytes.
-static int parseHex(const char* s, uint8_t* out, uint8_t maxLen)
+static int parseHex(const char* s, uint8_t* out, size_t maxLen)
 {
-    uint8_t n = 0;
+    size_t n = 0;
     int hi = -1;
     for (; *s; ++s) {
         if (*s == ' ' || *s == ',' || *s == ':' || *s == '-') continue;
@@ -1336,6 +1336,23 @@ void WebUi::routesDisplay()
                                               byteOf("src", 0xFF),
                                               byteOf("fmt", 0x60),
                                               byteOf("bank2", 0x55)));
+    });
+
+    // Any message on a registered function id (151 = the text, 1F1 = the nav
+    // pane), the bytes as typed ("21 0B 00 ..."): the sweep tool for a screen
+    // the library does not build yet (docs/nav-text.md). The library segments
+    // it and copies the bytes at the call; past 119 bytes it goes through the
+    // long-payload pool (320 at most).
+    route("/api/display/raw", HTTP_POST, [this, posted](PsychicRequest* r) {
+        if (!_ops) return r->reply(503, "text/plain", "not_built display");
+        const uint32_t id = paramU32(r, "id", "151", 16);
+        if (!id || id > 0x7FF) return r->reply(400, "text/plain", "param id");
+        struct RawBytes { uint8_t b[AFFA_MAX_EXTERNAL_PAYLOAD]; };
+        Scratch<RawBytes> box;   // not on httpd's stack
+        if (!box) return r->reply(503, "text/plain", "no_memory");
+        const int n = parseHex(paramStr(r, "data", "").c_str(), box->b, sizeof(box->b));
+        if (n <= 0) return r->reply(400, "text/plain", "param data");
+        return posted(r, _ops->postRaw((uint16_t)id, box->b, (uint16_t)n));
     });
 
     // The three-row info list: three messages on the wire, one per row, not

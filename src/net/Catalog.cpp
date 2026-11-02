@@ -102,6 +102,7 @@ namespace Catalog
                                          uiNum("ms", nullptr, 0, 60000)};
     static const UiField kStyled[]    = {uiText("text", nullptr, 14), uiEnum("icon", nullptr, "icons"),
                                          uiEnum("src", nullptr, "src"), uiEnum("fmt", nullptr, "fmt")};
+    static const UiField kRaw[]       = {uiText("id", nullptr, 3), uiText("data", nullptr, 960)};
     static const UiField kConfirm[]   = {uiText("caption", nullptr, 6), uiText("row0", nullptr, 26),
                                          uiText("row1", nullptr, 26)};
     static const UiField kMsgbox[]    = {uiText("row0", nullptr, 26), uiText("row1", nullptr, 26),
@@ -120,6 +121,7 @@ namespace Catalog
         {"fullscreen",   nullptr,            FLDS(kFull)},
         {"popup",        nullptr,                   FLDS(kPopup)},
         {"styled",       nullptr,       FLDS(kStyled)},
+        {"raw",          nullptr,       FLDS(kRaw)},
         {"confirm",      nullptr,                  FLDS(kConfirm)},
         {"msgbox",       nullptr,        FLDS(kMsgbox)},
         {"selectbutton", nullptr, FLDS(kSelect)},

@@ -7,6 +7,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [1.7.1] - 2026-11-02
 
+### Added
+- The display console (Сервіс) has `raw`: any message on a function id the panel registers (`151` the text, `1F1` the navigation pane), the bytes as typed, segmented by the library (up to 320 bytes through its long-payload pool). The tool for the screen on the photo from 2026-11-02: the guidance text in the small font over two rows with the clock kept. What is known about that screen, what the OEM navigation captures hold and the hypotheses to try, in order, are in docs/nav-text.md; `tools/affa_capture.py` reassembles such a capture.
+
 ### Changed
 - **«Сигнали» in two sides.** «Авто» is what the car gives: every signal a CAN row, a computed value (Derived) or a formula makes. «Лише ГУ» is the rest: fields of the head unit's protocol the Mégane has no data for (the parking radar, the tyres, the amplifier, its settings, the A/C panel, the hybrid, the selector, the unit's own trip computer), settable with a constant or a formula. The side is computed from the signal's source by the firmware (`Vehicle::fromCar`; the live row's sixth element), never declared, so a new signal cannot land on the wrong side and a signal bound to a CAN row moves to «Авто» by itself. The tab filters by side, by group and by class, and is laid out like «Формули» and «Правила»: what it is, the filters, the table, the action at the end. The groups come by id (`sigGroups` in `/api/catalog`, words `k.grp.<id>`): one table for the page and the panel menu.
 - **«Поля ГУ»** holds fields only: «Напруга АКБ», the one row protocol 112 has no field for, is gone with its mechanism (`fw` / `why`); the car's volts are on «Сигнали», the head unit measures its own. An intro row says what the tab is, and every protocol setting (`raise.*`) has a **?** with what it changes on the unit (`k.set.<id>.h`: a hint any setting may have now).

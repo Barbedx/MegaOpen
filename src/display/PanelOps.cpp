@@ -50,6 +50,7 @@ namespace MegaOpen
             case Op::Resync:         return "resync";
             case Op::Clear:          return "clear";
             case Op::NavBitmap:      return "pane";
+            case Op::Raw:            return "raw";
         }
         return "?";
     }
@@ -66,6 +67,7 @@ namespace MegaOpen
             case Op::MessageBox:
             case Op::SelectButton:
             case Op::InfoPopup:
+            case Op::Raw:
                 return true;
             default:
                 return false;
@@ -149,6 +151,12 @@ namespace MegaOpen
     {
         Req r; r.op = Op::TextStyled; copyStr(r.a, text);
         r.p[0] = icon; r.p[1] = srcIcon; r.p[2] = fmt; r.p[3] = iconBank2;
+        return accepted(submit(r));
+    }
+
+    bool PanelOps::postRaw(uint16_t funcId, const uint8_t* data, uint16_t len)
+    {
+        Req r; r.op = Op::Raw; r.u16 = funcId; r.img = data; r.len = len;
         return accepted(submit(r));
     }
 
@@ -297,6 +305,15 @@ namespace MegaOpen
                                         r.p[0], r.p[1] == 0xFF ? 0 : r.p[1]);
                 break;
             }
+            // Any message, as given: a short one through the queue, a long one
+            // (the 302-byte nav screen) through the long-payload pool. Both copy
+            // the bytes at the call; an id that is not a registered function
+            // comes back UnknownFunc.
+            case Op::Raw:
+                if (!r.img || !r.len) { res = affa::Submitted::refused(affa::Result::BadArgument); break; }
+                res = r.len <= AFFA_MAX_PAYLOAD ? d.enqueue(r.u16, r.img, (uint8_t)r.len)
+                                                : d.enqueueExternal(r.u16, r.img, r.len);
+                break;
             // The pane: copied into the library's pool at the call.
             case Op::NavBitmap:
                 res = (_carminat && r.img)
