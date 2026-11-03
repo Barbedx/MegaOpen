@@ -1,4 +1,5 @@
 #include "WebUi.h"
+#include "../utils/HeapSentinel.h"
 #include "../link/UsbLink.h"
 #include "RescuePage.h"
 #include "lwip/sockets.h"
@@ -28,7 +29,6 @@
 #include "../utils/LogFile.h"
 #include <LittleFS.h>
 #endif
-#include <esp_heap_caps.h>    // HEAP_HUNT
 #include <esp_system.h>
 #include "../utils/Scratch.h"
 #if FEATURE_BLE && FEATURE_ANCS
@@ -218,9 +218,6 @@ void WebUi::begin(Cfg::Config& cfg, KeyEngine& engine, KeyMap& map,
     routes();
     // The one handler for the whole table — see Route in WebUi.h.
     _server.onNotFound([this](PsychicRequest* r) { return dispatch(r); });
-#if HEAP_HUNT
-    startHeapHunt();
-#endif
     mem("routes");
     // No OTA password: the web API that sets every password has none either.
     // Its endpoints pass the same gate as every route (RequestGate.h).
@@ -281,32 +278,16 @@ void WebUi::route(const char* path, http_method method, PsychicHttpRequestCallba
     _routes[_nRoutes++] = Route{path, method, fn};
 }
 
-#if HEAP_HUNT
-// Diagnostic build only (PLATFORMIO_BUILD_FLAGS=-DHEAP_HUNT=1), from the
-// 2026-10-19 httpd heap-corruption hunt, which is still open: the heap is
-// walked before and after every request, and every 100 ms by its own task.
-// The first one to fail aborts with what it knows in the panic message, which
-// the coredump keeps.
+#if HEAP_SENTINEL
+// The diagnostic build (src/utils/HeapSentinel.h): a heap walk before and
+// after every route, the step naming the request.
 static volatile uint32_t s_huntReqs = 0;
 static char s_huntLast[48] = "";
 static void huntCheck(const char* when, const char* path)
 {
-    if (heap_caps_check_integrity_all(true)) return;
-    static char msg[112];
-    snprintf(msg, sizeof(msg), "HEAP_HUNT corrupt %s %s (req %u, last %s, up %u ms)", when, path,
-             (unsigned)s_huntReqs, s_huntLast, (unsigned)millis());
-    LOGI("heap", "%s", msg);
-    LogBus::flushAndWait(500);
-    esp_system_abort(msg);
-}
-static void huntTask(void*)
-{
-    for (;;) { vTaskDelay(pdMS_TO_TICKS(100)); huntCheck("idle", "-"); }
-}
-void WebUi::startHeapHunt()
-{
-    xTaskCreatePinnedToCore(huntTask, "heaphunt", 3072, nullptr, 1, nullptr, 1);
-    LOGI("heap", "HEAP_HUNT on: integrity walk per request and every 100 ms");
+    char w[112];
+    snprintf(w, sizeof(w), "web %s %s (req %u, last %s)", when, path, (unsigned)s_huntReqs, s_huntLast);
+    HeapSentinel::check(w);
 }
 #endif
 
@@ -335,7 +316,7 @@ esp_err_t WebUi::dispatch(PsychicRequest* r)
         }
         return r->reply(403, "text/plain", RequestGate::whyText(why));
     }
-#if HEAP_HUNT
+#if HEAP_SENTINEL
     huntCheck("before", path.c_str());
     ++s_huntReqs;
     esp_err_t res = ESP_OK;

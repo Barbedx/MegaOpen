@@ -16,10 +16,10 @@
 // local upload in progress, but clears one left open by a /ota/start that
 // never uploaded (LOCAL_STALE_MS).
 //
-// Both run on a task of their own at the lowest priority on core 0, created
-// for the job and deleted after it, so the keys and BLE never wait on TLS. On
-// a board with PSRAM, mbedTLS allocates there for the job (it is pinned to
-// internal RAM by the prebuilt sdkconfig), and its ~40 kB stays off the heap.
+// Both run on the network worker (NetJob.h), at the lowest priority on core
+// 0, so the keys and BLE never wait on TLS. On a board with PSRAM, mbedTLS
+// allocates there for the job (it is pinned to internal RAM by the prebuilt
+// sdkconfig), and its ~40 kB stays off the heap.
 //
 // The routes (WebUiGhOta.cpp) gate the rest: STA only.
 
@@ -48,9 +48,8 @@ namespace GhOta
         // Internal heap, bytes: free when the job started, and the lowest seen
         // during it (the TLS cost the BACKLOG asks to measure).
         uint32_t heapStart = 0, heapMin = 0;
-        // ...and at the steps between: the task just created (its stack is
-        // internal), the task running, the HTTP client made, the last TLS
-        // connection open.
+        // ...and at the steps between: the job just queued, the job running,
+        // the HTTP client made, the last TLS connection open.
         uint32_t heapCreated = 0, heapTask = 0, heapClient = 0, heapTls = 0;
         uint32_t stackFree = 0;        // the last job's unused stack, bytes
         // The download in tenths: internal heap at its lowest in each (our
@@ -60,8 +59,8 @@ namespace GhOta
         uint32_t stepMin[10] = {}, stepMs[10] = {};
         bool     tlsInPsram = false;
         bool     pre = false;          // the test channel (pre())
-        // The job waits its turn: the log push holds TLS (one part, seconds),
-        // and the job goes next (TlsJob::reserve), at most QUEUE_MS.
+        // The job waits its turn: the log push's part (seconds) is on the
+        // worker, and the job goes next (NetJob).
         bool     queued = false;
     };
     void view(View& out);

@@ -36,7 +36,8 @@ namespace LogBus
     // carries decoded. In the ring like every line; its readers skip it.
     void line(const char* s);      // never blocks
     void printf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
-    void startTask(UBaseType_t prio, BaseType_t core);
+    // The numbers are the plan's (src/app/TaskPlan.h LOGBUS_*): utils/ stays off app/.
+    void startTask(UBaseType_t prio, BaseType_t core, uint32_t stack);
 
     // The task, for its stack high-water mark; null before startTask().
     TaskHandle_t task();

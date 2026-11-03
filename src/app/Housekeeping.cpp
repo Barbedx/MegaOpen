@@ -3,6 +3,7 @@
 #include "OtaTrial.h"
 #include "../utils/LogBus.h"
 #include <esp_heap_caps.h>
+#include "../utils/HeapSentinel.h"
 
 namespace App
 {
@@ -97,6 +98,10 @@ namespace App
                     if (s_h.wifi) s_h.wifi(now);
                     OtaTrial::tick(now, healthy(now));
                     sampleHeap();
+#if HEAP_SENTINEL
+                    static uint32_t s_walkAt = 0;
+                    if ((uint32_t)(now - s_walkAt) >= 500) { s_walkAt = now; HEAP_CHECK("tick"); }
+#endif
 
                     if ((uint32_t)(now - beatAt) >= BEAT_MS) {
                         beatAt = now;
@@ -112,6 +117,9 @@ namespace App
                         slowDone = true;
                         slowAt = now;
                         if (s_h.beatSlow) s_h.beatSlow(now);
+#if HEAP_SENTINEL
+                        LOGI("heap", "sentinel: %u walks, the longest %u us", (unsigned)HeapSentinel::checks(), (unsigned)HeapSentinel::maxUs());
+#endif
                     }
                     Tasks::beat(s_id, micros() - t0);
                     vTaskDelay(pdMS_TO_TICKS(PASS_MS));

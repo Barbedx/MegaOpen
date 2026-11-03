@@ -349,9 +349,6 @@ private:
     uint8_t _routesLost = 0;      // registrations past ROUTE_MAX, logged by begin()
     void route(const char* path, http_method method, PsychicHttpRequestCallback fn);
     esp_err_t dispatch(PsychicRequest* r);
-#if HEAP_HUNT
-    void startHeapHunt();
-#endif
     void routesCanbox();
     void routesMap();            // WebUiMap.cpp
     void routesAlerts();         // WebUiMap.cpp, /api/alerts (MegaOpen Companion)

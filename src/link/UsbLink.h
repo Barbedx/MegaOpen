@@ -47,7 +47,7 @@ namespace UsbLink
     // The board's own GitHub requests (GhOta, LogPush), carried out by the
     // app on its network with Android's TLS: the board composes them as over
     // WiFi, the app only moves the bytes (docs/design/usb-link.md, "Net").
-    // One at a time; TlsJob already serialises the callers. Any task but
+    // One at a time; the network worker (NetJob) already serialises the callers. Any task but
     // usblink. The body is the app's to stream; 16 kB of credit at a time.
     constexpr size_t NET_WINDOW = 16384;
     struct NetHead {

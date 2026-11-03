@@ -19,9 +19,9 @@
 // The token (fine-grained, Contents read/write on that one repository) and
 // the switch live in NVS namespace "logpush"; the token is never sent back.
 //
-// The job runs on a task of its own at the lowest priority on core 0, created
-// for the push and deleted after it, like GhOta's; TLS in PSRAM, one TLS job
-// at a time (TlsJob.h). It never runs below MIN_HEAP of internal heap.
+// The job runs on the network worker (NetJob.h), one job at a time with the
+// GitHub update, mbedTLS in PSRAM for it. It never runs below MIN_HEAP of
+// internal heap.
 #if FEATURE_LOG_PUSH
 namespace LogPush
 {

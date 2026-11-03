@@ -90,7 +90,7 @@ Raise the log level for one session through `/api/settings` `{"logLevel":"DBG"}`
 | OTA rolls back | `[ota]` | `src/app/OtaTrial.*`, `OtaVerdict.*` (confirm after 60 s healthy, revert at 180 s) |
 | reboots / heap low | `[hb]`, `[mem]`, flash log | `src/app/Housekeeping.*`, `TaskPlan.h` (priorities, stacks) |
 | WiFi / AP | `/api/wifi` | `src/net/WifiManager.*` |
-| remote log not arriving | `/api/logpush` (`state`, `err`), `[push]` | `src/net/LogPush.*`, `TlsJob.*`; the files: `gh api repos/Barbedx/megaopen-logs/contents/mo-XXXX` or clone the repo |
+| remote log not arriving | `/api/logpush` (`state`, `err`), `[push]` | `src/net/LogPush.*`, `NetJob.*`; the files: `gh api repos/Barbedx/megaopen-logs/contents/mo-XXXX` or clone the repo |
 | climate read (cabin temp) | `/api/diag` (`state`, `last`, `reply`), `[diag]`, `W [can2] diagnostic read stopped` | `src/app/CarDiag.*`, `src/diag/ClimDiag.*`, `src/bus/Mcp2518Source.*` (`setTransmit`, `send`) |
 
 Pins live only in `src/board/BoardProfile.h`. Feature flags: `src/Features.h`

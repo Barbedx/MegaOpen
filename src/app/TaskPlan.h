@@ -104,23 +104,37 @@ namespace App
         constexpr int         BLE_CORE  = 0;
         constexpr uint32_t    BLE_STACK = 4096;
 
-        // The GitHub update (src/net/GhOta.h): one job, created by a tap on
-        // the page and deleted after it, so not in the registry. Below
-        // everything on the WiFi core. The stack holds the TLS handshake and
-        // must be internal: the flash writes run with the cache off.
-        constexpr UBaseType_t GHOTA_PRIO  = 1;
-        constexpr int         GHOTA_CORE  = 0;
-        constexpr uint32_t    GHOTA_STACK = 8192;
+        // The network worker (src/net/NetJob.h): the GitHub update and the
+        // log push, one job after the other, on one task for the whole boot
+        // with a STATIC stack. Each job used to create and delete a task of
+        // its own, 10 kB and 8 kB of internal stack churned through the heap
+        // every minute. IDLE's priority: at 1 a run of TLS handshakes (a
+        // backlog sent every few seconds, ECDH in PSRAM, the car's 800 fps on
+        // the same core) kept IDLE0 out for 5 s and the task watchdog
+        // rebooted the board, and the next boot's backlog did it again (the
+        // car, 12 boots, 1.6.0-rc5). The stack holds the TLS handshake and
+        // the OTA download, and must be internal: the flash writes run with
+        // the cache off. The push used 3.5 kB of it (boot 190's coredump).
+        constexpr UBaseType_t NETJOB_PRIO  = 0;
+        constexpr int         NETJOB_CORE  = 0;
+        constexpr uint32_t    NETJOB_STACK = 10240;
 
-        // Log push (src/net/LogPush.h): the same shape as GhOta's, one TLS
-        // job at a time with it (TlsJob.h). IDLE's priority, so the two take
-        // turns: at 1 a run of TLS handshakes (a backlog sent every few
-        // seconds, ECDH in PSRAM, the car's 800 fps on the same core) kept
-        // IDLE0 out for 5 s and the task watchdog rebooted the board, and the
-        // next boot's backlog did it again (the car, 12 boots, 1.6.0-rc5).
-        constexpr UBaseType_t LOGPUSH_PRIO  = 0;
-        constexpr int         LOGPUSH_CORE  = 0;
-        constexpr uint32_t    LOGPUSH_STACK = 10240;   // GhOta's plus the token, URL and auth header
+        // LogBus (src/utils/LogBus.h): below everything, on the WiFi core.
+        // 4096: the sinks format a timestamp and may call into LittleFS.
+        constexpr UBaseType_t LOGBUS_PRIO  = 1;
+        constexpr int         LOGBUS_CORE  = 0;
+        constexpr uint32_t    LOGBUS_STACK = 4096;
+
+        // capwr, the CAN recorder's writer (src/capture/CanRecorder.h):
+        // below everything, on the WiFi core. 6144: LittleFS calls and the
+        // [cap] printf.
+        constexpr UBaseType_t CAPWR_PRIO  = 1;
+        constexpr int         CAPWR_CORE  = 0;
+        constexpr uint32_t    CAPWR_STACK = 6144;
+
+        // bt_begin (main.cpp): BleHub::Begin builds the GATT tree and needs
+        // more stack than setup() has; the task deletes itself after.
+        constexpr uint32_t    BT_BEGIN_STACK = 16384;
 
         // The USB link (src/link/UsbLink.h): the app's frames, the sockets it
         // pipes to httpd, the alert events. httpd's priority on its core, so
@@ -129,10 +143,6 @@ namespace App
         constexpr UBaseType_t USBLINK_PRIO  = 2;
         constexpr int         USBLINK_CORE  = 0;
         constexpr uint32_t    USBLINK_STACK = 4096;
-
-        // LogBus: below everything, on the WiFi core.
-        constexpr UBaseType_t LOGBUS_PRIO = 1;
-        constexpr int         LOGBUS_CORE = 0;
 
         // esp_http_server, set in WebUi::begin. HTTPD_DEFAULT_CONFIG gives it 5
         // on either core, which put every web request above the loop. It takes

@@ -11,7 +11,8 @@
 #include "freertos/semphr.h"
 #include <atomic>
 #include "GhRoots.h"
-#include "TlsJob.h"
+#include "NetJob.h"
+#include "../utils/HeapSentinel.h"
 #include "../Version.h"
 #include "../app/TaskPlan.h"
 #include "../utils/LogBus.h"
@@ -222,8 +223,10 @@ namespace LogPush
             cfg.buffer_size    = 4608;
             cfg.buffer_size_tx = 4608;
             cfg.user_agent     = "MegaOpen/" MEGAOPEN_VERSION;
+            HEAP_CHECK("push pre-init");
             esp_http_client_handle_t c = esp_http_client_init(&cfg);
             if (!c) { err = ESP_ERR_NO_MEM; return -1; }
+            HEAP_CHECK("push init");
             char auth[TOKEN_MAX + 16];
             snprintf(auth, sizeof(auth), "Bearer %s", tok);
             esp_http_client_set_header(c, "Authorization", auth);
@@ -232,8 +235,11 @@ namespace LogPush
             esp_http_client_set_header(c, "Content-Type", "application/json");
             esp_http_client_set_post_field(c, body, (int)len);
             err = esp_http_client_perform(c);
+            HEAP_CHECK("push perform");
             const int st = err == ESP_OK ? esp_http_client_get_status_code(c) : -1;
+            HEAP_CHECK("push pre-cleanup");
             esp_http_client_cleanup(c);
+            HEAP_CHECK("push cleanup");
             memset(auth, 0, sizeof(auth));
             if (st > 0) s_noAnswer = 0;
             else if (err != ESP_ERR_NO_MEM) ++s_noAnswer;   // our memory is not the link's fault
@@ -280,6 +286,7 @@ namespace LogPush
             size_t len = 0;
             char* body = buildBody(data, n, lost, msg, len);
             if (!body) { err = ESP_ERR_NO_MEM; ms = 0; return -1; }
+            HEAP_CHECK("push body");
             const uint32_t t0 = millis();
             const int st = put(url, tok, body, len, err);
             ms = millis() - t0;
@@ -530,7 +537,7 @@ namespace LogPush
         // The next chunk of an earlier boot's flash log: true when a PUT was tried.
         bool pastStep(const char* repo, const char* tok)
         {
-            if (s_pastN < 0) scanPast();
+            if (s_pastN < 0) { scanPast(); HEAP_CHECK("push scan"); }
             char* text = nullptr;
             while (s_pastI < s_pastN) {
                 Past& g = s_past[s_pastI];
@@ -542,6 +549,7 @@ namespace LogPush
                     pastDone(g.boot);
                     continue;
                 }
+                HEAP_CHECK("push loadFile");
                 if (!text) text = (char*)psMalloc(CHUNK_MAX);
                 if (!text) return false;
                 // Whole lines from s_pastOff, the ones after fromMs, up to CHUNK_MAX.
@@ -792,26 +800,24 @@ namespace LogPush
                                "internal heap %u, stack %u of %u unused",
                                dev, rel, (unsigned)n, (unsigned)ms,
                                lost ? " (after a lost stretch)" : "", (unsigned)queued, (unsigned)heapNow(),
-                               (unsigned)uxTaskGetStackHighWaterMark(nullptr), (unsigned)App::Plan::LOGPUSH_STACK);
+                               (unsigned)uxTaskGetStackHighWaterMark(nullptr), (unsigned)App::Plan::NETJOB_STACK);
                 return;
             }
             failed(st, err, ms, &s_part);
         }
 
-        void task(void*)
+        // One push, on the network worker (NetJob), mbedTLS in PSRAM for it.
+        void job(void*)
         {
-            {
-                TlsJob::InPsram tls;
-                runPush();
-            }
-            TlsJob::release();
+            HEAP_CHECK("push job");
+            runPush();
+            HEAP_CHECK("push done");
             const uint32_t low = heap_caps_get_minimum_free_size(CAP_IN);
             portENTER_CRITICAL(&s_mux);
             s_heapMin = low;
             s_busy = false;
             if (s_state == State::Pushing) s_state = State::Waiting;
             portEXIT_CRITICAL(&s_mux);
-            vTaskDelete(nullptr);
         }
 
         void load()
@@ -905,8 +911,8 @@ namespace LogPush
             setErr(State::Waiting, "push_heap", 0);
             return;
         }
-        // GhOta's job holds TLS: try again on a later pass.
-        if (!TlsJob::claim("logpush")) {
+        // The worker is on GhOta's job: try again on a later pass.
+        if (NetJob::busy()) {
             portENTER_CRITICAL(&s_mux);
             s_nextAt = now + DRAIN_MS;
             portEXIT_CRITICAL(&s_mux);
@@ -916,15 +922,12 @@ namespace LogPush
         s_busy = true;
         s_state = State::Pushing;
         portEXIT_CRITICAL(&s_mux);
-        if (xTaskCreatePinnedToCore(task, "logpush", App::Plan::LOGPUSH_STACK, nullptr,
-                                    App::Plan::LOGPUSH_PRIO, nullptr,
-                                    App::core(App::Plan::LOGPUSH_CORE)) != pdPASS) {
-            TlsJob::release();
+        if (!NetJob::post("push", job, nullptr)) {
             portENTER_CRITICAL(&s_mux);
             s_busy = false;
             s_nextAt = now + PERIOD_MS;
             portEXIT_CRITICAL(&s_mux);
-            setErr(State::Waiting, "no_memory", 0);
+            setErr(State::Waiting, "push_busy", 0);
         }
     }
 

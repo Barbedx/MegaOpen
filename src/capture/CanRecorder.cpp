@@ -1,3 +1,4 @@
+#include "../app/TaskPlan.h"
 #include "CanRecorder.h"
 #if FEATURE_CAPTURE
 #if !FEATURE_LOGFS
@@ -36,11 +37,10 @@ namespace Capture
         constexpr uint32_t LOG_MS           = 10000;
         constexpr uint32_t DRAIN_BATCH      = 4096;          // slots per pass, then beat
 
-        // capwr: below everything, on the WiFi core (the plan's numbers; not in
-        // src/app/TaskPlan.h yet). 6144: LittleFS calls and the [cap] printf.
-        constexpr UBaseType_t CAPWR_PRIO  = 1;
-        constexpr int         CAPWR_CORE  = 0;
-        constexpr uint32_t    CAPWR_STACK = 6144;
+        // capwr: the plan's numbers (src/app/TaskPlan.h CAPWR_*).
+        constexpr UBaseType_t CAPWR_PRIO  = App::Plan::CAPWR_PRIO;
+        constexpr int         CAPWR_CORE  = App::Plan::CAPWR_CORE;
+        constexpr uint32_t    CAPWR_STACK = App::Plan::CAPWR_STACK;
 
         // A ring slot: the frame as pushed. 20 bytes with alignment.
         struct Slot {

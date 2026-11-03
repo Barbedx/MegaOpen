@@ -12,7 +12,8 @@
 #include <mbedtls/md.h>
 #include "GhRelease.h"
 #include "GhRoots.h"
-#include "TlsJob.h"
+#include "NetJob.h"
+#include "../utils/HeapSentinel.h"
 #include "../Version.h"
 #include "../app/TaskPlan.h"
 #include "../utils/LogBus.h"
@@ -110,7 +111,7 @@ namespace GhOta
             LOGI("ota", "github: %s%s%s", code, *d ? ": " : "", d);
         }
 
-        // mbedTLS itself goes to PSRAM for the job (TlsJob::InPsram).
+        // mbedTLS itself goes to PSRAM for the job (the worker, NetJob).
         // Everything else the job allocates and could keep in PSRAM: the
         // download chunk, SHA256SUMS, the JSON pools. Internal RAM when there
         // is no PSRAM (heap_caps_free frees either).
@@ -162,6 +163,7 @@ namespace GhOta
             cfg.user_agent     = "MegaOpen/" MEGAOPEN_VERSION;   // the API refuses none
             esp_http_client_handle_t c = esp_http_client_init(&cfg);
             if (!c) { fail("no_memory", "for the HTTP client"); return nullptr; }
+            HEAP_CHECK("ota init");
             stage(&View::heapClient);
             if (api) esp_http_client_set_header(c, "Accept", "application/vnd.github+json");
 
@@ -174,6 +176,7 @@ namespace GhOta
                 }
                 stage(&View::heapTls);
                 len = esp_http_client_fetch_headers(c);
+                HEAP_CHECK("ota headers");
                 const int st = esp_http_client_get_status_code(c);
                 if (st == 200) return c;
                 if (st == 301 || st == 302 || st == 303 || st == 307 || st == 308) {
@@ -204,6 +207,7 @@ namespace GhOta
             }
             if (hop == HOPS) fail("gh_redirects");
             esp_http_client_close(c);
+            HEAP_CHECK("ota pre-cleanup");
             esp_http_client_cleanup(c);
             return nullptr;
         }
@@ -271,7 +275,9 @@ namespace GhOta
                 UsbLink::netClose();
             } else if (c.h) {
                 esp_http_client_close(c.h);
+                HEAP_CHECK("ota pre-cleanup");
                 esp_http_client_cleanup(c.h);
+                HEAP_CHECK("ota cleanup");
             }
             c = Src{};
         }
@@ -484,16 +490,16 @@ namespace GhOta
             LOGI("ota", "github: %s written, SHA-256 matches; internal heap min %u of %u; "
                            "stack %u of %u unused; rebooting into the trial",
                            s_rel.tag, (unsigned)s_v.heapMin, (unsigned)s_v.heapStart,
-                           (unsigned)stackFree, (unsigned)App::Plan::GHOTA_STACK);
+                           (unsigned)stackFree, (unsigned)App::Plan::NETJOB_STACK);
             // Into the flash log now, not at the reboot: the car turned off
             // while waiting boots the new image with no shutdown handler run.
             LogBus::flushAndWait(500);
         }
 
-        // After a good install, with mbedTLS back on its own allocator: the
-        // reboot into the trial at once, as after a file upload. No gate on
-        // the car moving (the owner's call, 2026-11-02: he updates on the
-        // move, and the trial runs anywhere).
+        // After a good install, with mbedTLS back on its own allocator (the
+        // worker's `after` hook): the reboot into the trial at once, as after
+        // a file upload. No gate on the car moving (the owner's call,
+        // 2026-11-02: he updates on the move, and the trial runs anywhere).
         [[noreturn]] void rebootNow()
         {
             setPhase(Phase::Rebooting);
@@ -504,75 +510,48 @@ namespace GhOta
             for (;;) vTaskDelay(pdMS_TO_TICKS(1000));   // restart() does not return
         }
 
-        // The longest a pressed check/install waits for the log push's part
-        // (its PUT times out at 20 s; a connect on top).
-        constexpr uint32_t QUEUE_MS = 60000;
-
-        // Queued: the turn after the push's part. false: it never came.
-        bool waitTurn()
-        {
-            portENTER_CRITICAL(&s_mux);
-            const bool queued = s_v.queued;
-            portEXIT_CRITICAL(&s_mux);
-            if (!queued) return true;
-            const uint32_t t0 = millis();
-            while (!TlsJob::claim("ghota")) {
-                if ((uint32_t)(millis() - t0) >= QUEUE_MS) {
-                    TlsJob::unreserve("ghota");
-                    return false;
-                }
-                vTaskDelay(pdMS_TO_TICKS(100));
-            }
-            LOGI("ota", "github: TLS free after %u ms in the queue", (unsigned)(millis() - t0));
-            portENTER_CRITICAL(&s_mux);
-            s_v.queued = false;
-            portEXIT_CRITICAL(&s_mux);
-            return true;
-        }
-
-        void task(void* arg)
+        // One job, on the network worker (NetJob), after whatever was queued
+        // before it (the log push's part): mbedTLS in PSRAM for it.
+        void runJob(void* arg)
         {
             const Job job = (Job)(uintptr_t)arg;
-            if (!waitTurn()) {
-                fail("tls_busy", "%s still held after %u s", TlsJob::holder() ? TlsJob::holder() : "TLS",
-                     (unsigned)(QUEUE_MS / 1000));
-                portENTER_CRITICAL(&s_mux);
-                s_v.queued = false;
-                s_busy = false;
-                portEXIT_CRITICAL(&s_mux);
-                vTaskDelete(nullptr);
-            }
+            const bool ps = NetJob::tlsInPsram();
+            portENTER_CRITICAL(&s_mux);
+            s_v.queued = false;
+            s_v.tlsInPsram = ps;
+            portEXIT_CRITICAL(&s_mux);
             stage(&View::heapTask);
-            {
-                TlsJob::InPsram tls;
-                portENTER_CRITICAL(&s_mux);
-                s_v.tlsInPsram = tls.on;
-                portEXIT_CRITICAL(&s_mux);
-                if (job == Job::Check) runCheck();
-                else                   runInstall();
-            }
-            TlsJob::release();   // mbedTLS is back on its own allocator
+            HEAP_CHECK("ota turn");
+            if (job == Job::Check) runCheck();
+            else                   runInstall();
+            HEAP_CHECK("ota done");
+        }
+
+        // Right after runJob, mbedTLS back on its own allocator.
+        void afterJob(void* arg)
+        {
+            const Job job = (Job)(uintptr_t)arg;
             View v;
             view(v);
             if (v.phase == Phase::Written) rebootNow();
             // ESP-IDF counts the high-water mark in bytes.
             const uint32_t stackFree = uxTaskGetStackHighWaterMark(nullptr);
-            LOGI("ota", "github: %s done; internal heap %u, task created %u, running %u, "
+            LOGI("ota", "github: %s done; internal heap %u, queued %u, running %u, "
                            "client %u, after TLS %u, min %u (TLS in %s); stack %u of %u unused",
                            job == Job::Check ? "check" : "install", (unsigned)s_v.heapStart,
                            (unsigned)s_v.heapCreated, (unsigned)s_v.heapTask,
                            (unsigned)s_v.heapClient, (unsigned)s_v.heapTls,
                            (unsigned)s_v.heapMin, s_v.tlsInPsram ? "PSRAM" : "internal RAM",
-                           (unsigned)stackFree, (unsigned)App::Plan::GHOTA_STACK);
+                           (unsigned)stackFree, (unsigned)App::Plan::NETJOB_STACK);
             portENTER_CRITICAL(&s_mux);
             s_v.stackFree = stackFree;
             s_busy = false;
             portEXIT_CRITICAL(&s_mux);
-            vTaskDelete(nullptr);
         }
 
         const char* start(Job job)
         {
+            const bool queued = NetJob::busy();
             portENTER_CRITICAL(&s_mux);
             if (s_busy) {
                 const bool written = s_v.phase == Phase::Written;
@@ -584,10 +563,8 @@ namespace GhOta
                 return "fw_no_newer";   // check first
             }
             // The log push may be mid-upload (one part, seconds): the job
-            // queues, goes next, and its task waits for the turn.
-            const bool now = TlsJob::claim("ghota");
-            if (!now) TlsJob::reserve("ghota");
-            s_v.queued   = !now;
+            // queues behind it on the worker and goes next.
+            s_v.queued   = queued;
             s_busy       = true;
             s_v.phase    = job == Job::Check ? Phase::Checking : Phase::Downloading;
             s_v.err[0]   = 0;
@@ -596,22 +573,18 @@ namespace GhOta
             s_v.heapCreated = s_v.heapTask = s_v.heapClient = s_v.heapTls = 0;
             portEXIT_CRITICAL(&s_mux);
 
-            if (xTaskCreatePinnedToCore(task, "ghota", App::Plan::GHOTA_STACK, (void*)(uintptr_t)job,
-                                        App::Plan::GHOTA_PRIO, nullptr,
-                                        App::core(App::Plan::GHOTA_CORE)) != pdPASS) {
-                if (now) TlsJob::release();
-                else     TlsJob::unreserve("ghota");
+            if (!NetJob::post(job == Job::Check ? "check" : "install", runJob, (void*)(uintptr_t)job,
+                              afterJob)) {
                 portENTER_CRITICAL(&s_mux);
                 s_v.queued = false;
                 s_busy    = false;
                 s_v.phase = Phase::Failed;
-                snprintf(s_v.err, sizeof(s_v.err), "no_memory");
+                snprintf(s_v.err, sizeof(s_v.err), "fw_running");
                 portEXIT_CRITICAL(&s_mux);
-                return "no_memory";
+                return "fw_running";
             }
-            // Right after the create, still on httpd: the stack and TCB alone.
-            // The task's own first sample comes whenever priority 1 gets the
-            // core, after whatever httpd and WiFi did meanwhile.
+            // Right after the post, still on httpd. The job's own first
+            // sample comes when the worker gets to it.
             stage(&View::heapCreated);
             return nullptr;
         }

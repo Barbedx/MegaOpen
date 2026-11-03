@@ -40,6 +40,10 @@
 #include "utils/Snapshot.h"
 #include <esp_heap_caps.h>
 #include <esp_core_dump.h>
+#include "utils/HeapSentinel.h"
+#if FEATURE_GH_OTA || FEATURE_LOG_PUSH
+#include "net/NetJob.h"
+#endif
 #include <esp_flash.h>
 #if FEATURE_LOGFS
 #include <LittleFS.h>
@@ -1792,6 +1796,9 @@ static void logBootReason()
 
 void setup()
 {
+#if HEAP_SENTINEL
+    HeapSentinel::begin();
+#endif
     // The log ring into PSRAM before anything logs (LogBus::grow()).
     const bool ringGrown = LogBus::grow();
     Serial.begin(115200);
@@ -1813,6 +1820,9 @@ void setup()
         LogBus::onFlush(LogFile::flushNow);
     }
 #endif
+#if FEATURE_GH_OTA || FEATURE_LOG_PUSH
+    NetJob::begin();   // the GitHub jobs' worker, before anything can post one
+#endif
 #if FEATURE_LOG_PUSH
     const bool push = LogPush::begin();
     if (push) LogBus::addSink(pushSink);
@@ -1828,7 +1838,7 @@ void setup()
     }
 #endif
     // Below the loop task (raised in setup()'s tail), on the core WiFi lives on.
-    LogBus::startTask(App::Plan::LOGBUS_PRIO, App::core(App::Plan::LOGBUS_CORE));
+    LogBus::startTask(App::Plan::LOGBUS_PRIO, App::core(App::Plan::LOGBUS_CORE), App::Plan::LOGBUS_STACK);
 #if FEATURE_CAPTURE
     // The CAN recorder, after the flash log has mounted littlefs (they share
     // it). The car task pushes into it from its first frame.
@@ -2308,7 +2318,7 @@ void setup()
                             g_bleTask = App::spawn(spec);
                             vTaskDelete(nullptr);
                         },
-                        "bt_begin", 16384, nullptr, 1, nullptr);
+                        "bt_begin", App::Plan::BT_BEGIN_STACK, nullptr, 1, nullptr);
             LOGI("boot", "BLE mode=%s\n", bm.c_str());
         }
 

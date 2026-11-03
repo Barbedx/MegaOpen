@@ -129,7 +129,7 @@ TLS and moves the bytes. It goes to GitHub over https only (the board's
 `GhRelease::trustedUrl` list, on the app's side too), follows the redirects
 itself and says where it ended up; the board checks that URL again.
 
-One transfer at a time (TlsJob already serialises GhOta and LogPush). The
+One transfer at a time (the network worker, NetJob, already serialises GhOta and LogPush). The
 response body goes into a 16 kB stream buffer in PSRAM, and the app may send no
 more than 16 kB past the board's last NET_ACK: a 1.7 MB image cannot outrun the
 flash writes.

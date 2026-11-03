@@ -185,8 +185,8 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   lines and the next file says how many bytes. 401/404 stop it until the
   page saves new settings; the rest back off 1 → 10 min. The token
   (fine-grained, Contents read/write on that one repo) is in NVS `logpush`,
-  never sent back. One TLS job at a time with GhOta (`src/net/TlsJob.*`:
-  both move mbedTLS to PSRAM, a global). Плата → «Логи в GitHub»;
+  never sent back. One job at a time with GhOta, on the network worker
+  (`src/net/NetJob.*`: both move mbedTLS to PSRAM, a global). Плата → «Логи в GitHub»;
   `src/net/LogPush.*`, routes `/api/logpush` (`WebUiLogPush.cpp`), `[push]`
   lines. `FEATURE_LOG_PUSH` on the T-2CAN envs. Open: a token per board does
   not scale to other people's boards (owner's plan); that needs an ingest

@@ -164,12 +164,11 @@ namespace LogBus
         line(b);
     }
 
-    void startTask(UBaseType_t prio, BaseType_t core)
+    void startTask(UBaseType_t prio, BaseType_t core, uint32_t stack)
     {
         if (g_task) return;
         if (!g_flushDone) g_flushDone = xSemaphoreCreateBinary();
-        // 4 kB: the sinks format a timestamp and may call into LittleFS.
-        xTaskCreatePinnedToCore(taskBody, "logbus", 4096, nullptr, prio, &g_task, core);
+        xTaskCreatePinnedToCore(taskBody, "logbus", stack, nullptr, prio, &g_task, core);
     }
 
     void onFlush(void (*fn)()) { g_onFlush = fn; }
