@@ -250,6 +250,20 @@ namespace Cfg
                 Log::setTagSpec(v);
             },
         };
+        // The stock radio's code (src/display/RadioCode.h): four digits, or
+        // nothing (off); anything else is left as it was.
+        const SStr kRadioCode = {
+            4,
+            [](const Model& m, char* out, size_t cap) {
+                if (cap) snprintf(out, cap, "%s", m.s->radioCode.c_str());
+            },
+            [](Model& m, const char* v) {
+                size_t n = 0;
+                for (; v[n]; ++n) if (v[n] < '0' || v[n] > '9') return;
+                if (n != 0 && n != 4) return;
+                m.s->radioCode = v;
+            },
+        };
 #undef UI_NAMES_ENUM
 
         // ---- the head-unit emitter's messages: row i = message i, on/off ----
@@ -436,6 +450,9 @@ namespace Cfg
             // Live: WifiManager reads it every pass (net_svc).
             {"wifiAuto", "No WiFi on USB", "system", SType::Bool, W, AP_NONE,
              0, 1, 0, nullptr, nullptr, S_GET(s.wifiAuto), S_PUT(s.wifiAuto = v != 0)},
+            // Live: the panel task reads it on the next pass after a save.
+            {"radioCode", "Radio code", "system", SType::Str, W, AP_NONE,
+             0, 0, 0, nullptr, nullptr, nullptr, nullptr, nullptr, &kRadioCode},
             {"can2Bitrate", "CAN A rate", "system", SType::Enum, W, AP_REBOOT,
              0, 0, 0, nullptr, &kRates, S_GET(rateIndex(s.can2Bitrate)),
              S_PUT(s.can2Bitrate = rateRow((uint8_t)v))},

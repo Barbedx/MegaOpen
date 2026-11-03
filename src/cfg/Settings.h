@@ -64,6 +64,9 @@ namespace Cfg
         Text<12> bleMode = "ams";
         // The head-unit protocol (Canbox::Protocols), by id. Read once at boot.
         Text<16> huProtocol = "raise112";
+        // The stock radio's code (FuncsReg off, src/display/RadioCode.h):
+        // four digits typed on the panel bus when the radio asks; "" = off.
+        Text<5>  radioCode = "";
         // No wifiSleep setting: WiFi power save is derived from bleMode
         // (WifiManager::sleepRequired()). BT on with power save off makes the
         // IDF WiFi driver abort at radio start and boot-loop.

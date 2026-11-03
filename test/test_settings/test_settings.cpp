@@ -494,7 +494,7 @@ void test_texts_are_web_only_and_described()
         TEST_ASSERT_NOT_NULL_MESSAGE(e.str, e.id);
         TEST_ASSERT_TRUE_MESSAGE(e.str->maxLen > 0 && e.str->maxLen <= 160, e.id);
     }
-    TEST_ASSERT_EQUAL(2, texts);   // raise.version, logTags
+    TEST_ASSERT_EQUAL(3, texts);   // raise.version, logTags, radioCode
 }
 
 // Exactly 16 bytes on the wire, space-padded; read back trimmed.
@@ -553,7 +553,7 @@ static const char* const kNotInRegistry[] = {"ssid", "pass", "mdnsName", "apName
 // and the board lay the struct out the same way.
 void test_settings_struct_unchanged()
 {
-    TEST_ASSERT_EQUAL_MESSAGE(576, sizeof(Settings),
+    TEST_ASSERT_EQUAL_MESSAGE(580, sizeof(Settings),
                               "Cfg::Settings changed: add a registry entry, then update this size");
     // Every other field: count the entries that write Settings.
     size_t n = 0;

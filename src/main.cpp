@@ -42,6 +42,9 @@
 #include <esp_core_dump.h>
 #include "utils/HeapSentinel.h"
 #include "utils/JsonEscape.h"
+#if FEATURE_DISPLAY_CAN
+#include "display/RadioCode.h"
+#endif
 #if FEATURE_GH_OTA || FEATURE_LOG_PUSH
 #include "net/NetJob.h"
 #endif
@@ -538,6 +541,10 @@ static affa::TwaiLink g_twai;
 // Who else is on the panel bus (display/PanelBusWatch.h): fed by the raw tap,
 // read by panelWatchStep() on this task and by /api/health.
 static MegaOpen::PanelBusWatch g_panelWatch;
+// The stock radio's code, typed when it asks (FuncsReg off). Fed from the
+// frame tap, stepped from loop(): the panel task, which may send a key.
+static MegaOpen::RadioCode g_radioCode;
+static bool radioCodeSend(uint16_t wire, bool hold, void*);   // below, with panelWatchStep
 #endif
 static uint32_t  g_canRx = 0;
 // The library's log lines (link and panel) into the LogBus.
@@ -1126,7 +1133,10 @@ static uint32_t          g_affaTracePrinted = 0;
 static void affaTap(const affa::Frame& f, affa::Direction d, void*)
 {
     // Received frames only: what the rest of the bus says, never our own.
-    if (d != affa::Direction::Tx) g_panelWatch.onRx(f.id, f.len, f.data, millis());
+    if (d != affa::Direction::Tx) {
+        g_panelWatch.onRx(f.id, f.len, f.data, millis());
+        g_radioCode.onRx(f.id, f.data, f.len, millis());
+    }
     // Feed the raw frame ring: the panel bus is not a car source.
     ringPut((d == affa::Direction::Tx) ? 'T' : 'R', f.id, f.data, f.len);
 
@@ -2249,6 +2259,11 @@ void setup()
     // begin() transmits nothing; the first heartbeat leaves on the first poll().
     panel.begin();
     memMark("display.begin");
+    // The stock radio's code (FuncsReg off): the setting, and the keys onto the bus.
+    g_radioCode.begin(radioCodeSend, nullptr);
+    g_radioCode.setCode(g_cfg.s().radioCode.c_str());
+    if (!g_cfg.s().funcReg && g_radioCode.enabled())
+        LOGI("code", "radio code set: typed when the radio asks for it");
 
     LOGI("boot", "display=%s funcreg=%s\n",
                   dt.c_str(), g_cfg.s().funcReg ? "on" : "off");
@@ -2731,6 +2746,65 @@ static void loopWait()
 }
 
 #if FEATURE_DISPLAY_CAN
+// The radio code's key onto the bus: the panel's own key frame, from the
+// panel task (this one), so no ticket and no PanelOps.
+static bool radioCodeSend(uint16_t wire, bool hold, void*)
+{
+    const affa::Submitted s = App::Panel::lib().pressKey(
+        (affa::Key)wire, hold ? affa::KeyEdge::Hold : affa::KeyEdge::Click, affa::KeySource::Wire);
+    return s.result == affa::Result::Ok;
+}
+
+// The radio code, every pass: the setting as the page last saved it, the
+// next key when due, and what happened, to the log.
+static void radioCodeStep(uint32_t now)
+{
+    static uint32_t s_gen = 0xFFFFFFFFu, s_genAt = 0;
+    if (s_gen != g_cfg.generation() && (uint32_t)(now - s_genAt) >= 1000) {
+        s_genAt = now;
+        // A torn read of five bytes is the worst case here (Cfg::Text): the
+        // next pass reads it whole; never the blocking lock on this task.
+        if (g_cfg.tryLock()) {
+            s_gen = g_cfg.generation();
+            const bool was = g_radioCode.enabled();
+            g_radioCode.setCode(g_cfg.s().radioCode.c_str());
+            g_cfg.unlock();
+            if (was != g_radioCode.enabled())
+                LOGI("code", "radio code: %s", g_radioCode.enabled() ? "set, typed when the radio asks" : "off");
+        }
+    }
+    g_radioCode.tick(now);
+    const MegaOpen::RadioCode::Event e = g_radioCode.takeEvent();
+    if (e == MegaOpen::RadioCode::Event::None) return;
+    const MegaOpen::RadioCode::View v = g_radioCode.view();
+    switch (e) {
+        case MegaOpen::RadioCode::Event::Prompt:
+            LOGI("code", "the radio asks for its code: typing it (attempt %u)", (unsigned)(v.attempts + 1));
+            break;
+        case MegaOpen::RadioCode::Event::Typed:
+            LOGI("code", "%u keys sent; the radio's answer in %u s", (unsigned)v.sent,
+                 (unsigned)(MegaOpen::RadioCode::RESULT_MS / 1000));
+            break;
+        case MegaOpen::RadioCode::Event::Accepted:
+            LOGI("code", "accepted: the prompt is gone");
+            break;
+        case MegaOpen::RadioCode::Event::Rejected:
+            LOGW("code", "REJECTED: the radio asks again; check the code on the Плата page (not typed again for %u s)",
+                 (unsigned)(MegaOpen::RadioCode::COOLDOWN_MS / 1000));
+            break;
+        case MegaOpen::RadioCode::Event::Skipped:
+            LOGW("code", "the radio asks again within %u s of the last attempt: not typed (it waits longer after each wrong code)",
+                 (unsigned)(MegaOpen::RadioCode::COOLDOWN_MS / 1000));
+            break;
+        case MegaOpen::RadioCode::Event::NoBus:
+            LOGW("code", "no key reached the bus after %u tries: given up for this prompt",
+                 (unsigned)MegaOpen::RadioCode::SEND_TRIES);
+            break;
+        default:
+            break;
+    }
+}
+
 // The panel bus watch's verdicts, applied on the panel task after each poll().
 // FuncsReg off (passive, the radio owns the handshake): we draw over it, the
 // watch only reports (health, one log line). FuncsReg on: another master on
@@ -2842,6 +2916,9 @@ void loop()
     if (App::Panel::present()) {
         App::Panel::pump(now);
         panelWatchStep(now);
+        // Only with the radio on the bus (FuncsReg off): in the radio role
+        // nobody asks for a code.
+        if (!g_cfg.s().funcReg) radioCodeStep(now);
         lap("disp.poll");
     }
 #endif

@@ -3,6 +3,7 @@
 #include <string.h>
 #include "../Features.h"
 #include "../utils/UiList.h"
+#include "../utils/JsonEscape.h"
 #include "../utils/Log.h"
 #include "../keys/KeyAction.h"
 #include "../keys/KeyDests.h"
@@ -202,10 +203,7 @@ namespace Catalog
             void quoted(const char* s)
             {
                 put('"');
-                for (; *s; ++s) {
-                    if (*s == '"' || *s == '\\') put('\\');
-                    put(*s);
-                }
+                Json::escape(s, strlen(s), [](const char* p, size_t n, void* c) { ((Out*)c)->put(p, n); }, &_o);
                 put('"');
             }
 

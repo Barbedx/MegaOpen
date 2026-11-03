@@ -203,6 +203,17 @@ The knob rings take WS2812B (GRB), RGB or SK6812 **RGBW** strips: **Кнопки
 Підсвітка → Тонко → Порядок кольорів**. On RGBW the white LED carries what
 the three colours have in common.
 
+## The stock radio's code
+
+With «Реєструвати щиток» off (the stock radio drives the panel and MegaOpen
+only listens and draws over it), the radio asks for its four-digit code on
+the panel after the battery was off. Put the code into Плата → Система →
+«Код магнітоли», and the board types it when the prompt appears, as the
+stalk would: the wheel up for each digit, the bottom button to the next,
+held to confirm. One attempt per prompt and never two within a minute: the
+radio waits longer after every wrong code. The log says what happened
+(tag `code`: typed, accepted, rejected). Empty = off.
+
 ## Updating
 
 **From GitHub** (the board on a network with internet):

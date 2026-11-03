@@ -501,6 +501,8 @@
  "k.set.funcReg": "Register the display",
  "k.set.mdnsOn": "Name megaopen.local",
  "k.set.wifiAuto": "No WiFi while on USB",
+ "k.set.radioCode": "Radio code",
+ "k.set.radioCode.h": "The stock radio (function registration off): when it asks for CODE after the battery was off, the board types these 4 digits on the bus as the stalk would (wheel up: the digit, the bottom button: next, held: confirm). Empty: off. One attempt per prompt and at most one a minute: after a wrong code the radio waits longer each time. The verdict is in the log, tag code.",
  "k.set.can2Bitrate": "CAN A speed",
  "k.rate.auto": "auto",
  "k.set.can2Detected": "CAN A speed found",

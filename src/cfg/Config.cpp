@@ -53,6 +53,7 @@ namespace Cfg
         _s.funcReg     = _p.getBool  ("funcReg", true);
         _s.bleMode     = _p.getString("bleMode", "ams");
         _s.huProtocol  = _p.getString("huProto", "raise112");
+        _s.radioCode   = _p.getString("radioCode", "");
         _s.autoTime    = _p.getBool  ("autoTime", true);
         _s.mediaScreen = _p.getBool  ("mediaScr", false);
         // isKey first: added after boards were seeded, and an absent key costs
@@ -197,6 +198,7 @@ namespace Cfg
 
         _p.putString("bleMode",  _s.bleMode.c_str());
         _p.putString("huProto",  _s.huProtocol.c_str());
+        _p.putString("radioCode", _s.radioCode.c_str());
         _p.putBool  ("autoTime", _s.autoTime);
         _p.putBool  ("mediaScr", _s.mediaScreen);
         _p.putBool  ("carScr",   _s.carScreen);
