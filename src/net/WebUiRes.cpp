@@ -60,7 +60,7 @@ void WebUi::routesRes()
         // The newest edit, applied or not: what the page just saved.
         Sinks::ResistiveMap m;
         if (!_st.resMap->peek(m)) return r->reply(503, "text/plain", "busy");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         d["enabled"]    = _res->enabled();
         d["activeHigh"] = m.activeHigh();
         d["spin"]       = (int)m.spin();
@@ -152,8 +152,7 @@ void WebUi::routesRes()
             }
         }
 
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // ---- what is on the wire, polled --------------------------------------
@@ -163,7 +162,7 @@ void WebUi::routesRes()
         // own copy, which it may be replacing right now.
         Sinks::ResistiveMap m;
         if (!_st.resMap->peek(m)) return r->reply(503, "text/plain", "busy");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         JsonArray chs = d["ch"].to<JsonArray>();
         for (uint8_t c = 0; c < Sinks::ResistiveMap::CHANNELS; ++c) {
             JsonObject o = chs.add<JsonObject>();
@@ -180,8 +179,7 @@ void WebUi::routesRes()
         d["longs"]    = _res->longs();
         // Non-zero = a Release never arrived (fault upstream of the sink).
         d["stuck"]    = _res->stuck();
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // ---- settings ----------------------------------------------------------
@@ -190,7 +188,7 @@ void WebUi::routesRes()
     // so the flash write never runs under the staging mutex.
     route("/api/res", HTTP_POST, [this](PsychicRequest* r) {
         if (!_res || !_st.resMap) return r->reply(503, "text/plain", "not_built resistive_sink");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
 
         Sinks::ResistiveMap saved;
@@ -253,7 +251,7 @@ void WebUi::routesRes()
     // ---- one action's rungs -------------------------------------------------
     route("/api/res/map", HTTP_POST, [this](PsychicRequest* r) {
         if (!_res || !_st.resMap) return r->reply(503, "text/plain", "not_built resistive_sink");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         const Keys::Action a = Keys::fromName(d["action"] | "");
         if (a == Keys::Action::None) return r->reply(400, "text/plain", "param action");
@@ -279,7 +277,7 @@ void WebUi::routesRes()
     // ---- give every button a rung -------------------------------------------
     route("/api/res/auto", HTTP_POST, [this](PsychicRequest* r) {
         if (!_res || !_st.resMap) return r->reply(503, "text/plain", "not_built resistive_sink");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         deserializeJson(d, r->body());
         const uint8_t ch = (uint8_t)(d["ch"] | 0);
 
@@ -295,7 +293,7 @@ void WebUi::routesRes()
         App::KeyBus::kick();
         _cfg->saveResMap(saved);
 
-        JsonDocument o;
+        JsonDocument o(&PsramJson::instance());
         o["ok"]     = true;
         o["wanted"] = n;
         // Fewer rungs than buttons is normal on a one-leg channel; report it.
@@ -312,7 +310,7 @@ void WebUi::routesRes()
     // so the page still gets its 409; the hold itself is the keys task's.
     route("/api/res/learn", HTTP_POST, [this](PsychicRequest* r) {
         if (!_res || !_st.resMap || !_st.resLearn) return r->reply(503, "text/plain", "not_built resistive_sink");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         deserializeJson(d, r->body());
 
         if (d["stop"].as<bool>()) {

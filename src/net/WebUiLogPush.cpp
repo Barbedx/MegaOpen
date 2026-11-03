@@ -14,7 +14,7 @@ void WebUi::routesLogPush()
     route("/api/logpush", HTTP_GET, [](PsychicRequest* r) {
         LogPush::View v;
         LogPush::view(v);
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         d["state"]    = LogPush::stateId(v.state);
         d["on"]       = v.on;
         d["hasToken"] = v.hasToken;
@@ -35,13 +35,11 @@ void WebUi::routesLogPush()
         d["canToday"] = v.canToday;
         d["canFile"]  = v.canFile;
         d["canBudget"] = v.canBudget;
-        String out;
-        serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     route("/api/logpush", HTTP_POST, [](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         bool on = false;
         const bool hasOn = d["on"].is<bool>();

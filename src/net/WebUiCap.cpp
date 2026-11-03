@@ -71,7 +71,7 @@ void WebUi::routesCap()
     // ---- status ------------------------------------------------------------------
     route("/api/cap", HTTP_GET, [](PsychicRequest* r) {
         const Capture::Status s = Capture::status();
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         d["ready"]     = s.ready;
         d["recording"] = s.recording;
         d["mode"]      = uiId(CapFormat::MODE_NAMES, s.mode);
@@ -97,8 +97,7 @@ void WebUi::routesCap()
         br.add(s.bitrate[1]);           // panel
         d["error"] = s.lastError ? s.lastError : "";
         capSettingsOut(d["settings"].to<JsonObject>(), Capture::settings());
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // ---- control -------------------------------------------------------------------
@@ -127,7 +126,7 @@ void WebUi::routesCap()
         const Capture::FileInfo* files = box->f;
         const size_t total = Capture::list(box->f, 128);
         const size_t n = total < 128 ? total : 128;
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         JsonArray a = d["files"].to<JsonArray>();
         for (size_t i = 0; i < n; ++i) {
             JsonObject o = a.add<JsonObject>();
@@ -141,8 +140,7 @@ void WebUi::routesCap()
             o["protected"] = files[i].prot;
             o["current"]   = files[i].current;
         }
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // ?f=NNNN: streamed in chunks; the live file is flushed first.

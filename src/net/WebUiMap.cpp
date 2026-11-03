@@ -272,7 +272,7 @@ void WebUi::routesMap()
     });
 
     route("/api/hu/fields", HTTP_POST, [this](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         // ~450 B with the field map: per request (Scratch), not on httpd's 4 kB stack.
         Scratch<Canbox::HuConfig> cfgBox;
@@ -307,7 +307,7 @@ void WebUi::routesMap()
     });
 
     route("/api/map", HTTP_POST, [this](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
 
         // ~450 B with the field map: per request (Scratch), not on httpd's 4 kB stack.
@@ -456,9 +456,7 @@ void WebUi::routesMap()
             o["code"] = pr.e.code ? pr.e.code : "";
             o["pos"] = pr.e.pos;
         }
-        String out;
-        serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     route("/api/formulas", HTTP_POST, [this](PsychicRequest* r) {
@@ -472,7 +470,7 @@ void WebUi::routesMap()
         } else {
             if (!d["rows"].is<JsonArrayConst>()) return r->reply(400, "text/plain", "param rows");
             JsonObjectConst car = d.as<JsonObjectConst>();
-            JsonDocument wrap;
+            JsonDocument wrap(&PsramJson::instance());
             wrap["formulas"] = car["rows"];
             if (const char* why = CarFile::getFormulas(wrap.as<JsonObjectConst>(), *set))
                 return r->reply(400, "text/plain", why);
@@ -498,14 +496,14 @@ void WebUi::routesMap()
     // nothing is saved. Functions with state read their first evaluation.
     route("/api/expr", HTTP_POST, [this](PsychicRequest* r) {
         if (!_state) return r->reply(503, "text/plain", "not_built vehicle");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         if (!d["f"].is<const char*>()) return r->reply(400, "text/plain", "param f");
         Scratch<Expr::Program> p;
         Scratch<Expr::Program::State> ps;
         if (!p || !ps) return r->reply(503, "text/plain", "no_memory");
         Expr::Error e;
-        JsonDocument o;
+        JsonDocument o(&PsramJson::instance());
         if (!p->compile(d["f"].as<const char*>(), Vehicle::exprResolve, nullptr, e) || !p->reset(*ps)) {
             o["ok"] = false;
             o["code"] = e.code ? e.code : "no_memory";
@@ -539,7 +537,7 @@ void WebUi::routesMap()
     // `send` on it keeps going out on its schedule until the 30 s are up.
     route("/api/map/test", HTTP_POST, [this](PsychicRequest* r) {
         if (!_state) return r->reply(503, "text/plain", "not_built vehicle");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         const char* id = d["id"] | "";
         const Canbox::Protocol& P = Canbox::activeProtocol();
@@ -733,7 +731,7 @@ void WebUi::routesDiag()
         size_t k = 0;
         for (uint8_t i = 0; i < v.replyLen && k + 4 < sizeof(hex); ++i)
             k += snprintf(hex + k, sizeof(hex) - k, "%s%02X", i ? " " : "", v.reply[i]);
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         d["on"]        = v.on;
         d["session"]   = v.session;
         d["inSession"] = v.inSession;
@@ -761,13 +759,11 @@ void WebUi::routesDiag()
             d["ac"]     = v.ac;
             d["clear"]  = v.clear;
         }
-        String out;
-        serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     route("/api/diag", HTTP_POST, [](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         App::CarDiag::View v;
         App::CarDiag::view(v);
@@ -802,7 +798,7 @@ void WebUi::routesAlerts()
     // clutch, neutral (null when the signal has no value); the table in use;
     // the learner's peaks [ratio, seconds] this boot.
     route("/api/gears", HTTP_GET, [this](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         auto sig = [&](const char* key, uint8_t s) {
             if (_state && _state->has(s)) d[key] = _state->get(s);
             else d[key] = nullptr;
@@ -824,9 +820,7 @@ void WebUi::routesAlerts()
             e.add(pr[i]);
             e.add(ps[i]);
         }
-        String out;
-        serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     route("/api/alerts", HTTP_GET, [](PsychicRequest* r) {
@@ -837,7 +831,7 @@ void WebUi::routesAlerts()
         uint32_t last = 0;
         const uint8_t n = App::Car::alertsSince(since, list, App::Car::ALERT_LOG, last);
         const uint32_t now = millis();
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         d["last"] = last;
         d["upMs"] = now;
         JsonArray a = d["alerts"].to<JsonArray>();
@@ -850,9 +844,7 @@ void WebUi::routesAlerts()
             o["value"] = list[i].value;
             o["text"]  = list[i].text;
         }
-        String out;
-        serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // GET ?name=drive_no_lights: one signal now, {"name","has","value"}, for
@@ -870,7 +862,7 @@ void WebUi::routesAlerts()
     });
 
     route("/api/alerts/test", HTTP_POST, [](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         deserializeJson(d, r->body());
         // `sig`: the rule's name, the key the app's phrases know (fuel_low ...).
         const char* name = d["sig"] | "drive_no_lights";

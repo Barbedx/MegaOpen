@@ -28,6 +28,7 @@ static inline int replyPage(PsychicRequest* r, const uint8_t* gz, size_t len,
     return res.send();
 }
 #include "Catalog.h"
+#include "../utils/PsramJson.h"
 #include "../display/PanelBusWatch.h"
 
 // A JSON body streamed in chunks from one static buffer rather than built as
@@ -51,6 +52,9 @@ public:
         }
     }
     void put(const char* s) { put(s, strlen(s)); }
+    // ArduinoJson's writer: serializeJson(doc, out) streams through put().
+    size_t write(uint8_t c) { put((const char*)&c, 1); return 1; }
+    size_t write(const uint8_t* s, size_t n) { put((const char*)s, n); return n; }
     esp_err_t finish()
     {
         flush();
@@ -99,6 +103,18 @@ private:
     size_t _n = 0;
     bool _started = false;
 };
+
+// A document straight into the chunked reply: no String of the whole body
+// in internal heap (75 routes built one, 2 kB realloc steps each, under the
+// settings lock: most of httpd's heap churn). The status is 200, so decide
+// the refusals before building the document. The document's pools are in
+// PSRAM (PsramJson): declare it `JsonDocument d(&PsramJson::instance())`.
+static inline esp_err_t replyDoc(PsychicRequest* r, JsonDocument& d)
+{
+    ChunkOut out(r);
+    serializeJson(d, out);
+    return out.finish();
+}
 #if FEATURE_DISPLAY_CAN
 #include "../display/AffaPort.h"
 #include "../display/PanelOps.h"
@@ -270,8 +286,8 @@ public:
     void attachKnobs(Knobs::Service* k) { _knobs = k; }
 #endif
 
-    // The head-unit UART ring as JSON; main.cpp owns the storage.
-    using HuDumpFn = String (*)(bool inOnly);
+    // The head-unit UART ring as JSON, streamed; main.cpp owns the storage.
+    using HuDumpFn = void (*)(bool inOnly, Catalog::Out& out);
     void attachHuRing(HuDumpFn f) { _huDump = f; }
 
     // Arm the popup's take-down `ms` from now. The deadline is the loop's

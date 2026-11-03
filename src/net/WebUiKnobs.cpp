@@ -237,17 +237,16 @@ void WebUi::routesKnobs()
     // ---- the whole configuration -------------------------------------------
     route("/api/knobs", HTTP_GET, [this](PsychicRequest* r) {
         if (!_knobs) return r->reply(503, "text/plain", "not_built knob_service");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         knobsJson(_knobs->config(), d.to<JsonObject>());
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // ---- what the knobs are doing, polled ----------------------------------
     route("/api/knobs/live", HTTP_GET, [this](PsychicRequest* r) {
         if (!_knobs) return r->reply(503, "text/plain", "not_built knob_service");
         const Service::Live v = _knobs->live();
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         JsonObject e = d["enc"].to<JsonObject>();
         JsonObject e2 = d["enc2"].to<JsonObject>();
         e2["detents"] = v.enc2Detents; e2["pos"] = v.pos[1]; e["pos"] = v.pos[0]; e2["errors"] = v.enc2Errors;
@@ -292,14 +291,13 @@ void WebUi::routesKnobs()
         // Events the KeyBus refused (lane full): the keys task, which drains
         // it, stalled. Not the panel/loop task.
         d["dropped"] = v.dropped;
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // ---- settings ------------------------------------------------------------
     route("/api/knobs", HTTP_POST, [this](PsychicRequest* r) {
         if (!_knobs) return r->reply(503, "text/plain", "not_built knob_service");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
 
         Config c = _knobs->config();

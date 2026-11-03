@@ -31,6 +31,7 @@
 #endif
 #include <esp_system.h>
 #include "../utils/Scratch.h"
+#include "../utils/JsonEscape.h"
 #if FEATURE_BLE && FEATURE_ANCS
 #include "../apple_notification_service.h"
 #endif
@@ -136,18 +137,8 @@ static esp_err_t logLines(PsychicRequest* r, uint32_t since)
         out.put(h, snprintf(h, sizeof(h), "%s{\"n\":%lu,\"t\":%lu,\"l\":\"%s\",\"tag\":\"%s\",\"msg\":\"",
                             lines ? "," : "", (unsigned long)(c.n - 1), (unsigned long)ms,
                             Log::LEVEL_NAMES[p.level], Log::TAG_ROWS[p.tag].tag));
-        // JSON string escapes; runs of plain bytes (UTF-8 included) go as they are.
-        const char* q = s_line + p.msg;
-        const char* const end = s_line + len;
-        while (q < end) {
-            const char* run = q;
-            while (q < end && (uint8_t)*q >= 0x20 && *q != '"' && *q != '\\') ++q;
-            out.put(run, (size_t)(q - run));
-            if (q == end) break;
-            if (*q == '"' || *q == '\\') { const char e[2] = {'\\', *q}; out.put(e, 2); }
-            else out.put(h, snprintf(h, sizeof(h), "\\u%04x", (unsigned)(uint8_t)*q));
-            ++q;
-        }
+        Json::escape(s_line + p.msg, (size_t)(len - (int)p.msg),
+                     [](const char* s, size_t n, void* c) { ((ChunkOut*)c)->put(s, n); }, &out);
         out.put("\"}");
         bytes += (uint32_t)len;
         ++lines;
@@ -487,7 +478,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         // A dry run: what would change, nothing applied (the table copies are
         // this handler's own).
         if (dry) {
-            JsonDocument o;
+            JsonDocument o(&PsramJson::instance());
             o["ok"] = true;
             bool reboot = false;
             JsonArray chg = o["changes"].to<JsonArray>();
@@ -600,7 +591,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         // caller still applies the knobs and the page says exactly what
         // stayed behind; the form keeps its statuses.
         if (file) {
-            JsonDocument o;
+            JsonDocument o(&PsramJson::instance());
             o["ok"] = true;
             if (restart) o["pendingReboot"] = true;
             if (huBusy) o["partial"].to<JsonArray>().add("hu_busy");
@@ -679,7 +670,7 @@ void WebUi::routes()
     });
 
     route("/api/logs/tags", HTTP_GET, [](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         JsonArray a = d["tags"].to<JsonArray>();
         const uint8_t n = Log::tagCount();
         for (uint8_t i = 0; i < n; ++i) {
@@ -690,13 +681,12 @@ void WebUi::routes()
             else o["lvl"] = nullptr;
         }
         d["spec"] = Log::tagSpec();
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     route("/api/logs", HTTP_GET, [](PsychicRequest* r) {
         if (r->hasParam("since")) return logLines(r, paramU32(r, "since", "0", 10));
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         d["lines"]    = LogBus::lines();
         d["dropped"]  = LogBus::dropped();   // non-zero: the ring overflowed
         d["ringSize"] = LogBus::ringSize();
@@ -714,8 +704,7 @@ void WebUi::routes()
             f["size"] = LogFile::size(n);
         }
 #endif
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
 #if FEATURE_LOGFS
@@ -733,10 +722,9 @@ void WebUi::routes()
 #endif
 
     route("/api/status", HTTP_GET, [this](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         statusJson(d.to<JsonObject>());
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
 #if FEATURE_MATRIX
@@ -746,7 +734,7 @@ void WebUi::routes()
         App::KeysTask::KeyMapCfg k;
         if (!_st.keymap || !_st.keymap->peek(k)) return r->reply(503, "text/plain", "busy");
         const KeyMap* const map = &k.map;
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         JsonArray slots = d["slots"].to<JsonArray>();
         for (uint8_t i = 0; i < KeyMap::POSITIONS; ++i) {
             const Slot& s = map->slot(i);
@@ -761,15 +749,14 @@ void WebUi::routes()
         d["encCw"]       = cw  ? cw  : P.keyCodeFor(Keys::Action::EncCw);
         d["encCcw"]      = ccw ? ccw : P.keyCodeFor(Keys::Action::EncCcw);
         d["encInverted"] = k.encInverted;
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // Staged: the task that sweeps the matrix applies it (and with it the
     // encoder phases and the fast-debounce mask) at its next pass.
     route("/api/keymap", HTTP_POST, [this](PsychicRequest* r) {
         if (!_st.keymap) return r->reply(503, "text/plain", "not_built keymap");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
 
         _cfg->s().encInverted = d["encInverted"] | false;
@@ -814,7 +801,7 @@ void WebUi::routes()
     // `cols`), cells as above; a scaled Int has its decimal point placed.
     route("/api/settings", HTTP_GET, [this](PsychicRequest* r) {
         auto& s = _cfg->s();
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         settingsOut(d.to<JsonObject>(), false);
         // Not settings: the network names (passwords never) and the build.
         d["ssid"]           = s.ssid.c_str();
@@ -825,12 +812,11 @@ void WebUi::routes()
         d["cfgVer"]         = _cfg->version();
         d["cfgVerWas"]      = _cfg->migratedFrom();
         d["wifiSleep"]      = _wifi ? _wifi->sleeping() : false;   // derived, read-only
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     route("/api/settings", HTTP_POST, [this](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body()) || !d.is<JsonObjectConst>())
             return r->reply(400, "text/plain", "bad_json");
         String out;
@@ -858,14 +844,14 @@ void WebUi::routes()
                  Cfg::SettingsJson::FORMAT, Cfg::SettingsJson::SCHEMA, MEGAOPEN_VERSION, MegaOpen::buildId());
         out.put(head);
         {
-            JsonDocument d;
+            JsonDocument d(&PsramJson::instance());
             settingsOut(d.to<JsonObject>(), true);
             serializeJson(d, w);
         }
 #if FEATURE_KNOBS
         if (_knobs) {
             out.put(",\"knobs\":");
-            JsonDocument d;
+            JsonDocument d(&PsramJson::instance());
             knobsJson(_knobs->config(), d.to<JsonObject>());
             serializeJson(d, w);
         }
@@ -894,7 +880,7 @@ void WebUi::routes()
     });
 
     route("/api/config", HTTP_POST, [this](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body()) || !d.is<JsonObjectConst>())
             return r->reply(400, "text/plain", "bad_json");
         const auto chk = Cfg::SettingsJson::checkFile(d.as<JsonObjectConst>());
@@ -955,7 +941,7 @@ void WebUi::routes()
         }
 #endif
 
-        JsonDocument o;
+        JsonDocument o(&PsramJson::instance());
         deserializeJson(o, out);
         if (dry) {
             o["knobs"] = knobs;
@@ -1004,16 +990,15 @@ void WebUi::routes()
     // Each entry is a chain with one verdict and, when not "ok", the link that
     // broke it.
     route("/api/health", HTTP_GET, [this](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         healthJson(d.to<JsonObject>());
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
 #if FEATURE_BLE && FEATURE_ANCS
     // Cached ANCS notifications, raw UTF-8 (the panel gets the ASCII-folded copy).
     route("/api/notifications", HTTP_GET, [this](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         d["popup"] = _cfg->s().ancsPopup;
         JsonArray a = d["items"].to<JsonArray>();
         // Newest first; capped because the reply is built in RAM.
@@ -1029,8 +1014,7 @@ void WebUi::routes()
             o["title"]    = it.title;
             o["message"]  = it.message;
         }
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 #endif
 
@@ -1043,7 +1027,7 @@ void WebUi::routes()
     route("/api/wifi/scan", HTTP_POST, [this](PsychicRequest* r) {
         if (_wifi) _wifi->scanBegin();
         const int n = WiFi.scanNetworks();
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         JsonArray a = d["networks"].to<JsonArray>();
         for (int i = 0; i < n && i < 30; ++i) {
             JsonObject o = a.add<JsonObject>();
@@ -1055,15 +1039,14 @@ void WebUi::routes()
         if (_wifi) _wifi->scanEnd();
         d["count"] = n;
         d["current"] = WiFi.isConnected() ? WiFi.SSID() : String();
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // {ssid, pass, ssid2, pass2}, either pair or both. An empty password keeps
     // the stored one while the name stays the same; a new name with no password
     // is an open network. The first network applies at boot, the second live.
     route("/api/wifi", HTTP_POST, [this](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         const bool has1 = d["ssid"].is<const char*>(), has2 = d["ssid2"].is<const char*>();
         const String s1 = d["ssid"] | "", s2 = d["ssid2"] | "";
@@ -1145,7 +1128,7 @@ void WebUi::routes()
 void WebUi::routesDisplay()
 {
     route("/api/display", HTTP_GET, [this](PsychicRequest* r) {
-        JsonDocument doc;
+        JsonDocument doc(&PsramJson::instance());
         fillDisplay(doc.to<JsonObject>());
         String out; serializeJson(doc, out);
         return replyJson(r, out);
@@ -1154,7 +1137,7 @@ void WebUi::routesDisplay()
     // Display type and registration role are read once at boot: saved, and
     // pendingReboot when either changed.
     route("/api/display", HTTP_POST, [this](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         auto& s = _cfg->s();
         const String type = d["type"] | s.displayType.c_str();
@@ -1172,7 +1155,7 @@ void WebUi::routesDisplay()
     // panel's answer comes later; /api/display reports lastResult), 503 when
     // it refused (PanelOps logs why).
     auto posted = [this](PsychicRequest* r, bool ok) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         d["queued"] = ok;
         d["note"] = ok ? "queued for the display task; the result is reported in the log"
                        : "refused — nothing was drawn; the reason is in the log";
@@ -1441,7 +1424,7 @@ void WebUi::routesAffaMap()
 
         Keys::AffaMap map;
         if (!_st.affa->peek(map)) return r->reply(503, "text/plain", "busy");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
 
         JsonArray rows = d["rows"].to<JsonArray>();
         for (uint8_t k = 0; k < Keys::AffaMap::KEYS; ++k) {
@@ -1475,13 +1458,12 @@ void WebUi::routesAffaMap()
             d["events"] = _affaSrc->events();
         }
         d["last"] = serialized((const char*)last);
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     route("/api/affamap", HTTP_POST, [this](PsychicRequest* r) {
         if (!_affaMap || !_st.affa) return r->reply(503, "text/plain", "not_built display");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
 
         uint16_t n = 0;
@@ -1503,7 +1485,7 @@ void WebUi::routesAffaMap()
         App::KeyBus::kick();
         _cfg->saveAffaMap(saved);
         LOGI("cfg", "stalk mapping saved (%u rows)", (unsigned)n);
-        JsonDocument res; res["ok"] = true; res["applied"] = n;
+        JsonDocument res(&PsramJson::instance()); res["ok"] = true; res["applied"] = n;
         String out; serializeJson(res, out);
         return replyJson(r, out);
     });
@@ -1561,7 +1543,7 @@ void WebUi::routesMedia()
         if (!mediaSettings(ms)) return r->reply(503, "text/plain", "busy");
         const App::Ui::UiStatus us = _ui.status ? _ui.status->read() : App::Ui::UiStatus{};
 
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         d["auto"]     = ms.mediaAuto;
         d["title"]    = media.title();
         d["artist"]   = media.artist();
@@ -1715,8 +1697,7 @@ void WebUi::routesMedia()
             pn["bits"] = (const char*)pw->hex;
         }
 
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
 #if FEATURE_BLE
@@ -1741,7 +1722,7 @@ void WebUi::routesMedia()
 
     route("/api/media", HTTP_POST, [this](PsychicRequest* r) {
         if (!_ui.settings) return r->reply(503, "text/plain", "not_built display");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
         using MegaOpen::MediaPane;
         if (d["scroll"].is<int>() && !Catalog::arrowsKnown(d["scroll"].as<int>()))
@@ -1898,7 +1879,7 @@ void WebUi::routesMedia()
 void WebUi::routesCan()
 {
     route("/api/can", HTTP_GET, [this](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         // Listen-only on the car's bus; with the panel, the link's TX gate can
         // also have turned transmit off (nobody ACKs, nothing heard), which is
         // why busErr and twaiTx stop moving: say so here.
@@ -1955,8 +1936,7 @@ void WebUi::routesCan()
         }
         d["rxPin"] = (int)Board::PIN_CAN_RX;
         d["txPin"] = (int)Board::PIN_CAN_TX;
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // Error Code Capture: type (bit/form/stuff/other), direction and frame
@@ -1989,7 +1969,7 @@ void WebUi::routesCan()
             delayMicroseconds(40);
             if ((i & 0xFF) == 0xFF) delay(1);        // let the server breathe
         }
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         JsonArray a = d["seen"].to<JsonArray>();
         for (uint16_t v = 0; v < 256; ++v) {
             if (!hist[v]) continue;
@@ -2000,14 +1980,13 @@ void WebUi::routesCan()
             o["dir"]   = (v & 0x20) ? "while RECEIVING" : "while SENDING";
             o["where"] = segName(v & 0x1F);
         }
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // Per-id table. `changed`: a bit per byte that differed since the baseline.
     route("/api/can/ids", HTTP_GET, [this](PsychicRequest* r) {
         if (!_sniffer) return r->reply(503, "text/plain", "not_built can");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         d["overflow"] = _sniffer->overflow();
         JsonArray a = d["ids"].to<JsonArray>();
         // copyAt: the panel task writes these rows while this runs on httpd.
@@ -2026,8 +2005,7 @@ void WebUi::routesCan()
                 n += snprintf(hex + n, sizeof(hex) - n, "%02X", e.last[b]);
             o["data"] = hex;
         }
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     route("/api/can/baseline", HTTP_POST, [this](PsychicRequest* r) {
@@ -2069,7 +2047,7 @@ void WebUi::routesCan2()
         if (!_can2) return r->reply(503, "text/plain", "not_built can2");
         const Mcp2518Source::Status c = _can2->read();
         static const char* const kAb[] = {"searching", "locked", "manual"};
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         d["live"]          = c.live;
         d["listenOnly"]    = true;       // the only mode this firmware has
         d["autobaud"]      = kAb[c.state <= 2 ? c.state : 0];
@@ -2093,8 +2071,7 @@ void WebUi::routesCan2()
         d["rounds"]        = c.cycles;
         d["rejected"]      = c.rejected;
         d["beginErr"]      = c.beginErr;
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // ?bitrate=125000|250000|500000|1000000 fixes the rate; 0 (or auto) goes
@@ -2127,7 +2104,7 @@ void WebUi::routesCanbox()
         if (!cfgBox) return r->reply(503, "text/plain", "no_memory");
         Canbox::HuConfig& cfg = *cfgBox;
         if (!App::Hu::emitterCfg().peek(cfg)) return r->reply(503, "text/plain", "busy");
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         JsonArray a = d["messages"].to<JsonArray>();
         const Canbox::Protocol& proto = Canbox::activeProtocol();
         for (uint8_t i = 0; i < proto.messageCount(); ++i) {
@@ -2153,8 +2130,7 @@ void WebUi::routesCanbox()
                 o["ready"] = false;
             }
         }
-        String out; serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // 409 when the message has no data, so nothing-sent never looks like success.
@@ -2183,8 +2159,9 @@ void WebUi::routesCanbox()
     route("/api/canbox/last", HTTP_GET, [this](PsychicRequest* r) {
         if (!_huDump) return r->reply(503, "text/plain", "not_built uart_ring");
         // ?in=1: the head unit's frames alone, kept apart from ours.
-        const String out = _huDump(paramStr(r, "in") == "1");
-        return replyJson(r, out);
+        ChunkOut out(r);
+        _huDump(paramStr(r, "in") == "1", out);
+        return out.finish();
     });
 
     // The Raise tuning (every value the sources disagree about, persisted:
@@ -2217,7 +2194,7 @@ void WebUi::routesCanbox()
 
         String hex; appendHex(hex, frame, flen);
         LOGI("hu", "raw tx: %s", hex.c_str());
-        JsonDocument d; d["ok"] = true; d["queued"] = true; d["bytes"] = hex;
+        JsonDocument d(&PsramJson::instance()); d["ok"] = true; d["queued"] = true; d["bytes"] = hex;
         String out; serializeJson(d, out);
         if (!out.c_str()) return r->reply(503, "text/plain", "no_memory");
         return r->reply(202, "application/json", out.c_str());

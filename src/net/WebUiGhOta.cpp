@@ -13,7 +13,7 @@
 
 static int fwBusy(PsychicRequest* r, const char* why)
 {
-    JsonDocument d;
+    JsonDocument d(&PsramJson::instance());
     d["error"] = why;
     String out;
     serializeJson(d, out);
@@ -25,7 +25,7 @@ void WebUi::routesGhOta()
     route("/api/fw", HTTP_GET, [](PsychicRequest* r) {
         GhOta::View v;
         GhOta::view(v);
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         d["fw"]     = MEGAOPEN_VERSION;
         d["env"]    = MegaOpen::envName();
         d["phase"]  = GhOta::phaseId(v.phase);
@@ -47,14 +47,12 @@ void WebUi::routesGhOta()
         for (int i = 0; i < 10; ++i) { sm.add(v.stepMin[i]); st.add(v.stepMs[i]); }
         d["tlsInPsram"] = v.tlsInPsram;
         d["pre"]        = v.pre;
-        String out;
-        serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     // {pre: bool}: the test channel (an rc too) or finals only.
     route("/api/fw/channel", HTTP_POST, [](PsychicRequest* r) {
-        JsonDocument d;
+        JsonDocument d(&PsramJson::instance());
         if (deserializeJson(d, r->body()) || !d["pre"].is<bool>())
             return r->reply(400, "text/plain", "param pre");
         const char* why = GhOta::setPre(d["pre"].as<bool>());

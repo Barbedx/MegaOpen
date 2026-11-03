@@ -41,6 +41,7 @@
 #include <esp_heap_caps.h>
 #include <esp_core_dump.h>
 #include "utils/HeapSentinel.h"
+#include "utils/JsonEscape.h"
 #if FEATURE_GH_OTA || FEATURE_LOG_PUSH
 #include "net/NetJob.h"
 #endif
@@ -835,16 +836,17 @@ static void huDrainSerial()
 }
 
 // Newest first, same as the CAN ring. `inOnly`: the head unit's frames alone.
-static String huLastFramesJson(bool inOnly)
+// Streamed into the reply (ChunkOut): 24 rows of ~300 characters used to be
+// one String grown by += on httpd, in internal heap, under the settings lock.
+static void huLastFramesJson(bool inOnly, Catalog::Out& out)
 {
-    String out = "{\"total\":";
-    out += (uint32_t)g_huCount;
-    out += ",\"baud\":";
-    out += (uint32_t)g_cfg.s().uartBaud;
-    out += ",\"frames\":[";
+    char h[64];
+    out.put(h, (size_t)snprintf(h, sizeof(h), "{\"total\":%lu,\"baud\":%lu,\"frames\":[",
+                                (unsigned long)g_huCount, (unsigned long)g_cfg.s().uartBaud));
     const uint8_t head = g_huHead;
     const uint32_t now = millis();
     const uint8_t rows = inOnly ? kHuInLen : kHuRingLen;
+    bool first = true;
     for (uint8_t i = 0; i < rows; ++i) {
         HuEntry e;
         if (inOnly) huInNewest(i, e);
@@ -853,9 +855,10 @@ static String huLastFramesJson(bool inOnly)
         char b[420];
         int n = snprintf(b, sizeof(b),
                          "%s{\"dir\":\"%c\",\"cmd\":\"%02X\",\"len\":%u,\"total\":%u,\"ageMs\":%u,\"data\":\"",
-                         out.endsWith("[") ? "" : ",", e.dir, (unsigned)e.cmd,
+                         first ? "" : ",", e.dir, (unsigned)e.cmd,
                          (unsigned)e.len, (unsigned)e.total,
                          (unsigned)(now - e.atMs));
+        first = false;
         for (uint8_t k = 0; k < e.len; ++k)
             n += snprintf(b + n, sizeof(b) - n, "%02X", e.data[k]);
         // The text column, decoded here so the browser need not.
@@ -872,24 +875,20 @@ static String huLastFramesJson(bool inOnly)
             b[n] = '\0';
             snprintf(b + n, sizeof(b) - n, "\",\"u16\":%s", wide ? "true" : "false");
         }
-        out += b;
+        out.put(b, strlen(b));
         // The track text as the protocol reads it, UTF-8 (Cyrillic and all).
         if (e.dir == 'R') {
             char t[HuMediaSource::TEXT_MAX];
             uint8_t field = 0;
             if (Canbox::activeProtocol().frameText(e.data, e.len, t, sizeof(t), field)) {
-                JsonDocument j;
-                j.set(t);
-                out += ",\"field\":";
-                out += (unsigned)field;
-                out += ",\"text\":";
-                serializeJson(j, out);
+                out.put(h, (size_t)snprintf(h, sizeof(h), ",\"field\":%u,\"text\":\"", (unsigned)field));
+                Json::escape(t, strlen(t), [](const char* s, size_t k, void* c) { ((Catalog::Out*)c)->put(s, k); }, &out);
+                out.put("\"", 1);
             }
         }
-        out += "}";
+        out.put("}", 1);
     }
-    out += "]}";
-    return out;
+    out.put("]}", 2);
 }
 
 // Every frame UartTx wrote, on the task that wrote it (keys or hu): into the

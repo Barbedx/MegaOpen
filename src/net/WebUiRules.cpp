@@ -54,9 +54,7 @@ void WebUi::routesRules()
         s["fired"]   = st.fired;
         s["shown"]   = st.shown;
         s["dropped"] = st.dropped;
-        String out;
-        serializeJson(d, out);
-        return replyJson(r, out);
+        return replyDoc(r, d);
     });
 
     route("/api/rules", HTTP_POST, [this](PsychicRequest* r) {
