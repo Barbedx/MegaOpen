@@ -4,8 +4,9 @@
 
 // The stock radio's code, typed for the owner.
 //
-// With FuncsReg off the OEM radio owns the panel and MegaOpen only listens
-// and injects. After the battery was off, the radio asks for its four-digit
+// In the extension role (display/PanelRole.h) the stock radio owns the panel
+// and MegaOpen only listens and injects; app/StockRadio runs this there, and
+// nowhere else. After the battery was off, the radio asks for its four-digit
 // code on the panel: the text "  CODE  " on 0x151, then the entry field
 // "  <cursor>000 " with 0xB0 for the blinking cursor on digit 0 (0xB1.. on
 // the next ones). The code is typed with the stalk: the wheel up adds one to

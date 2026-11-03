@@ -120,6 +120,17 @@ fi
 # ---- settings and the settings file (dry runs only) ----------------------------
 req settings GET /api/settings
 expect_code "GET /api/settings" 200
+# The board's role on the panel bus (display/PanelRole.h); the radio code
+# exists in the extension role only.
+has "  panelRole" '"panelRole":"\(emulator\|extension\)"'
+hasnt "  no funcReg (1.8 and before)" '"funcReg"'
+if grep -q '"panelRole":"emulator"' "$BODY"; then
+    hasnt "  emulator: no radioCode" '"radioCode"'
+    req code_role POST '/api/settings?dry=1' "${GATE[@]}" -H 'Content-Type: application/json' \
+        --data '{"radioCode":"1234"}'
+    expect_code "radioCode refused in the emulator role" 400
+    has "  radioCode: role" "^radioCode: role$"
+fi
 
 req bad_two POST '/api/settings?dry=1' "${GATE[@]}" -H 'Content-Type: application/json' \
     --data '{"keyPopup":"x","logLevel":"NOPE"}'
@@ -160,7 +171,7 @@ has "  panel: clusterPings field" '"clusterPings"'
 has "  chains carry a code" '"code":"panel_\|"code":"hu_'
 hasnt "  no chain sends prose" '"code":"[a-z_]*","why"'
 has "  clock: src field" '"id":"clock"[^}]*"src"'
-for code in hu_dialect_vw panel_foreign_master panel_beside_radio panel_cluster_only; do
+for code in hu_dialect_vw panel_foreign_master panel_beside_radio panel_no_radio panel_cluster_only; do
     if grep -q "\"$code\"" "$BODY"; then echo "NOTE  health reports $code"; fi
 done
 

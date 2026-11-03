@@ -42,9 +42,8 @@
 #include <esp_core_dump.h>
 #include "utils/HeapSentinel.h"
 #include "utils/JsonEscape.h"
-#if FEATURE_DISPLAY_CAN
-#include "display/RadioCode.h"
-#endif
+#include "app/StockRadio.h"
+#include "display/PanelRole.h"
 #if FEATURE_GH_OTA || FEATURE_LOG_PUSH
 #include "net/NetJob.h"
 #endif
@@ -539,12 +538,9 @@ static void onAncsNotification(const AppleNotificationService::NotificationInfo&
 static affa::TwaiLink g_twai;
 #if FEATURE_DISPLAY_CAN
 // Who else is on the panel bus (display/PanelBusWatch.h): fed by the raw tap,
-// read by panelWatchStep() on this task and by /api/health.
+// read by panelWatchStep() on this task and by /api/health. It reports; the
+// role decides (display/PanelRole.h, App::Panel::role()).
 static MegaOpen::PanelBusWatch g_panelWatch;
-// The stock radio's code, typed when it asks (FuncsReg off). Fed from the
-// frame tap, stepped from loop(): the panel task, which may send a key.
-static MegaOpen::RadioCode g_radioCode;
-static bool radioCodeSend(uint16_t wire, bool hold, void*);   // below, with panelWatchStep
 #endif
 static uint32_t  g_canRx = 0;
 // The library's log lines (link and panel) into the LogBus.
@@ -1135,7 +1131,8 @@ static void affaTap(const affa::Frame& f, affa::Direction d, void*)
     // Received frames only: what the rest of the bus says, never our own.
     if (d != affa::Direction::Tx) {
         g_panelWatch.onRx(f.id, f.len, f.data, millis());
-        g_radioCode.onRx(f.id, f.data, f.len, millis());
+        // The extension role: the stock radio's prompts (its code).
+        if (App::StockRadio::active()) App::StockRadio::onRx(f.id, f.data, f.len, millis());
     }
     // Feed the raw frame ring: the panel bus is not a car source.
     ringPut((d == affa::Direction::Tx) ? 'T' : 'R', f.id, f.data, f.len);
@@ -2196,6 +2193,10 @@ void setup()
     g_affaLog.begin([](const char* line) { LogBus::line(line); });
 
     const auto& dt = g_cfg.s().displayType;
+    // The role (display/PanelRole.h): the settings' word, fixed for this boot.
+    // Config::begin() has already reduced an unknown id to the emulator.
+    MegaOpen::PanelRole role = MegaOpen::PanelRole::Emulator;
+    MegaOpen::PanelRoles::parse(g_cfg.s().panelRole.c_str(), role);
     {
         // `carminat`: the same object typed as CarminatDisplay (styled text,
         // message boxes, the 0x1F1 pane); null on an UpdateList panel. No RTTI
@@ -2213,6 +2214,7 @@ void setup()
         ps.carminat = carminat;
         ps.link     = &g_twai;
         ps.ops      = &g_panelOps;
+        ps.role     = role;
         ps.hooks.onCompletion = App::Ui::postCompletion;
         App::Panel::begin(ps);
     }
@@ -2232,15 +2234,11 @@ void setup()
         else    LOGE("can", "display: TwaiLink::begin FAILED - no controller (it keeps trying)");
     }
     memMark("can+display");
-    // Listen before talking, when we register: the TX gate stays shut until
-    // PanelBusWatch has listened for LISTEN_MS from the first poll() with no
-    // other master's sync (panelWatchStep()), so an OEM radio is found before
-    // we send one. With FuncsReg off we draw over the radio: no gate.
-    g_twai.setTxEnabled(!g_cfg.s().funcReg);
+    // Who else is on the bus, for health `panel` and the [panel] lines
+    // (panelWatchStep). The link transmits from its first poll() in either
+    // role: no listen window, no gate of ours (the library keeps its own TX
+    // gate for a bus where nobody ACKs).
     g_web.attachPanelWatch(&g_panelWatch);
-    // Passive = a real radio owns the handshake; we send no sync or hello and
-    // never register. Must be set if an OEM radio is on the bus.
-    panel.setPassive(!g_cfg.s().funcReg);
 
     // The default, stated: the library powers the panel on during the opening.
     panel.setAutoPower(true);
@@ -2259,14 +2257,10 @@ void setup()
     // begin() transmits nothing; the first heartbeat leaves on the first poll().
     panel.begin();
     memMark("display.begin");
-    // The stock radio's code (FuncsReg off): the setting, and the keys onto the bus.
-    g_radioCode.begin(radioCodeSend, nullptr);
-    g_radioCode.setCode(g_cfg.s().radioCode.c_str());
-    if (!g_cfg.s().funcReg && g_radioCode.enabled())
-        LOGI("code", "radio code set: typed when the radio asks for it");
+    // The extension role's own work: the stock radio beside us (its code).
+    if (role == MegaOpen::PanelRole::Extension) App::StockRadio::begin(g_cfg);
 
-    LOGI("boot", "display=%s funcreg=%s\n",
-                  dt.c_str(), g_cfg.s().funcReg ? "on" : "off");
+    LOGI("boot", "display=%s role=%s\n", dt.c_str(), MegaOpen::PanelRoles::id(role));
 #endif
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
@@ -2746,118 +2740,39 @@ static void loopWait()
 }
 
 #if FEATURE_DISPLAY_CAN
-// The radio code's key onto the bus: the panel's own key frame, from the
-// panel task (this one), so no ticket and no PanelOps.
-static bool radioCodeSend(uint16_t wire, bool hold, void*)
-{
-    const affa::Submitted s = App::Panel::lib().pressKey(
-        (affa::Key)wire, hold ? affa::KeyEdge::Hold : affa::KeyEdge::Click, affa::KeySource::Wire);
-    return s.result == affa::Result::Ok;
-}
-
-// The radio code, every pass: the setting as the page last saved it, the
-// next key when due, and what happened, to the log.
-static void radioCodeStep(uint32_t now)
-{
-    static uint32_t s_gen = 0xFFFFFFFFu, s_genAt = 0;
-    if (s_gen != g_cfg.generation() && (uint32_t)(now - s_genAt) >= 1000) {
-        s_genAt = now;
-        // A torn read of five bytes is the worst case here (Cfg::Text): the
-        // next pass reads it whole; never the blocking lock on this task.
-        if (g_cfg.tryLock()) {
-            s_gen = g_cfg.generation();
-            const bool was = g_radioCode.enabled();
-            g_radioCode.setCode(g_cfg.s().radioCode.c_str());
-            g_cfg.unlock();
-            if (was != g_radioCode.enabled())
-                LOGI("code", "radio code: %s", g_radioCode.enabled() ? "set, typed when the radio asks" : "off");
-        }
-    }
-    g_radioCode.tick(now);
-    const MegaOpen::RadioCode::Event e = g_radioCode.takeEvent();
-    if (e == MegaOpen::RadioCode::Event::None) return;
-    const MegaOpen::RadioCode::View v = g_radioCode.view();
-    switch (e) {
-        case MegaOpen::RadioCode::Event::Prompt:
-            LOGI("code", "the radio asks for its code: typing it (attempt %u)", (unsigned)(v.attempts + 1));
-            break;
-        case MegaOpen::RadioCode::Event::Typed:
-            LOGI("code", "%u keys sent; the radio's answer in %u s", (unsigned)v.sent,
-                 (unsigned)(MegaOpen::RadioCode::RESULT_MS / 1000));
-            break;
-        case MegaOpen::RadioCode::Event::Accepted:
-            LOGI("code", "accepted: the prompt is gone");
-            break;
-        case MegaOpen::RadioCode::Event::Rejected:
-            LOGW("code", "REJECTED: the radio asks again; check the code on the Плата page (not typed again for %u s)",
-                 (unsigned)(MegaOpen::RadioCode::COOLDOWN_MS / 1000));
-            break;
-        case MegaOpen::RadioCode::Event::Skipped:
-            LOGW("code", "the radio asks again within %u s of the last attempt: not typed (it waits longer after each wrong code)",
-                 (unsigned)(MegaOpen::RadioCode::COOLDOWN_MS / 1000));
-            break;
-        case MegaOpen::RadioCode::Event::NoBus:
-            LOGW("code", "no key reached the bus after %u tries: given up for this prompt",
-                 (unsigned)MegaOpen::RadioCode::SEND_TRIES);
-            break;
-        default:
-            break;
-    }
-}
-
-// The panel bus watch's verdicts, applied on the panel task after each poll().
-// FuncsReg off (passive, the radio owns the handshake): we draw over it, the
-// watch only reports (health, one log line). FuncsReg on: another master on
-// the bus (an OEM radio) would fight our registration, so the stack goes
-// silent, passive, TX gate shut and the controller listen-only (not even an
-// ACK), logged once; otherwise the TX gate opens once the listen window has
-// passed.
+// What the bus says about the role, on the panel task after each poll(): a
+// report only (health `panel` reads the watch itself; this logs each change)
+// and never a decision, the board does what its role says
+// (display/PanelRole.h). Extension: the stock radio's sync is the expected
+// bus, and its absence means nothing of ours shows. Emulator: another
+// master's sync means two radios fight over one panel.
 static void panelWatchStep(uint32_t now)
 {
-    static bool s_silent = false, s_open = false;
-    // The window starts at the first poll(): only poll() drains the receive
-    // queue, so before it nothing has been heard.
-    g_panelWatch.begin(now);
-    if (!g_cfg.s().funcReg) {   // AP_REBOOT: fixed for this boot
-        static bool s_told = false;
-        if (!s_told && g_panelWatch.foreignMaster(now)) {
-            s_told = true;
-            LOGI("panel", "another bus master on the panel bus (sync 0x%03X): FuncsReg off, "
-                           "MegaOpen draws over it", (unsigned)g_panelWatch.masterId());
+    static bool     s_master = false, s_said = false;
+    static uint32_t s_firstPoll = 0;
+    if (!s_firstPoll) s_firstPoll = now ? now : 1;   // nothing could be heard before the first poll()
+    const bool extension = App::Panel::role() == MegaOpen::PanelRole::Extension;
+    const bool master    = g_panelWatch.foreignMaster(now);
+    if (master != s_master) {
+        s_master = master;
+        s_said   = true;
+        const unsigned id   = (unsigned)g_panelWatch.masterId();
+        const unsigned gone = (unsigned)(MegaOpen::PanelBusWatch::GONE_MS / 1000);
+        if (extension) {
+            if (master) LOGI("panel", "the stock radio drives the panel bus (sync 0x%03X): drawing over it", id);
+            else        LOGW("panel", "no sync from the stock radio for %u s: nothing of ours shows until it is back", gone);
+        } else {
+            if (master) LOGW("panel", "another master syncs on the panel bus (0x%03X) while this board emulates the radio: "
+                                      "the two fight over the panel; with a stock radio fitted set the role to extension", id);
+            else        LOGI("panel", "the other bus master has been quiet for %u s", gone);
         }
         return;
     }
-    if (g_panelWatch.foreignMaster(now)) {
-        if (s_silent) return;
-        s_silent = true;
-        s_open = false;
-        App::Panel::lib().setPassive(true);
-        g_twai.setTxEnabled(false);
-        g_twai.abortTx();       // frames already in the driver's queue too
-        const bool lo = g_twai.setListenOnly(true);
-        LOGI("panel", "another bus master on the panel bus (sync 0x%03X): MegaOpen is silent "
-                       "(passive, TX off, listen-only%s) until it has been quiet %u s",
-                       (unsigned)g_panelWatch.masterId(), lo ? "" : " FAILED",
-                       (unsigned)(MegaOpen::PanelBusWatch::REARM_MS / 1000));
-        return;
-    }
-    if (s_silent) {
-        // No foreign sync for REARM_MS: back to what the settings say; the
-        // gate opens below once the listen rule allows it.
-        s_silent = false;
-        g_twai.setListenOnly(false);
-        App::Panel::lib().setPassive(!g_cfg.s().funcReg);
-        LOGI("panel", "no other bus master for a while: the panel stack listens, then talks again");
-    }
-    // Ours to open and to close: a single foreign sync shuts the gate again
-    // for LISTEN_MS, before a second one would make it a master.
-    const bool may = g_panelWatch.mayTransmit(now);
-    if (may != s_open) {
-        s_open = may;
-        g_twai.setTxEnabled(may);
-        // Shut: what is already queued in the driver (up to its TX depth)
-        // must not go out after a foreign sync either.
-        if (!may) g_twai.abortTx();
+    // Extension with no radio heard at all: said once, GONE_MS after the first poll.
+    if (extension && !s_said && (uint32_t)(now - s_firstPoll) >= MegaOpen::PanelBusWatch::GONE_MS) {
+        s_said = true;
+        LOGW("panel", "no stock radio heard on the panel bus since boot: in the extension role nothing of ours "
+                      "shows; with no stock radio fitted set the role to emulator");
     }
 }
 #endif
@@ -2916,9 +2831,8 @@ void loop()
     if (App::Panel::present()) {
         App::Panel::pump(now);
         panelWatchStep(now);
-        // Only with the radio on the bus (FuncsReg off): in the radio role
-        // nobody asks for a code.
-        if (!g_cfg.s().funcReg) radioCodeStep(now);
+        // The extension role: the stock radio's code, when it asks.
+        if (App::StockRadio::active()) App::StockRadio::step(now);
         lap("disp.poll");
     }
 #endif

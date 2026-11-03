@@ -68,6 +68,7 @@ namespace App
                 p.registered   = d.registered();
                 p.busy         = d.busy();
                 p.passive      = d.passive();
+                p.role         = (uint8_t)s_s.role;
                 p.syncState    = (uint8_t)d.syncState();
                 p.phase        = (uint8_t)d.phase();
                 p.queued       = d.queued();
@@ -114,6 +115,11 @@ namespace App
             d.setPollOwner((void*)s_task, currentTask);
             d.onSync(&onSync, nullptr);
             d.onComplete(&onComplete, nullptr);
+            // The role (display/PanelRole.h). Extension: the library's passive
+            // mode — no sync, no hello, no 0x74 ACK, FUNCSREG never latched;
+            // it only injects over the stock radio. Emulator: the library
+            // runs the handshake itself and transmits from its first poll().
+            d.setPassive(s_s.role == MegaOpen::PanelRole::Extension);
 
             using F = affa::Feature;
             using namespace MegaOpen;
@@ -131,6 +137,8 @@ namespace App
         affa::AffaDisplayBase& lib() { return *s_s.display; }
 
         bool present() { return s_s.display != nullptr; }
+
+        MegaOpen::PanelRole role() { return s_s.role; }
 
         void pump(uint32_t)
         {

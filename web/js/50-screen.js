@@ -41,8 +41,10 @@ SCR.screen={title:'nav.screen',async render(m){
   row(t('sc.setManual'),`<button class="btn" id="clkNow" type="button">${t('sc.likeThis')}</button>`))+
  (ams&&has('ancs')?card(t('sc.ntf'),row(t('sc.ntfShow'),sw('/api/settings|ancsPopup',se.ancsPopup))+'<div id="ntf"></div>'):'')+
  card(t('sc.panelType'),
-  row(t('sc.type'),sel('rb:/api/display|type',CAT.panels.map(p=>[p.id,p.name+panelHint(p.id)]),di.type,'data-str'+rbA('rb:',di.type,t('sc.typeLbl'),true)))+
-  row(t('sc.funcReg'),sw('rb:/api/display|funcReg',di.funcReg,rbA('rb:',di.funcReg,t('sc.funcRegLbl'),true)),'',t('sc.funcRegH')));
+  row(t('sc.type'),sel('rb:/api/settings|displayType',CAT.panels.map(p=>[p.id,p.name+panelHint(p.id)]),se.displayType,'data-str'+rbA('rb:',se.displayType,t('sc.typeLbl'))))+
+  /* роль на шині (display/PanelRole.h); код магнітоли є лише в ролі «доповнення» — інакше його нема в se */
+  row(t('sc.role'),sel('rb:/api/settings|panelRole',regOpts('panelRole'),se.panelRole,'data-str'+rbA('rb:',se.panelRole,t('sc.roleLbl'))),'',t('sc.roleH'))+
+  setById(se,'radioCode'));
  $$('.card',m).forEach(c=>saver(c,genericSave));
  $('[data-k="/api/settings|carPreset"]').addEventListener('change',e=>$('#carHint').hidden=e.currentTarget.dataset.v!=='trip');
  mk('layout').addEventListener('change',e=>{const cur={...this.me,layout:e.target.value};$('#lp').innerHTML=lpHTML(cur);this.me=cur;this.fill(cur)});

@@ -146,7 +146,7 @@ These are the changes only. Everything not named stays as it is.
   - `dropped` counts lines the full ring refused since boot; the page marks each increase. `boot` changes every boot (`esp_random()`); when it changes, the page restarts at `since=0` with no marker. A `since` past the newest line reads from the start as well.
   - The ring is the LogBus's own (`LogRing.h`): sent lines stay in it until a new line needs the room. No second buffer.
 - `POST /api/reboot` replaces the reboots that happen as a side effect of `/api/settings`, `/api/wifi` and `/api/display`. Those now save and answer `{ok:true,pendingReboot:true}`, or `{ok:true}` when nothing that is read only at boot changed. `/api/reboot` answers `{ok:true}`, then restarts (reply, 300 ms, restart: the one helper `/api/factory` and `/api/can/role` use as well).
-  - Boot-only: `bleMode`, `canRxPin`/`canTxPin`, `canRole`, `mdnsOn`, `apPass`; the WiFi networks; the panel `type` and `funcReg`.
+  - Boot-only: `bleMode`, `canRxPin`/`canTxPin`, `canRole`, `mdnsOn`, `apPass`; the WiFi networks; `displayType` and `panelRole` (registry entries since 1.9; `POST /api/display` is gone).
   - `GET /api/settings` shows the saved values. WifiManager keeps boot copies of the first network, the AP password and whether BT is up, so those never reach the running WiFi before the reboot. The second network is the exception, on purpose: `setNet2` stages it and WifiManager takes it at its next AP retry, so `ssid2`/`pass2` alone answer no `pendingReboot`.
 - `GET/POST /api/map` and `POST /api/map/test` replace:
   - `/api/signals` (GET and POST)

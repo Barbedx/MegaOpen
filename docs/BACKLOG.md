@@ -280,6 +280,11 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   the foreign-master path is still to be seen on a bus with an OEM radio.
   Since 1.5.1 only with FuncsReg on: off (passive), MegaOpen draws over the
   radio and the watch only reports (`panel_beside_radio`), as designed.
+  **Since 1.9 the watch decides nothing:** the role (`panelRole`, emulator |
+  extension, display/PanelRole.h) is the owner's setting, and the watch only
+  reports when the bus disagrees (`panel_foreign_master` in the emulator role,
+  `panel_no_radio` in the extension role, one `[panel]` line per change). The
+  silence loop, the 3 s listen window and our TX gate are gone.
 
 - **A menu knob commit is no longer lost under a web save** (review,
   2026-10-21): closed by the settings lock (3ad4450). The /api/settings

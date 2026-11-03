@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+- **The board's role on the display bus, named.** «Реєструвати щиток» (`funcReg`, a switch read in seven places) is now one setting with two values, `panelRole`: **Емулятор магнітоли** (`emulator`, no stock radio: the board is the radio) or **Доповнення магнітоли** (`extension`, the stock radio stays and the board draws over it). Екран → Панель → «Роль на шині», applied by a restart; the update turns the old switch into the role (on = emulator, off = extension) and removes the old key. The role is applied in one place (`App::Panel::begin`: the library's passive mode for the extension), and the extension role's own work lives in one module (`app/StockRadio`).
+- **The radio code exists in the extension role only.** In the emulator role `radioCode` is not sent by `GET /api/settings`, not shown, and a `POST` is refused as `radioCode: role`; nothing about a stock radio runs.
+- **The bus watch reports, it no longer decides.** The emulator used to go silent (passive, TX off, listen-only) for 30 s windows whenever another master synced, then probe again, and held its TX gate shut for a 3 s listen window at boot. Now the board does what its role says, and the watch only tells when the bus disagrees: health `panel_foreign_master` (emulator, another radio syncs) and the new `panel_no_radio` (extension, no stock radio heard), one `[panel]` line per change. The library's own TX gate (nobody ACKs) is unchanged.
+
+### Removed
+- `POST /api/display` (it wrote `displayType` and `funcReg` beside the registry): both are registry entries, `POST /api/settings`. `GET /api/display` has `role` instead of `funcReg`.
+
 ## [1.8.0] - 2026-11-03
 
 The stabilisation release: the review of 2026-11-03 (the architecture behind the heap corruptions) implemented, plus the stock radio's code.

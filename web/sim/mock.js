@@ -87,7 +87,7 @@ const S={
  nets:[{ssid:'HomeWiFi',rssi:-58,secure:true},{ssid:'iPhone',rssi:-47,secure:true},{ssid:'KYIVSTAR_7F2A',rssi:-79,secure:true}],
  set:defSet(),staged:{},
  ble:{bonded:true,connected:true,address:'00:11:22:33:44:55'},
- disp:{type:'carminat',funcReg:true,registered:true,phase:'Ready',sessionsLost:1,lastLoss:'AckTimeout',resyncAt:0},
+ disp:{type:'carminat',registered:true,phase:'Ready',sessionsLost:1,lastLoss:'AckTimeout',resyncAt:0},
  clk:{src:'',at:''},
  med:{auto:true,style:'classic',scroll:0,scrollMsTitle:700,scrollMsArtist:1400,splashMs:4000,pane:'media',paneAuto:true,paneSpeed:2,paneCycleS:8,ti:0,elapsed:63,playing:true,inj:null,custom:null},
  tracks:[['Нічний Київ','Океан Ельзи',241],['Плине кача','ДахаБраха',214],['Обійми','Океан Ельзи',258]],
@@ -201,7 +201,7 @@ const W={panel:[['panel_unregistered','registration lost — panel is not comple
 function health(){
  const d=S.disp,ch=[],chain=(id,state,i,x)=>{const[code]=W[id][i],o={id,state,code,...(x||{})};ch.push(o);return o};
  const reg=d.registered,tr=curTrack(),ck=clockStrOrEmpty(),F=C.features;
- if(F.display){chain('panel',reg?'ok':'broken',reg?1:0,{rxFrames:S.can.twaiRx,rxPin:6,txPin:7,resyncs:d.sessionsLost,txGated:false,foreignMasters:0,clusterPings:0});
+ if(F.display){chain('panel',reg?'ok':'broken',reg?1:0,{rxFrames:S.can.twaiRx,rxPin:6,txPin:7,resyncs:d.sessionsLost,txGated:false,foreignMasters:0,clusterPings:0,role:role()});
  const mi=!S.med.auto?0:!reg?1:!phone()&&mediaSrc()!=='hu'?2:!tr.title?3:4;
  chain('media',!S.med.auto?'off':mi<4?'idle':'ok',mi,{title:tr.title,artist:tr.artist,clock:ck,delivered:1834,superseded:12,failed:0});
  {const ci=!S.set.autoTime?0:ck?(phone()?1:2):phone()?3:4;chain('clock',!ci?'off':ci<3?'ok':'idle',ci,{hhmm:ck,src:['','cts','hu','',''][ci]})}}
@@ -224,6 +224,8 @@ g('/api/health',health);
 /* прошивка зберігає в cfg одразу, тож GET бачить збережене; діє воно після перезавантаження */
 /* кожен id реєстру, якого нема в defSet, — з першого значення (enum) або min (int) */
 /* str (raise.version) has no enum: '' until RAISE fills it */
+/* роль на шині щитка (display/PanelRole.h): збережене значення реєстру */
+const role=()=>S.set.panelRole||'emulator';
 const regDef=f=>f.type==='bool'?false:f.type==='int'?f.min:f.type==='str'?'':f.enum[0].v;
 /* cap.* реєстру живуть у S.cap.settings, як у прошивці — у рекордера (свій простір NVS) */
 const CAPK=['ring','fill','fileMB','autoProtect','mode','autostart'];
@@ -240,7 +242,9 @@ g('/api/settings',()=>{for(const f of C.settings||[])if(f.type!=='group'&&f.type
  for(const d of DESTS)o[mRouteId(d)]=S.routing[d]|0;   /* route*: маски призначень (S.routing, як destState) */
  o.huMessages=S.msgs.map(m=>[!!m.enabled]);   /* таблиця huMessages: лише в RAM */
  for(const[k,[to]]of Object.entries(RAISE))o['raise.'+k]=to(S.tun[k]);
- if(st.bleMode)o.bleMode=st.bleMode;if(st.wifi)o.ssid=st.wifi.ssid;return o});
+ if(st.bleMode)o.bleMode=st.bleMode;if(st.wifi)o.ssid=st.wifi.ssid;
+ /* код магнітоли — лише в ролі «доповнення» (SEntry::when): інакше його нема, як у прошивці */
+ if(role()!=='extension')delete o.radioCode;return o});
 /* НОВЕ (план, зріз 4): перезапуск не побічний ефект, а pendingReboot; apPass */
 po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass);
  if(ap&&(ap.length<8||ap.length>63))return fail(400,'apPass: pass_len');
@@ -254,7 +258,8 @@ po('/api/settings',q=>{const s=S.set,ap=q.apPass===undefined?'':String(q.apPass)
     окремим рядком "ключ: код" (SettingsJson::read), і нічого не записано */
  const errs=[],put=[];
  for(const f of C.settings||[]){if(f.type==='group'||f.type==='table'||q[f.id]===undefined||['bleMode','mediaSource'].includes(f.id))continue;
-  const v=q[f.id],why=f.ro?'ro':f.type==='bool'&&typeof v!=='boolean'?'bool':f.type==='int'&&typeof v!=='number'?'number':
+  /* код магнітоли — лише в ролі «доповнення» (SEntry::when) */
+  const v=q[f.id],why=f.id==='radioCode'&&role()!=='extension'?'role':f.ro?'ro':f.type==='bool'&&typeof v!=='boolean'?'bool':f.type==='int'&&typeof v!=='number'?'number':
    f.type==='enum'&&!f.enum.some(o=>o.v===v)?'enum':f.type==='str'&&!(typeof v==='string'&&v.length<=f.max&&/^[ -~]*$/.test(v))?'text':'';
   if(why){errs.push(f.id+': '+why);continue}put.push(f)}
  if(errs.length)return fail(400,errs.join('\n'));
@@ -285,13 +290,9 @@ po('/api/config',q=>{if(!q||q.format!=='megaopen-config'||typeof q.settings!=='o
   const changes=Object.keys(set).filter(k=>k in was&&JSON.stringify(was[k])!==JSON.stringify(set[k]));
   return {ok:true,changes,reboot:changes.some(k=>((C.settings||[]).find(f=>f.id===k)||{}).reboot),unknown,skipped:[],knobs:!!(q.knobs&&C.features.knobs),clamped:[],fileFw:q.fw||''}}
  const r=R['POST /api/settings'](set);if(r&&r.__status)return r;if(q.knobs&&C.features.knobs)R['POST /api/knobs'](q.knobs);emit(2,'NET','settings set from a file');return r});
-g('/api/display',()=>{const d=S.disp,car=d.type==='carminat';return {type:d.type,funcReg:d.funcReg,canRx:S.can.twaiRx,attached:true,sync:d.registered?15:1,synced:d.registered,registered:d.registered,passive:!d.funcReg,busy:false,queued:0,lastResult:'Ok',
+g('/api/display',()=>{const d={...S.disp,type:S.set.displayType||S.disp.type},car=d.type==='carminat';return {type:d.type,canRx:S.can.twaiRx,attached:true,sync:d.registered?15:1,synced:d.registered,registered:d.registered,passive:role()==='extension',role:role(),busy:false,queued:0,lastResult:'Ok',
  supports:{text:true,time:car,power:car,menu:car,popup:car,fullscreen:car,confirm:car,info:car},phase:d.phase,lastRendered:'text',lastRenderedMs:1200,glassHoldMs:10000,glassHeldMs:0,
  sessionsLost:d.sessionsLost,lastLoss:d.lastLoss,linkFlaps:0,linkRecoveries:0,linkDownMs:0,txGated:false,txGates:0,reinstalls:0,failStreak:0,rendersPosted:412,rendersRefused:0}});
-po('/api/display',q=>{const st=S.staged,t0=st.dispType||S.disp.type,f0=st.funcReg!==undefined?st.funcReg:S.disp.funcReg;
- const t=q.type===undefined?t0:q.type,f=q.funcReg===undefined?f0:!!q.funcReg;
- if(!C.panels.some(p=>p.id===t))return fail(400,'param type');
- st.dispType=t;st.funcReg=f;return t!==t0||f!==f0?{ok:true,pendingReboot:true}:ok});
 for(const k of ['text','clock','power','menu','highlight','popup','confirm','msgbox','selectbutton','styled','info','fullscreen','abort','raw'])po('/api/display/'+k,q=>{
  if(k==='text'&&q.text===undefined)return fail(400,'param text');if(k==='clock'&&q.time===undefined)return fail(400,'param time');if(k==='popup'&&q.text===undefined&&!B(q.hide))return fail(400,'param text');
  if(k==='menu'&&q.scroll!==undefined&&!ARROWS.includes(+q.scroll))return fail(400,SCROLL_WHY);
@@ -360,7 +361,7 @@ po('/api/wifi',q=>{const h1=typeof q.ssid==='string',h2=typeof q.ssid2==='string
 function doBoot(){S.bootAt=now()+4000;++S.boots;S.heap=Math.round(rnd(79000,82000));const st=S.staged;
  if(st.wifi){S.set.ssid=st.wifi.ssid;S.wifi.pass=st.wifi.pass}
  if(st.bleMode)S.set.bleMode=st.bleMode;
- if(st.apPass)S.wifi.apPass=st.apPass;if(st.dispType)S.disp.type=st.dispType;if(st.funcReg!==undefined)S.disp.funcReg=st.funcReg;S.staged={};
+ if(st.apPass)S.wifi.apPass=st.apPass;S.staged={};
  const n=S.nets.find(x=>x.ssid===S.set.ssid)||S.nets.find(x=>x.ssid===S.wifi2.ssid);
  if(n){S.wifi.mode='sta';S.wifi.ssid=n.ssid;S.wifi.ip=n.ssid==='HomeWiFi'?'192.168.1.50':'172.20.10.4';S.wifi.rssi=n.rssi}else{S.wifi.mode='ap';S.wifi.ip='192.168.4.1'}
  S.disp.registered=false;S.disp.resyncAt=now()+6000;S.cap.recording=S.cap.settings.autostart;S.emitter=false;S.tests={}}

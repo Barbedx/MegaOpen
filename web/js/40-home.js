@@ -34,7 +34,7 @@ SCR.home={title:'nav.home',async render(m){
  const chip=(el,c,txt)=>setChip(el,CH[c.state]||'off',txt||stateT(c.state));
  if(D){const p=ch('panel');chip('#hPanel',p,di.registered?t('h.registered'):'');$('#hResyncRow').hidden=p.state==='ok';
   $('#hPanelW').textContent=p.state==='ok'?nameOf(CAT.panels,di.type):whyT(p);
-  const dt=t('h.panelDt',di.type,di.funcReg?t('h.byBoard'):t('h.byRadio'),di.phase||DASH,di.sessionsLost||0,di.lastLoss||DASH);
+  const dt=t('h.panelDt',di.type,di.role?t('k.role.'+di.role):DASH,di.phase||DASH,di.sessionsLost||0,di.lastLoss||DASH);
   $('#hPanelD').textContent=dt;$('#hPanel').title=dt;
   const md=ch('media'),src=enumOf('mediaSrc',me.sourceActive);chip('#hSrc',md,src&&me.sourceActive!=='none'?src.name:'');
   const tt=me.srcTitle||me.title;$('#hTrack').textContent=tt?[tt,me.srcArtist||me.artist,me.srcAlbum].filter(Boolean).join(' — ')+(me.hasTransport?' · '+fmtT(me.elapsed)+' / '+fmtT(me.duration):''):whyT(md)||t('h.nothing');

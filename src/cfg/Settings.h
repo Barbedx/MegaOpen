@@ -53,7 +53,10 @@ namespace Cfg
 
         // OEM display
         Text<16> displayType = "carminat";   // carminat | updatelist
-        bool     funcReg     = true;         // we are the master: run FUNCSREG ourselves
+        // How the board sits on the panel bus (display/PanelRole.h):
+        // emulator (no stock radio: the board is the radio) | extension (the
+        // stock radio stays, the board draws over it). Read once at boot.
+        Text<12> panelRole   = "emulator";
         // The page's developer mode, told to the board: RAM only, never saved,
         // off after every boot. Shows the page's developer tools.
         bool     devMode     = false;
@@ -64,8 +67,9 @@ namespace Cfg
         Text<12> bleMode = "ams";
         // The head-unit protocol (Canbox::Protocols), by id. Read once at boot.
         Text<16> huProtocol = "raise112";
-        // The stock radio's code (FuncsReg off, src/display/RadioCode.h):
-        // four digits typed on the panel bus when the radio asks; "" = off.
+        // The stock radio's code (the extension role only: app/StockRadio,
+        // src/display/RadioCode.h): four digits typed on the panel bus when
+        // the radio asks; "" = off. The registry offers it in that role alone.
         Text<5>  radioCode = "";
         // No wifiSleep setting: WiFi power save is derived from bleMode
         // (WifiManager::sleepRequired()). BT on with power save off makes the

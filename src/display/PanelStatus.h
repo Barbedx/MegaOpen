@@ -29,7 +29,8 @@ namespace MegaOpen
         bool     synced     = false;
         bool     registered = false;
         bool     busy       = false;    // a job in flight or queued
-        bool     passive    = false;
+        bool     passive    = false;    // the library's passive mode (the extension role)
+        uint8_t  role       = 0;        // MegaOpen::PanelRole, fixed at boot (App::Panel::role())
         uint8_t  syncState  = 0;        // affa::SyncState bits
         uint8_t  phase      = 0;        // affa::Phase
         uint8_t  queued     = 0;        // jobs behind the active one

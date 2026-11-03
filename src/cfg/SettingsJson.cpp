@@ -143,7 +143,8 @@ namespace Cfg
                 c.e = e;
                 if (e->flags & F_RO)                 why = "ro";
                 else if (!Registry::available(m, *e))
-                    why = (e->apply & AP_HU) ? "busy_absent" : "absent";
+                    why = (e->when && !e->when(m)) ? "role"
+                        : (e->apply & AP_HU)       ? "busy_absent" : "absent";
                 else if (e->type == SType::Table)  { readTable(m, *e, j, r, err); continue; }
                 else if (e->type == SType::Str) {
                     c.text = j.is<const char*>() ? j.as<const char*>() : nullptr;

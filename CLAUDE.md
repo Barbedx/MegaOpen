@@ -73,6 +73,7 @@ Raise the log level for one session through `/api/settings` `{"logLevel":"DBG"}`
 | symptom | API / log | code |
 | --- | --- | --- |
 | panel blank, never registers | health `panel`, `[disp]`, `AFFA-TWAI` | `src/app/PanelOwner.*`, `src/display/AffaPort.cpp`; protocol in AffaDisplay (`.pio/libdeps/t2can/AffaDisplay`), sequence in `docs/DISPLAY-INIT-SPEC.md` |
+| wrong role: two radios fight / nothing shows over the stock radio | health `panel` (`panel_foreign_master`, `panel_no_radio`), `[panel]`, `/api/settings` `panelRole` | `src/display/PanelRole.h` (the two roles), `src/app/PanelOwner.cpp` (applies it), `src/app/StockRadio.*` (extension only: the radio code), `src/display/PanelBusWatch.h` (reports only) |
 | panel keys slow / lost | `[key]` p99, drops | `src/keys/AffaKeySource.*`, `src/app/KeysTask.*`, `src/keys/KeyRouter.*` |
 | wrong text / layout on glass | `[ui]`, `[media]` | `src/app/UiTask.*`, `src/display/PanelOps.*`, `MediaScreen.*`, `MediaPane.*`, `GlassGate.h` |
 | panel menu (hold right knob) | — | `src/app/PanelMenu.*`, `src/ui/MenuEngine.*`, `MenuInput.*` |

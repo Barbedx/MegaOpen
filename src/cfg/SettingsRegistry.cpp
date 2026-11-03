@@ -10,6 +10,7 @@
 #endif
 #include "../bus/Autobaud.h"
 #include "../capture/CapFormat.h"
+#include "../display/PanelRole.h"
 #include "../utils/Log.h"
 #include "../utils/LogTags.h"
 #include "../net/Catalog.h"
@@ -118,6 +119,21 @@ namespace Cfg
             "proto",
         };
         const SEnum kPanels   = { Catalog::panelCount,   Catalog::panelId,   Catalog::panelName, "panel" };
+        // The board's role on the panel bus (display/PanelRole.h); k.role.<id>.
+        const SEnum kPanelRoles = {
+            [] { return MegaOpen::PanelRoles::COUNT; },
+            [](uint8_t i) { return MegaOpen::PanelRoles::id(i); },
+            [](uint8_t) -> const char* { return nullptr; },
+            "role",
+        };
+        // The entries of the extension role alone (SEntry::when): a stock
+        // radio to type a code to exists in that role only.
+        bool extendsRadio(const Model& m)
+        {
+            MegaOpen::PanelRole r;
+            return m.s && MegaOpen::PanelRoles::parse(m.s->panelRole.c_str(), r) &&
+                   r == MegaOpen::PanelRole::Extension;
+        }
 
         // can2Bitrate: 0 = find it, then the rates Autobaud probes, ascending.
         uint32_t rateRow(uint8_t i)
@@ -250,8 +266,8 @@ namespace Cfg
                 Log::setTagSpec(v);
             },
         };
-        // The stock radio's code (src/display/RadioCode.h): four digits, or
-        // nothing (off); anything else is left as it was.
+        // The stock radio's code (app/StockRadio, src/display/RadioCode.h):
+        // four digits, or nothing (off); anything else is left as it was.
         const SStr kRadioCode = {
             4,
             [](const Model& m, char* out, size_t cap) {
@@ -443,16 +459,18 @@ namespace Cfg
             {"displayType", "Panel", "system", SType::Enum, W, AP_REBOOT,
              0, 0, 0, nullptr, &kPanels, S_GET(rowOf(kPanels, s.displayType)),
              S_PUT(s.displayType = kPanels.id((uint8_t)v))},
-            {"funcReg", "FuncsReg", "system", SType::Bool, W, AP_REBOOT,
-             0, 1, 0, nullptr, nullptr, S_GET(s.funcReg), S_PUT(s.funcReg = v != 0)},
+            {"panelRole", "Role", "system", SType::Enum, W, AP_REBOOT,
+             0, 0, 0, nullptr, &kPanelRoles, S_GET(rowOf(kPanelRoles, s.panelRole)),
+             S_PUT(s.panelRole = kPanelRoles.id((uint8_t)v))},
             {"mdnsOn", "mDNS", "system", SType::Bool, W, AP_REBOOT,
              0, 1, 0, nullptr, nullptr, S_GET(s.mdnsOn), S_PUT(s.mdnsOn = v != 0)},
             // Live: WifiManager reads it every pass (net_svc).
             {"wifiAuto", "No WiFi on USB", "system", SType::Bool, W, AP_NONE,
              0, 1, 0, nullptr, nullptr, S_GET(s.wifiAuto), S_PUT(s.wifiAuto = v != 0)},
-            // Live: the panel task reads it on the next pass after a save.
+            // The extension role only (`when`); live: the panel task reads it
+            // on the next pass after a save (App::StockRadio).
             {"radioCode", "Radio code", "system", SType::Str, W, AP_NONE,
-             0, 0, 0, nullptr, nullptr, nullptr, nullptr, nullptr, &kRadioCode},
+             0, 0, 0, nullptr, nullptr, nullptr, nullptr, nullptr, &kRadioCode, extendsRadio},
             {"can2Bitrate", "CAN A rate", "system", SType::Enum, W, AP_REBOOT,
              0, 0, 0, nullptr, &kRates, S_GET(rateIndex(s.can2Bitrate)),
              S_PUT(s.can2Bitrate = rateRow((uint8_t)v))},
@@ -576,6 +594,7 @@ namespace Cfg
         bool available(const Model& m, const SEntry& e)
         {
             if (e.type == SType::Group) return true;
+            if (e.when && !e.when(m)) return false;
             if (e.apply & AP_CAP) return m.c != nullptr;
             if (e.apply & AP_HU)  return m.hu != nullptr && m.msg != nullptr;
             return (e.apply & AP_KNOBS) ? m.k != nullptr : m.s != nullptr;

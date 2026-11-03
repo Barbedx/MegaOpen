@@ -124,6 +124,10 @@ namespace Cfg
         void    (*put)(Model&, int32_t);   // gets a value valid() accepted
         const STable* tab;     // Table only (get/put are then null)
         const SStr*   str;     // Str only (get/put are then null)
+        // An entry that exists only in some configuration of the board (the
+        // radio code: the extension role, display/PanelRole.h). False makes
+        // it unavailable: not sent, not offered, refused as `role`.
+        bool (*when)(const Model&) = nullptr;
     };
 
     namespace Registry

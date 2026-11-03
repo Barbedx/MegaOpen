@@ -294,6 +294,53 @@ void test_knob_entries_unavailable_without_knobs()
     TEST_ASSERT_TRUE(Registry::available(m, *Registry::find("keyPopup")));
 }
 
+// The board's role on the panel bus (display/PanelRole.h): an enum read at
+// boot. The radio code exists in the extension role only: in the emulator
+// it is not sent, not written, and a POST names the reason (`role`).
+void test_the_radio_code_exists_in_the_extension_role_only()
+{
+    Fixture f;
+    const SEntry* role = Registry::find("panelRole");
+    const SEntry* code = Registry::find("radioCode");
+    TEST_ASSERT_NOT_NULL(role);
+    TEST_ASSERT_NOT_NULL(code);
+    TEST_ASSERT_NULL(Registry::find("funcReg"));
+    TEST_ASSERT_TRUE(role->apply & AP_REBOOT);
+    TEST_ASSERT_EQUAL_STRING("emulator", f.s.panelRole.c_str());
+    TEST_ASSERT_EQUAL(0, Registry::enumIndex(*role, "emulator"));
+    TEST_ASSERT_EQUAL(1, Registry::enumIndex(*role, "extension"));
+    TEST_ASSERT_EQUAL(-1, Registry::enumIndex(*role, "auto"));
+
+    TEST_ASSERT_FALSE(Registry::available(f.m, *code));
+    TEST_ASSERT_FALSE(Registry::setText(f.m, *code, "1234"));
+    TEST_ASSERT_EQUAL_STRING("", f.s.radioCode.c_str());
+    {
+        JsonDocument out;
+        SettingsJson::write(f.m, out.to<JsonObject>(), false);
+        TEST_ASSERT_FALSE(out["radioCode"].is<const char*>());
+        TEST_ASSERT_EQUAL_STRING("emulator", out["panelRole"] | "");
+    }
+    {
+        JsonDocument in;
+        in["radioCode"] = "1234";
+        static SettingsJson::Read r;
+        r = SettingsJson::Read{};
+        SettingsJson::Errors err;
+        SettingsJson::read(f.m, in.as<JsonObjectConst>(), r, err, false);
+        char why[128];
+        err.join(why, sizeof(why));
+        TEST_ASSERT_EQUAL_STRING("radioCode: role", why);
+    }
+
+    uint8_t ap = 0;
+    TEST_ASSERT_TRUE(Registry::set(f.m, *role, 1, &ap));
+    TEST_ASSERT_EQUAL_STRING("extension", f.s.panelRole.c_str());
+    TEST_ASSERT_EQUAL(AP_REBOOT, ap);
+    TEST_ASSERT_TRUE(Registry::available(f.m, *code));
+    TEST_ASSERT_TRUE(Registry::setText(f.m, *code, "5321"));
+    TEST_ASSERT_EQUAL_STRING("5321", f.s.radioCode.c_str());
+}
+
 void test_apply_bits_only_on_change()
 {
     Fixture f;
@@ -553,7 +600,7 @@ static const char* const kNotInRegistry[] = {"ssid", "pass", "mdnsName", "apName
 // and the board lay the struct out the same way.
 void test_settings_struct_unchanged()
 {
-    TEST_ASSERT_EQUAL_MESSAGE(580, sizeof(Settings),
+    TEST_ASSERT_EQUAL_MESSAGE(592, sizeof(Settings),
                               "Cfg::Settings changed: add a registry entry, then update this size");
     // Every other field: count the entries that write Settings.
     size_t n = 0;
@@ -859,6 +906,7 @@ int main(int, char**)
     RUN_TEST(test_color_preset_paints_the_zone_and_custom_keeps_it);
     RUN_TEST(test_refusals_write_nothing);
     RUN_TEST(test_knob_entries_unavailable_without_knobs);
+    RUN_TEST(test_the_radio_code_exists_in_the_extension_role_only);
     RUN_TEST(test_apply_bits_only_on_change);
     RUN_TEST(test_stepped);
     RUN_TEST(test_format_is_ascii_and_short);

@@ -1,5 +1,6 @@
 #include "../utils/LogBus.h"
 #include "Config.h"
+#include "../display/PanelRole.h"
 #include <nvs.h>
 
 namespace Cfg
@@ -50,7 +51,15 @@ namespace Cfg
         _s.displayType = _p.getString("dispType", "carminat");
         // AffaDisplay 2.0 has one UpdateList encoding; the "LCD" variant is gone.
         if (_s.displayType == "updatelist_menu") _s.displayType = "updatelist";
-        _s.funcReg     = _p.getBool  ("funcReg", true);
+        // The role (display/PanelRole.h). Up to 1.8 it was the Bool "funcReg"
+        // (on = the board registers = emulator): read once here, saved as
+        // "panelRole" by the next save(), which removes the old key.
+        if (_p.isKey("panelRole"))    _s.panelRole = _p.getString("panelRole", "emulator");
+        else if (_p.isKey("funcReg")) _s.panelRole = _p.getBool("funcReg", true) ? "emulator" : "extension";
+        {
+            MegaOpen::PanelRole r;
+            if (!MegaOpen::PanelRoles::parse(_s.panelRole.c_str(), r)) _s.panelRole = "emulator";
+        }
         _s.bleMode     = _p.getString("bleMode", "ams");
         _s.huProtocol  = _p.getString("huProto", "raise112");
         _s.radioCode   = _p.getString("radioCode", "");
@@ -194,7 +203,8 @@ namespace Cfg
         _p.putBool  ("encInv", _s.encInverted);
 
         _p.putString("dispType", _s.displayType.c_str());
-        _p.putBool  ("funcReg",  _s.funcReg);
+        _p.putString("panelRole", _s.panelRole.c_str());
+        if (_p.isKey("funcReg")) _p.remove("funcReg");   // the switch of 1.8 and before, read at load
 
         _p.putString("bleMode",  _s.bleMode.c_str());
         _p.putString("huProto",  _s.huProtocol.c_str());

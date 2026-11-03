@@ -17,6 +17,7 @@
 #include <driver/gpio.h>
 #include "../diag/CanBench.h"
 #include "../board/BoardProfile.h"
+#include "../display/PanelRole.h"
 #include "../Version.h"
 #include "../app/TaskPlan.h"
 #include "../app/KeyBus.h"
@@ -1127,22 +1128,9 @@ void WebUi::routesDisplay()
         return replyJson(r, out);
     });
 
-    // Display type and registration role are read once at boot: saved, and
-    // pendingReboot when either changed.
-    route("/api/display", HTTP_POST, [this](PsychicRequest* r) {
-        JsonDocument d(&PsramJson::instance());
-        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
-        auto& s = _cfg->s();
-        const String type = d["type"] | s.displayType.c_str();
-        if (!Catalog::panelKnown(type.c_str())) return r->reply(400, "text/plain", "param type");
-        const bool funcReg = d["funcReg"] | s.funcReg;
-        const bool changed = type != s.displayType.c_str() || funcReg != s.funcReg;
-        s.displayType = type;
-        s.funcReg     = funcReg;
-        _cfg->save();
-        return r->reply(200, "application/json", changed ? "{\"ok\":true,\"pendingReboot\":true}"
-                                                         : "{\"ok\":true}");
-    });
+    // The panel type and the board's role are registry entries (displayType,
+    // panelRole: POST /api/settings, applied by a reboot): nothing is written
+    // here.
 
     // One reply for every render route: 202 when the library took it (the
     // panel's answer comes later; /api/display reports lastResult), 503 when
@@ -2216,7 +2204,6 @@ void WebUi::routesCanbox()
 void WebUi::fillDisplay(JsonObject d)
 {
         d["type"]     = _cfg->s().displayType.c_str();
-        d["funcReg"]  = _cfg->s().funcReg;
         d["canRx"]    = _canRx ? *_canRx : 0;
         // The panel task's copy, published after every poll(): the library
         // itself is never called from here (httpd).
@@ -2233,6 +2220,7 @@ void WebUi::fillDisplay(JsonObject d)
             d["synced"]     = ps.synced;
             d["registered"] = ps.registered;
             d["passive"]    = ps.passive;
+            d["role"]       = MegaOpen::PanelRoles::id((MegaOpen::PanelRole)ps.role);
             d["busy"]       = ps.busy;
             d["queued"]     = ps.queued;
             d["lastResult"] = affa::resultName((affa::Result)ps.lastResult);
@@ -2402,20 +2390,22 @@ void WebUi::healthJson(JsonObject d)
                 "panel_ok",
                 "panel_foreign_master",
                 "panel_cluster_only",
-                "panel_beside_radio"};
+                "panel_beside_radio",
+                "panel_no_radio"};
             const bool reg = ps.attached && ps.registered;
-            // What else is on the bus (PanelBusWatch) explains a panel that
-            // never registers: an OEM radio has it (and we stay silent), or
-            // there is no panel at all.
+            // What the bus says against the role (display/PanelRole.h).
+            // Extension: the stock radio's sync is the expected bus, and its
+            // absence means nothing of ours shows. Emulator: another master's
+            // sync means two radios fight over one panel; a lone cluster
+            // means no AFFA panel to register with.
+            const bool extension = ps.role == (uint8_t)MegaOpen::PanelRole::Extension;
             const bool foreign = _panelWatch && _panelWatch->foreignMaster(millis());
             const bool cluster = !reg && _panelWatch && _panelWatch->clusterOnly();
-            // FuncsReg off: the radio owns the handshake and we draw over it,
-            // so its sync is the expected bus, not a fault.
-            const bool overlay = foreign && _cfg && !_cfg->s().funcReg;
-            const uint8_t i = !ps.attached ? 0 : overlay ? 5 : foreign ? 3 : reg ? 2 : cluster ? 4 : 1;
-            // A foreign master with FuncsReg on is "broken", not "idle": nothing
-            // is drawn, and it may be a false positive worth a look.
+            const uint8_t i = !ps.attached ? 0
+                            : extension    ? (foreign ? 5 : 6)
+                            : foreign      ? 3 : reg ? 2 : cluster ? 4 : 1;
             JsonObject o = chain("panel", i == 0 ? "off" : (i == 2 || i == 5) ? "ok" : "broken", W[i]);
+            o["role"] = MegaOpen::PanelRoles::id((MegaOpen::PanelRole)ps.role);
             if (_panelWatch) {
                 o["foreignMasters"] = _panelWatch->masters();
                 o["clusterPings"]   = _panelWatch->clusterPings();

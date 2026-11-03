@@ -5,6 +5,7 @@
 #include <AffaDisplay.h>
 #include "../app/UiWaits.h"
 #include "../display/PanelOps.h"
+#include "../display/PanelRole.h"
 #include "../display/PanelStatus.h"
 #include "../utils/Snapshot.h"
 
@@ -51,6 +52,10 @@ namespace App
             affa::CarminatDisplay*  carminat = nullptr;   // same object, typed; or null
             affa::TwaiLink*         link     = nullptr;   // the panel's bus
             MegaOpen::PanelOps*     ops      = nullptr;   // its counts, for PanelStatus
+            // How the board sits on the bus (display/PanelRole.h), from the
+            // settings, fixed for this boot. begin() applies it to the
+            // library: the extension role is its passive mode.
+            MegaOpen::PanelRole     role     = MegaOpen::PanelRole::Emulator;
             Hooks                   hooks;
         };
 
@@ -71,6 +76,8 @@ namespace App
         // ---- any task --------------------------------------------------------
         // A panel object exists (fixed at boot). Never touches the library.
         bool present();
+        // The role this boot runs in (Setup::role). Emulator before begin().
+        MegaOpen::PanelRole role();
         // Published after every poll(). failStreak in it is the render
         // breaker's input; a Resync resets it.
         MegaOpen::PanelStatus status();

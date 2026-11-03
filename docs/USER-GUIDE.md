@@ -203,13 +203,29 @@ The knob rings take WS2812B (GRB), RGB or SK6812 **RGBW** strips: **Кнопки
 Підсвітка → Тонко → Порядок кольорів**. On RGBW the white LED carries what
 the three colours have in common.
 
+## The board's role on the display bus
+
+**Екран → Панель → Роль на шині** (`panelRole`, applied by a restart) says
+how the board is wired, and the board never guesses it:
+
+- **Емулятор магнітоли** (`emulator`): there is no stock radio. The board is
+  the radio: it does the handshake with the display, registers its
+  functions, draws every screen and gets the display's keys.
+- **Доповнення магнітоли** (`extension`): the stock radio stays and drives
+  the bus. The board only listens, draws over the radio's screens, presses
+  keys and types the radio's code.
+
+When the bus does not match the role, **Огляд** and the log say so
+(`panel_foreign_master`, `panel_no_radio` below); the board keeps doing what
+its role says. Up to 1.8 this was the switch «Реєструвати щиток» (on =
+emulator, off = extension); the update keeps your choice.
+
 ## The stock radio's code
 
-With «Реєструвати щиток» off (the stock radio drives the panel and MegaOpen
-only listens and draws over it), the radio asks for its four-digit code on
-the panel after the battery was off. Put the code into Плата → Система →
-«Код магнітоли», and the board types it when the prompt appears, as the
-stalk would: the wheel up for each digit, the bottom button to the next,
+Only in the **Доповнення магнітоли** role: the stock radio asks for its
+four-digit code on the panel after the battery was off. Put the code into
+**Екран → Панель → Код магнітоли** (the row is there in that role only), and
+the board types it when the prompt appears, as the stalk would: the wheel up for each digit, the bottom button to the next,
 held to confirm. One attempt per prompt and never two within a minute: the
 radio waits longer after every wrong code. The log says what happened
 (tag `code`: typed, accepted, rejected). Empty = off.
@@ -287,8 +303,9 @@ words beside it are the page's (`w.<code>` in `web/i18n/uk.json`, English in
 | code | Огляд says | means | try |
 | --- | --- | --- | --- |
 | `panel_unregistered` | реєстрацію втрачено: панель не завершує рукостискання | the display is not finishing its handshake | check CAN B wiring and power; reboot the board |
-| `panel_foreign_master` | на шині синхронізація іншої магнітоли, а «Реєстрація функцій» увімкнена — MegaOpen мовчить (лише слухає), щоб не битися з нею; вимкніть реєстрацію, щоб малювати поверх магнітоли | another radio drives the display bus and function registration is on; MegaOpen stays silent rather than fight it | turn «Реєстрація функцій» off to draw over the radio; with no OEM radio fitted, report it (a false detection) |
-| `panel_beside_radio` | магнітола веде шину, MegaOpen малює поверх неї (реєстрація функцій вимкнена) | the OEM radio owns the handshake, MegaOpen sends its text over it | nothing: this is the overlay setup |
+| `panel_foreign_master` | на шині синхронізація іншої магнітоли, а плата в ролі емулятора — дві магнітоли б'ються за панель; … | the role is emulator, but another radio syncs on the display bus | with the stock radio fitted, set the role to **Доповнення магнітоли**; with none fitted, report it (a false detection) |
+| `panel_beside_radio` | штатна магнітола веде шину, MegaOpen малює поверх неї | the extension role, and the stock radio is there | nothing: this is the extension setup |
+| `panel_no_radio` | роль «Доповнення магнітоли», а синхронізації штатної магнітоли нема — … | the extension role, but no stock radio syncs: nothing of ours shows | with no stock radio fitted, set the role to **Емулятор магнітоли**; else check the radio's power and CAN B |
 | `panel_cluster_only` | на цій шині лише щиток приладів, панелі AFFA нема | only an instrument cluster answers on this bus, no AFFA display | CAN B is wired to the wrong bus |
 | `media_off` | екран музики вимкнено | now playing switched off | **Екран → Показувати музику** |
 | `media_no_panel` | панель не зареєстрована, нема де малювати | nothing can be drawn | see `panel_unregistered` |

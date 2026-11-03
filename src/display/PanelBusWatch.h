@@ -3,61 +3,46 @@
 #include <atomic>
 
 // Who else is on the panel bus, from what it sends: listening only, never a
-// frame of its own.
+// frame of its own, and never a decision — the board does what its role says
+// (display/PanelRole.h); this only tells whether the bus agrees, for health
+// `panel` and one [panel] line per change (main.cpp panelWatchStep).
 //
-//   * A foreign bus master: an OEM radio already drives the handshake, its
-//     sync on 0x3AF (Carminat) or 0x3DF (UpdateList). Those are the master's
-//     ids (AffaDisplay's kIdSync); the panel never sends them, and the TWAI
+//   * A foreign bus master: a stock radio driving the handshake, its sync on
+//     0x3AF (Carminat) or 0x3DF (UpdateList). Those are the master's ids
+//     (AffaDisplay's kIdSync); the panel never sends them, and the TWAI
 //     controller does not receive our own frames. MASTER_MIN syncs within
-//     WINDOW_MS make it a master; it stays one until REARM_MS pass with no
-//     sync at all (the radio was removed or switched off). An OEM radio
+//     WINDOW_MS make it a master; it stays one until GONE_MS pass with no
+//     sync at all (the radio was removed or switched off). A stock radio
 //     syncs about once a second (our own AFFA_SYNC_INTERVAL_MS is 1000).
 //   * A lone cluster: 0x3CF DLC 1 `69` pings and never the panel's `61 11`
 //     request on 0x3CF. There is no AFFA panel here to register with.
 //
-// mayTransmit(): our stack keeps its TX gate shut until it has listened for
-// LISTEN_MS (counted from begin(), which the panel task calls at its first
-// poll(): before that nothing is read, so nothing was heard) with no foreign
-// sync in the last LISTEN_MS. So ONE sync is enough to keep us quiet, and an
-// OEM radio is always heard before we send a sync of our own.
-//
 // onRx() runs inside poll() (the link's raw tap, the panel task); the
 // verdicts are read there and by httpd: relaxed atomics. Its nowMs is when
 // poll() drained the frame, not when it arrived: syncs that queued up before
-// the first poll() read as one burst. That errs on the quiet side (it can
+// the first poll() read as one burst. That errs on the loud side (it can
 // only make a master sooner, never miss one).
 // Pure (no Arduino): host-tested in test/test_panelwatch.
 namespace MegaOpen
 {
     class PanelBusWatch {
     public:
-        static constexpr uint32_t LISTEN_MS   = 3000;
         static constexpr uint32_t WINDOW_MS   = 3000;
         static constexpr uint32_t MASTER_MIN  = 2;
-        static constexpr uint32_t REARM_MS    = 30000;
+        static constexpr uint32_t GONE_MS     = 30000;
         static constexpr uint32_t CLUSTER_MIN = 3;
         static constexpr uint32_t ID_SYNC_CARMINAT   = 0x3AF;
         static constexpr uint32_t ID_SYNC_UPDATELIST = 0x3DF;
         static constexpr uint32_t ID_SYNC_REPLY      = 0x3CF;
-
-        // The panel task's first poll(): the listen window starts here. Later
-        // calls change nothing.
-        void begin(uint32_t nowMs)
-        {
-            if (_started.load(std::memory_order_relaxed)) return;
-            _t0.store(nowMs, std::memory_order_relaxed);
-            _started.store(true, std::memory_order_relaxed);
-        }
-        bool started() const { return _started.load(std::memory_order_relaxed); }
 
         // A frame the controller received (never one we sent), at nowMs.
         void onRx(uint32_t id, uint8_t len, const uint8_t* d, uint32_t nowMs)
         {
             if (id == ID_SYNC_CARMINAT || id == ID_SYNC_UPDATELIST) {
                 const uint32_t gap = sinceSync(nowMs);
-                // Quiet for REARM_MS: whatever drove the bus is gone; this
+                // Quiet for GONE_MS: whatever drove the bus is gone; this
                 // sync starts a fresh count rather than re-latching at once.
-                if (gap >= REARM_MS) _latched.store(false, std::memory_order_relaxed);
+                if (gap >= GONE_MS) _latched.store(false, std::memory_order_relaxed);
                 const bool recent = gap < WINDOW_MS;
                 const uint32_t burst = recent ? _burst.load(std::memory_order_relaxed) + 1 : 1;
                 _burst.store(burst, std::memory_order_relaxed);
@@ -73,24 +58,16 @@ namespace MegaOpen
         }
 
         // Another master drives this bus: MASTER_MIN syncs within WINDOW_MS,
-        // and a sync within the last REARM_MS.
+        // and a sync within the last GONE_MS.
         bool foreignMaster(uint32_t nowMs) const
         {
-            return _latched.load(std::memory_order_relaxed) && sinceSync(nowMs) < REARM_MS;
+            return _latched.load(std::memory_order_relaxed) && sinceSync(nowMs) < GONE_MS;
         }
         // Which sync id the last foreign master used (0 = none seen).
         uint32_t masterId() const { return _masterId.load(std::memory_order_relaxed); }
+        // Any master's sync at all since boot.
+        bool heardSync() const    { return _heard.load(std::memory_order_relaxed); }
         bool clusterOnly() const  { return clusterPings() >= CLUSTER_MIN && panelRequests() == 0; }
-
-        // Our panel stack may transmit: begin() was called, LISTEN_MS have
-        // passed since, no foreign sync in the last LISTEN_MS, and no master.
-        bool mayTransmit(uint32_t nowMs) const
-        {
-            if (!started()) return false;
-            if ((uint32_t)(nowMs - _t0.load(std::memory_order_relaxed)) < LISTEN_MS) return false;
-            if (_heard.load(std::memory_order_relaxed) && sinceSync(nowMs) < LISTEN_MS) return false;
-            return !foreignMaster(nowMs);
-        }
 
         uint32_t masters() const       { return _master.load(std::memory_order_relaxed); }
         uint32_t clusterPings() const  { return _cluster.load(std::memory_order_relaxed); }
@@ -103,8 +80,8 @@ namespace MegaOpen
             return (uint32_t)(nowMs - _lastSync.load(std::memory_order_relaxed));
         }
 
-        std::atomic<bool>     _started{false}, _heard{false}, _latched{false};
-        std::atomic<uint32_t> _t0{0}, _lastSync{0}, _burst{0};
+        std::atomic<bool>     _heard{false}, _latched{false};
+        std::atomic<uint32_t> _lastSync{0}, _burst{0};
         std::atomic<uint32_t> _master{0}, _masterId{0}, _cluster{0}, _panel{0};
     };
 }

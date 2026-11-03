@@ -13,7 +13,8 @@ Rules, by where they bite:
                  and diag/CanBench.cpp)
                  - no portMAX_DELAY : a hot-path task never waits for ever.
   the panel      (Step 3) the library object is reached through App::Panel::lib()
-                 only from the panel task's files: PanelOwner.cpp and main.cpp
+                 only from the panel task's files: PanelOwner.cpp, StockRadio.cpp
+                 (the extension role's keys, stepped from loop) and main.cpp
                  (setup and loop, never a keys or hu function). Every other task
                  renders through MegaOpen::PanelOps, which the library makes
                  safe from any task. No g_display / g_carminat globals.
@@ -182,7 +183,7 @@ for fn in CAR_TASK_FUNCS:
 for m in re.finditer(r'\bg_(display|carminat)\b', main):
     problems.append('%s:%d: g_%s  (the panel library is App::Panel\'s, not a global)'
                     % (main_rel, line_of(main, m.start()), m.group(1)))
-PANEL_OWNERS = {'src/app/PanelOwner.cpp', main_rel}
+PANEL_OWNERS = {'src/app/PanelOwner.cpp', 'src/app/StockRadio.cpp', main_rel}
 for dirpath, _, files in os.walk(os.path.join(ROOT, 'src')):
     for fn in files:
         if not fn.endswith(('.cpp', '.h')):

@@ -61,7 +61,7 @@ The rules behind this layout (the ownership and blocking rules are checked by
 | `app/` | tasks (`*Task`), the KeyBus, the panel owner, request/reply slots, the OTA trial |
 | `board/` | `BoardProfile.h`, the only file that names a pin |
 | `bus/` | the MCP2518FD driver, the vehicle-frame sources, autobaud |
-| `display/` | AffaDisplay ports (clock, log, panel factory), `PanelOps`, screen/pane composers |
+| `display/` | AffaDisplay ports (clock, log, panel factory), `PanelOps`, screen/pane composers, `PanelRole` (emulator / extension) and the bus watch |
 | `keys/`, `input/` | key model, map, router, macros; encoders, debounce, matrix |
 | `sinks/` | key outputs: Raise UART, resistive ladder, BLE HID/AMS |
 | `media/` | now-playing sources (iPhone AMS, head unit) and the router between them |
