@@ -105,7 +105,7 @@ static esp_err_t replyAndRestart(PsychicRequest* r, const char* json)
 }
 
 
-uint8_t ChunkOut::s_buf[ChunkOut::HEAD + ChunkOut::DATA + 2];
+uint8_t* ChunkOut::s_buf = nullptr;
 
 // GET /api/logs?since=N: {lines:[{n,t,l,tag,msg}], next, lost, more, dropped,
 // boot}. The lines after N from the LogBus ring; `lost` lines were evicted

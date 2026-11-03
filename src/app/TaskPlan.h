@@ -105,19 +105,22 @@ namespace App
         constexpr uint32_t    BLE_STACK = 4096;
 
         // The network worker (src/net/NetJob.h): the GitHub update and the
-        // log push, one job after the other, on one task for the whole boot
-        // with a STATIC stack. Each job used to create and delete a task of
-        // its own, 10 kB and 8 kB of internal stack churned through the heap
-        // every minute. IDLE's priority: at 1 a run of TLS handshakes (a
-        // backlog sent every few seconds, ECDH in PSRAM, the car's 800 fps on
-        // the same core) kept IDLE0 out for 5 s and the task watchdog
-        // rebooted the board, and the next boot's backlog did it again (the
-        // car, 12 boots, 1.6.0-rc5). The stack holds the TLS handshake and
-        // the OTA download, and must be internal: the flash writes run with
-        // the cache off. The push used 3.5 kB of it (boot 190's coredump).
+        // log push, one job after the other, on one task for the whole boot.
+        // Each job used to create and delete a task of its own, 10 kB and
+        // 8 kB of internal stack churned through the heap every minute; now
+        // the stack is taken once, at the first job, and kept (not static:
+        // 10 kB of BSS moved the heap under the OTA trial's floor, bench boot
+        // 196). IDLE's priority: at 1 a run of TLS handshakes (a backlog sent
+        // every few seconds, ECDH in PSRAM, the car's 800 fps on the same
+        // core) kept IDLE0 out for 5 s and the task watchdog rebooted the
+        // board, and the next boot's backlog did it again (the car, 12 boots,
+        // 1.6.0-rc5). The stack holds the TLS handshake and the OTA download,
+        // and must be internal: the flash writes run with the cache off.
+        // 8192 was GhOta's, proven by every install; the push used 3.5 kB
+        // (boot 190's coredump).
         constexpr UBaseType_t NETJOB_PRIO  = 0;
         constexpr int         NETJOB_CORE  = 0;
-        constexpr uint32_t    NETJOB_STACK = 10240;
+        constexpr uint32_t    NETJOB_STACK = 8192;
 
         // LogBus (src/utils/LogBus.h): below everything, on the WiFi core.
         // 4096: the sinks format a timestamp and may call into LittleFS.

@@ -19,10 +19,15 @@ namespace NetJob
         constexpr uint8_t QUEUE_LEN = 4;
 
         // ESP-IDF's StackType_t is a byte: the depth below is in bytes, as
-        // xTaskCreate's is. Static, in DRAM: a task stack must be internal.
+        // xTaskCreate's is. The stack is internal RAM (a task stack must be:
+        // the OTA install writes flash with the cache off), taken from the
+        // heap ONCE, at the first job, and kept. Not static: 10 kB of BSS
+        // moved the whole heap down, and the OTA trial's health floor
+        // (HEALTH_HEAP_MIN) was never met (bench boot 196, 1.8.0-rc1). The
+        // trial holds the push, so a trial never pays for it.
         static_assert(sizeof(StackType_t) == 1, "the stack depth below is in bytes");
         StaticTask_t  s_tcb;
-        StackType_t   s_stack[App::Plan::NETJOB_STACK];
+        StackType_t*  s_stack = nullptr;
         StaticQueue_t s_qbuf;
         uint8_t       s_qstore[QUEUE_LEN * sizeof(Job)];
         QueueHandle_t s_q = nullptr;
@@ -85,20 +90,29 @@ namespace NetJob
 
     void begin()
     {
-        if (s_task) return;
+        if (s_q) return;
         s_q = xQueueCreateStatic(QUEUE_LEN, sizeof(Job), s_qstore, &s_qbuf);
         // Not critical: a job that hangs on the network must never cost the
         // keys an OTA rollback; it shows as age in the [task] line.
         s_id = App::Tasks::add("netjob", false);
+    }
+
+    // The task, at the first job: its stack from the internal heap, kept.
+    static bool ensureTask()
+    {
+        if (s_task) return true;
+        if (!s_stack) s_stack = (StackType_t*)heap_caps_malloc(App::Plan::NETJOB_STACK, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        if (!s_stack) return false;
         s_task = xTaskCreateStaticPinnedToCore(taskBody, "netjob", App::Plan::NETJOB_STACK, nullptr,
                                                App::Plan::NETJOB_PRIO, s_stack, &s_tcb,
                                                App::core(App::Plan::NETJOB_CORE));
-        if (s_id >= 0) App::Tasks::setHandle(s_id, s_task);
+        if (s_task && s_id >= 0) App::Tasks::setHandle(s_id, s_task);
+        return s_task != nullptr;
     }
 
     bool post(const char* name, Fn fn, void* arg, Fn after)
     {
-        if (!s_q || !fn) return false;
+        if (!s_q || !fn || !ensureTask()) return false;
         const Job j{name, fn, arg, after};
         return xQueueSend(s_q, &j, 0) == pdTRUE;
     }

@@ -29,6 +29,7 @@ static inline int replyPage(PsychicRequest* r, const uint8_t* gz, size_t len,
 }
 #include "Catalog.h"
 #include "../utils/PsramJson.h"
+#include "../utils/PsHeap.h"
 #include "../display/PanelBusWatch.h"
 
 // A JSON body streamed in chunks from one static buffer rather than built as
@@ -39,11 +40,15 @@ class ChunkOut final : public Catalog::Out
 public:
     explicit ChunkOut(PsychicRequest* r) : _req(r->request()), _res(r)
     {
+        // The one buffer, in PSRAM (internal RAM without), at the first use.
+        if (!s_buf) s_buf = (uint8_t*)PsHeap::malloc(HEAD + DATA + 2);
+        if (!s_buf) _err = ESP_ERR_NO_MEM;
         _res.setContentType("application/json");
         _res.sendHeaders();
     }
     void put(const char* s, size_t len) override
     {
+        if (!s_buf) return;
         while (len) {
             if (_n == DATA) flush();
             const size_t k = len < DATA - _n ? len : DATA - _n;
@@ -96,7 +101,7 @@ private:
         }
         _n = 0;
     }
-    static uint8_t s_buf[HEAD + DATA + 2];
+    static uint8_t* s_buf;
     httpd_req_t* _req;
     PsychicResponse _res;
     esp_err_t _err = ESP_OK;
