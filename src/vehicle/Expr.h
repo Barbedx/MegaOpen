@@ -81,6 +81,11 @@ namespace Expr
         static constexpr uint16_t MAX_SRC   = 255;
         static constexpr uint16_t MAX_OPS   = 128;
         static constexpr uint8_t  MAX_STACK = 16;
+        // Nested expressions (brackets, a call's arguments, a chain of
+        // nots): the parser recurses once per level, on the car task's
+        // stack when a set is applied, so the depth is capped (expr_deep).
+        // Two units per bracket level: about five levels.
+        static constexpr uint8_t  MAX_NEST  = 12;
 
         // Replaces this program; false with `err` set and the program empty.
         bool compile(const char* src, ResolveFn resolve, void* ctx, Error& err);

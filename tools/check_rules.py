@@ -20,7 +20,9 @@ Rules, by where they bite:
   HuTask.cpp     - no readBytes() and no bare read(): the HAL UART mutex is
                    shared with the key writes, and both of those can wait on it
                    (§3.3). read(buf, n) after available() is the only form.
-  main.cpp       functions that run on the keys or hu task must not write the
+  main.cpp       functions that run on the car task (carTap, performAction,
+                 onSignalsRenamed) never take the settings lock: a copy or
+                 tryLock (Cfg::Config). Functions that run on the keys or hu task must not write the
                  render state (App::Ui's since Step 3: they may only ask, through
                  armPopup, requestScene, postHuClock and the key popup calls),
                  must not reach the panel (App::Panel::lib), must not touch the
@@ -161,6 +163,20 @@ for fn in KEYS_TASK_FUNCS:
         continue
     check(main_rel, body, r'\bg_tx\s*\.\s*write(Ack|Lane)\b',
           '%s: only the hu task writes acks and lane frames' % fn, at, main)
+
+# ---- main.cpp: what runs on the car task (CarTask's callbacks) ------------------
+# The settings are httpd's (Cfg::Config: one lock for the writers). A function
+# on the car task takes a copy (trySnapshot) or tryLock(), never the blocking
+# lock: a route holds it for as long as a settings-file import takes.
+CAR_TASK_FUNCS = ['carTap', 'performAction', 'onSignalsRenamed']
+for fn in CAR_TASK_FUNCS:
+    body, at = function_body(main, fn)
+    if body is None:
+        problems.append('%s: function %s not found (rename? update tools/check_rules.py)' % (main_rel, fn))
+        continue
+    check(main_rel, body, r'\bg_cfg\s*\.\s*(?!tryLock\b|unlock\b|trySnapshot\b|resolveCarSigs\b)\w+',
+          '%s: the settings are httpd\'s: a copy (trySnapshot) or tryLock on the car task' % fn, at, main)
+    check(main_rel, body, r'Config::Guard', '%s: never the blocking settings lock on the car task' % fn, at, main)
 
 # ---- the panel library: one owner (Step 3, §3.6) --------------------------------
 for m in re.finditer(r'\bg_(display|carminat)\b', main):

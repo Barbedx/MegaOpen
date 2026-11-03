@@ -86,6 +86,7 @@ namespace Expr
         void*       ctx;
         Error&      err;
         int         depth = 0, maxDepth = 0;
+        uint8_t     nest = 0;          // recursion, Program::MAX_NEST
 
         bool fail(const char* code, size_t at)
         {
@@ -120,7 +121,18 @@ namespace Expr
             return true;
         }
 
+        // Every nested expression (brackets, a call's arguments) comes
+        // through orExpr(), every chain of nots through unary(): the two
+        // count the recursion and refuse past MAX_NEST, so a typed formula
+        // can never run the car task out of stack.
         bool orExpr()
+        {
+            if (++nest > Program::MAX_NEST) return fail("expr_deep", i);
+            const bool ok = orExprBody();
+            --nest;
+            return ok;
+        }
+        bool orExprBody()
         {
             if (!andExpr()) return false;
             for (;;) {
@@ -169,6 +181,13 @@ namespace Expr
             }
         }
         bool unary()
+        {
+            if (++nest > Program::MAX_NEST) return fail("expr_deep", i);
+            const bool ok = unaryBody();
+            --nest;
+            return ok;
+        }
+        bool unaryBody()
         {
             ws();
             // "!=" is not a not.

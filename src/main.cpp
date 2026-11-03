@@ -1706,6 +1706,20 @@ static void hkBeatSlow(uint32_t)
 // push to send home (boot-<boot>/coredump.bin, the boot that crashed): every
 // task's stack, which the summary's corrupted backtrace cannot give.
 //   esp-coredump info_corefile -t raw -c coredump.bin firmware.elf
+#if FEATURE_VEHICLE_CAN
+// On the car task, after a set of formulas is applied: the car screen's rows,
+// saved by name, find their (possibly moved) signals. Under the settings lock,
+// since save() on httpd writes the same fields; never waits for it (a hot
+// task): false, and the car task asks again on its next pass.
+static bool onSignalsRenamed()
+{
+    if (!g_cfg.tryLock()) return false;
+    g_cfg.resolveCarSigs();
+    g_cfg.unlock();
+    return true;
+}
+#endif
+
 static void keepCrash(uint32_t boot)
 {
 #if FEATURE_LOGFS
@@ -2419,7 +2433,7 @@ void setup()
         cs.formulas = &formulas;
         // Once the user signals have their names: the car screen's rows,
         // saved by name, find them.
-        cs.signalsRenamed = [] { g_cfg.resolveCarSigs(); };
+        cs.signalsRenamed = onSignalsRenamed;
         // The rules (none in the file: the factory's three), and the hand that
         // performs their actions (popups the car task queues itself).
         Vehicle::RuleSet rules;

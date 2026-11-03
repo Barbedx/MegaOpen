@@ -399,6 +399,9 @@ namespace App
                 s_rulePub.publish(s_ruleSt);
             }
 
+            // signalsRenamed could not run (a lock was busy): the next chores pass.
+            bool s_renamePending = false;
+
             void applyFormulas()
             {
                 Vehicle::FormulaProblem p;
@@ -410,7 +413,7 @@ namespace App
                 refreshVerified();
                 // Every row starts afresh: what it reads counts as changed.
                 for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) s_changed.set(s);
-                if (s_s.signalsRenamed) s_s.signalsRenamed();
+                if (s_s.signalsRenamed) s_renamePending = !s_s.signalsRenamed();
                 LOGI("car", "formulas: %u row(s) running", (unsigned)s_formulas.rows());
             }
 
@@ -541,6 +544,7 @@ namespace App
                 Cmd c;
                 while (s_cmd && xQueueReceive(s_cmd, &c, 0) == pdTRUE) applyCmd(c, now);
                 if (s_table.applyIfDirty()) applyTable();
+                if (s_renamePending && s_s.signalsRenamed && s_s.signalsRenamed()) s_renamePending = false;
                 if (s_formulaSet.applyIfDirty()) applyFormulas();
                 if (s_ruleSet.applyIfDirty()) applyRules();
                 expireTests(now);

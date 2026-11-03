@@ -167,6 +167,9 @@ namespace App
         // is busy, moves it to core 1 at priority 3, below the panel and keys.
         // Not created on a board with no car source.
         constexpr UBaseType_t CAR_PRIO  = 4;  constexpr int CAR_CORE  = 0;
-        constexpr uint32_t    CAR_STACK  = 4096;
+        // 6144 (was 4096): the formulas and the rules compile HERE when a
+        // set is applied (Expr's recursion, bounded by Program::MAX_NEST),
+        // then LOGW's 320 B line and the NVS writes of odoKeep/svcKeep.
+        constexpr uint32_t    CAR_STACK  = 6144;
     }
 }

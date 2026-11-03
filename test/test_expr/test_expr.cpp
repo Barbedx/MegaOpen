@@ -220,6 +220,32 @@ void test_errors_say_what_and_where()
     refused(lng, "expr_long", Program::MAX_SRC);
 }
 
+// The parser recurses once per nested level; a formula is typed by a person,
+// and the car task's stack is small: brackets, calls and chains of nots past
+// MAX_NEST are refused, not parsed (the operand stack alone would not catch a
+// chain of nots: each one pushes nothing).
+void test_nesting_is_capped()
+{
+    char nots[200] = "";
+    for (int i = 0; i < 40; ++i) strcat(nots, "!");
+    strcat(nots, "lights");
+    F f(nots);
+    TEST_ASSERT_FALSE(f.ok);
+    TEST_ASSERT_EQUAL_STRING("expr_deep", f.e.code);
+    char calls[200] = "";
+    for (int i = 0; i < 12; ++i) strcat(calls, "abs(");
+    strcat(calls, "speed");
+    for (int i = 0; i < 12; ++i) strcat(calls, ")");
+    F c(calls);
+    TEST_ASSERT_FALSE(c.ok);
+    TEST_ASSERT_EQUAL_STRING("expr_deep", c.e.code);
+    // What a person types still fits: four levels of brackets and calls.
+    F ok("abs(min((speed - (rpm / 100)) * 2, 10))");
+    TEST_ASSERT_TRUE_MESSAGE(ok.ok, ok.e.code ? ok.e.code : "?");
+    F ok2("!!!!lights");
+    TEST_ASSERT_TRUE(ok2.ok);
+}
+
 // What a formula reads: the rule engine re-evaluates only when one changed.
 void test_inputs_are_the_signals_it_reads()
 {
@@ -308,6 +334,7 @@ int main(int, char**)
     RUN_TEST(test_functions_of_change);
     RUN_TEST(test_functions_of_time);
     RUN_TEST(test_errors_say_what_and_where);
+    RUN_TEST(test_nesting_is_capped);
     RUN_TEST(test_inputs_are_the_signals_it_reads);
     RUN_TEST(test_raw_values_both_ways);
     RUN_TEST(test_formulas_read_the_cars_signals);

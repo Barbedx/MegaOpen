@@ -64,7 +64,9 @@ namespace App
             const Vehicle::FormulaSet*  formulas = nullptr;
             // After a set of formulas is applied (the user signals renamed): on
             // the car task, must not block (main: the car screen's names).
-            void (*signalsRenamed)() = nullptr;
+            // false: it could not now (a lock was busy); asked again on the
+            // next chores pass.
+            bool (*signalsRenamed)() = nullptr;
             // The rules as the car file holds them (CarStore::loadRules),
             // copied; null = the factory's.
             const Vehicle::RuleSet*     rules = nullptr;
