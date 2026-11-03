@@ -29,8 +29,7 @@
 // the task that owns each (main.cpp performAction, by Keys::effectRoute).
 //
 // The rows live in the car file (/cfg/car.json "rules", CarFile) and in
-// PSRAM; 1.6's 16 NVS alert rows and 8 NVS macros migrate once (fromAlertBlob,
-// fromMacroBlob). Portable: env:native tests it (test_rules).
+// PSRAM. Portable: env:native tests it (test_rules).
 namespace Vehicle
 {
     constexpr uint8_t RULE_NAME = 31;
@@ -158,16 +157,6 @@ namespace Vehicle
         // `out` is cleared.
         static uint8_t gestures(const RuleSet& set, Keys::MacroTable& out, uint8_t cap);
 
-        // ---- 1.6's tables, once (CarStore::migrate) --------------------------
-        // The NVS "alerts" blob (AlertRules::toBlob v1: [1] then 16 x {sig,
-        // cond, thr i32, cooldownS u16, on}): one signal rule per filled row,
-        // "rises(x)", "x > 100", ... with its pause and switch, a popup with
-        // the default text. Appends to `set`; false: not that blob.
-        static bool fromAlertBlob(const uint8_t* in, size_t n, RuleSet& set);
-        // The NVS "macros" blob (MacroEngine::toBlob v1: [1] then 8 x 82 B):
-        // one gesture rule per macro with a trigger, its effect the one
-        // action, no pause. Appends; false: not that blob.
-        static bool fromMacroBlob(const uint8_t* in, size_t n, RuleSet& set);
 
     private:
         struct Row {

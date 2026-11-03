@@ -14,16 +14,17 @@
 // stored value is the owner's and stays). When the owner can simply set it
 // again on the page, prefer no carry-over at all.
 //
-// ROLLBACK: a new image runs on an OTA trial and may roll back to the release
-// before it, which reads the NVS this step left. So a step writes the new key
-// and KEEPS the old one; an old key is removed (drop()) only by a later step,
-// once the release before CURRENT no longer reads it.
+// NO LEFTOVERS: a step removes every key it replaces, in the same step, and
+// every key no firmware reads any more. Nothing is kept "for later": a key
+// left for a later step is a key nobody remembers. The price: a rollback (the
+// OTA trial failing, or flashing an older release) finds those settings at
+// their defaults, and the owner sets them again on the page.
 //
 // HOW to add one:
 //   1. Config (load and save) and the registry use the NEW key only.
 //   2. Here: toV<N>(Store&) rewrites the old key into the new one, only when
-//      the new one is absent, and drops keys no supported release reads. It
-//      must be safe to run twice (a failed version write repeats it).
+//      the new one is absent, then drop()s the old one. It must be safe to
+//      run twice (a failed version write repeats it).
 //   3. CURRENT = N, and `if (v < N) toV<N>(s);` in run(), after the others.
 //   4. A case in test/test_migrations; a line in CHANGELOG.md.
 // A step never touches the network settings (SSID, password, AP name, mDNS):

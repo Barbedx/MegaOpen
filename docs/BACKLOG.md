@@ -17,18 +17,15 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
-- **2026-11-03 — old keys left for a rollback.** Schema v4 keeps `funcReg`
-  (1.8 reads it) and the car screen's index keys `carSig0..2`/`carSigV` (1.8
-  falls back to them); no firmware from 1.9 on reads either. A step after the
-  release that follows 1.9 can drop them (`src/cfg/Migrations.cpp`, `drop()`).
-- **2026-11-03 — 1.6.x import still spread over five modules.** CarStore reads
-  1.6.x's NVS tables (decode, huFmap, alerts, macros) into `/cfg/car.json` and
-  erases them after the OTA confirm; the readers of those old formats live in
-  `Config.cpp` (`loadDecode`/`loadFieldMap`/`loadAlertBlob`/`loadMacroBlob`
-  and the erases), `DecodeTable::unpack`, `FieldMap`'s blob, `Rules::fromAlertBlob`/
-  `fromMacroBlob` and `Vehicle::sigFromSaved`. Both known boards are past 1.7,
-  so the whole import could go, or move into one file like `cfg/Migrations`.
-  `tools/check_rules.py` lists the four keys in `LEGACY_IMPORT` until then.
+- **2026-11-03 — older blob layouts are still read.** Not NVS keys but the
+  layout versions inside a blob: `Knobs::Config::fromBlob` reads v3/v4
+  (`BLOB_SIZE_V3`, the retired potentiometer fields stay in the layout),
+  `Rav4Emitter::Tuning::fromBlob` reads v1 and clears a saved "MegaOpen X.Y.Z"
+  (builds up to 1.7.0). Dropping a reader resets that board's knob or
+  head-unit tuning settings if its blob is the old layout; whether the car's
+  is, is unknown. Also legacy JSON: `bluetooth.cpp` top-level AMS keys and
+  BleHub's "legacy" mode names. `src/knobs/KnobConfig.*`,
+  `src/proto/canbox/Rav4Emitter.cpp`, `src/bluetooth.cpp`.
 - **2026-11-03 — the notification popup's default disagreed with itself.**
   `Settings.h` says `ancsPopup` is off by default (a popup covers
   now-playing), but the schema step v2 turned it on for every fresh board.
@@ -302,6 +299,12 @@ where.
 
 ## Done
 
+- **Nothing older firmware stored is kept or read** (1.9.0): schema v4 turns
+  `funcReg` into `panelRole` and removes it, the car screen's index keys,
+  `gr1..5` and 1.6.x's tables in the same step; the 1.6.x import (CarStore,
+  Config, DecodeTable/FieldMap blobs, the alert/macro blob readers,
+  `sigFromSaved`) is deleted, and `check_rules` has no legacy exception left.
+  Migrations leave no old key (`Migrations.h`, CLAUDE.md).
 - **Health says when the head unit speaks the VW canbox profile**
   (547753c, v1.2.0): `Canbox::HuDialect` counts Toyota-only and VW-only
   inbound commands (the profiles are disjoint) and the 0xF3 NACKs; health

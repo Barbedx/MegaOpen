@@ -266,116 +266,6 @@ void test_the_popup_text()
     TEST_ASSERT_EQUAL_STRING("AKB 11.75 V, --", b);
 }
 
-// 1.6's NVS alert table and macro table become rules, once.
-void test_the_old_tables_carry_into_rules()
-{
-    // The alert blob: v1, 16 rows of {sig, cond, thr i32, cooldownS u16, on}.
-    uint8_t alerts[1 + 16 * 9] = {1};
-    auto put = [&](uint8_t row, uint8_t sig, uint8_t cond, int32_t thr, uint16_t cd, bool on) {
-        uint8_t* b = alerts + 1 + row * 9;
-        b[0] = sig; b[1] = cond;
-        b[2] = (uint8_t)thr; b[3] = (uint8_t)(thr >> 8); b[4] = (uint8_t)(thr >> 16); b[5] = (uint8_t)(thr >> 24);
-        b[6] = (uint8_t)cd; b[7] = (uint8_t)(cd >> 8); b[8] = on;
-    };
-    for (uint8_t i = 0; i < 16; ++i) put(i, 0xFF, 0, 0, 5, false);   // empty
-    put(0, SIG_FUEL_LOW, 2, 0, 300, true);                           // rises
-    put(1, SIG_SPEED, 0, 10000, 60, true);                           // above 100 km/h
-    put(2, SIG_BATT_V, 1, 1180, 2, false);                           // below 11.80 V, pause under the floor
-    put(3, SIG_SPEED, 4, 0, 5, true);                                // changes: a second speed rule
-    RuleSet set;
-    TEST_ASSERT_TRUE(Rules::fromAlertBlob(alerts, sizeof(alerts), set));
-    TEST_ASSERT_EQUAL_UINT16(4, set.rows.size());
-    TEST_ASSERT_EQUAL_STRING("fuel_low", set.rows[0].name);
-    TEST_ASSERT_EQUAL_STRING("rises(fuel_low)", set.rows[0].when);
-    TEST_ASSERT_EQUAL_UINT16(300, set.rows[0].pauseS);
-    TEST_ASSERT_EQUAL_STRING("speed > 100", set.rows[1].when);
-    TEST_ASSERT_EQUAL_STRING("batt_v < 11.8", set.rows[2].when);
-    TEST_ASSERT_FALSE(set.rows[2].on);
-    TEST_ASSERT_EQUAL_UINT16(5, set.rows[2].pauseS);
-    TEST_ASSERT_EQUAL_STRING("speed_2", set.rows[3].name);
-    TEST_ASSERT_EQUAL_STRING("changed(speed)", set.rows[3].when);
-    TEST_ASSERT_EQUAL(Keys::Effect::Popup, set.rows[0].act[0].effect);
-    RuleProblem p;
-    TEST_ASSERT_TRUE(Rules::check(set, p));
-    // The macro blob: v1, 8 x 82 B; one combo (VOL+ & VOL- -> key 07, "SRC").
-    uint8_t macros[1 + 8 * 82] = {1};
-    {
-        uint8_t* b = macros + 1;
-        uint16_t q = 0;
-        b[q++] = 1;                                   // enabled
-        b[q++] = (uint8_t)Keys::Trigger::Combo;
-        b[q++] = (uint8_t)Keys::Action::VolUp; b[q++] = (uint8_t)Keys::Action::VolDown; b[q++] = 0;
-        b[q++] = 2;                                   // members
-        b[q++] = 3;                                   // taps
-        b[q++] = 0x58; b[q++] = 0x02;                 // 600 ms
-        b[q++] = 1;                                   // swallow
-        b[q++] = (uint8_t)Keys::Effect::KeyCode;
-        b[q++] = 0;                                   // action
-        b[q++] = 0x07;                                // code
-        b[q++] = 0;                                   // dataLen
-        q += 8;                                       // data
-        memcpy(b + q, "SRC", 3); q += 40;             // arg
-        memcpy(b + q, "VOL+ & VOL-", 11);             // name
-    }
-    TEST_ASSERT_TRUE(Rules::fromMacroBlob(macros, sizeof(macros), set));
-    TEST_ASSERT_EQUAL_UINT16(5, set.rows.size());
-    const RuleRow& g = set.rows[4];
-    TEST_ASSERT_TRUE(g.isGesture());
-    TEST_ASSERT_EQUAL_STRING("VOL+ & VOL-", g.name);
-    TEST_ASSERT_EQUAL(Keys::Trigger::Combo, g.gesture.trigger);
-    TEST_ASSERT_EQUAL_UINT8(2, g.gesture.members);
-    TEST_ASSERT_EQUAL_UINT16(600, g.gesture.windowMs);
-    TEST_ASSERT_EQUAL_UINT16(0, g.pauseS);
-    TEST_ASSERT_EQUAL(Keys::Effect::KeyCode, g.act[0].effect);
-    TEST_ASSERT_EQUAL_UINT8(0x07, g.act[0].code);
-    TEST_ASSERT_EQUAL_STRING("SRC", g.act[0].arg);
-    TEST_ASSERT_TRUE(Rules::check(set, p));
-    // Not those blobs: nothing appended.
-    TEST_ASSERT_FALSE(Rules::fromAlertBlob(alerts, 10, set));
-    TEST_ASSERT_FALSE(Rules::fromMacroBlob(macros, sizeof(macros) - 1, set));
-    TEST_ASSERT_EQUAL_UINT16(5, set.rows.size());
-}
-
-// 1.7.0's first bench boot: a version-1 blob (up to 1.6.3) marks an empty row
-// with the saving build's SIG_COUNT, fuel_pct's or service_calc's index today;
-// those rows are empty, not sixteen rules on service_calc. Version 2 marks them
-// 0xFF. A cond or on byte out of range is not this blob at all.
-void test_a_legacy_alert_blob_carries_no_empty_rows()
-{
-    uint8_t blob[1 + 16 * 9] = {1};
-    auto row = [&](uint8_t i, uint8_t sig, uint8_t cond, uint8_t on) {
-        uint8_t* b = blob + 1 + i * 9;
-        memset(b, 0, 9);
-        b[0] = sig; b[1] = cond; b[6] = 5; b[8] = on;
-    };
-    for (uint8_t i = 0; i < 16; ++i) row(i, (uint8_t)(SIG_FUEL_PCT + 1), 2, 0);   // 1.6.3's empty row
-    row(0, SIG_FUEL_PCT, 2, 0);                                                  // 1.6.2's
-    row(5, SIG_SPEED, 0, 1);                                                     // speed > 0, on
-    RuleSet set;
-    TEST_ASSERT_TRUE(Rules::fromAlertBlob(blob, sizeof(blob), set));
-    TEST_ASSERT_EQUAL_UINT16(1, set.rows.size());
-    TEST_ASSERT_EQUAL_STRING("speed", set.rows[0].name);
-    TEST_ASSERT_EQUAL_STRING("speed > 0", set.rows[0].when);
-    TEST_ASSERT_TRUE(set.rows[0].on);
-    // Version 2: 0xFF is the empty row, fuel_pct a signal again.
-    blob[0] = 2;
-    for (uint8_t i = 0; i < 16; ++i) row(i, 0xFF, 2, 0);
-    row(1, SIG_FUEL_PCT, 1, 1);
-    set.rows.clear();
-    TEST_ASSERT_TRUE(Rules::fromAlertBlob(blob, sizeof(blob), set));
-    TEST_ASSERT_EQUAL_UINT16(1, set.rows.size());
-    TEST_ASSERT_EQUAL_STRING("fuel_pct", set.rows[0].name);
-    TEST_ASSERT_EQUAL_STRING("fuel_pct < 0", set.rows[0].when);
-    RuleProblem p;
-    TEST_ASSERT_TRUE(Rules::check(set, p));
-    // Not this blob: a sixth condition, an `on` past 1. Nothing appended.
-    row(2, SIG_SPEED, 5, 1);
-    TEST_ASSERT_FALSE(Rules::fromAlertBlob(blob, sizeof(blob), set));
-    row(2, SIG_SPEED, 0, 2);
-    TEST_ASSERT_FALSE(Rules::fromAlertBlob(blob, sizeof(blob), set));
-    TEST_ASSERT_EQUAL_UINT16(1, set.rows.size());
-}
-
 // The car file: every field of both kinds round-trips by name.
 void test_rules_round_trip_through_the_car_file()
 {
@@ -456,8 +346,6 @@ int main(int, char**)
     RUN_TEST(test_a_gesture_rule_is_armed_by_its_formula_and_becomes_a_macro);
     RUN_TEST(test_check_says_which_row_and_why);
     RUN_TEST(test_the_popup_text);
-    RUN_TEST(test_the_old_tables_carry_into_rules);
-    RUN_TEST(test_a_legacy_alert_blob_carries_no_empty_rows);
     RUN_TEST(test_rules_round_trip_through_the_car_file);
     return UNITY_END();
 }

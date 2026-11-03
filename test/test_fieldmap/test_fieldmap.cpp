@@ -70,28 +70,6 @@ void test_bad_rules_are_refused()
     TEST_ASSERT_EQUAL_UINT8(0, m.count());
 }
 
-void test_the_blob_round_trips_and_a_bad_one_is_refused()
-{
-    FieldMap m;
-    FieldRule a; a.field = SIG_RANGE; a.kind = FK_SIGNAL; a.src = SIG_FUEL_LEVEL; a.mul = -3; a.div = 7; a.add = -100000;
-    FieldRule b; b.field = SIG_ENG_TEMP; b.kind = FK_CONST; b.add = 95;
-    m.set(a); m.set(b);
-    uint8_t blob[FieldMap::BLOB_MAX];
-    const size_t n = m.pack(blob, sizeof(blob));
-    TEST_ASSERT_EQUAL(2 + 2 * FieldMap::RULE_BYTES, n);
-    FieldMap back;
-    TEST_ASSERT_TRUE(back.unpack(blob, n));
-    TEST_ASSERT_EQUAL_UINT8(2, back.count());
-    const FieldRule* r = back.find(SIG_RANGE);
-    TEST_ASSERT_NOT_NULL(r);
-    TEST_ASSERT_EQUAL_INT16(-3, r->mul);
-    TEST_ASSERT_EQUAL_INT16(7, r->div);
-    TEST_ASSERT_EQUAL_INT32(-100000, r->add);
-    blob[1] = 3;                                       // says 3, holds 2
-    TEST_ASSERT_FALSE(back.unpack(blob, n));
-    TEST_ASSERT_EQUAL_UINT8(2, back.count());           // unchanged
-}
-
 void test_the_map_is_bounded()
 {
     FieldMap m;
@@ -112,7 +90,6 @@ int main(int, char**)
     RUN_TEST(test_a_field_from_another_signal_scaled);
     RUN_TEST(test_const_and_off);
     RUN_TEST(test_bad_rules_are_refused);
-    RUN_TEST(test_the_blob_round_trips_and_a_bad_one_is_refused);
     RUN_TEST(test_the_map_is_bounded);
     return UNITY_END();
 }

@@ -92,7 +92,7 @@ One page, two tables, same row shape:
    the experiments become default mappings and their flags are removed.
    *As built (1.6.2 / 1.6.3):* `FieldMap` rules (another signal ×÷+, a
    constant, off, own) keyed by the field's default signal; `FieldView` puts
-   them between State and the emitter; NVS `huFmap`, settings file `hu.fields`.
+   them between State and the emitter; the car file (`/cfg/car.json`, CarStore), settings file `hu.fields`.
    The module's defaults are rules too (`Rav4Emitter::defaults()`): coolant,
    the PRND probe and the tank % (a new derived signal, `fuel_pct`) start off.
    The experiment bits are gone: `experimentsToRules` turns an old NVS

@@ -1908,7 +1908,7 @@ void setup()
     // The car's configuration (/cfg/car.json; built once from 1.6.x's NVS).
     // After the protocol (its field map is the protocol's) and the flash
     // log (which mounts LittleFS).
-    CarStore::begin(g_cfg);
+    CarStore::begin();
     // The log's own settings, saved (docs/design/logging.md).
     {
         const Cfg::Settings& s = g_cfg.s();

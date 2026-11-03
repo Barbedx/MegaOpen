@@ -549,36 +549,29 @@ static void writeForTheSimulator(const DecodeTable& t)
     fclose(fp);
 }
 
-void test_the_blob_round_trips_the_factory_table_and_constants()
+void test_the_factory_table_loads_with_its_constants()
 {
-    static DecodeTable a, b;
+    static DecodeTable a;
     a.factory();
     TEST_ASSERT_EQUAL_UINT8(63, a.row.size());
     writeForTheSimulator(a);
     TEST_ASSERT_TRUE(a.bindConst(SIG_KEY_ON, 1));
     TEST_ASSERT_TRUE(a.bindConst(SIG_OUT_TEMP, -12));
-    static uint8_t blob[DecodeTable::BLOB_MAX];
-    const size_t n = a.pack(blob);
-    TEST_ASSERT_EQUAL_UINT32(3 + (a.row.size()) * DecodeTable::ROW_BYTES + 2 * DecodeTable::CONST_BYTES, n);
-    TEST_ASSERT_TRUE(b.unpack(blob, n));
-    TEST_ASSERT_EQUAL_UINT8(a.row.size(), b.row.size());
-    for (uint8_t i = 0; i < a.row.size(); ++i) TEST_ASSERT_TRUE(sameRow(a.row[i], b.row[i]));
-    TEST_ASSERT_EQUAL_UINT8(2, b.k.size());
-    TEST_ASSERT_EQUAL_INT32(-12, b.k[b.constOf(SIG_OUT_TEMP)].value);
-    // The indicator latch and the steering bias survive the trip.
-    const int li = b.rowOf(SIG_IND_LEFT);
-    TEST_ASSERT_TRUE(li >= 0 && (b.row[li].flags & DF_LATCH) && b.row[li].holdMs == 500);
-    TEST_ASSERT_EQUAL_INT32(-32767, b.row[b.rowOf(SIG_STEERING)].add);
+    TEST_ASSERT_EQUAL_UINT8(2, a.k.size());
+    TEST_ASSERT_EQUAL_INT32(-12, a.k[a.constOf(SIG_OUT_TEMP)].value);
+    // The indicator latch and the steering bias.
+    const int li = a.rowOf(SIG_IND_LEFT);
+    TEST_ASSERT_TRUE(li >= 0 && (a.row[li].flags & DF_LATCH) && a.row[li].holdMs == 500);
+    TEST_ASSERT_EQUAL_INT32(-32767, a.row[a.rowOf(SIG_STEERING)].add);
     CanDecode dec;
-    TEST_ASSERT_TRUE(dec.load(b.row.data(), b.row.size()));
+    TEST_ASSERT_TRUE(dec.load(a.row.data(), a.row.size()));
 }
 
-// The owner's ✓ on the live page: a hypothesis goes measured, survives the
-// NVS blob, can be taken back, and factory() brings the hypothesis back.
-void test_a_confirm_flips_the_flag_and_survives_the_blob()
+// The owner's ✓ on the live page: a hypothesis goes measured, can be taken
+// back, and factory() brings the hypothesis back.
+void test_a_confirm_flips_the_flag()
 {
-    static DecodeTable a, b;
-    static uint8_t blob[DecodeTable::BLOB_MAX];
+    static DecodeTable a;
     a.factory();
     TEST_ASSERT_FALSE(a.measured(SIG_ACCEL_LAT));
     TEST_ASSERT_FALSE(DecodeTable::factoryMeasured(SIG_ACCEL_LAT));
@@ -587,13 +580,11 @@ void test_a_confirm_flips_the_flag_and_survives_the_blob()
     TEST_ASSERT_TRUE(a.measured(SIG_ACCEL_LAT));
     const int ri = a.rowOf(SIG_ACCEL_LAT);
     const uint8_t keep = a.row[ri].flags | DF_HYPOTHESIS;
-    TEST_ASSERT_TRUE(b.unpack(blob, a.pack(blob)));
-    TEST_ASSERT_TRUE(b.measured(SIG_ACCEL_LAT));
-    TEST_ASSERT_FALSE(b.measured(SIG_ACCEL_LONG));              // only that signal
-    TEST_ASSERT_TRUE(b.setMeasured(SIG_ACCEL_LAT, false));      // ↺
-    TEST_ASSERT_FALSE(b.measured(SIG_ACCEL_LAT));
-    TEST_ASSERT_EQUAL_HEX8(keep, b.row[b.rowOf(SIG_ACCEL_LAT)].flags);   // nothing else moved
-    TEST_ASSERT_FALSE(b.setMeasured(SIG_RANGE, true));          // no CAN row: refused
+    TEST_ASSERT_FALSE(a.measured(SIG_ACCEL_LONG));              // only that signal
+    TEST_ASSERT_TRUE(a.setMeasured(SIG_ACCEL_LAT, false));      // ↺
+    TEST_ASSERT_FALSE(a.measured(SIG_ACCEL_LAT));
+    TEST_ASSERT_EQUAL_HEX8(keep, a.row[a.rowOf(SIG_ACCEL_LAT)].flags);   // nothing else moved
+    TEST_ASSERT_FALSE(a.setMeasured(SIG_RANGE, true));          // no CAN row: refused
     a.factory();                                                // «Заводські прив'язки»
     TEST_ASSERT_FALSE(a.measured(SIG_ACCEL_LAT));
     // ↺ is each row's factory flag, not "hypothesis" across the board: a
@@ -658,32 +649,8 @@ void test_a_refused_map_change_leaves_the_table_untouched()
     TEST_ASSERT_EQUAL_INT32(300, t.k[t.constOf(SIG_RANGE)].value);
 }
 
-void test_a_bad_blob_is_refused_whole()
-{
-    static DecodeTable a, b;
-    static uint8_t blob[DecodeTable::BLOB_MAX + 32];
-    a.factory();
-    a.bindConst(SIG_RANGE, 420);
-    const size_t n = a.pack(blob);
-    TEST_ASSERT_FALSE(b.unpack(blob, n - 1));                  // short
-    TEST_ASSERT_EQUAL_UINT8(0, b.row.size());                        // and left empty
-    blob[0] = 2;  TEST_ASSERT_FALSE(b.unpack(blob, n)); blob[0] = 1;   // another layout
-    blob[3 + 19] = SIG_COUNT;                                   // row 0's signal
-    TEST_ASSERT_FALSE(b.unpack(blob, n));
-    a.pack(blob);
-    blob[3 + 5] = 5;                                            // row 0 len 5
-    TEST_ASSERT_FALSE(b.unpack(blob, n));
-    a.pack(blob);
-    blob[n - 5] = a.row[0].sig;                                 // const on a CAN-bound signal
-    TEST_ASSERT_FALSE(b.unpack(blob, n));
-    a.pack(blob);
-    blob[1] = DecodeTable::MAX_ROWS + 1;                        // past the cap
-    TEST_ASSERT_FALSE(b.unpack(blob, n));
-    TEST_ASSERT_FALSE(b.unpack(nullptr, 0));
-}
-
 // Caps, not sizes: the table grows as a car needs (PsArray), up to a sanity
-// cap; the 1.6.x NVS blob kept its own 96/16 and is only ever read.
+// cap.
 void test_the_caps_are_512_rows_and_128_constants()
 {
     static DecodeTable t;
@@ -711,9 +678,6 @@ void test_the_caps_are_512_rows_and_128_constants()
     while (t.constOf(other) >= 0 || other == SIG_RPM || other == SIG_BRAKE) ++other;
     TEST_ASSERT_FALSE(t.bindConst(other, meta(other).min));    // the 129th
     TEST_ASSERT_TRUE(t.bindConst(t.k[0].sig, meta(t.k[0].sig).min));   // replacing one fits
-    // Past the old blob's caps, pack() writes nothing: the file is the format now.
-    static uint8_t blob[DecodeTable::BLOB_MAX];
-    TEST_ASSERT_EQUAL(0, t.pack(blob));
 }
 
 void test_binding_replaces_and_keeps_the_order()
@@ -1075,10 +1039,9 @@ int main(int, char**)
     RUN_TEST(test_gear_from_speed_rpm_and_the_switches);
     RUN_TEST(test_fuel_rate_consumption_and_trip);
     RUN_TEST(test_derived_signals_name_their_inputs);
-    RUN_TEST(test_the_blob_round_trips_the_factory_table_and_constants);
-    RUN_TEST(test_a_confirm_flips_the_flag_and_survives_the_blob);
+    RUN_TEST(test_the_factory_table_loads_with_its_constants);
+    RUN_TEST(test_a_confirm_flips_the_flag);
     RUN_TEST(test_a_refused_map_change_leaves_the_table_untouched);
-    RUN_TEST(test_a_bad_blob_is_refused_whole);
     RUN_TEST(test_the_caps_are_512_rows_and_128_constants);
     RUN_TEST(test_binding_replaces_and_keeps_the_order);
     RUN_TEST(test_the_can_object_reads_back_what_it_writes);

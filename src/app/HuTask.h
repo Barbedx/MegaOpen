@@ -41,7 +41,7 @@ namespace App
         // Before any producer: creates the queues and the emitter's staging,
         // seeded with `cfg`. start() creates the task.
         // `cfg` is the emitter's settings as the web edits them (Canbox::HuConfig;
-        // its field map is NVS "huFmap"); the hu task applies each edit.
+        // its field map is in the car file, CarStore); the hu task applies each edit.
         // `inbound`: what the head unit's frames mean, for the caller (its
         // ackDue is the hu task's own and is replaced).
         void begin(const Setup& s, const Canbox::HuConfig& cfg, const Canbox::HuInbound& inbound);

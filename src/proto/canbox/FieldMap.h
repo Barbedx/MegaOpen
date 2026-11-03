@@ -10,8 +10,8 @@
 //   OFF     nothing (the field reads as absent: its message leaves it out)
 // Fields and signals are Vehicle::Sig ids (the RAV4 fields are Sigs today).
 //
-// Pure: env:native tests it. NVS keeps it as one blob (pack/unpack), the
-// emitter's config carries a copy (Canbox::HuConfig).
+// Pure: env:native tests it. The car file keeps it (CarFile), the emitter's
+// config carries a copy (Canbox::HuConfig).
 namespace Canbox
 {
     enum FieldKind : uint8_t { FK_SIGNAL = 1, FK_CONST = 2, FK_OFF = 3 };
@@ -28,9 +28,6 @@ namespace Canbox
     {
     public:
         static constexpr uint8_t MAX = 32;
-        static constexpr uint8_t BLOB_VER = 1;
-        static constexpr size_t  RULE_BYTES = 11;
-        static constexpr size_t  BLOB_MAX = 2 + MAX * RULE_BYTES;
 
         const FieldRule* find(uint8_t field) const;
         // Adds or replaces the field's rule; false when full or not valid
@@ -41,11 +38,6 @@ namespace Canbox
         void clearAll() { _n = 0; }
         uint8_t count() const { return _n; }
         const FieldRule& at(uint8_t i) const { return _r[i]; }
-
-        // [ver][n] then n rules; unpack refuses a blob that does not parse
-        // (and leaves the map as it was).
-        size_t pack(uint8_t* out, size_t cap) const;
-        bool   unpack(const uint8_t* in, size_t n);
 
         // The rule applied to a source value (SIGNAL), with no overflow.
         static int32_t scale(const FieldRule& r, int32_t v);

@@ -176,25 +176,6 @@ void test_a_rule_reads_like_the_api_sends_it()
     TEST_ASSERT_EQUAL_STRING("{\"from\":\"k\",\"src\":\"\",\"mul\":1,\"div\":1,\"add\":70}", b);
 }
 
-// 1.6.x's NVS blob (indexes) reads into the table CarStore then writes by name.
-void test_the_old_nvs_blob_carries_into_the_file()
-{
-    DecodeTable t;
-    t.factory();
-    TEST_ASSERT_TRUE(t.bindConst(SIG_BATT_V, 1300));
-    uint8_t blob[DecodeTable::BLOB_MAX];
-    const size_t n = t.pack(blob);
-    DecodeTable u;
-    TEST_ASSERT_TRUE(u.unpack(blob, n));
-    JsonDocument d;
-    CarFile::putDecode(d.to<JsonObject>(), u);
-    DecodeTable w;
-    uint16_t skipped = 0;
-    TEST_ASSERT_NULL(CarFile::getDecode(d.as<JsonObjectConst>(), w, skipped));
-    TEST_ASSERT_EQUAL_UINT8(t.row.size(), w.row.size());
-    TEST_ASSERT_EQUAL_INT32(1300, w.k[w.constOf(SIG_BATT_V)].value);
-}
-
 // ArduinoJson takes a `const char (&)[N]` for a string literal and keeps the
 // pointer. A const struct's char[] member put into the car document that way
 // dangles once the struct is gone (1.6.9's formulas, 1.7.0's first rules): the
@@ -279,6 +260,5 @@ int main(int, char**)
     RUN_TEST(test_rows_come_back_sorted_by_id);
     RUN_TEST(test_the_field_map_round_trips_per_protocol);
     RUN_TEST(test_a_rule_reads_like_the_api_sends_it);
-    RUN_TEST(test_the_old_nvs_blob_carries_into_the_file);
     return UNITY_END();
 }

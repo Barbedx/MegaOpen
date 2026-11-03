@@ -5,16 +5,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-03
+
+The panel role (radio emulator or radio extension) and the clean-out of what older firmware left behind.
+
 ### Changed
 - **The board's role on the display bus, named.** «Реєструвати щиток» (`funcReg`, a switch read in seven places) is now one setting with two values, `panelRole`: **Емулятор магнітоли** (`emulator`, no stock radio: the board is the radio) or **Доповнення магнітоли** (`extension`, the stock radio stays and the board draws over it). Екран → Панель → «Роль на шині», applied by a restart; the update turns the old switch into the role (on = emulator, off = extension) and removes the old key. The role is applied in one place (`App::Panel::begin`: the library's passive mode for the extension), and the extension role's own work lives in one module (`app/StockRadio`).
 - **The radio code exists in the extension role only.** In the emulator role `radioCode` is not sent by `GET /api/settings`, not shown, and a `POST` is refused as `radioCode: role`; nothing about a stock radio runs.
 - **The bus watch reports, it no longer decides.** The emulator used to go silent (passive, TX off, listen-only) for 30 s windows whenever another master synced, then probe again, and held its TX gate shut for a 3 s listen window at boot. Now the board does what its role says, and the watch only tells when the bus disagrees: health `panel_foreign_master` (emulator, another radio syncs) and the new `panel_no_radio` (extension, no stock radio heard), one `[panel]` line per change. The library's own TX gate (nobody ACKs) is unchanged.
 
-- **Stored settings migrate in one place.** `src/cfg/Migrations.*` rewrites what older firmware stored into today's NVS keys before Config reads any, one numbered step per format change (the recipe is in `Migrations.h`); Config itself reads and writes only today's keys, and `tools/check_rules.py` fails on a key it reads but never writes. A step keeps the old key for a rollback to the release before; a later step drops it. Schema v4: `funcReg` becomes `panelRole` (`funcReg` kept for 1.8); 1.6.1's `gr1..5` are removed. Host test `test_migrations`. The old steps v1/v2 only set defaults on fresh boards and are gone: a fresh board's notification popup is now off, as `Settings.h` always said.
+- **Stored settings migrate in one place.** `src/cfg/Migrations.*` rewrites what older firmware stored into today's NVS keys before Config reads any, one numbered step per format change (the recipe is in `Migrations.h`); Config itself reads and writes only today's keys, and `tools/check_rules.py` fails on a key it reads but never writes. A step removes the keys it replaces in the same step: nothing is left behind for later (a rollback finds those settings at their defaults). Schema v4: `funcReg` becomes `panelRole`; removed with it everything older firmware left in NVS (`funcReg`, the car screen's index keys `carSig0..2`/`carSigV`, 1.6.1's `gr1..5`, 1.6.x's tables `decode`/`huFmap`/`alerts`/`macros`). Host test `test_migrations`. The old steps v1/v2 only set defaults on fresh boards and are gone: a fresh board's notification popup is now off, as `Settings.h` always said.
 - **Findings go to the backlog.** `docs/BACKLOG.md` → «Findings» collects every inconsistency, bug or suspicion an agent sees, for the owner's sweeps (CLAUDE.md says so).
 
 ### Removed
 - `POST /api/display` (it wrote `displayType` and `funcReg` beside the registry): both are registry entries, `POST /api/settings`. `GET /api/display` has `role` instead of `funcReg`.
+- **The 1.6.x import.** A board updating straight from 1.6.x no longer carries its decode map, head-unit field map, alerts and macros into `/cfg/car.json` (every board is past 1.7, where that happened): gone are CarStore's import, Config's readers of those NVS tables, `DecodeTable::pack/unpack`, `FieldMap::pack/unpack`, `Rules::fromAlertBlob/fromMacroBlob` and `Vehicle::sigFromSaved`. A board with no car file starts from the factory's.
 
 ## [1.8.0] - 2026-11-03
 

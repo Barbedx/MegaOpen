@@ -8,8 +8,7 @@ namespace Cfg
     {
         namespace
         {
-            // Keys no supported release reads any more (see ROLLBACK in the
-            // header): removed, so they stop taking NVS entries.
+            // Keys this firmware no longer reads (NO LEFTOVERS in the header).
             void drop(Store& s, std::initializer_list<const char*> keys)
             {
                 for (const char* k : keys) if (s.has(k)) s.remove(k);
@@ -18,14 +17,19 @@ namespace Cfg
             // v3 -> v4 (1.9): the panel role. 1.8's Bool "funcReg" (on = the
             // board registers = emulator) becomes "panelRole"
             // (display/PanelRole.h): carried over, because a wrong role after
-            // the update fights the stock radio or shows nothing. "funcReg"
-            // stays for a rollback to 1.8; a later step drops it.
-            // Dropped: 1.6.1's gear keys gr1..gr5 (unread since 1.6.2).
+            // the update fights the stock radio or shows nothing.
+            // Dropped with it, everything older firmware left in NVS: the car
+            // screen's index keys carSig0..2/carSigV (by name since 1.7), the
+            // gear keys gr1..gr5 (unread since 1.6.2), and 1.6.x's tables
+            // decode/huFmap/alerts/macros (in /cfg/car.json since 1.7).
             void toV4(Store& s)
             {
                 if (s.has("funcReg") && !s.has("panelRole"))
                     s.putStr("panelRole", s.getBool("funcReg", true) ? "emulator" : "extension");
-                drop(s, {"gr1", "gr2", "gr3", "gr4", "gr5"});
+                drop(s, {"funcReg",
+                         "carSig0", "carSig1", "carSig2", "carSigV",
+                         "gr1", "gr2", "gr3", "gr4", "gr5",
+                         "decode", "huFmap", "alerts", "macros"});
             }
         }
 

@@ -5,23 +5,18 @@
 #include "../vehicle/Formulas.h"
 #include "../vehicle/Rules.h"
 
-namespace Cfg { class Config; }
-
 // The car's configuration on the board: /cfg/car.json in LittleFS (CarFile's
-// document, by signal NAME), held in PSRAM while the board runs. Replaces the
-// NVS blobs `decode` and `huFmap` (docs/design/rules.md, slice 1): NVS is
-// 20 kB and keeps the small board settings only.
+// document, by signal NAME), held in PSRAM while the board runs. NVS is 20 kB
+// and keeps the small board settings only (Cfg::Config).
 //
 // Setup reads it once (begin, then load*); httpd writes it (save*), each save
 // rewritten whole through /cfg/car.tmp, so a power cut leaves the old file or
 // the new one, never half of one. One writer at a time (a mutex).
 namespace CarStore
 {
-    // After the flash log mounted LittleFS (LogFile::begin). No file yet: it
-    // is built once from what NVS held (1.6.x). Those keys are erased once
-    // the file exists and this image is not on an OTA trial, so a rollback
-    // during the trial still finds them.
-    void begin(Cfg::Config& cfg);
+    // After the flash log mounted LittleFS (LogFile::begin). No file yet: a
+    // new one, every part the factory's.
+    void begin();
     // Whether the file is the configuration's home on this boot (LittleFS
     // mounted, the document in memory). False: saves fail, loads are factory.
     bool ready();
@@ -44,12 +39,9 @@ namespace CarStore
     // Back to the factory set: the file's `formulas` is dropped.
     bool factoryFormulas();
 
-    // The rules; none in the file = the factory set (RuleSet::factory). A
-    // file from 1.6.9 (no `rules`) gets them on first read: 1.6's NVS alerts
-    // and macros carried over, else the factory's.
+    // The rules; none in the file = the factory set (RuleSet::factory).
     void loadRules(Vehicle::RuleSet& set);
     bool saveRules(const Vehicle::RuleSet& set);
-    // The factory set, written as rows (not a missing key, which would read
-    // the NVS tables again).
+    // The factory set, written as rows.
     bool factoryRules();
 }

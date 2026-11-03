@@ -313,54 +313,6 @@ namespace Cfg
             p.tuningFromBlob(t, blob, (uint8_t)n);
     }
 
-    size_t Config::loadDecode(uint8_t* b, size_t cap)
-    {
-        // isKey first: getBytes on an absent key prints an IDF error per boot.
-        if (!_p.isKey("decode")) return 0;
-        const size_t n = _p.getBytesLength("decode");
-        if (!n || n > cap) return 0;
-        return _p.getBytes("decode", b, n);
-    }
-
-    bool Config::eraseDecode()
-    {
-        return !_p.isKey("decode") || _p.remove("decode");
-    }
-
-    bool Config::eraseFieldMap()
-    {
-        return !_p.isKey("huFmap") || _p.remove("huFmap");
-    }
-
-    bool Config::loadFieldMap(Canbox::FieldMap& m)
-    {
-        uint8_t blob[Canbox::FieldMap::BLOB_MAX];
-        // isKey first: getBytes on an absent key prints an IDF error.
-        if (!_p.isKey("huFmap")) return false;
-        const size_t n = _p.getBytes("huFmap", blob, sizeof(blob));
-        return n && m.unpack(blob, n);
-    }
-
-    size_t Config::loadAlertBlob(uint8_t* b, size_t cap)
-    {
-        if (!_p.isKey("alerts")) return 0;
-        const size_t n = _p.getBytesLength("alerts");
-        if (!n || n > cap) return 0;
-        return _p.getBytes("alerts", b, n);
-    }
-
-    bool Config::eraseAlerts() { return !_p.isKey("alerts") || _p.remove("alerts"); }
-
-    size_t Config::loadMacroBlob(uint8_t* b, size_t cap)
-    {
-        if (!_p.isKey("macros")) return 0;
-        const size_t n = _p.getBytesLength("macros");
-        if (!n || n > cap) return 0;
-        return _p.getBytes("macros", b, n);
-    }
-
-    bool Config::eraseMacros() { return !_p.isKey("macros") || _p.remove("macros"); }
-
     int Config::nvsFreeEntries()
     {
         nvs_stats_t st;

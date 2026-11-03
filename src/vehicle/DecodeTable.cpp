@@ -206,68 +206,6 @@ namespace Vehicle
         return addConst(sig, value);
     }
 
-    size_t DecodeTable::pack(uint8_t* out) const
-    {
-        if (row.size() > LEGACY_ROWS || k.size() > LEGACY_CONSTS) return 0;
-        uint8_t* p = out;
-        *p++ = 1;
-        *p++ = (uint8_t)row.size();
-        *p++ = (uint8_t)k.size();
-        for (uint16_t i = 0; i < row.size(); ++i) {
-            const DecodeRow& r = row[i];
-            p = put32(p, r.canId);
-            *p++ = r.startByte; *p++ = r.numBytes; *p++ = r.shift;
-            p = put32(p, r.mask);
-            p = put16(p, (uint16_t)r.mul);
-            p = put16(p, (uint16_t)r.div);
-            p = put32(p, (uint32_t)r.add);
-            *p++ = r.sig; *p++ = r.flags;
-            p = put16(p, r.holdMs);
-        }
-        for (uint16_t i = 0; i < k.size(); ++i) {
-            *p++ = k[i].sig;
-            p = put32(p, (uint32_t)k[i].value);
-        }
-        return (size_t)(p - out);
-    }
-
-    bool DecodeTable::unpack(const uint8_t* in, size_t n)
-    {
-        row.clear();
-        k.clear();
-        if (!in || n < 3 || in[0] != 1 || in[1] > LEGACY_ROWS || in[2] > LEGACY_CONSTS) return false;
-        if (n != 3 + (size_t)in[1] * ROW_BYTES + (size_t)in[2] * CONST_BYTES) return false;
-        const uint8_t* p = in + 3;
-        for (uint8_t i = 0; i < in[1]; ++i, p += ROW_BYTES) {
-            DecodeRow r;
-            r.canId = get32(p);
-            r.startByte = p[4]; r.numBytes = p[5]; r.shift = p[6];
-            r.mask = get32(p + 7);
-            r.mul = (int16_t)get16(p + 11);
-            r.div = (int16_t)get16(p + 13);
-            r.add = (int32_t)get32(p + 15);
-            r.sig = p[19]; r.flags = p[20];
-            r.holdMs = get16(p + 21);
-            if (r.sig >= SIG_COUNT || r.numBytes < 1 || r.numBytes > 4 || r.startByte + r.numBytes > 8 ||
-                r.shift > 31 || !r.mask || !r.mul || !r.div || !row.push(r)) {
-                row.clear();
-                return false;
-            }
-        }
-        for (uint8_t i = 0; i < in[2]; ++i, p += CONST_BYTES) {
-            const uint8_t sig = p[0];
-            const int32_t v = (int32_t)get32(p + 1);
-            if (sig >= SIG_COUNT || v < meta(sig).min || v > meta(sig).max || rowOf(sig) >= 0 || constOf(sig) >= 0 ||
-                !k.push(DecodeConst{sig, v})) {
-                row.clear();
-                k.clear();
-                return false;
-            }
-        }
-        sortRows();
-        return true;
-    }
-
     // ---- the `can` object ---------------------------------------------------------
 
     namespace DecodeJson

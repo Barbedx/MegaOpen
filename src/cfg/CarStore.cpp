@@ -1,9 +1,7 @@
 #include "CarStore.h"
 #include "../utils/PsHeap.h"
 #include <LittleFS.h>
-#include <esp_ota_ops.h>
 #include "CarFile.h"
-#include "Config.h"
 #include "../utils/Locks.h"
 #include "../utils/Log.h"
 #include "../Features.h"
@@ -42,6 +40,15 @@ namespace CarStore
             return true;
         }
 
+        // No file yet (a fresh board, a factory reset): the version only, every
+        // part absent = the factory's.
+        void create()
+        {
+            (*g_doc)["v"] = CarFile::VERSION;
+            if (write()) LOGI("car", "%s made (factory)", PATH);
+            else         LOGW("car", "%s not written: factory tables, made again next boot", PATH);
+        }
+
         bool read()
         {
             File f = LittleFS.open(PATH, "r");
@@ -49,7 +56,7 @@ namespace CarStore
             const DeserializationError e = deserializeJson(*g_doc, f);
             f.close();
             if (e) {
-                LOGW("car", "%s does not parse (%s): kept aside, starting from NVS / factory", PATH, e.c_str());
+                LOGW("car", "%s does not parse (%s): kept aside, starting from the factory", PATH, e.c_str());
                 LittleFS.rename(PATH, "/cfg/car.bad");
                 g_doc->clear();
                 return false;
@@ -57,87 +64,9 @@ namespace CarStore
             return true;
         }
 
-        // This image boots on an OTA trial (it rolls back if it never gets
-        // healthy). OtaTrial::begin runs later in setup; this asks the
-        // partition itself.
-        bool onTrial()
-        {
-            const esp_partition_t* run = esp_ota_get_running_partition();
-            esp_ota_img_states_t st;
-            return run && esp_ota_get_state_partition(run, &st) == ESP_OK && st == ESP_OTA_IMG_PENDING_VERIFY;
-        }
-
-        // 1.6.x's NVS tables go only once the file is written AND this image
-        // is no longer on trial: a rollback during the trial finds them where
-        // its firmware looks. So on the first boot after the confirm.
-        void dropNvs(Cfg::Config& cfg)
-        {
-            if (onTrial()) {
-                LOGI("car", "NVS decode/huFmap/alerts/macros kept until this image is confirmed (rollback-safe)");
-                return;
-            }
-            if (cfg.eraseDecode() && cfg.eraseFieldMap() && cfg.eraseAlerts() && cfg.eraseMacros()) return;
-            LOGW("car", "NVS decode/huFmap/alerts/macros NOT erased: again next boot");
-        }
-
-        // 1.6's panel alerts (NVS "alerts") and key macros (NVS "macros") become
-        // rules once, into `car["rules"]`; none there = the factory rules.
-        // True when something came from NVS.
-        bool rulesFromNvs(JsonObject car, Cfg::Config& cfg)
-        {
-            Vehicle::RuleSet set;
-            bool any = false;
-            uint8_t blob[1 + 8 * 82];
-            size_t n = cfg.loadAlertBlob(blob, sizeof(blob));
-            if (n && Vehicle::Rules::fromAlertBlob(blob, n, set)) any = true;
-            else if (n) LOGW("car", "NVS alerts (%u B) do not read: not carried over", (unsigned)n);
-            n = cfg.loadMacroBlob(blob, sizeof(blob));
-            if (n && Vehicle::Rules::fromMacroBlob(blob, n, set)) any = true;
-            else if (n) LOGW("car", "NVS macros (%u B) do not read: not carried over", (unsigned)n);
-            // Never a set the reader refuses next boot: checked as POST /api/rules checks.
-            Vehicle::RuleProblem pr;
-            if (set.rows.size() && !Vehicle::Rules::check(set, pr)) {
-                LOGW("car", "NVS alerts/macros make no rule set (row %u: %s): not carried over",
-                     (unsigned)pr.row, pr.e.code ? pr.e.code : "?");
-                set.rows.clear();
-                any = false;
-            }
-            if (!set.rows.size()) set.factory();
-            CarFile::putRules(car, set);
-            LOGI("car", "rules: %u row(s)%s", (unsigned)set.rows.size(), any ? " from NVS alerts/macros" : ", the factory's");
-            return any;
-        }
-
-        // 1.6.x kept the tables as NVS blobs, keyed by signal index. Read
-        // once into the document by name.
-        void migrate(Cfg::Config& cfg)
-        {
-            JsonObject car = g_doc->to<JsonObject>();
-            car["v"] = CarFile::VERSION;
-            bool any = false;
-            uint8_t* blob = (uint8_t*)heap_caps_malloc(Vehicle::DecodeTable::BLOB_MAX, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (blob) {
-                Vehicle::DecodeTable t;   // its rows are in PSRAM (PsArray)
-                const size_t n = cfg.loadDecode(blob, Vehicle::DecodeTable::BLOB_MAX);
-                if (n && t.unpack(blob, n)) { CarFile::putDecode(car, t); any = true; }
-                else if (n) LOGW("car", "NVS decode (%u B) does not unpack: not carried over", (unsigned)n);
-            }
-            heap_caps_free(blob);
-            Canbox::FieldMap m;
-            if (cfg.loadFieldMap(m) && m.count()) {
-                CarFile::putFields(car, Canbox::activeProtocol(), m);
-                any = true;
-            }
-            if (rulesFromNvs(car, cfg)) any = true;
-            if (!write()) {
-                LOGW("car", "%s not written: the NVS tables stay, read again next boot", PATH);
-                return;
-            }
-            LOGI("car", "%s made%s", PATH, any ? " from NVS" : "");
-        }
     }
 
-    void begin(Cfg::Config& cfg)
+    void begin()
     {
         void* m = PsHeap::malloc(sizeof(JsonDocument));
 #if FEATURE_LOGFS
@@ -153,17 +82,8 @@ namespace CarStore
         g_doc = new (m) JsonDocument(&PsramJson::instance());
         if (!LittleFS.exists(DIR)) LittleFS.mkdir(DIR);
         g_ready = true;
-        if (read()) {
-            LOGI("car", "%s: %u B, version %d", PATH, (unsigned)measureJson(*g_doc), (int)((*g_doc)["v"] | 0));
-            // A 1.6.9 file: the rules come in once, from NVS or the factory.
-            if (!(*g_doc)["rules"].is<JsonArrayConst>()) {
-                rulesFromNvs(g_doc->as<JsonObject>(), cfg);
-                if (!write()) LOGW("car", "%s not written: the rules are read again next boot", PATH);
-            }
-        } else {
-            migrate(cfg);
-        }
-        if (LittleFS.exists(PATH)) dropNvs(cfg);
+        if (read()) LOGI("car", "%s: %u B, version %d", PATH, (unsigned)measureJson(*g_doc), (int)((*g_doc)["v"] | 0));
+        else        create();
     }
 
     bool ready() { return g_ready; }

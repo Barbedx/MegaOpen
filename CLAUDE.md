@@ -26,7 +26,8 @@ map; this file is the "where do I look" index for a session in the car.
   fixed, moved to an Open section or dropped.
 - **Stored settings change format only through `src/cfg/Migrations.*`.**
   Config reads and writes today's NVS keys only; a renamed, retyped or dropped
-  key is a step there (the recipe is in `Migrations.h`). `tools/check_rules.py`
+  key is a step there (the recipe is in `Migrations.h`). A step removes the
+  old key in the same step: nothing is kept "for later". `tools/check_rules.py`
   fails on a key Config reads but never writes.
 - **Never force-push** `master`. Commits use the repo-local identity
   (`www.andruxa@gmail.com`); check `git log -1 --format='%ae %ce'` before a push.

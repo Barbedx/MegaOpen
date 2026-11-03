@@ -11,7 +11,7 @@ on different cars."
 | what | where | editable? | shape |
 | --- | --- | --- | --- |
 | CAN row → signal | `DecodeTable` (NVS `decode`, 96 rows + 16 constants), factory rows in `decode_defaults.inc` | yes, «Мапа › Сигнали» | data |
-| signal → head-unit field | `Canbox::FieldMap` (NVS `huFmap`, 32 rules: own / other signal ×÷+ / constant / off) | yes, «Мапа › Поля ГУ» | data |
+| signal → head-unit field | `Canbox::FieldMap` (`/cfg/car.json` `hu`, 32 rules: own / other signal ×÷+ / constant / off) | yes, «Мапа › Поля ГУ» | data |
 | alert popup | `AlertRules` (NVS `alerts`, 16 rows: ONE signal, above/below/rises/falls/changes, pause) | yes, «Мапа › Сповіщення» | data, but one condition only |
 | reminders "driving without lights", "handbrake while driving" | `Derived.cpp`: C++ sets `drive_no_lights`, `drive_handbrake`; two speeds in Settings › Reminders | only the speed | **hardcoded** |
 | gear, consumption, range, avg speed, `fuel_pct` | `Derived.cpp` | gear table only | C++ math (integration, matching): stays C++ |

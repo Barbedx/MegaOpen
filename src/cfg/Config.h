@@ -56,23 +56,6 @@ namespace Cfg
         // and steering were checked in the car).
         void saveHuSend(bool on) { _p.putBool("huSend", on); }
         bool loadHuSend()        { return _p.getBool("huSend", false); }
-        // 1.6.x's NVS tables, read once by CarStore (/cfg/car.json is their
-        // home now) and erased when the file is written: the head-unit field
-        // map (key huFmap) and the decode map (key decode, DecodeTable::pack).
-        bool    loadFieldMap(Canbox::FieldMap& m);
-        bool    eraseFieldMap();
-        // The user's decode map (Vehicle::DecodeTable::pack), key "decode".
-        // load: its length, 0 when there is none or it does not fit `cap`.
-        // erase: back to factory (decode_defaults.inc). False: not written.
-        size_t loadDecode(uint8_t* b, size_t cap);
-        bool   eraseDecode();
-        // 1.6.x's panel alerts (key "alerts") and key macros (key "macros"):
-        // read once by CarStore into the car file's rules, erased after the
-        // OTA trial. load: the blob's length, 0 when none or it does not fit.
-        size_t loadAlertBlob(uint8_t* b, size_t cap);
-        size_t loadMacroBlob(uint8_t* b, size_t cap);
-        bool   eraseAlerts();
-        bool   eraseMacros();
         // NVS entries left (32 B each), for the boot line. -1: unknown.
         int    nvsFreeEntries();
 #if FEATURE_RESISTIVE_KEYS

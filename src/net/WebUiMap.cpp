@@ -224,16 +224,16 @@ void WebUi::routesMap()
     // Any of: {send:bool}, {rows:[{id,src,k,can}]},
     // {confirm:{sig,on}} (the owner's ✓: that signal's CAN rows measured, or
     // a hypothesis again; reset brings the factory's flags back),
-    // {reset:true} (back to decode_defaults.inc: the NVS blob is erased). Every
+    // {reset:true} (back to decode_defaults.inc: the car file's `decode` is dropped). Every
     // part is checked before any is applied. A row replaces whatever bound
-    // that field; the map goes to the car task (no reboot) and to NVS (`decode`).
+    // that field; the map goes to the car task (no reboot) and to the car file (`decode`).
     // ---- the head-unit field map (docs/design/hu-mapping.md, step 2) ----------
     // GET: every field of the active protocol (RAV4 today): `rule`, the
     // owner's (null: none), `def`, the protocol's default (null: its own
     // signal; the fields that start off), and `v`, the value sent now. POST
     // {rows:[{id, from: "auto"|"own"|"sig"|"k"|"off", src, mul, div, add}]}:
     // "auto" drops the owner's rule (the default again); the rest set one.
-    // Applied at the hu task's next pass and saved (NVS "huFmap").
+    // Applied at the hu task's next pass and saved (the car file, CarStore).
     route("/api/hu/fields", HTTP_GET, [this](PsychicRequest* r) {
         if (!_state) return r->reply(503, "text/plain", "not_built vehicle");
         // ~450 B with the field map: per request (Scratch), not on httpd's 4 kB stack.
@@ -604,8 +604,7 @@ void WebUi::routesMap()
 // the bindings, the constants, the owner's ✓, the field map, the formulas, the
 // rules, all by signal name), plus hu.send. A file without a part leaves that
 // part alone. A 1.6.x file's base64 `decode` is refused (decode: not_object):
-// its rows are signal indexes, not names; its `alerts` rows are not read (the
-// rules came from NVS on the update).
+// its rows are signal indexes, not names; its `alerts` rows are not read.
 
 void WebUi::mapToFile(ChunkOut& out)
 {
