@@ -92,13 +92,14 @@ namespace Cfg
         // write, and nothing else in Settings is touched from that task.
         void saveCan2Detected(uint32_t bps);
 
-        // THE SETTINGS HAVE ONE LOCK. Settings holds Strings: a reassignment
-        // frees the old buffer, so a reader on another task, or a second writer,
-        // is a use-after-free or a double free. Writers are the web (httpd: every
+        // THE SETTINGS HAVE ONE LOCK, for the writers. Settings holds no heap
+        // (its texts are Cfg::Text), so a reader on another task sees at worst
+        // a torn value, never a freed buffer. Writers are the web (httpd: every
         // request runs under the lock, WebUi::dispatch) and the panel menu
         // (net_svc, applyPending: under tryLock, retried next pass). save() takes
-        // it too. Another task reads s() only under the lock, or reads a copy
-        // (trySnapshot()). Recursive: a request handler calls save().
+        // it too. A reader that needs a consistent set takes the lock or a copy
+        // (trySnapshot()); a single word may be read bare (hkBeat's reminders).
+        // Recursive: a request handler calls save().
         // save() BLOCKS for the lock: never call it while holding another lock
         // a web handler may wait on (KnobService, a staging mutex, LogBus).
         Settings& s() { return _s; }
@@ -125,7 +126,7 @@ namespace Cfg
         uint8_t migratedFrom() const { return _verWas; }
 
     private:
-        Str  _carSigName[3];        // the car screen rows, as saved
+        Text<32> _carSigName[3];    // the car screen rows, as saved
         bool _carSigPending[3] = {}; // named, not yet a signal
         // One-time, versioned fix-ups for older defaults. End of begin(); never
         // touches network settings (see the definition).

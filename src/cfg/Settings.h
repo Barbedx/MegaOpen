@@ -6,20 +6,12 @@
 #include "../input/KeyDebouncer.h"
 #include "../keys/KeyAction.h"
 #include "../vehicle/Signals.h"
-#ifdef NATIVE
-#include <string>
-#else
-#include <Arduino.h>
-#endif
+#include "Text.h"
 
 namespace Cfg
 {
-    // Arduino's String on the board; the host build has none.
-#ifdef NATIVE
-    using Str = std::string;
-#else
-    using Str = String;
-#endif
+    // Every text field is a Cfg::Text<N> (no heap): a copy of Settings is a
+    // plain copy, and nothing a reader holds can be freed under it.
 
     // The car screen's rows: the three chosen signals, or the trip computer
     // (consumption now/average, range, trip distance; MenuUi::tripRows).
@@ -28,9 +20,9 @@ namespace Cfg
 
     struct Settings {
         // network
-        Str      ssid = MO_WIFI_SSID;      // defaults: src/secrets.example.h
-        Str      pass = MO_WIFI_PASS;
-        Str      mdnsName = "megaopen";     // -> http://megaopen.local
+        Text<33> ssid = MO_WIFI_SSID;      // defaults: src/secrets.example.h
+        Text<65> pass = MO_WIFI_PASS;
+        Text<33> mdnsName = "megaopen";     // -> http://megaopen.local
         // Off = no .local name; see WifiManager::startMdns().
         bool     mdnsOn   = true;
         // WiFi off while MegaOpen Companion is on the USB link (src/net/WifiManager.h):
@@ -45,22 +37,22 @@ namespace Cfg
         // thresholds ("hu=TRC knobs=DBG"), and the lowest level each sink takes.
         // LogLevel values: 0 ERR .. 4 TRC.
         uint8_t  logLevel  = 2;
-        Str      logTags   = "";
+        Text<161> logTags  = "";           // LogTags::SPEC_MAX + 1
         uint8_t  logWeb    = 4;
         uint8_t  logFlash  = 3;
         uint8_t  logPush   = 4;
         uint8_t  logSerial = 2;
         uint8_t  logStatus = 1;           // the status lines at INF: 0 = 10 s, 1 = 60 s, 2 = 300 s
         uint16_t gearRatio[6] = {80, 147, 207, 275, 359, 431};
-        Str      apName = "MegaOpen";
-        Str      apPass = MO_AP_PASS;      // >= 8 chars or the AP comes up open
+        Text<32> apName = "MegaOpen";
+        Text<65> apPass = MO_AP_PASS;      // >= 8 chars or the AP comes up open
 
         // input timing
         Input::KeyDebouncer::Params timing;
         bool     encInverted = false;
 
         // OEM display
-        Str      displayType = "carminat";   // carminat | updatelist
+        Text<16> displayType = "carminat";   // carminat | updatelist
         bool     funcReg     = true;         // we are the master: run FUNCSREG ourselves
         // The page's developer mode, told to the board: RAM only, never saved,
         // off after every boot. Shows the page's developer tools.
@@ -69,9 +61,9 @@ namespace Cfg
         // BLE role: off | ams (phone: now-playing + clock) | keyboard (HID to the
         // head unit) | both (transport to the phone, volume to the head unit).
         // Read once at boot; "off" keeps ~40 kB of host state out of RAM.
-        Str      bleMode = "ams";
+        Text<12> bleMode = "ams";
         // The head-unit protocol (Canbox::Protocols), by id. Read once at boot.
-        Str      huProtocol = "raise112";
+        Text<16> huProtocol = "raise112";
         // No wifiSleep setting: WiFi power save is derived from bleMode
         // (WifiManager::sleepRequired()). BT on with power save off makes the
         // IDF WiFi driver abort at radio start and boot-loop.
@@ -96,16 +88,16 @@ namespace Cfg
         // "menu" (mode 0x01). Persisted because leaving fullscreen needs an
         // explicit hide; a forgotten fullscreen swallows every later setText
         // while returning Ok (AffaDisplay WIRE-SPEC 8.6 [CAP]).
-        Str      mediaLayout = "fullscreen";
+        Text<16> mediaLayout = "fullscreen";
 
         // Text style, stored by name (see MediaScreen::Style).
-        Str      mediaStyle = "classic";
+        Text<16> mediaStyle = "classic";
 
         // The 48x48 graphic layer (see MediaPane); covered under "menu"/"fullscreen".
         // Off by default for bus budget: 304 wire bytes (~44 ACKed CAN frames)
         // vs 14 for a text screen (see the BUS_OFF circuit breaker in main.cpp).
         // Stored by name; "auto" = carousel, paneCycleS apart.
-        Str      mediaPane = "off";
+        Text<16> mediaPane = "off";
 
         // Seconds per carousel stop. WebUi floors it at 5.
         uint16_t paneCycleS = 30;
@@ -121,7 +113,7 @@ namespace Cfg
         // Now-playing source: "ams" (iPhone), "hu" (the head unit's text) or "auto"
         // (head unit while live, else phone). "ams" by default: the head unit's
         // text frame is undocumented and learned at runtime.
-        Str      mediaSource = "ams";
+        Text<16> mediaSource = "ams";
 
         // Which commands carry the text is the protocol's (raise.titleCmd).
         // "Title - Artist" order when one command carries both.

@@ -163,17 +163,17 @@ namespace Cfg
     void Config::save()
     {
         Guard g(*this);
-        _p.putString("ssid", _s.ssid);
-        _p.putString("pass", _s.pass);
-        _p.putString("apName", _s.apName);
+        _p.putString("ssid", _s.ssid.c_str());
+        _p.putString("pass", _s.pass.c_str());
+        _p.putString("apName", _s.apName.c_str());
 
-        _p.putString("mdns", _s.mdnsName);
+        _p.putString("mdns", _s.mdnsName.c_str());
         _p.putBool  ("mdnsOn", _s.mdnsOn);
         _p.putBool  ("wifiAuto", _s.wifiAuto);
         _p.putUChar ("rmLights", _s.remindLightsKmh);
         _p.putUChar ("rmBrake",  _s.remindBrakeKmh);
         _p.putUChar ("logLv",    _s.logLevel);
-        _p.putString("logTags",  _s.logTags);
+        _p.putString("logTags",  _s.logTags.c_str());
         _p.putUChar ("logWeb",   _s.logWeb);
         _p.putUChar ("logFlash", _s.logFlash);
         _p.putUChar ("logPush",  _s.logPush);
@@ -183,7 +183,7 @@ namespace Cfg
             static const char* const key[6] = {"g1", "g2", "g3", "g4", "g5", "g6"};
             for (int i = 0; i < 6; ++i) _p.putUShort(key[i], _s.gearRatio[i]);
         }
-        _p.putString("apPass", _s.apPass);
+        _p.putString("apPass", _s.apPass.c_str());
 
         _p.putUShort("dbMs",  _s.timing.debounceMs);
         _p.putUShort("fdbMs", _s.timing.fastDebounceMs);
@@ -192,11 +192,11 @@ namespace Cfg
         _p.putBool  ("rep",   _s.timing.repeatEnabled);
         _p.putBool  ("encInv", _s.encInverted);
 
-        _p.putString("dispType", _s.displayType);
+        _p.putString("dispType", _s.displayType.c_str());
         _p.putBool  ("funcReg",  _s.funcReg);
 
-        _p.putString("bleMode",  _s.bleMode);
-        _p.putString("huProto",  _s.huProtocol);
+        _p.putString("bleMode",  _s.bleMode.c_str());
+        _p.putString("huProto",  _s.huProtocol.c_str());
         _p.putBool  ("autoTime", _s.autoTime);
         _p.putBool  ("mediaScr", _s.mediaScreen);
         _p.putBool  ("carScr",   _s.carScreen);
@@ -208,21 +208,21 @@ namespace Cfg
                 // defined at boot) keeps the name it was saved with.
                 if (s < Vehicle::SIG_COUNT && Vehicle::exists(s)) _carSigName[i] = Vehicle::meta(s).name;
                 else if (s >= Vehicle::SIG_COUNT && !_carSigPending[i]) _carSigName[i] = "";
-                _p.putString(kName[i], _carSigName[i]);
+                _p.putString(kName[i], _carSigName[i].c_str());
             }
             for (const char* k : {"carSig0", "carSig1", "carSig2", "carSigV"}) if (_p.isKey(k)) _p.remove(k);
         }
         _p.putUChar ("carPre",   _s.carPreset);
 
         _p.putBool  ("ancsPop", _s.ancsPopup);
-        _p.putString("medLay",  _s.mediaLayout);
+        _p.putString("medLay",  _s.mediaLayout.c_str());
 
-        _p.putString("medSty",   _s.mediaStyle);
-        _p.putString("medPane",  _s.mediaPane);
+        _p.putString("medSty",   _s.mediaStyle.c_str());
+        _p.putString("medPane",  _s.mediaPane.c_str());
         _p.putUChar ("paneSpd",  _s.paneSpeed);
         _p.putUShort("splashMs", _s.trackSplashMs);
         _p.putUShort("paneCyc",  _s.paneCycleS);
-        _p.putString("medSrc",   _s.mediaSource);
+        _p.putString("medSrc",   _s.mediaSource.c_str());
         _p.putBool  ("huTtlFst", _s.huTitleFirst);
 
         _p.putBool  ("keyPop",   _s.keyPopup);

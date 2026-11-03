@@ -507,7 +507,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         }
 
         const bool huFirst = s.huTitleFirst;
-        const Cfg::Str src = s.mediaSource;
+        const auto src = s.mediaSource;
 
 
         uint8_t ap = 0;
@@ -591,7 +591,7 @@ int WebUi::settingsPost(JsonObjectConst d, bool dry, bool file, String& out, con
         if (ap & Cfg::AP_CAP) Capture::setSettings(cs);
 #endif
 
-        if (apPass.length()) { restart = restart || apPass != s.apPass; s.apPass = apPass; }
+        if (apPass.length()) { restart = restart || apPass != s.apPass.c_str(); s.apPass = apPass; }
 
         _cfg->save();
         LOGI("cfg", "settings saved: %u value(s)%s%s", (unsigned)rd.n, file ? " from a file" : "",
@@ -817,7 +817,7 @@ void WebUi::routes()
         JsonDocument d;
         settingsOut(d.to<JsonObject>(), false);
         // Not settings: the network names (passwords never) and the build.
-        d["ssid"]           = s.ssid;
+        d["ssid"]           = s.ssid.c_str();
         d["ssid2"]          = _wifi ? _wifi->net2Ssid() : String();
         // fw is the build; cfgVer is the NVS schema version, not a build version.
         d["fw"]             = MEGAOPEN_VERSION;
@@ -1078,9 +1078,9 @@ void WebUi::routes()
         auto& s = _cfg->s();
         // Only the first network needs the reboot: WifiManager takes the second
         // (setNet2) at its next AP retry.
-        const bool changed = has1 && (s1 != s.ssid || (p1.length() && p1 != s.pass));
+        const bool changed = has1 && (s1 != s.ssid.c_str() || (p1.length() && p1 != s.pass.c_str()));
         if (has1) {
-            if (p1.isEmpty() && s1 == s.ssid) p1 = s.pass;
+            if (p1.isEmpty() && s1 == s.ssid.c_str()) p1 = s.pass.c_str();
             s.ssid = s1;
             s.pass = p1;
             _cfg->save();
@@ -1160,7 +1160,7 @@ void WebUi::routesDisplay()
         const String type = d["type"] | s.displayType.c_str();
         if (!Catalog::panelKnown(type.c_str())) return r->reply(400, "text/plain", "param type");
         const bool funcReg = d["funcReg"] | s.funcReg;
-        const bool changed = type != s.displayType || funcReg != s.funcReg;
+        const bool changed = type != s.displayType.c_str() || funcReg != s.funcReg;
         s.displayType = type;
         s.funcReg     = funcReg;
         _cfg->save();
@@ -1645,7 +1645,7 @@ void WebUi::routesMedia()
         // Where the metadata comes from ("no title" and "no phone" look the same).
         d["phone"]    = _phoneConnected ? _phoneConnected() : false;
         d["autoTime"] = ms.autoTime;
-        d["bleMode"]  = _cfg ? _cfg->s().bleMode : String("off");
+        d["bleMode"]  = _cfg ? _cfg->s().bleMode.c_str() : "off";
         if (_router) {
             // snapshot(), not current(): AMS writes MediaInfo from NimBLE's host
             // task; the copy is taken under the source's mutex.
@@ -2245,7 +2245,7 @@ void WebUi::routesCanbox()
 // The body of /api/display.
 void WebUi::fillDisplay(JsonObject d)
 {
-        d["type"]     = _cfg->s().displayType;
+        d["type"]     = _cfg->s().displayType.c_str();
         d["funcReg"]  = _cfg->s().funcReg;
         d["canRx"]    = _canRx ? *_canRx : 0;
         // The panel task's copy, published after every poll(): the library
@@ -2600,5 +2600,5 @@ void WebUi::healthJson(JsonObject d)
               phone ? "phone_ok"
               : _cfg->s().bleMode == "off" ? "phone_ble_off"
                                            : "phone_advertising");
-        d["bleMode"] = _cfg->s().bleMode;
+        d["bleMode"] = _cfg->s().bleMode.c_str();
 }

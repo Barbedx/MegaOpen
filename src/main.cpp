@@ -2172,7 +2172,7 @@ void setup()
     // copies into its ring.
     g_affaLog.begin([](const char* line) { LogBus::line(line); });
 
-    const String& dt = g_cfg.s().displayType;
+    const auto& dt = g_cfg.s().displayType;
     {
         // `carminat`: the same object typed as CarminatDisplay (styled text,
         // message boxes, the 0x1F1 pane); null on an UpdateList panel. No RTTI
@@ -2259,7 +2259,7 @@ void setup()
     if (!Sinks::BleKeyQueue::begin())
         LOGI("ble", "KEY QUEUE FAILED TO ALLOCATE - phone and BLE keyboard keys are dead");
     {
-        const String& bm = g_cfg.s().bleMode;
+        const auto& bm = g_cfg.s().bleMode;
         // Off = BleHub not started (saves ~40 KB of host state).
         const bool bleOn = (bm == "ams" || bm == "keyboard" || bm == "both");
         // For /api/health. Not BleHub::amsActive() alone: its gMode defaults to
@@ -2521,8 +2521,8 @@ void setup()
     App::OtaTrial::begin();
 
     const char* mdns = g_wifi.mdnsHost().length() ? g_wifi.mdnsHost().c_str() : "(mdns FAILED)";
-    // httpd is up: a String in Settings is read under its lock (Cfg::Config::lock).
-    const String staSsid = [] { Cfg::Config::Guard g(g_cfg); return g_cfg.s().ssid; }();
+    // httpd is up: a copy under the lock, so the line is never torn.
+    const auto staSsid = [] { Cfg::Config::Guard g(g_cfg); return g_cfg.s().ssid; }();
     if (g_wifi.connecting())
         // WiFi no longer blocks setup(); the outcome is logged by [wifi] lines.
         LOGI("boot", "MegaOpen " MEGAOPEN_VERSION " up, WiFi joining in the background, uart=%u baud",

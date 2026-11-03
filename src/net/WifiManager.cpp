@@ -11,10 +11,10 @@ void WifiManager::begin(Cfg::Config& cfg)
     _cfg = &cfg;
     // Boot copies: httpd saves new values into cfg at any time (POST /api/wifi,
     // /api/settings) and they apply at the next boot, so after this line no
-    // String in cfg is read here except mdnsName, which nothing writes.
-    _ssid1 = cfg.s().ssid;
-    _pass1 = cfg.s().pass;
-    _apPass = cfg.s().apPass;
+    // text in cfg is read here except mdnsName, which nothing writes.
+    _ssid1 = cfg.s().ssid.c_str();
+    _pass1 = cfg.s().pass.c_str();
+    _apPass = cfg.s().apPass.c_str();
     _btOn = cfg.s().bleMode != "off";
     {
         char name[32];
@@ -160,7 +160,7 @@ void WifiManager::startMdns()
     // Switchable to save heap: an abort under WiFi buffer pressure had a
     // backtrace in `_mdns_scheduler_run`. Off means no name, nothing else.
     if (!_cfg->s().mdnsOn) return;
-    const String host = _cfg->s().mdnsName.length() ? _cfg->s().mdnsName : String("megaopen");
+    const String host = _cfg->s().mdnsName.length() ? String(_cfg->s().mdnsName.c_str()) : String("megaopen");
     if (!MDNS.begin(host.c_str())) return;
     MDNS.addService("http", "tcp", 80);
     // For OTA tools.

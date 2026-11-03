@@ -265,7 +265,7 @@ namespace Cfg
         static_assert(Canbox::HuConfig::MAX_MESSAGES <= 255, "a table has at most 255 rows");
 
         // A String field stored by id, read and written as its row.
-        int32_t rowOf(const SEnum& en, const Str& v)
+        template <class T> int32_t rowOf(const SEnum& en, const T& v)
         {
             const uint8_t n = en.count();
             for (uint8_t i = 0; i < n; ++i) if (!strcmp(v.c_str(), en.id(i))) return i;

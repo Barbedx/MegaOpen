@@ -549,10 +549,11 @@ static const char* const kNotInRegistry[] = {"ssid", "pass", "mdnsName", "apName
 
 // A new field in Cfg::Settings changes its size and lands here: give it a
 // registry entry (or add it to kNotInRegistry with the reason), then update
-// the number. Host layout: std::string fields.
+// the number. The texts are Cfg::Text (fixed size, no heap), so the host
+// and the board lay the struct out the same way.
 void test_settings_struct_unchanged()
 {
-    TEST_ASSERT_EQUAL_MESSAGE(sizeof(std::string) * 13 + 104, sizeof(Settings),
+    TEST_ASSERT_EQUAL_MESSAGE(576, sizeof(Settings),
                               "Cfg::Settings changed: add a registry entry, then update this size");
     // Every other field: count the entries that write Settings.
     size_t n = 0;
