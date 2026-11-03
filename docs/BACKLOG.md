@@ -8,6 +8,42 @@ findings at the top of each section; move an item to **Done** with its commit.
 Evidence rule: "seen on camera" means the laptop camera pointed at the bench
 panel (`py` + OpenCV, device 0), not inferred from an ACK.
 
+## Findings
+
+The owner's ask (2026-11-03): every inconsistency, bug, suspicion or rough
+edge an agent sees goes here first, even when it is off the task, and is not
+fixed on the side. The owner asks for a sweep from time to time; then each
+entry is fixed (moved to **Done** with its commit), promoted to an Open section,
+or dropped with a word why. Newest at the top. One entry: date, what, evidence,
+where.
+
+- **2026-11-03 — 1.6.x import still spread over five modules.** CarStore reads
+  1.6.x's NVS tables (decode, huFmap, alerts, macros) into `/cfg/car.json` and
+  erases them after the OTA confirm; the readers of those old formats live in
+  `Config.cpp` (`loadDecode`/`loadFieldMap`/`loadAlertBlob`/`loadMacroBlob`
+  and the erases), `DecodeTable::unpack`, `FieldMap`'s blob, `Rules::fromAlertBlob`/
+  `fromMacroBlob` and `Vehicle::sigFromSaved`. Both known boards are past 1.7,
+  so the whole import could go, or move into one file like `cfg/Migrations`.
+  `tools/check_rules.py` lists the four keys in `LEGACY_IMPORT` until then.
+- **2026-11-03 — the notification popup's default disagreed with itself.**
+  `Settings.h` says `ancsPopup` is off by default (a popup covers
+  now-playing), but the schema step v2 turned it on for every fresh board.
+  Since the migrations moved (`cfg/Migrations.h`) a fresh board takes the
+  documented default, off. Existing boards keep their stored value.
+- **2026-11-03 — the radio code's key sequence is unverified.** RollUp per
+  digit, Load to the next, Load held to confirm comes from one line of
+  MeganeCAN's notes; whether the radio accepts `pressKey(…, Wire)` from a
+  passive board beside the real panel is unknown. `src/display/RadioCode.*`;
+  check in the car: the extension role, a code, battery off, read `[code]`.
+- **2026-11-03 — what the extension role draws over the radio is not
+  decided.** In the extension role the ui task renders as always, so our
+  screens fight the radio's (the CODE prompt, volume popups). Which screens
+  should yield is open. `src/app/UiTask.cpp`, `app/StockRadio`.
+- **2026-11-03 — `dispType` "updatelist_menu" is no longer converted.** The
+  schema step for it was dropped with the old migrate(): a board that still
+  stores it reads as Carminat (the registry's first row). Both known boards
+  store `carminat`.
+
 ## Open
 
 ### Hardware (T-2CAN)

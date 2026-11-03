@@ -19,6 +19,15 @@ map; this file is the "where do I look" index for a session in the car.
   (`diag.session`, off by default). Flow control only in answer to a reply. No
   other ECU, no functional 0x7DF, no write (3B), clear, routine, reset or IO
   control. Never add another transmit path; `tools/check_rules.py` fails on one.
+- **Every finding goes into `docs/BACKLOG.md` → «Findings».** An
+  inconsistency, a bug, a suspicion, dead code, a doubt about a doc: one entry
+  (date, what, evidence, where), even when it is off the task. Do not fix it on
+  the side. The owner asks for a sweep from time to time; only then are entries
+  fixed, moved to an Open section or dropped.
+- **Stored settings change format only through `src/cfg/Migrations.*`.**
+  Config reads and writes today's NVS keys only; a renamed, retyped or dropped
+  key is a step there (the recipe is in `Migrations.h`). `tools/check_rules.py`
+  fails on a key Config reads but never writes.
 - **Never force-push** `master`. Commits use the repo-local identity
   (`www.andruxa@gmail.com`); check `git log -1 --format='%ae %ce'` before a push.
 - **Opening the USB serial port can reset the board.** Prefer the web log

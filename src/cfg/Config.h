@@ -121,18 +121,15 @@ namespace Cfg
         // A change that is not saved (a volatile setting) still makes copies stale.
         void touch() { _gen.fetch_add(1, std::memory_order_release); }
 
-        // Stored schema version, and what migrate() started from on this boot.
+        // Stored schema version, and what it was when this boot started
+        // (cfg/Migrations.h).
         uint8_t version() const { return _ver; }
         uint8_t migratedFrom() const { return _verWas; }
 
     private:
         Text<32> _carSigName[3];    // the car screen rows, as saved
         bool _carSigPending[3] = {}; // named, not yet a signal
-        // One-time, versioned fix-ups for older defaults. End of begin(); never
-        // touches network settings (see the definition).
-        void migrate();
-
-        uint8_t     _ver = 0;      // what is stored now, after migrate()
+        uint8_t     _ver = 0;      // what is stored now, after the migrations
         uint8_t     _verWas = 0;   // what was stored when this boot started
         Preferences _p;
         Settings    _s;

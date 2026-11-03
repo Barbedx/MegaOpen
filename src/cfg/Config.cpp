@@ -1,6 +1,6 @@
 #include "../utils/LogBus.h"
 #include "Config.h"
-#include "../display/PanelRole.h"
+#include "Migrations.h"
 #include <nvs.h>
 
 namespace Cfg
@@ -10,6 +10,9 @@ namespace Cfg
     void Config::begin()
     {
         _p.begin(NS, false);
+        // What older firmware stored, rewritten into today's keys first:
+        // everything below reads only those (cfg/Migrations.h).
+        _ver = Migrations::run(_p, _verWas);
 
         // Read first, seed afterwards. The seed calls save(), which writes every
         // field; run before the reads it would blank values already in a
@@ -33,8 +36,6 @@ namespace Cfg
         _s.logSerial = _p.getUChar("logSer", 2);
         _s.logStatus = _p.getUChar("logStat", 1);
         {
-            // Keys g1..g6 (1.6.2): the gr1..gr5 of 1.6.1 held the computed
-            // five-speed table, wrong for this car; they are left unread.
             static const uint16_t def[6] = {80, 147, 207, 275, 359, 431};
             static const char* const key[6] = {"g1", "g2", "g3", "g4", "g5", "g6"};
             for (int i = 0; i < 6; ++i) _s.gearRatio[i] = _p.getUShort(key[i], def[i]);
@@ -49,40 +50,25 @@ namespace Cfg
         _s.encInverted           = _p.getBool  ("encInv", false);
 
         _s.displayType = _p.getString("dispType", "carminat");
-        // AffaDisplay 2.0 has one UpdateList encoding; the "LCD" variant is gone.
-        if (_s.displayType == "updatelist_menu") _s.displayType = "updatelist";
-        // The role (display/PanelRole.h). Up to 1.8 it was the Bool "funcReg"
-        // (on = the board registers = emulator): read once here, saved as
-        // "panelRole" by the next save(), which removes the old key.
-        if (_p.isKey("panelRole"))    _s.panelRole = _p.getString("panelRole", "emulator");
-        else if (_p.isKey("funcReg")) _s.panelRole = _p.getBool("funcReg", true) ? "emulator" : "extension";
-        {
-            MegaOpen::PanelRole r;
-            if (!MegaOpen::PanelRoles::parse(_s.panelRole.c_str(), r)) _s.panelRole = "emulator";
-        }
+        _s.panelRole   = _p.getString("panelRole", "emulator");
         _s.bleMode     = _p.getString("bleMode", "ams");
         _s.huProtocol  = _p.getString("huProto", "raise112");
         _s.radioCode   = _p.getString("radioCode", "");
         _s.autoTime    = _p.getBool  ("autoTime", true);
-        _s.mediaScreen = _p.getBool  ("mediaScr", false);
+        _s.mediaScreen = _p.getBool  ("mediaScr", true);
         // isKey first: added after boards were seeded, and an absent key costs
         // an IDF error line per boot.
         _s.carScreen = _p.isKey("carScr") ? _p.getBool("carScr", false) : false;
         {
             // By NAME ("carSigN<i>", "" = an empty row): a user signal's id is
-            // known only once its formula is (resolveCarSigs). Before 1.7 an
-            // index ("carSig<i>"; "carSigV" 2: an empty slot saved as
-            // SIG_SAVED_NONE, without it the saving build's SIG_COUNT): read
-            // once, saved by name on the next save.
-            static const char* const kSig[3]  = {"carSig0", "carSig1", "carSig2"};
+            // known only once its formula is (resolveCarSigs). Absent: the
+            // default row.
             static const char* const kName[3] = {"carSigN0", "carSigN1", "carSigN2"};
-            const bool legacy = !_p.isKey("carSigV");
             for (uint8_t i = 0; i < 3; ++i) {
                 if (_p.isKey(kName[i])) {
                     _carSigName[i] = _p.getString(kName[i], "");
                 } else {
-                    const uint8_t s = _p.isKey(kSig[i]) ? Vehicle::sigFromSaved(_p.getUChar(kSig[i], 0), legacy)
-                                                        : _s.carSig[i];
+                    const uint8_t s = _s.carSig[i];
                     _carSigName[i] = s < Vehicle::SIG_COUNT ? Vehicle::meta(s).name : "";
                 }
             }
@@ -128,46 +114,6 @@ namespace Cfg
             save();
             _p.putBool("seeded", true);
         }
-
-        migrate();
-    }
-
-    // A changed default never reaches a seeded board; it needs a migration step.
-    // Keep steps narrow: never touch network settings (SSID, password, AP name,
-    // mDNS) — a bad value there strands the board with no way in over the air.
-    void Config::migrate()
-    {
-        const uint8_t v = _p.getUChar("cfgVer", 0);
-        const uint8_t kCurrent = 3;
-        _verWas = v;
-        _ver = v;
-        // Printed every boot so "did the migration run" is always answerable.
-        LOGI("cfg", "schema v%u (current v%u)%s\n", (unsigned)v,
-                      (unsigned)kCurrent, v >= kCurrent ? " — nothing to do" : " — migrating");
-        if (v >= kCurrent) return;
-
-        // v0 -> v1: the now-playing screen is on by default.
-        if (v < 1) {
-            _s.mediaScreen = true;
-            _p.putBool("mediaScr", true);
-        }
-
-        // v1 -> v2: notifications become a popup, now-playing becomes fullscreen.
-        if (v < 2) {
-            _s.ancsPopup = true;
-            _p.putBool("ancsPop", true);
-            _s.mediaLayout = "fullscreen";
-            _p.putString("medLay", "fullscreen");
-        }
-
-        // v2 -> v3 moved a stored CTX pin back to the board's; the CAN pins are
-        // no longer settings, so it has nothing left to do.
-
-        // An NVS write can fail (full namespace); Preferences reports it only
-        // in the return value.
-        const size_t wrote = _p.putUChar("cfgVer", kCurrent);
-        _ver = wrote ? kCurrent : v;
-        if (!wrote) LOGI("cfg", "SCHEMA WRITE FAILED — migration will re-run");
     }
 
     void Config::save()
@@ -204,7 +150,6 @@ namespace Cfg
 
         _p.putString("dispType", _s.displayType.c_str());
         _p.putString("panelRole", _s.panelRole.c_str());
-        if (_p.isKey("funcReg")) _p.remove("funcReg");   // the switch of 1.8 and before, read at load
 
         _p.putString("bleMode",  _s.bleMode.c_str());
         _p.putString("huProto",  _s.huProtocol.c_str());
@@ -222,7 +167,6 @@ namespace Cfg
                 else if (s >= Vehicle::SIG_COUNT && !_carSigPending[i]) _carSigName[i] = "";
                 _p.putString(kName[i], _carSigName[i].c_str());
             }
-            for (const char* k : {"carSig0", "carSig1", "carSig2", "carSigV"}) if (_p.isKey(k)) _p.remove(k);
         }
         _p.putUChar ("carPre",   _s.carPreset);
 

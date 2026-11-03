@@ -34,6 +34,9 @@ Rules, by where they bite:
                  Step 3 it never calls twai_* or reinstalls the driver, and never
                  calls the panel library except through PanelOps.
 
+Config.cpp     reads only the NVS keys it writes: an old key is rewritten by a
+               step in src/cfg/Migrations.cpp (the recipe is in Migrations.h).
+
 Comments are stripped before matching, so a comment may name what it forbids.
 Standard library only.
 """
@@ -251,6 +254,22 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, 'src')):
         if rel not in TX_CALLERS:
             check(rel, src, r'\bMcp2518Source\b[^;]*\.\s*(send|setTransmit)\s*\(',
                   'only CarDiag transmits on CAN A (the climate read, src/diag/ClimDiag.h)')
+
+# ---- settings: one format, migrations in one place (src/cfg/Migrations.h) --------
+# Config.cpp reads only the NVS keys it writes. An old key is rewritten into the
+# new one by a step in Migrations.cpp before Config reads anything, never read
+# "if the new one is missing" in Config. LEGACY_IMPORT: 1.6.x's tables, read
+# once by CarStore into /cfg/car.json and erased (cfg/CarStore.cpp); they go
+# with that import.
+LEGACY_IMPORT = {'decode', 'huFmap', 'alerts', 'macros'}
+cfg_rel = 'src/cfg/Config.cpp'
+cfg_src = strip_comments(read(cfg_rel))
+cfg_puts = set(re.findall(r'_p\.put\w+\s*\(\s*"([^"]+)"', cfg_src))
+for m in re.finditer(r'_p\.(?:get\w+|isKey|remove)\s*\(\s*"([^"]+)"', cfg_src):
+    if m.group(1) not in cfg_puts and m.group(1) not in LEGACY_IMPORT:
+        problems.append('%s:%d: NVS key "%s" read or removed but never written  '
+                        '(an old key: a step in src/cfg/Migrations.cpp, not Config)'
+                        % (cfg_rel, line_of(cfg_src, m.start()), m.group(1)))
 
 if problems:
     print('check_rules: %d problem(s)' % len(problems))

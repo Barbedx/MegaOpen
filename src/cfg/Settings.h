@@ -79,8 +79,7 @@ namespace Cfg
         // drawn inside the menu/media screen, so we compose one there.
         bool     autoTime = true;
 
-        // Show the now-playing screen. Persisted; Config::migrate() turns it on
-        // once for boards seeded before it defaulted on.
+        // Show the now-playing screen. Persisted.
         bool     mediaScreen = true;
 
         // The car screen: three signals instead of now-playing, one per row
