@@ -7,12 +7,36 @@ namespace Cfg
 {
     static constexpr const char* NS = "megaopen";
 
+    namespace
+    {
+        // NVS as the migrations see it (cfg/Migrations.h).
+        struct NvsStore : Migrations::Store {
+            Preferences& p;
+            explicit NvsStore(Preferences& pr) : p(pr) {}
+            bool    has(const char* k) override                { return p.isKey(k); }
+            bool    getBool(const char* k, bool d) override    { return p.getBool(k, d); }
+            uint8_t getU8(const char* k, uint8_t d) override   { return p.isKey(k) ? p.getUChar(k, d) : d; }
+            void    getStr(const char* k, char* out, size_t cap) override
+            {
+                if (!cap) return;
+                out[0] = 0;
+                if (p.isKey(k)) p.getString(k, out, cap);
+            }
+            bool    putU8(const char* k, uint8_t v) override        { return p.putUChar(k, v) != 0; }
+            bool    putStr(const char* k, const char* v) override   { return p.putString(k, v) != 0; }
+            void    remove(const char* k) override                  { p.remove(k); }
+        };
+    }
+
     void Config::begin()
     {
         _p.begin(NS, false);
         // What older firmware stored, rewritten into today's keys first:
         // everything below reads only those (cfg/Migrations.h).
-        _ver = Migrations::run(_p, _verWas);
+        {
+            NvsStore st(_p);
+            _ver = Migrations::run(st, _verWas);
+        }
 
         // Read first, seed afterwards. The seed calls save(), which writes every
         // field; run before the reads it would blank values already in a

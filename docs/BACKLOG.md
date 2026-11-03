@@ -17,6 +17,10 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
+- **2026-11-03 — old keys left for a rollback.** Schema v4 keeps `funcReg`
+  (1.8 reads it) and the car screen's index keys `carSig0..2`/`carSigV` (1.8
+  falls back to them); no firmware from 1.9 on reads either. A step after the
+  release that follows 1.9 can drop them (`src/cfg/Migrations.cpp`, `drop()`).
 - **2026-11-03 — 1.6.x import still spread over five modules.** CarStore reads
   1.6.x's NVS tables (decode, huFmap, alerts, macros) into `/cfg/car.json` and
   erases them after the OTA confirm; the readers of those old formats live in
