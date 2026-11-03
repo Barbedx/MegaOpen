@@ -1,4 +1,5 @@
 #include "CarFile.h"
+#include "../utils/Hex.h"
 #include <initializer_list>
 #include <stdio.h>
 #include <string.h>
@@ -171,12 +172,11 @@ namespace CarFile
             uint8_t n = 0;
             int hi = -1;
             for (; *s; ++s) {
-                int v;
-                if (*s >= '0' && *s <= '9') v = *s - '0';
-                else if (*s >= 'a' && *s <= 'f') v = *s - 'a' + 10;
-                else if (*s >= 'A' && *s <= 'F') v = *s - 'A' + 10;
-                else if (*s == ' ' || *s == ':' || *s == ',') { if (hi >= 0) return -1; continue; }
-                else return -1;
+                const int v = Hex::nibble(*s);
+                if (v < 0) {
+                    if (*s == ' ' || *s == ':' || *s == ',') { if (hi >= 0) return -1; continue; }
+                    return -1;
+                }
                 if (hi < 0) { hi = v; continue; }
                 if (n >= cap) return -1;
                 out[n++] = (uint8_t)((hi << 4) | v);

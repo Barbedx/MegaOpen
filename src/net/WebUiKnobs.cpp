@@ -1,4 +1,5 @@
 #include "WebUi.h"
+#include "../utils/Hex.h"
 #if FEATURE_KNOBS
 #include "../board/BoardProfile.h"
 #include "../utils/LogBus.h"
@@ -18,21 +19,13 @@ static void knobRgbOut(JsonObject o, const char* key, const Rgb& c)
     o[key] = b;
 }
 
-static int knobNibble(char c)
-{
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
-}
-
 // "#rrggbb" only; anything else leaves the colour alone.
 static void knobRgbIn(JsonVariantConst v, Rgb& c)
 {
     const char* s = v.as<const char*>();
     if (!s || s[0] != '#' || strlen(s) != 7) return;
     int n[6];
-    for (uint8_t i = 0; i < 6; ++i) { n[i] = knobNibble(s[i + 1]); if (n[i] < 0) return; }
+    for (uint8_t i = 0; i < 6; ++i) { n[i] = Hex::nibble(s[i + 1]); if (n[i] < 0) return; }
     c.r = (uint8_t)((n[0] << 4) | n[1]);
     c.g = (uint8_t)((n[2] << 4) | n[3]);
     c.b = (uint8_t)((n[4] << 4) | n[5]);

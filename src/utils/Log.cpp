@@ -64,7 +64,6 @@ namespace Log
         return true;
     }
     void     setStatusInterval(uint32_t ms) { g_statusMs = ms < 1000 ? 1000 : ms; }
-    uint32_t statusInterval()               { return g_statusMs; }
 
     bool setTagSpec(const char* spec)
     {

@@ -1228,7 +1228,7 @@ namespace App
                 PaneBits pb;
                 pb.set = cfg.loadPaneBits(pb.bits, sizeof(pb.bits));
                 s_paneBits.init(pb);
-                g_pane.setCustom(s_paneBits.live().bits);   // borrowed, see MediaPane.h
+                g_pane.setCustom(s_paneBits.live().bits);   // copied, see MediaPane.h
             }
             g_keyPopup   = s.keyPopup;
             g_keyPopupMs = s.keyPopupMs;

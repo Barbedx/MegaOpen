@@ -13,6 +13,7 @@
 #include "GhRelease.h"
 #include "GhRoots.h"
 #include "NetJob.h"
+#include "../utils/PsHeap.h"
 #include "../utils/HeapSentinel.h"
 #include "../Version.h"
 #include "../app/TaskPlan.h"
@@ -117,7 +118,6 @@ namespace GhOta
         // is no PSRAM (heap_caps_free frees either).
         constexpr uint32_t CAP_PS = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
         constexpr uint32_t CAP_IN = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
-        void* psMalloc(size_t n) { return heap_caps_malloc_prefer(n, 2, CAP_PS, CAP_IN); }
 
         PsramJson& s_json = PsramJson::instance();   // the JSON pools (utils/PsramJson.h)
 
@@ -186,7 +186,7 @@ namespace GhOta
                     // Where it now points, read back: a Location cut short
                     // (split across reads) or off GitHub stops here.
                     constexpr size_t URL_MAX = 2048;
-                    char* u = (char*)psMalloc(URL_MAX);
+                    char* u = (char*)PsHeap::malloc(URL_MAX);
                     if (!u) { fail("no_memory", "for the redirect"); break; }
                     const bool got = esp_http_client_get_url(c, u, URL_MAX) == ESP_OK;
                     char h[48];
@@ -346,7 +346,7 @@ namespace GhOta
             int64_t len = 0;
             Src c = get(s_rel.sumsUrl, false, len);
             if (!c) return false;
-            char* b = (char*)psMalloc(SUMS_MAX);
+            char* b = (char*)PsHeap::malloc(SUMS_MAX);
             if (!b) { done(c); fail("no_memory", "for SHA256SUMS"); return false; }
             size_t n = 0;
             for (int k; n < SUMS_MAX && (k = readSrc(c, b + n, SUMS_MAX - n)) > 0;) n += k;

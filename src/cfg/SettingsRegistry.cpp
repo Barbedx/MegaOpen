@@ -634,11 +634,6 @@ namespace Cfg
             return valid(e, v) && e.en ? e.en->id((uint8_t)v) : "";
         }
 
-        const char* enumName(const SEntry& e, int32_t v)
-        {
-            return valid(e, v) && e.en ? e.en->name((uint8_t)v) : "";
-        }
-
         void format(const Model& m, const SEntry& e, char* out, size_t cap)
         {
             if (!cap) return;

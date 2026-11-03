@@ -342,8 +342,6 @@ public:
 
     // /api/display's body.
     void fillDisplay(JsonObject d);
-    // For modules with their own endpoints. Setup only: the table is not locked.
-    void addRoute(const char* path, http_method method, PsychicHttpRequestCallback fn);
 
 private:
     void routes();
@@ -418,7 +416,7 @@ private:
 #endif
     // Host and X-MegaOpen (RequestGate.h), for dispatch() and the OTA filter.
     RequestGate::Why gateWhy(PsychicRequest* r);
-    // The mDNS name at boot: still announced after a rename until a restart.
+    // The mDNS name, copied at boot: nothing renames it (it is not in the registry).
     char _bootName[33] = {0};
     void gateOta();              // after ElegantOTA.begin(): its endpoints gated too
 

@@ -1,4 +1,5 @@
 #include "Signals.h"
+#include "../utils/PsHeap.h"
 #include <atomic>
 #include <stdlib.h>
 #include <string.h>
@@ -231,12 +232,7 @@ namespace Vehicle
             UserTable* t = g_user.load(std::memory_order_acquire);
             if (t) return t;
             const size_t n = 2 * sizeof(UserTable);
-#ifdef NATIVE
-            void* m = calloc(1, n);
-#else
-            void* m = heap_caps_calloc(1, n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (!m) m = heap_caps_calloc(1, n, MALLOC_CAP_8BIT);
-#endif
+            void* m = PsHeap::calloc(1, n);
             t = static_cast<UserTable*>(m);
             g_user.store(t, std::memory_order_release);
             return t;

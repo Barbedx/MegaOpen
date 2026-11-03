@@ -2,16 +2,6 @@
 
 namespace Keys
 {
-    const char* laneName(Lane l)
-    {
-        switch (l) {
-            case Lane::Rel: return "rel";
-            case Lane::Tap: return "tap";
-            case Lane::Web: return "web";
-        }
-        return "?";
-    }
-
     uint8_t KeyQueues::size(Lane l) const
     {
         switch (l) {

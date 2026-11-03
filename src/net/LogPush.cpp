@@ -12,6 +12,7 @@
 #include <atomic>
 #include "GhRoots.h"
 #include "NetJob.h"
+#include "../utils/PsHeap.h"
 #include "../utils/HeapSentinel.h"
 #include "../Version.h"
 #include "../app/TaskPlan.h"
@@ -39,7 +40,6 @@ namespace LogPush
         constexpr uint32_t BACKLOG_BYTES = 16 * 1024;
         constexpr uint32_t CAP_PS = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
         constexpr uint32_t CAP_IN = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
-        void* psMalloc(size_t n) { return heap_caps_malloc_prefer(n, 2, CAP_PS, CAP_IN); }
         uint32_t heapNow() { return heap_caps_get_free_size(CAP_IN); }
 
         // ---- the spool: a byte ring of whole lines, in absolute offsets ----
@@ -164,13 +164,13 @@ namespace LogPush
             if (lost) nn = snprintf(note, sizeof(note), "[push] %u bytes lost: the spool wrapped before they were pushed\n",
                                     (unsigned)lost);
             const size_t raw = nn + n;
-            char* src = (char*)psMalloc(raw ? raw : 1);
+            char* src = (char*)PsHeap::malloc(raw ? raw : 1);
             if (!src) return nullptr;
             memcpy(src, note, nn);
             memcpy(src + nn, text, n);
             const size_t b64 = 4 * ((raw + 2) / 3) + 1;
             const size_t cap = b64 + strlen(msg) + 64;
-            char* body = (char*)psMalloc(cap);
+            char* body = (char*)PsHeap::malloc(cap);
             if (!body) { heap_caps_free(src); return nullptr; }
             int at = snprintf(body, cap, "{\"message\":\"%s\",\"content\":\"", msg);
             size_t olen = 0;
@@ -506,7 +506,7 @@ namespace LogPush
             snprintf(path, sizeof(path), "/crash/%s", base);
             const uint32_t boot = (uint32_t)strtoul(base, nullptr, 10);
             const size_t n = f.size();
-            char* data = n && n <= CHUNK_MAX ? (char*)psMalloc(n) : nullptr;
+            char* data = n && n <= CHUNK_MAX ? (char*)PsHeap::malloc(n) : nullptr;
             const size_t got = data ? f.read((uint8_t*)data, n) : 0;
             f.close();
             d.close();
@@ -550,7 +550,7 @@ namespace LogPush
                     continue;
                 }
                 HEAP_CHECK("push loadFile");
-                if (!text) text = (char*)psMalloc(CHUNK_MAX);
+                if (!text) text = (char*)PsHeap::malloc(CHUNK_MAX);
                 if (!text) return false;
                 // Whole lines from s_pastOff, the ones after fromMs, up to CHUNK_MAX.
                 size_t n = 0, off = s_pastOff;
@@ -563,12 +563,21 @@ namespace LogPush
                     if (!lineMs(ln, ln + ll, ms) || ms >= g.fromMs) { memcpy(text + n, ln, ll); n += ll; }
                     off += ll;
                 }
-                const bool fileDone = off >= s_flen;
                 if (!n) {
+                    if (off == s_pastOff && off < s_flen) {
+                        // A stretch longer than a whole part with no line
+                        // end (a corrupt file): past it, or this would spin.
+                        const char* nl = (const char*)memchr(s_fbuf + off, '\n', s_flen - off);
+                        const size_t to = nl ? (size_t)(nl - s_fbuf) + 1 : s_flen;
+                        LOGW("push", "boot %u: %u bytes with no line end skipped", (unsigned)g.boot,
+                             (unsigned)(to - off));
+                        off = to;
+                    }
                     s_pastOff = off;
-                    if (fileDone) { --s_pastFile; s_pastOff = 0; }
+                    if (off >= s_flen) { --s_pastFile; s_pastOff = 0; }
                     continue;
                 }
+                const bool fileDone = off >= s_flen;
                 char msg[64], rel[48];
                 snprintf(msg, sizeof(msg), "%s boot %u from flash %u (" MEGAOPEN_VERSION ")", s_dev,
                          (unsigned)g.boot, (unsigned)s_pastPart);
@@ -601,7 +610,7 @@ namespace LogPush
         Capture::FileInfo* s_capList = nullptr;
         size_t capFiles()
         {
-            if (!s_capList) s_capList = (Capture::FileInfo*)psMalloc(CAP_LIST * sizeof(Capture::FileInfo));
+            if (!s_capList) s_capList = (Capture::FileInfo*)PsHeap::malloc(CAP_LIST * sizeof(Capture::FileInfo));
             if (!s_capList) return 0;
             const size_t total = Capture::list(s_capList, CAP_LIST);
             return total < CAP_LIST ? total : CAP_LIST;
@@ -633,7 +642,7 @@ namespace LogPush
             char path[32];
             if (Capture::beginRead(f->num, path, sizeof(path)) != Capture::Res::OK) return false;
             const uint32_t want = f->size - s_coff < CAN_PART ? f->size - s_coff : CAN_PART;
-            char* data = (char*)psMalloc(want ? want : 1);
+            char* data = (char*)PsHeap::malloc(want ? want : 1);
             size_t got = 0;
             if (data) {
                 File fl = LittleFS.open(path, "r");
@@ -681,7 +690,7 @@ namespace LogPush
         {
             if (!s_snapFn || !s_okAt) return false;   // after this boot's first log part
             if (s_snapAt && millis() - s_snapAt < SNAP_MS) return false;
-            char* buf = (char*)psMalloc(SNAP_MAX);
+            char* buf = (char*)PsHeap::malloc(SNAP_MAX);
             if (!buf) return false;
             const size_t n = s_snapFn(buf, SNAP_MAX);
             if (!n || n >= SNAP_MAX) { heap_caps_free(buf); s_snapAt = millis() | 1; return false; }
@@ -746,7 +755,7 @@ namespace LogPush
                 }
             }
 #endif
-            char* text = (char*)psMalloc(CHUNK_MAX);
+            char* text = (char*)PsHeap::malloc(CHUNK_MAX);
             if (!text) { setErr(State::Waiting, "no_memory", 0); return; }
             uint64_t from = 0, to = 0;
             uint32_t lost = 0;

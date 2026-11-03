@@ -47,7 +47,6 @@ namespace Keys
     // keys keep their order among themselves (a combo still sees both down).
     enum class Lane : uint8_t { Rel = 0, Tap = 1, Web = 2 };
     constexpr uint8_t LANES = 3;
-    const char* laneName(Lane l);
 
     // The three lanes as fixed rings, with the order the keys task takes them
     // in. Not thread-safe: the firmware calls every method under one lock.

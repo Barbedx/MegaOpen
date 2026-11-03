@@ -32,6 +32,7 @@
 #include <esp_system.h>
 #include "../utils/Scratch.h"
 #include "../utils/JsonEscape.h"
+#include "../utils/Hex.h"
 #if FEATURE_BLE && FEATURE_ANCS
 #include "../apple_notification_service.h"
 #endif
@@ -39,14 +40,6 @@
 using namespace Keys;
 
 // ---- small shared helpers ---------------------------------------------------
-
-static int hexNibble(char c)
-{
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    return -1;
-}
 
 // "7D 03 39 30" / "7d033930" -> bytes. -1 on a stray character or odd nibble
 // count: a half-parsed payload would get a valid checksum over the wrong bytes.
@@ -56,7 +49,7 @@ static int parseHex(const char* s, uint8_t* out, size_t maxLen)
     int hi = -1;
     for (; *s; ++s) {
         if (*s == ' ' || *s == ',' || *s == ':' || *s == '-') continue;
-        const int v = hexNibble(*s);
+        const int v = Hex::nibble(*s);
         if (v < 0) return -1;
         if (hi < 0) { hi = v; continue; }
         if (n >= maxLen) return -1;
@@ -233,13 +226,12 @@ namespace
 
 RequestGate::Why WebUi::gateWhy(PsychicRequest* r)
 {
-    // mdnsName is a Settings String: read under the settings lock (recursive,
-    // so dispatch() holding it already is fine).
-    Cfg::Config::Guard g(*_cfg);
+    // The name is the boot's copy: nothing renames it (it is not in the
+    // registry), so no lock here.
     const http_method m = r->method();
-    return RequestGate::check(r->host().c_str(), _cfg->s().mdnsName.c_str(),
+    return RequestGate::check(r->host().c_str(), _bootName,
                               m == HTTP_GET || m == HTTP_HEAD, r->path().c_str(),
-                              r->header(RequestGate::HEADER).c_str(), _bootName);
+                              r->header(RequestGate::HEADER).c_str());
 }
 
 // ElegantOTA registers its own handlers: /ota/start and /ota/upload pass the
@@ -302,7 +294,7 @@ esp_err_t WebUi::dispatch(PsychicRequest* r)
             static char w[96];
             const String ip = r->client()->localIP().toString();
             snprintf(w, sizeof(w), "%s http://%s/ http://%s.local/", RequestGate::whyText(why),
-                     ip.c_str(), _cfg->s().mdnsName.length() ? _cfg->s().mdnsName.c_str() : "megaopen");
+                     ip.c_str(), _bootName[0] ? _bootName : "megaopen");
             return r->reply(403, "text/plain", w);
         }
         return r->reply(403, "text/plain", RequestGate::whyText(why));
@@ -697,8 +689,9 @@ void WebUi::routes()
         d["used"]    = LogFile::usedBytes();
         d["total"]   = LogFile::totalBytes();
         JsonArray files = d["files"].to<JsonArray>();
+        char p[LogFile::PATH_CAP];
         for (int n = 0; n < LogFile::FILES; ++n) {
-            if (!LogFile::path(n)) continue;
+            if (!LogFile::path(n, p, sizeof(p))) continue;
             JsonObject f = files.add<JsonObject>();
             f["n"]    = n;   // 0 = this boot, 1 = the boot before, ...
             f["size"] = LogFile::size(n);
@@ -714,8 +707,8 @@ void WebUi::routes()
         // This boot's file: an explicit dump, so the RAM buffer goes to flash
         // first (the LogBus task writes it; this waits up to 500 ms).
         if (n == 0) LogBus::flushAndWait(500);
-        const char* p = LogFile::path(n);
-        if (!p) return r->reply(404, "text/plain", "no_log");
+        char p[LogFile::PATH_CAP];
+        if (!LogFile::path(n, p, sizeof(p))) return r->reply(404, "text/plain", "no_log");
         PsychicFileResponse resp(r, LittleFS, p, "text/plain", false);
         return resp.send();
     });
@@ -2307,11 +2300,6 @@ void WebUi::fillDisplay(JsonObject d)
 #else
 void WebUi::fillDisplay(JsonObject d) { d["attached"] = false; }
 #endif
-
-void WebUi::addRoute(const char* path, http_method method, PsychicHttpRequestCallback fn)
-{
-    route(path, method, fn);
-}
 
 // GET /api/status's object; also the status snapshot LogPush sends to GitHub.
 void WebUi::statusJson(JsonObject d)

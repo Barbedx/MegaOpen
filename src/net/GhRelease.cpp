@@ -1,4 +1,5 @@
 #include "GhRelease.h"
+#include "../utils/Hex.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -18,14 +19,6 @@ namespace GhRelease
             }
             out = (uint16_t)v;
             return true;
-        }
-
-        int hex(char c)
-        {
-            if (c >= '0' && c <= '9') return c - '0';
-            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-            return -1;
         }
 
         bool copy(char* dst, size_t n, const char* src)
@@ -193,7 +186,7 @@ namespace GhRelease
                 uint8_t h[32];
                 bool ok = true;
                 for (int i = 0; i < 32 && ok; ++i) {
-                    const int hi = hex(p[2 * i]), lo = hex(p[2 * i + 1]);
+                    const int hi = Hex::nibble(p[2 * i]), lo = Hex::nibble(p[2 * i + 1]);
                     ok = hi >= 0 && lo >= 0;
                     h[i] = (uint8_t)((hi << 4) | lo);
                 }

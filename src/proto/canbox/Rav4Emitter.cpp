@@ -190,7 +190,6 @@ namespace Canbox
     uint32_t Rav4Emitter::messageInterval(uint8_t i) { return i < M_COUNT ? kInterval[i] : 0; }
 
     void Rav4Emitter::setMsgEnabled(uint8_t i, bool on) { if (i < M_COUNT) _msgOn[i] = on; }
-    bool Rav4Emitter::msgEnabled(uint8_t i) const { return i < M_COUNT && _msgOn[i]; }
 
     // By side, not role: b7 right-front, b6 left-front, b5 right-rear, b4
     // left-rear, b3 tailgate. "driver = 0x80" only holds in a RHD car

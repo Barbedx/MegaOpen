@@ -16,8 +16,8 @@
 // in a RAM buffer, and the file is written only:
 //   * when the buffer holds FLUSH_BYTES (16 kB),
 //   * on an event: a line at warning level or above ("E [", "W [" from Log::),
-//   * on an explicit dump: requestFlush() (the web reading /log/0.log), or
-//     flushNow() before a reboot (main.cpp's shutdown handler).
+//   * on an explicit dump: flushNow() before a reboot (main.cpp's shutdown
+//     handler), or through LogBus::flushAndWait (the web reading /log/0.log).
 // There is deliberately NO timer: a periodic flush is a periodic stall.
 // The cost: a panic or a power cut loses what is still in the buffer (up to
 // 16 kB). A software reboot does not (the shutdown handler).
@@ -50,14 +50,14 @@ namespace LogFile
     // A LogBus::Sink.
     void sink(const char* line, int len, uint32_t ms);
 
-    // Any task: the LogBus task writes the buffer out at its next line.
-    void requestFlush();
     // Buffer to file and sync, now. The LogBus task only (LogBus::onFlush,
     // which LogBus::flushAndWait runs there before a reboot).
     void flushNow();
 
-    // For the web API: path of file n, or nullptr if absent; its size.
-    const char* path(int n);
+    // For the web API: the path of file n into out (PATH_CAP bytes), false
+    // when absent; its size.
+    static constexpr size_t   PATH_CAP = 16;
+    bool        path(int n, char* out, size_t cap);
     size_t      size(int n);
     size_t      buffered();      // bytes still in RAM, not yet in /log/0.log
     // How many times the files have shifted up since boot: file n read at

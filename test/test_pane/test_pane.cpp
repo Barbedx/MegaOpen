@@ -424,9 +424,14 @@ static void test_the_custom_scene_draws_the_stored_picture_and_holds_still()
     for (int f = 0; f < 10; ++f) p.step();
     composeGuarded(p, b);
     TEST_ASSERT_EQUAL_INT_MESSAGE(0, memcmp(pic, b, MediaPane::BYTES), "not the stored picture");
-    // A borrow, not a copy: the ui task re-points it after each apply, and a
-    // change in the lent buffer shows on the next compose.
+    // A copy, not a borrow: a change in the caller's buffer is not the
+    // pane's until it is set again (a copy of the pane, the web's Mirror,
+    // is then whole, with no pointer into the ui task's staging buffer).
+    const uint8_t was = pic[0];
     pic[0] ^= 0xFF;
+    composeGuarded(p, b);
+    TEST_ASSERT_EQUAL_HEX8(was, b[0]);
+    p.setCustom(pic);
     composeGuarded(p, b);
     TEST_ASSERT_EQUAL_HEX8(pic[0], b[0]);
     // Nothing lent: dark, not a null read.

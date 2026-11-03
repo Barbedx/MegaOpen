@@ -1,4 +1,5 @@
 #include "MediaPane.h"
+#include "../utils/Hex.h"
 #include "PaneImages.h"
 #include <string.h>
 #include "../utils/UiList.h"
@@ -97,12 +98,7 @@ namespace MegaOpen
 
     bool MediaPane::fromHex(const char* hex, uint8_t* out)
     {
-        auto nib = [](char c) -> int {
-            if (c >= '0' && c <= '9') return c - '0';
-            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-            return -1;
-        };
+        const auto nib = Hex::nibble;
         if (!hex) return false;
         for (uint16_t i = 0; i < BYTES * 2; ++i)
             if (nib(hex[i]) < 0) return false;       // a short string stops at its NUL

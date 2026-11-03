@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <string.h>
 #include <stddef.h>
 
 // The 48x48 graphic half of the now-playing screen, drawn on the device.
@@ -98,12 +99,15 @@ namespace MegaOpen
         // keeps only the spectrum.
         void setHasTransport(bool on) { _hasTransport = on; }
 
-        // The Custom scene's picture, BYTES in the pane's own format. Borrowed,
-        // not copied: the ui task points it at Staged<PaneBits>'s live buffer,
-        // which httpd never writes, and re-points it after every apply. A copy
-        // of the pane (the web's Mirror) carries the pointer too, and must
-        // NOT compose Custom: the buffer is the ui task's. Null draws dark.
-        void setCustom(const uint8_t* bits) { _custom = bits; }
+        // The Custom scene's picture, BYTES in the pane's own format, copied:
+        // a copy of the pane (the web's Mirror, composing previews on httpd)
+        // is then whole, with no pointer into the ui task's staging buffer
+        // that the next apply swaps under it. Null draws dark.
+        void setCustom(const uint8_t* bits)
+        {
+            if (bits) memcpy(_customBits, bits, BYTES);
+            _custom = bits ? _customBits : nullptr;
+        }
 
         // The G-meter's input, in milli-g, drawn as the force a driver feels:
         // a left turn pushes the dot right, braking up, speeding up down. Not
@@ -239,7 +243,8 @@ namespace MegaOpen
         uint32_t _frame = 0;            // Rings, and anything else counting frames
         uint32_t _tapeTurn = 0;         // Tape's reels: frames spent playing
 
-        const uint8_t* _custom = nullptr;   // Scene::Custom, borrowed (setCustom)
+        const uint8_t* _custom = nullptr;   // Scene::Custom: _customBits, or null
+        uint8_t        _customBits[BYTES] = {0};
 
         // GMeter: pixel offsets from the centre, newest first; the peak.
         static constexpr uint8_t kGTrail = 6;

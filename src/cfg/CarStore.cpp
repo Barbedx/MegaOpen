@@ -1,4 +1,5 @@
 #include "CarStore.h"
+#include "../utils/PsHeap.h"
 #include <LittleFS.h>
 #include <esp_ota_ops.h>
 #include "CarFile.h"
@@ -138,8 +139,7 @@ namespace CarStore
 
     void begin(Cfg::Config& cfg)
     {
-        void* m = heap_caps_malloc(sizeof(JsonDocument), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!m) m = heap_caps_malloc(sizeof(JsonDocument), MALLOC_CAP_8BIT);
+        void* m = PsHeap::malloc(sizeof(JsonDocument));
 #if FEATURE_LOGFS
         const bool fs = LogFile::mounted();
 #else

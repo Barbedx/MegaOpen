@@ -1,5 +1,6 @@
 #include "../Features.h"
 #include "CarTask.h"
+#include "../utils/PsHeap.h"
 #include <Preferences.h>
 #include "Rt.h"
 #include "CarDiag.h"
@@ -565,9 +566,8 @@ namespace App
 
             Vehicle::DecodeTable* newTable(bool psram)
             {
-                void* m = psram ? heap_caps_malloc(sizeof(Vehicle::DecodeTable), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
-                                : nullptr;
-                if (!m) m = heap_caps_malloc(sizeof(Vehicle::DecodeTable), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+                void* m = psram ? PsHeap::malloc(sizeof(Vehicle::DecodeTable))
+                                : heap_caps_malloc(sizeof(Vehicle::DecodeTable), MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
                 configASSERT(m);   // setup: there is no running without it
                 return new (m) Vehicle::DecodeTable();
             }

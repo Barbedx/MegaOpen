@@ -1,4 +1,5 @@
 #pragma once
+#include "PsHeap.h"
 #include <esp_heap_caps.h>
 #include <new>
 
@@ -12,8 +13,7 @@ class Scratch {
 public:
     Scratch()
     {
-        void* m = heap_caps_malloc(sizeof(T), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!m) m = heap_caps_malloc(sizeof(T), MALLOC_CAP_8BIT);
+        void* m = PsHeap::malloc(sizeof(T));
         _p = m ? new (m) T() : nullptr;
     }
     ~Scratch() { if (_p) { _p->~T(); heap_caps_free(_p); } }
@@ -34,8 +34,7 @@ class ScratchBytes {
 public:
     explicit ScratchBytes(size_t n)
     {
-        _p = heap_caps_aligned_alloc(8, n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        if (!_p) _p = heap_caps_aligned_alloc(8, n, MALLOC_CAP_8BIT);
+        _p = PsHeap::aligned(8, n);
     }
     ~ScratchBytes() { if (_p) heap_caps_free(_p); }
     ScratchBytes(const ScratchBytes&) = delete;

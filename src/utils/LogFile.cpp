@@ -1,4 +1,5 @@
 #include "LogFile.h"
+#include "PsHeap.h"
 #if FEATURE_LOGFS
 #include <LittleFS.h>
 #include <Preferences.h>
@@ -13,7 +14,6 @@ namespace LogFile
         bool     g_mounted = false;
         File     g_cur;
         size_t   g_curSize = 0;       // bytes of /log/0.log on flash
-        char     g_path[16];
         const char* g_err = "";
 
         // The RAM side: lines wait here until a flush. PSRAM when the board
@@ -21,14 +21,9 @@ namespace LogFile
         char*    g_buf = nullptr;
         size_t   g_bufCap = 0;
         size_t   g_bufLen = 0;
-        volatile bool g_flushReq = false;
         volatile uint32_t g_rotations = 0;
 
-        const char* nameOf(int n)
-        {
-            snprintf(g_path, sizeof(g_path), "/log/%d.log", n);
-            return g_path;
-        }
+        void nameOf(int n, char* out, size_t cap) { snprintf(out, cap, "/log/%d.log", n); }
 
         // Oldest deleted, n -> n+1, a fresh 0 opened.
         void rotate()
@@ -63,10 +58,7 @@ namespace LogFile
         void allocBuf()
         {
             if (g_buf) return;
-            if (psramFound())
-                g_buf = (char*)heap_caps_malloc(FLUSH_BYTES, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (!g_buf)
-                g_buf = (char*)heap_caps_malloc(FLUSH_BYTES, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+            g_buf = (char*)PsHeap::malloc(FLUSH_BYTES);
             g_bufCap = g_buf ? FLUSH_BYTES : 0;
         }
     }
@@ -133,8 +125,6 @@ namespace LogFile
         if (g_curSize >= FILE_MAX) rotate();
     }
 
-    void requestFlush() { g_flushReq = true; }
-
     void sink(const char* line, int len, uint32_t ms)
     {
         if (!g_mounted || !g_cur) return;
@@ -159,8 +149,7 @@ namespace LogFile
             }
         }
 
-        if (isWarning(line, len) || g_flushReq) {
-            g_flushReq = false;
+        if (isWarning(line, len)) {
             flushNow();
         } else if (!g_buf && g_curSize >= FILE_MAX) {
             g_cur.flush();
@@ -168,17 +157,17 @@ namespace LogFile
         }
     }
 
-    const char* path(int n)
+    bool path(int n, char* out, size_t cap)
     {
-        if (!g_mounted || n < 0 || n >= FILES) return nullptr;
-        const char* p = nameOf(n);
-        return LittleFS.exists(p) ? p : nullptr;
+        if (!g_mounted || n < 0 || n >= FILES || cap < PATH_CAP) return false;
+        nameOf(n, out, cap);
+        return LittleFS.exists(out);
     }
 
     size_t size(int n)
     {
-        const char* p = path(n);
-        if (!p) return 0;
+        char p[PATH_CAP];
+        if (!path(n, p, sizeof(p))) return 0;
         if (n == 0) return g_curSize;   // the open file's size is ours, not the FS's
         File f = LittleFS.open(p, "r");
         const size_t s = f ? f.size() : 0;

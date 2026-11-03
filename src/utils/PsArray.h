@@ -1,4 +1,5 @@
 #pragma once
+#include "PsHeap.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -97,12 +98,7 @@ public:
 private:
     static void* alloc(size_t n)
     {
-#ifdef NATIVE
-        return malloc(n);
-#else
-        void* m = heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        return m ? m : heap_caps_malloc(n, MALLOC_CAP_8BIT);
-#endif
+        return PsHeap::malloc(n);
     }
     static void release(void* p)
     {

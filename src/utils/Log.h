@@ -108,7 +108,6 @@ namespace Log {
     // of it with write(INF, ...): the LOGS macro does both for one line.
     bool statusOn(const char* tag, int8_t& slot, uint32_t nowMs);
     void setStatusInterval(uint32_t ms);
-    uint32_t statusInterval();
 
     // Formats and writes, no threshold check (the macros checked).
     void write(LogLevel lvl, const char* tag, const char* fmt, ...)

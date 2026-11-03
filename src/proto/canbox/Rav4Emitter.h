@@ -146,7 +146,6 @@ namespace Canbox
         // Per-message schedule switch, for taking a pinned message off the
         // wire. sendNow() ignores it.
         void setMsgEnabled(uint8_t i, bool on);
-        bool msgEnabled(uint8_t i) const;
 
         // Run every scheduler against the current state.
         void tick(const FieldView& s, uint32_t nowMs) override;

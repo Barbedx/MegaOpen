@@ -162,7 +162,6 @@ namespace Cfg
         // Enum: row index for an id, -1 if unknown. And back.
         int         enumIndex(const SEntry& e, const char* id);
         const char* enumId(const SEntry& e, int32_t v);
-        const char* enumName(const SEntry& e, int32_t v);
 
         // The value as the panel shows it, ASCII, NUL-terminated, cut to cap:
         // the stored one ("--" when unavailable), or any value of the entry.
