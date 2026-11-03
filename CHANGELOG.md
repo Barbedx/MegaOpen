@@ -5,6 +5,24 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-03
+
+The stabilisation release: the review of 2026-11-03 (the architecture behind the heap corruptions) implemented, plus the stock radio's code.
+
+### Added
+- **The stock radio's code, typed for you.** With «Реєструвати щиток» off (the OEM radio drives the panel), the radio asks for its four-digit code on the panel after the battery was off. Плата → Система → «Код магнітоли» (`radioCode`, NVS; empty = off): when the prompt appears (`"  CODE  "` on 0x151, then the entry field with the 0xB0 cursor, as the car's captures show), the board types it on the bus as the stalk would, one key frame every 160 ms — the wheel up per digit, the bottom button to the next place, held to confirm. One attempt per prompt and never two within a minute (the radio waits longer after every wrong code); the screen's verdict goes to the log, tag `code` (typed, accepted, rejected, skipped). The logic is pure (`src/display/RadioCode.*`), host-tested against the captured frames.
+- **The heap diagnostic build.** `PLATFORMIO_BUILD_FLAGS=-DHEAP_SENTINEL=1` (`src/utils/HeapSentinel.h`) walks the heap at every network step, around every web route and every 500 ms, and on a hit logs the address, the step, the task and the bytes around it before the coredump. It replaces HEAP_HUNT (2026-10-19). Not in the release image.
+
+### Changed
+- **One network worker.** The log push and the GitHub update each created a task per job (10 kB and 8 kB of internal stack, every minute for the push) and deleted it after, serialised by a mutex and a 100 ms poll (TlsJob). The bench's heap corruption of 2026-11-01 sat in exactly the hole those stacks churned. Both jobs now run on `netjob`, one task for the whole boot with a static stack and a queue; a check or install pressed during a push waits its turn as before (`queued`). The error code `tls_busy` is gone; `push_busy` says the worker's queue was full.
+- **Settings hold no Strings.** Every text in Settings is a fixed `Cfg::Text<N>`: a copy is a copy, and a reader on another task can never find a freed buffer behind a field (the car task's `resolveCarSigs` read one while httpd's `save()` reassigned it; WifiManager read `mdnsName` on net_svc). The settings lock is for the writers now.
+- **Web replies stream.** 28 routes built the whole reply as a String on httpd (2 kB realloc steps in internal heap, under the settings lock) and 59 documents took their pools there: a document now goes straight into the chunked reply (`replyDoc`), every document on httpd allocates in PSRAM, and the head-unit ring (`/api/canbox/last`) streams too.
+- **The formula parser caps nesting.** Brackets, calls and chains of nots recursed with no limit (127 brackets in a rule were 12–40 kB of recursion on the car task's 4 kB stack): past `Program::MAX_NEST` (about five levels) a formula is refused as `expr_deep`. The car task never takes the blocking settings lock (tryLock, retried next pass), its stack is 6 kB, and `tools/check_rules.py` checks its functions in main.cpp. The stacks that lived outside `TaskPlan.h` (logbus, capwr, bt_begin) are in it.
+- **One of each.** `utils/PsHeap.h` is the one "PSRAM, else internal" allocator (ten copies before); `utils/Hex.h` the one hex digit (five); `utils/JsonEscape.h` the one JSON string escape (three, two of which let a control byte through into `/api/catalog` and the head-unit ring). `LogFile::path` fills the caller's buffer instead of handing one static buffer to every task; the pane copies its Custom picture, so the web's copy of it is whole; the request gate uses the boot's mDNS name without a lock (nothing renames it: it is not in the registry); the log push can no longer spin on a flash-log stretch with no line end.
+
+### Removed
+- Functions with no callers: `WebUi::addRoute`, `Registry::enumName`, `Keys::laneName`, `Log::statusInterval`, `Rav4Emitter::msgEnabled`, `LogFile::requestFlush`; `src/net/TlsJob.*`; HEAP_HUNT.
+
 ## [1.7.3] - 2026-11-02
 
 ### Removed

@@ -217,6 +217,21 @@ panel (`py` + OpenCV, device 0), not inferred from an ACK.
   whether `tud_vendor_n_available` stays 0 (the OUT endpoint not re-armed).
 
 ### Build / code health
+
+- **Heap corruption on the bench, boot 190 (1.7.3-rc1, 2026-11-01): cause
+  unknown.** `multi_heap_free: head != NULL` on the 32-byte http_parser
+  block right after the esp_http_client struct, during the log push's
+  cleanup, with a GitHub check queued and rc_smoke running; the heap is not
+  in the coredump, so the overwriting bytes are unknown. 1.8.0 removed the
+  structure around it (the per-job task stacks churning that hole, the
+  String replies on httpd, the Settings Strings) and bounded the parser's
+  recursion; the trap is the HEAP_SENTINEL build
+  (`PLATFORMIO_BUILD_FLAGS=-DHEAP_SENTINEL=1`, `src/utils/HeapSentinel.h`):
+  on a hit it logs the address, the step, the task and the bytes around it
+  before the coredump, which the next boot pushes to megaopen-logs. Loop on
+  the bench: reboot, let the past log push, run `tools/rc_smoke.sh` across
+  it, watch `/api/logs` for `[heap] CORRUPT`. The October httpd corruption
+  (HEAP_HUNT) was the same class. Watch the car's `[crash]` lines on 1.8.0.
 - **Internal heap, two levers not taken yet** (audit 2026-10-21; the log ring
   and request-only statics already moved to PSRAM). Both need a board soak,
   and the first a phone:

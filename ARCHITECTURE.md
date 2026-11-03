@@ -35,6 +35,7 @@ have the highest priority on core 1, so a key press never waits for a repaint.
 | ui | 2 | 1 | what goes on the glass and when; renders through `PanelOps` |
 | httpd, ble | 2 | 0 | web server, NimBLE |
 | net_svc, logbus | 1 | 0 | WiFi, housekeeping, log sinks |
+| netjob | 0 | 0 | the GitHub jobs, one at a time: the log push, the update (`net/NetJob.h`) |
 
 The rules behind this layout (the ownership and blocking rules are checked by
 `tools/check_rules.py`):
