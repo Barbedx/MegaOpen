@@ -17,20 +17,22 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
-- **2026-11-04 — the bench fell off WiFi; its netjob stuck at 67 min.**
-  mo-8428 (boot 204, 1.9.0 de349c5) pushed its last part at 2026-11-03 23:34
-  UTC (up 67 min). Read over the USB link (`tools/usb_link.py`) on 2026-11-04
-  after a power cycle, the boot's flash log (`/api/logs/file?n=1`) shows it
-  ran 17 h 36 min with every critical task alive (age ~0 ms). It did not hang.
-  It could not join "Yozhik" (`STA disconnected reason=2` every second, then
-  `did not join; AP`, a retry each minute) and was on its own AP,
-  192.168.4.1. Boot 205 does the same, so the cause is the network: the PC
-  does not see "Yozhik" on 2.4 GHz either. The firmware part: `[task]
-  netjob w=0 busy=7143891us age=58801295ms`, so the push/GitHub job has not
-  come round since about 67 min. The push stopped there, not at the WiFi
-  loss. `[hb] min=9940`. Earlier "ping OK, USB dead" was wrong. The ping
-  replies were the PC's own "host unreachable", and only COM7/CDC was tried,
-  never the USB link. Check the bench over `tools/usb_link.py` first.
+- **2026-11-04 — the bench fell off WiFi and cannot rejoin.** This was not a
+  hang. mo-8428 (boot 204, 1.9.0 de349c5) pushed its last part at 2026-11-03
+  23:34 UTC (up 67 min, `rssi=-85`). It then ran 17 h 36 min with every task
+  alive (flash log read over `tools/usb_link.py` after a power cycle). It was
+  on its own AP. "Yozhik" answered every join with `reason=2` (AUTH_EXPIRE:
+  the AP did not answer the open-system auth frame, before any key, so this
+  is not a bad password, which would be 15). Then `did not join; AP`, retried
+  every minute. Boots 205 and 206 behave the same. 206 ran with BLE off
+  (heap 110 kB), so it is not BT coexistence and not memory. The board sees
+  "Yozhik" at -75 dBm right next to the router, and the PC does not see it on
+  2.4 GHz at all: the router's 2.4 GHz side is the suspect. `netjob age=58801
+  s` is not a stuck job. The push only posts while STA is connected
+  (`NetHooks.cpp` LogPush::tick), so with WiFi gone nothing ran. The minutes
+  around the loss are lost: the flash log keeps 8 x 256 kB, and boot 204's
+  first 11 h rotated out. Lesson: the bench is read over USB and over WiFi
+  before anything is said about it.
 - **2026-11-04 — the heartbeat hook applies settings.** net_svc's 10 s beat
   (`hkBeat`, now `src/app/NetHooks.cpp`) also pushes the reminder speeds and
   gear ratios into the car task every pass and saves a newly detected CAN A
