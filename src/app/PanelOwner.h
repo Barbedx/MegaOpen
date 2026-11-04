@@ -51,7 +51,6 @@ namespace App
             affa::AffaDisplayBase*  display  = nullptr;
             affa::CarminatDisplay*  carminat = nullptr;   // same object, typed; or null
             affa::TwaiLink*         link     = nullptr;   // the panel's bus
-            MegaOpen::PanelOps*     ops      = nullptr;   // its counts, for PanelStatus
             // How the board sits on the bus (display/PanelRole.h), from the
             // settings, fixed for this boot. begin() applies it to the
             // library: the extension role is its passive mode.
@@ -74,6 +73,10 @@ namespace App
         void logWindow();
 
         // ---- any task --------------------------------------------------------
+        // Every render, from any task (src/display/PanelOps.h): the library
+        // object itself is this module's, and the render state is the ui
+        // task's (src/app/UiTask.h).
+        MegaOpen::PanelOps& ops();
         // A panel object exists (fixed at boot). Never touches the library.
         bool present();
         // The role this boot runs in (Setup::role). Emulator before begin().

@@ -187,7 +187,7 @@ for fn in KEYS_TASK_FUNCS + HU_TASK_FUNCS:
 # (Cfg::Config: one lock for the writers). A function on the car task takes a
 # copy (trySnapshot) or tryLock(), never the blocking lock: a route holds it
 # for as long as a settings-file import takes.
-CAR_TASK_FUNCS = ['carTap', 'performAction', 'onSignalsRenamed']
+CAR_TASK_FUNCS = ['carTap', 'perform', 'onSignalsRenamed']   # perform: RuleActions
 for fn in CAR_TASK_FUNCS:
     rel, src, body, at = glue_function(fn)
     if body is None:

@@ -36,6 +36,7 @@
 #include "app/HuTask.h"
 #include "app/HuLink.h"
 #include "app/Media.h"
+#include "app/RuleActions.h"
 #include "app/OneShot.h"
 #include "app/Housekeeping.h"
 #include "app/CarTask.h"
@@ -191,10 +192,6 @@ static MegaOpen::ArduinoClock g_affaClock;
 static Keys::AffaKeySource   g_affaKeys;
 static Keys::AffaMap         g_affaMap;      // stalk key -> action + head-unit code; keys task
 static Staged<Keys::AffaMap> g_affaCfg;      // ...as the web edits it
-// Every render, from any task (src/display/PanelOps.h). The library object
-// itself is App::Panel's (src/app/PanelOwner.h), and the render state is the
-// ui task's (src/app/UiTask.h).
-static MegaOpen::PanelOps g_panelOps;
 
 // The last panel key and where it went, for the wiring check on the page
 // (/api/affamap?live=1). The keys task publishes; httpd copies.
@@ -288,7 +285,7 @@ static void onAffaKeyReport(const Keys::AffaKeySource::Report& r, void*)
     if (!App::PanelMenu::popupAllowed(r.action)) return;
     if (!App::Ui::keyPopupWanted(trackKey)) return;
     // Armed only on a successful post: never hide a popup we did not show.
-    if (g_panelOps.postPopup(line)) App::Ui::keyPopupShown();
+    if (App::Panel::ops().postPopup(line)) App::Ui::keyPopupShown();
 }
 
 // No fullscreen bookkeeping: on this panel every full-screen-class render (menu,
@@ -648,86 +645,7 @@ static bool macroFilter(const Keys::Event& e, void*)
     return g_macros.observe(e);
 }
 
-#if FEATURE_DISPLAY_CAN
-// `arg` carries up to three panel rows separated by '|'.
-static void macroRows(const char* arg, char* a, char* b, char* c, size_t cap)
-{
-    a[0] = b[0] = c[0] = '\0';
-    char* out[3] = { a, b, c };
-    uint8_t row = 0, n = 0;
-    for (const char* p = arg; *p && row < 3; ++p) {
-        if (*p == '|') { out[row][n] = '\0'; ++row; n = 0; continue; }
-        if (n < cap - 1) out[row][n++] = *p;
-    }
-    if (row < 3) out[row][n] = '\0';
-}
-#endif
 
-// One of a rule's actions, performed from the car task: each goes where
-// Keys::effectRoute() says, as a post to the task that owns it (the keys
-// task's bus, the hu task's lanes, the ui task's requests). The popup is not
-// here: the car task queues it itself (one pending, when the glass is free).
-static void performAction(const Vehicle::RuleAction& a)
-{
-    switch (Keys::effectRoute(a.effect)) {
-        case Keys::EffectRoute::Keys:
-            if (a.effect == Keys::Effect::Action) {
-                // Through the routing matrix, like a real button.
-                Keys::Event e;
-                e.action   = a.action;
-                e.state    = Keys::State::Press;
-                e.tMs      = millis();
-                e.srcId    = 3;                 // 3 = a rule; 0 matrix, 1 encoder, 2 web
-                e.codeHint = a.code;            // 0 = let the sink use its own profile
-                if (Keys::isEncoder(a.action)) App::KeyBus::postEvent(e);   // a detent has no release
-                else                           App::KeyBus::postTap(e);
-            } else {
-                // KeyCode: one literal code down the UART sink, its release
-                // MIN_GAP_MS later (IKeySink.h).
-                App::KeyBus::postLiteral(a.code, Canbox::KEY_PRESS, true);
-            }
-            break;
-        case Keys::EffectRoute::UartOut: {
-            uint8_t frame[Canbox::HU_FRAME_MAX];
-            const uint8_t len = Canbox::activeProtocol().frame(a.code, a.data, a.dataLen, frame);
-            // The hu task's vehicle lane: an arbitrary frame is not a key, and
-            // must not go in front of the next ack.
-            if (!len)
-                LOGI("rule", "payload too long");
-            else if (!App::Hu::post(App::Hu::Kind::Raw, frame, len))
-                LOGI("rule", "uart queue full");
-            break;
-        }
-        case Keys::EffectRoute::Hu:
-            // Message: the hu task owns the emitter; it reports one with no data.
-            App::Hu::requestSendNow(a.code);
-            break;
-#if FEATURE_DISPLAY_CAN
-        case Keys::EffectRoute::Panel:
-            if (a.effect == Keys::Effect::Text) {
-                // Static: the car task's stack is small, and it is the one caller.
-                static char l1[MegaOpen::PanelOps::STR_MAX];
-                static char l2[MegaOpen::PanelOps::STR_MAX];
-                static char l3[MegaOpen::PanelOps::STR_MAX];
-                macroRows(a.arg, l1, l2, l3, sizeof(l1));
-                if (l2[0] || l3[0]) g_panelOps.postFullscreen(l1, l2, l3);
-                else                g_panelOps.postText(l1);
-            }
-            break;
-        case Keys::EffectRoute::Pane:
-            // The pane is the ui task's render state: ask for it.
-            App::Ui::requestScene((uint8_t)MegaOpen::MediaPane::sceneFromName(a.arg));
-            break;
-#else
-        case Keys::EffectRoute::Panel:
-        case Keys::EffectRoute::Pane:
-            LOGI("rule", "this build has no panel - see FEATURE_DISPLAY_CAN");
-            break;
-#endif
-        default:
-            break;
-    }
-}
 
 // A gesture MacroEngine detected on the keys task: the car task checks the
 // rule's "only if" and pause and performs its actions. Keys::Macro::rule is
@@ -1309,7 +1227,7 @@ void setup()
     // when there is a panel.
     {
         App::Ui::Deps d;
-        d.ops    = &g_panelOps;
+        d.ops    = &App::Panel::ops();
         d.router = &App::Media::router();
         d.hu     = &App::Media::hu();
         d.engine = &g_engine;
@@ -1325,7 +1243,7 @@ void setup()
     // net_svc (hkWeb), which stores them like any other setting.
     {
         App::PanelMenu::Deps m;
-        m.ops = &g_panelOps;
+        m.ops = &App::Panel::ops();
         m.cfg = &g_cfg;
         m.car = &g_state;
 #if FEATURE_KNOBS
@@ -1524,7 +1442,7 @@ void setup()
         affa::CarminatDisplay* carminat = nullptr;
         affa::AffaDisplayBase* display =
             MegaOpen::createDisplay(dt.c_str(), g_twai, g_affaClock, &carminat);
-        g_panelOps.attach(display, carminat);
+        App::Panel::ops().attach(display, carminat);
         // Callbacks before begin(), or the first poll()'s sync transition is
         // missed: App::Panel counts the verdicts, and every ticket's verdict
         // goes on to the ui task's UiQ.
@@ -1532,7 +1450,6 @@ void setup()
         ps.display  = display;
         ps.carminat = carminat;
         ps.link     = &g_twai;
-        ps.ops      = &g_panelOps;
         ps.role     = role;
         ps.hooks.onCompletion = App::Ui::postCompletion;
         App::Panel::begin(ps);
@@ -1766,7 +1683,7 @@ void setup()
         Vehicle::RuleSet rules;
         CarStore::loadRules(rules);
         cs.rules = &rules;
-        cs.perform = performAction;
+        cs.perform = App::RuleActions::perform;
 #if FEATURE_DISPLAY_CAN
         // As a phone notification is drawn, but only while nothing holds the
         // glass: an alert never covers a menu (CarTask waits, newest wins).
@@ -1814,7 +1731,7 @@ void setup()
         g_web.attachUi(v);
     }
     // The panel through its snapshot only: httpd never calls the library.
-    g_web.attachDisplay(&App::Panel::statusSnapshot(), &g_canRx, &g_panelOps);
+    g_web.attachDisplay(&App::Panel::statusSnapshot(), &g_canRx, &App::Panel::ops());
     g_web.attachAffaKeys(&g_affaMap, &g_affaKeys, &g_keyLast);
 #if FEATURE_BLE
     g_web.attachPhone([]() { return Bluetooth::IsConnected(); }, &App::Media::router());
@@ -1844,7 +1761,7 @@ void setup()
 #if FEATURE_DISPLAY_CAN
     g_web.attachPopupArm(App::Ui::armPopup);
     // Clear is only a count in PanelOps; the ui task acts on it.
-    g_web.attachNotify(App::Ui::queueNotification, []() { g_panelOps.postClear(); });
+    g_web.attachNotify(App::Ui::queueNotification, []() { App::Panel::ops().postClear(); });
 #endif
     g_web.begin(g_cfg, g_engine, g_map, g_keySink);
     memMark("web");
