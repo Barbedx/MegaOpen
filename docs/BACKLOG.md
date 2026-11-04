@@ -17,22 +17,20 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
-- **2026-11-04 — the bench went deaf on 1.9.0.** mo-8428 (boot 204, 1.9.0
-  de349c5) pushed its last part at 2026-11-03 23:34 UTC (up 67 min), then
-  nothing for 15 h; 2026-11-04 it answers ping at 192.168.100.110 but a TCP
-  connect to :80 times out. Its last lines: `[hb] heap=24500 min=9940
-  big=7668`, `[win] dma=16716`, `[task] netjob busy=5447111us` (the push),
-  RSSI -85, the panel unregistered (`nobody ACKs` probes every 30 s), the USB
-  link `reqs=68 fails=68`. Cause unknown: no reboot (no new boot folder), so
-  no coredump. megaopen-logs `mo-8428/boot-00204/0052.log`, `status-0066.json`.
-  USB is dead too: Windows still lists the composite device (COM7, "MegaOpen
-  link") as OK, but opening COM7 fails "A device attached to the system is
-  not functioning" (no answer to SET_LINE_CODING), so the TinyUSB task is not
-  running either; the 1200-baud touch fails the same way. A hang, not a WiFi
-  drop: lwIP answers ICMP while httpd, the push and USB are gone, and nothing
-  rebooted it (the task watchdog watches IDLE only; Step 6b never wired the
-  critical tasks to it). On the T-2CAN's TinyUSB port there is no reset from
-  the host: only a power cycle.
+- **2026-11-04 — the bench fell off WiFi; its netjob stuck at 67 min.**
+  mo-8428 (boot 204, 1.9.0 de349c5) pushed its last part at 2026-11-03 23:34
+  UTC (up 67 min). Read over the USB link (`tools/usb_link.py`) on 2026-11-04
+  after a power cycle, the boot's flash log (`/api/logs/file?n=1`) shows it
+  ran 17 h 36 min with every critical task alive (age ~0 ms). It did not hang.
+  It could not join "Yozhik" (`STA disconnected reason=2` every second, then
+  `did not join; AP`, a retry each minute) and was on its own AP,
+  192.168.4.1. Boot 205 does the same, so the cause is the network: the PC
+  does not see "Yozhik" on 2.4 GHz either. The firmware part: `[task]
+  netjob w=0 busy=7143891us age=58801295ms`, so the push/GitHub job has not
+  come round since about 67 min. The push stopped there, not at the WiFi
+  loss. `[hb] min=9940`. Earlier "ping OK, USB dead" was wrong. The ping
+  replies were the PC's own "host unreachable", and only COM7/CDC was tried,
+  never the USB link. Check the bench over `tools/usb_link.py` first.
 - **2026-11-04 — the heartbeat hook applies settings.** net_svc's 10 s beat
   (`hkBeat`, now `src/app/NetHooks.cpp`) also pushes the reminder speeds and
   gear ratios into the car task every pass and saves a newly detected CAN A
