@@ -88,6 +88,7 @@
 #include "media/AmsMediaSource.h"
 #include "sinks/BleKeyProxy.h"
 #include "sinks/BleKeySinks.h"
+#include "ble/BleService.h"
 #if FEATURE_ANCS
 #include "apple_notification_service.h"
 #endif
@@ -145,11 +146,18 @@ static WifiManager           g_wifi;
 // Task handles for the [stk] stack high-water line, which runs on net_svc
 // and so must name the loop's own handle rather than ask for "this task".
 static TaskHandle_t g_loopTask = nullptr;
-static TaskHandle_t g_bleTask = nullptr;
+static TaskHandle_t bleTask()
+{
+#if FEATURE_BLE
+    return BleService::task();
+#else
+    return nullptr;
+#endif
+}
 
 // Task registry ids (src/app/TaskRegistry.h): each task beats its own, and the
 // [task] heartbeat line and the OTA verdict read them all. -1 = not running.
-static int g_loopTaskId = -1, g_bleTaskId = -1;
+static int g_loopTaskId = -1;
 static int g_logbusTaskId = -1;
 
 
@@ -165,20 +173,6 @@ static Vehicle::CanSniffer g_sniffer;
 #endif
 
 
-#if FEATURE_BLE
-static AmsMediaSource     g_ams;
-// ble_svc performs what the keys task's BLE proxies post (sinks/BleKeyProxy.h).
-static Sinks::BleKeyWorker g_bleKeys;
-
-// ---------------------------------------------------------------------------
-// BLE service, on its own task
-// ---------------------------------------------------------------------------
-// ServiceAms() and ANCS Process() may block on GATT, and AffaDisplay's deadlines
-// (ACK timeout, 5 s PEER_ALIVE watchdog) are wall clock; from loop() this stalled
-// sync at 0x08 with 401/644 renders Timeout. A blocked task yields; a loop cannot.
-// It also performs the keys' AMS writes and HID presses, which therefore share
-// a task with ServiceAms and can no longer race it over the one client.
-#endif  // FEATURE_BLE — the BLE globals and the note on their task
 
 
 // ---------------------------------------------------------------------------
@@ -197,63 +191,7 @@ static void hkWeb(uint32_t now)
 #endif
 }
 
-#if FEATURE_BLE
-static void bleServiceTask(void*)
-{
-    bool amsPending = false;
-    for (;;) {
-        // Woken by a key for the phone or the head unit, or after 20 ms (the
-        // old fixed sleep). While AMS steps are owed it does not sleep beyond
-        // a tick: each write waits for its response, and that paces it. While
-        // a HID release is owed, it wakes when that is due.
-        uint32_t waitMs = amsPending ? 1 : 20;
-        uint32_t holdLeft = 0;
-        if (g_bleKeys.hidHoldLeft(millis(), holdLeft) && holdLeft < waitMs)
-            waitMs = holdLeft ? holdLeft : 1;
-        g_bleKeys.collect(waitMs);
-        const uint32_t t0 = micros();
-        // HID presses went out in collect(). Asked before the release below,
-        // so a hold that ends in between still gets its release first.
-        const bool hidOwed = g_bleKeys.hidHoldLeft(millis(), holdLeft);
-        // The HID release, ahead of any AMS write: Service() does it again
-        // first thing; that is a no-op.
-        if (BleHub::hidActive()) Hid::service();
-        // At most one AMS write, and none while a HID release is still owed:
-        // the write holds this task for 30-130 ms, and the release would wait
-        // behind it.
-        amsPending = hidOwed ? g_bleKeys.pending() : g_bleKeys.step();
-        // AMS's long read of a cut title holds this task for two GATT round
-        // trips: not while a HID release is owed or key writes wait.
-        Bluetooth::SetKeysBusy(g_bleKeys.hidHoldLeft(millis(), holdLeft) || g_bleKeys.pending());
-        BleHub::Service();
-        // busyMax here is how long GATT setup, ANCS and one AMS write can hold
-        // this task.
-        App::Tasks::beat(g_bleTaskId, micros() - t0);
-    }
-}
-#endif
 
-#if FEATURE_ANCS
-// Runs on the NimBLE host task (GATT subscription callback): no display calls,
-// nothing that blocks. Rows go to the ui task (App::Ui) under its spinlock.
-static uint32_t g_ancsCount = 0;
-static void onAncsNotification(const AppleNotificationService::NotificationInfo& n)
-{
-    ++g_ancsCount;
-
-    // Always logged, in raw UTF-8.
-    LOGI("ancs", "%s | %s: %s",
-                AppleNotificationService::CategoryName(n.categoryId),
-                n.title.c_str(), n.message.c_str());
-
-#if FEATURE_DISPLAY_CAN
-    if (!g_cfg.s().ancsPopup) return;
-    App::Ui::queueNotification(n.title.empty() ? AppleNotificationService::CategoryName(n.categoryId)
-                                               : n.title.c_str(),
-                               n.message.c_str());
-#endif
-}
-#endif  // FEATURE_ANCS
 
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
@@ -550,7 +488,7 @@ static void hkBeat(uint32_t now)
     LOGS("stk", "loop=%u net=%u ble=%u knobs=%u httpd=%u",
          g_loopTask ? (unsigned)uxTaskGetStackHighWaterMark(g_loopTask) : 0u,
          net ? (unsigned)uxTaskGetStackHighWaterMark(net) : 0u,
-         g_bleTask ? (unsigned)uxTaskGetStackHighWaterMark(g_bleTask) : 0u,
+         bleTask() ? (unsigned)uxTaskGetStackHighWaterMark(bleTask()) : 0u,
 #if FEATURE_KNOBS
          (unsigned)g_knobs.stackFree(),
 #else
@@ -593,11 +531,11 @@ static void hkBeat(uint32_t now)
     // pending count; nolink = owed with no phone connected; vol = AMS
     // commands a volume press sends (measured, sinks/AmsVolumeStep.h).
     LOGS("ble", "keys q=%u ams=%u fail=%u hid=%u stale=%u coal=%u nolink=%u vol=%u",
-         (unsigned)Sinks::BleKeyQueue::dropped(), (unsigned)g_bleKeys.amsWrites(),
-         (unsigned)g_bleKeys.amsFailed(),
-         (unsigned)g_bleKeys.hidPresses(), (unsigned)g_bleKeys.stale(),
-         (unsigned)g_bleKeys.coalesced(), (unsigned)g_bleKeys.noLink(),
-         (unsigned)g_bleKeys.volSteps());
+         (unsigned)Sinks::BleKeyQueue::dropped(), (unsigned)BleService::keys().amsWrites(),
+         (unsigned)BleService::keys().amsFailed(),
+         (unsigned)BleService::keys().hidPresses(), (unsigned)BleService::keys().stale(),
+         (unsigned)BleService::keys().coalesced(), (unsigned)BleService::keys().noLink(),
+         (unsigned)BleService::keys().volSteps());
 #endif
 #if FEATURE_DISPLAY_CAN || FEATURE_BLE
     // lockMiss = head-unit frames that found a reader holding the media
@@ -927,86 +865,7 @@ void setup()
 #endif
 
 #if FEATURE_BLE
-    // Before any key can be posted, BLE on or not: a proxy with no ble_svc
-    // behind it drops and counts.
-    if (!Sinks::BleKeyQueue::begin())
-        LOGI("ble", "KEY QUEUE FAILED TO ALLOCATE - phone and BLE keyboard keys are dead");
-    {
-        const auto& bm = g_cfg.s().bleMode;
-        // Off = BleHub not started (saves ~40 KB of host state).
-        const bool bleOn = (bm == "ams" || bm == "keyboard" || bm == "both");
-        // For /api/health. Not BleHub::amsActive() alone: its gMode defaults to
-        // Ams even when BLE never started.
-        const bool amsLive = bleOn && BleHub::amsActive(bm == "keyboard" ? BleHub::Mode::Keyboard
-                                                  : bm == "both"   ? BleHub::Mode::Both
-                                                                   : BleHub::Mode::Ams);
-        const bool hidLive = bleOn && BleHub::hidActive(bm == "keyboard" ? BleHub::Mode::Keyboard
-                                                  : bm == "both"   ? BleHub::Mode::Both
-                                                                   : BleHub::Mode::Ams);
-        App::KeyPath::setBleSinks(amsLive, hidLive);
-        BleHub::Mode mode = BleHub::Mode::Ams;
-        if      (bm == "keyboard") mode = BleHub::Mode::Keyboard;
-        else if (bm == "both")     mode = BleHub::Mode::Both;
-
-        if (bleOn) {
-            if (BleHub::amsActive(mode)) {
-                g_ams.begin();                     // AMS callback -> MediaInfo
-                g_ams.setChangeCallback(App::Media::onChange, nullptr);
-                // Pass both: a null here would unregister the head-unit source.
-
-                App::Media::router().setSources(&g_ams, &App::Media::hu());
-                App::KeyPath::engine().addSink(&App::KeyPath::amsKeys());
-            }
-            if (BleHub::hidActive(mode)) App::KeyPath::engine().addSink(&App::KeyPath::hidKeys());
-
-#if FEATURE_ANCS
-            // ANCS rides the AMS connection.
-            if (BleHub::amsActive(mode))
-                AppleNotificationService::RegisterForNotifications(onAncsNotification);
-#endif
-
-            // Key classes per destination come from config, editable at runtime
-            // (staged in App::KeyPath::routingCfg(), applied by the keys task).
-            App::KeyPath::amsKeys().setClasses(g_cfg.s().routeAms);
-            App::KeyPath::hidKeys().setClasses(g_cfg.s().routeHid);
-
-            // Begin() builds the GATT tree and needs more stack than setup() has.
-            static BleHub::Mode s_mode = mode;
-            xTaskCreate([](void*) {
-                            // Short name "MEGA" in the advertising packet, full
-                            // name in the scan response: "MegaOpen" filled the
-                            // 31-byte packet exactly and iPhones never paired
-                            // (MeganeCAN's "MCD1" leaves 4 bytes spare).
-                            BleHub::Begin(s_mode, "MEGA", "MegaOpen");
-                            memMark("ble.begin");   // on this task, so it interleaves
-                            // Only after the GATT tree exists. Not critical:
-                            // GATT discovery blocks for seconds, and a BLE
-                            // fault must never cost the keys an OTA rollback.
-                            App::TaskSpec spec;
-                            spec.name  = "ble_svc";
-                            spec.fn    = bleServiceTask;
-                            spec.stack = App::Plan::BLE_STACK;
-                            spec.prio  = App::Plan::BLE_PRIO;
-                            spec.core  = App::Plan::BLE_CORE;
-                            spec.idOut = &g_bleTaskId;
-                            g_bleTask = App::spawn(spec);
-                            vTaskDelete(nullptr);
-                        },
-                        "bt_begin", App::Plan::BT_BEGIN_STACK, nullptr, 1, nullptr);
-            LOGI("boot", "BLE mode=%s\n", bm.c_str());
-        }
-
-        // Warn when the media screen is on but no AMS role will feed it.
-#if FEATURE_DISPLAY_CAN
-        const bool mediaAuto = App::Ui::mediaAuto();
-#else
-        const bool mediaAuto = false;
-#endif
-        if (mediaAuto && !(bleOn && BleHub::amsActive(mode)))
-            LOGI("boot", "media screen is ON but bleMode=%s has no AMS "
-                          "role — rows will stay empty until it is 'ams' or 'both'\n",
-                          bm.c_str());
-    }
+    BleService::begin(g_cfg.s());
 #endif
 
     // The two core-1 tasks that write the head-unit UART. Here, with every
@@ -1158,7 +1017,7 @@ void setup()
     g_web.attachRouting(App::KeyPath::amsSinkLive() ? &App::KeyPath::amsKeys() : nullptr,
                         App::KeyPath::hidSinkLive() ? &App::KeyPath::hidKeys() : nullptr);
 #if FEATURE_ANCS
-    g_web.attachHealth(&g_ancsCount, App::KeyPath::engineEvents());
+    g_web.attachHealth(BleService::ancsCount(), App::KeyPath::engineEvents());
 #else
     g_web.attachHealth(nullptr, App::KeyPath::engineEvents());
 #endif
