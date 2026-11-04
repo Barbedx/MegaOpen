@@ -26,7 +26,7 @@
 // literal key code, a raw head-unit frame, a head-unit message. Up to three,
 // in order. The engine only says WHICH rule fired; the car task performs the
 // popup itself (one pending, when the glass is free) and posts the rest to
-// the task that owns each (main.cpp performAction, by Keys::effectRoute).
+// the task that owns each (App::RuleActions::perform, by Keys::effectRoute).
 //
 // The rows live in the car file (/cfg/car.json "rules", CarFile) and in
 // PSRAM. Portable: env:native tests it (test_rules).

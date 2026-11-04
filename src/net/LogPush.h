@@ -48,7 +48,7 @@ namespace LogPush
     // First thing after LogBus::grow(), before any sink: the spool, the NVS
     // settings. false: no memory for a spool; everything else is a no-op.
     bool begin();
-    // A LogBus::Sink (main.cpp filters it like the flash log).
+    // A LogBus::Sink (app/LogSetup filters it like the flash log).
     void sink(const char* line, int len, uint32_t ms);
     // net_svc, every pass: starts a push when one is due.
     void tick(uint32_t now, bool online);

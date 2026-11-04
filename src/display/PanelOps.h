@@ -31,7 +31,7 @@ namespace MegaOpen
         // Every rendering call the library offers, so the web console can
         // exercise the whole surface. The popup is the only overlay and the
         // only screen with a hide; every other screen is replaced by the next
-        // render (see main.cpp).
+        // render (see KeyPath.cpp, after onAffaKeyReport).
         enum class Op : uint8_t {
             Text, TextStyled, Time, Power,
             Menu, Highlight,

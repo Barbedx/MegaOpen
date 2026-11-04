@@ -330,7 +330,7 @@ namespace LogPush
         // ---- what earlier boots left on flash -------------------------------
         // A push that never came (no internet, a power cut, a crash) leaves the
         // lines in the flash log only (src/utils/LogFile.h), and a crash in the
-        // coredump partition (main.cpp copies it to /crash/). Before the spool,
+        // coredump partition (app/BootLog copies it to /crash/). Before the spool,
         // each job sends one piece of that: a coredump, or a chunk of an earlier
         // boot's log from the line after the last one pushed (NVS "pb"/"pms"; all
         // of it for a boot that pushed nothing), as boot-N/flash-PP.log. NVS
@@ -492,7 +492,7 @@ namespace LogPush
             if (hit) reseal(d, n);
         }
 
-        // A coredump copied by main.cpp, if one is there: true when it was tried.
+        // A coredump copied by app/BootLog, if one is there: true when it was tried.
         bool crashStep(const char* repo, const char* tok)
         {
             if (s_crashDone) return false;

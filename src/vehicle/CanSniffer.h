@@ -24,7 +24,7 @@ namespace Vehicle
 
         // ONE WRITER. ingest(), markBaseline(), reset() and applyRequests()
         // run on the task that feeds the table: the car task when the board has
-        // a car source, else the panel task (main.cpp, snifferOwner).
+        // a car source, else the panel task (LoopTask.cpp, affaTap).
         // Another task (httpd) asks with requestBaseline()/requestReset(),
         // which the owner applies at its next ingest() or applyRequests(), and
         // reads rows with copyAt(), which never returns a half-written row.

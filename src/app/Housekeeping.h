@@ -17,7 +17,7 @@
 //
 // What is generic lives here: the pacing, the heap low-water sampling and its
 // [win] line, the [task] line, and the verdict. What each line says about the
-// rest of the firmware comes from main.cpp through the hooks.
+// rest of the firmware comes from app/NetHooks through the hooks.
 namespace App
 {
     namespace Housekeeping

@@ -5,7 +5,7 @@
 // Who else is on the panel bus, from what it sends: listening only, never a
 // frame of its own, and never a decision — the board does what its role says
 // (display/PanelRole.h); this only tells whether the bus agrees, for health
-// `panel` and one [panel] line per change (main.cpp panelWatchStep).
+// `panel` and one [panel] line per change (LoopTask.cpp panelWatchStep).
 //
 //   * A foreign bus master: a stock radio driving the handshake, its sync on
 //     0x3AF (Carminat) or 0x3DF (UpdateList). Those are the master's ids

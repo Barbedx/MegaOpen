@@ -1,176 +1,89 @@
+// The wiring: the shared objects (the settings, the car's State, the web,
+// WiFi, the per-ID table), and setup() as the order things start in. Each
+// module owns its objects and its task's work (docs/design/main-split.md):
+//   app/LogSetup, app/BootLog   the log's sinks, the boot and crash evidence
+//   app/KeyPath                 every key object; the keys and scan tasks' hooks
+//   app/HuLink                  the head unit's UART, frames and ring
+//   app/Media                   now-playing (head unit, phone)
+//   app/LoopTask                the loop: TWAI, the panel's construction, the pass
+//   app/RuleActions             what a rule does, from the car task
+//   app/NetHooks                net_svc: web, WiFi, the heartbeat lines
+//   ble/BleService              the phone side and ble_svc
 #include <Arduino.h>
-#include <atomic>
 #include "Features.h"
 #include "Version.h"
 #include "board/BoardProfile.h"
 #include "cfg/Config.h"
-#include "input/MatrixScanner.h"
-#include "keys/KeyEngine.h"
-#include "keys/KeyMap.h"
-#include "keys/MacroEngine.h"
-#include "sinks/CanboxUartSink.h"
-#include "sinks/UartTx.h"
-#include "display/PanelBusWatch.h"
-#include "proto/canbox/Protocol.h"
 #include "cfg/CarStore.h"
-// Knob codes: the second byte is a detent count, not a press state — no release.
+#include "proto/canbox/Protocol.h"
 #include "vehicle/VehicleState.h"
 #include "net/WebUi.h"
 #include "net/WifiManager.h"
-#include "net/IpNotice.h"
 #include "net/LogPush.h"
-#include <WiFi.h>          // the heartbeat reports SSID/BSSID/gateway directly
+#include "link/UsbLink.h"
 #include "utils/Log.h"
 #include "utils/LogBus.h"
-#if FEATURE_LOGFS
-#include "utils/LogFile.h"
-#endif
-#include <Preferences.h>
-#include <esp_system.h>
-#include <esp_timer.h>
+#include "utils/HeapSentinel.h"
 #include "app/Rt.h"
 #include "app/BootLog.h"
 #include "app/LogSetup.h"
 #include "app/KeyBus.h"
 #include "app/KeysTask.h"
+#include "app/KeyPath.h"
 #include "app/HuTask.h"
 #include "app/HuLink.h"
 #include "app/Media.h"
-#include "app/RuleActions.h"
-#include "app/KeyPath.h"
 #include "app/LoopTask.h"
-#include "app/NetHooks.h"
-#include "app/OneShot.h"
-#include "app/Housekeeping.h"
+#include "app/RuleActions.h"
 #include "app/CarTask.h"
 #include "app/CarDiag.h"
-#include "utils/Staged.h"
-#include "utils/Snapshot.h"
-#include <esp_heap_caps.h>
-#include <esp_core_dump.h>
-#include "utils/HeapSentinel.h"
-#include "utils/JsonEscape.h"
-#include "app/StockRadio.h"
-#include "display/PanelRole.h"
+#include "app/NetHooks.h"
+#include "app/OtaTrial.h"
 #if FEATURE_GH_OTA || FEATURE_LOG_PUSH
 #include "net/NetJob.h"
-#endif
-#include <esp_flash.h>
-#if FEATURE_LOGFS
-#include <LittleFS.h>
-#endif
-
-#if FEATURE_VEHICLE_CAN
-#include "vehicle/CanSniffer.h"
-#include "bus/TwaiVehicleSource.h"
-#endif
-
-#if FEATURE_RESISTIVE_KEYS
-#include "sinks/ResistiveKeySink.h"
-#endif
-
-#if FEATURE_KNOBS
-#include "knobs/KnobService.h"
-#endif
-
-#if FEATURE_CAN2
-#include "bus/Mcp2518Source.h"
 #endif
 #if FEATURE_CAPTURE
 #include "capture/CanRecorder.h"
 #endif
-#if FEATURE_USB_HID
-#include "sinks/UsbKeySink.h"
+#if FEATURE_VEHICLE_CAN
+#include "vehicle/CanSniffer.h"
+#include "bus/TwaiVehicleSource.h"
 #endif
-
+#if FEATURE_KNOBS
+#include "knobs/KnobService.h"
+#endif
+#if FEATURE_CAN2
+#include "bus/Mcp2518Source.h"
+#endif
 #if FEATURE_BLE
 #include "ble/BleHub.h"
-#include "ble/HidRole.h"
-#include "bluetooth.h"
-#include "media/AmsMediaSource.h"
-#include "sinks/BleKeyProxy.h"
-#include "sinks/BleKeySinks.h"
 #include "ble/BleService.h"
-#if FEATURE_ANCS
-#include "apple_notification_service.h"
+#include "bluetooth.h"
 #endif
-#include <time.h>
-#endif
-
-#if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-#include "diag/CanBench.h"
-#include "display/AffaLogSink.h"
-#include <core/WakePacer.h>
-#include <driver/twai.h>
-#endif
-
 #if FEATURE_DISPLAY_CAN
-#include "display/AffaPort.h"
-#include "display/PanelOps.h"
-#include "display/MediaScreen.h"
-#include "display/MediaPane.h"
-#include "display/TextFold.h"
-#include "keys/AffaMap.h"
-#include "keys/AffaKeySource.h"
-#include "keys/KeyDests.h"
 #include "app/PanelOwner.h"
 #include "app/UiTask.h"
 #include "app/PanelMenu.h"
 #endif
 
-#if FEATURE_DISPLAY_CAN || FEATURE_BLE
-#include "media/MediaRouter.h"
-#endif
-// Portable: its UTF-16 decoder also serves the exchange log in every build.
-#include "media/HuMediaSource.h"
-#include <ArduinoJson.h>
-#include "utils/PsramJson.h"
-#include "app/OtaTrial.h"
-#include "link/UsbLink.h"
-
 using App::Boot::memMark;
-
-// Wiring only — every decision lives in the objects below.
 
 static Cfg::Config           g_cfg;
 #if FEATURE_KNOBS
-// The two knobs and their LEDs. A source: events go through App::KeyPath::engine().dispatch().
+// The two knobs and their LEDs. A source: its events go onto the KeyBus.
 static Knobs::Service        g_knobs;
 #endif
 static Vehicle::State        g_state;
 static WebUi                 g_web;
 static WifiManager           g_wifi;
 
-
-
-
-
-
 // Task registry ids (src/app/TaskRegistry.h): each task beats its own, and the
 // [task] heartbeat line and the OTA verdict read them all. -1 = not running.
 static int g_logbusTaskId = -1;
 
-
-
 #if FEATURE_VEHICLE_CAN
 static Vehicle::CanSniffer g_sniffer;
 #endif
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 #if FEATURE_VEHICLE_CAN
 // On the car task, after a set of formulas is applied: the car screen's rows,
@@ -185,7 +98,6 @@ static bool onSignalsRenamed()
     return true;
 }
 #endif
-
 
 void setup()
 {
@@ -374,7 +286,7 @@ void setup()
     g_web.attachWifi(&g_wifi);
     g_web.attachCounters(App::KeyPath::ghosts(), App::KeyPath::encSteps());
     {
-        // What the web edits and another task applies (see App::KeyPath::routingCfg()).
+        // What the web edits and another task applies (Staged<T>, app/KeyPath.h).
         WebUi::Staging st;
         st.routing = &App::KeyPath::routingCfg();
 #if FEATURE_BLE
@@ -462,7 +374,7 @@ void setup()
 #endif
         App::Car::begin(cs);
         App::Car::setReminderSpeeds(g_cfg.s().remindLightsKmh, g_cfg.s().remindBrakeKmh);
-    App::Car::setGears(g_cfg.s().gearRatio);
+        App::Car::setGears(g_cfg.s().gearRatio);
         LOGI("cfg", "NVS: %d entries of 32 B free", g_cfg.nvsFreeEntries());
         App::Car::start();
 #if FEATURE_CAN2

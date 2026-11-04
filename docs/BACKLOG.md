@@ -17,6 +17,31 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
+- **2026-11-04 — the bench went deaf on 1.9.0.** mo-8428 (boot 204, 1.9.0
+  de349c5) pushed its last part at 2026-11-03 23:34 UTC (up 67 min), then
+  nothing for 15 h; 2026-11-04 it answers ping at 192.168.100.110 but a TCP
+  connect to :80 times out. Its last lines: `[hb] heap=24500 min=9940
+  big=7668`, `[win] dma=16716`, `[task] netjob busy=5447111us` (the push),
+  RSSI -85, the panel unregistered (`nobody ACKs` probes every 30 s), the USB
+  link `reqs=68 fails=68`. Cause unknown: no reboot (no new boot folder), so
+  no coredump. megaopen-logs `mo-8428/boot-00204/0052.log`, `status-0066.json`.
+- **2026-11-04 — the heartbeat hook applies settings.** net_svc's 10 s beat
+  (`hkBeat`, now `src/app/NetHooks.cpp`) also pushes the reminder speeds and
+  gear ratios into the car task every pass and saves a newly detected CAN A
+  rate to NVS. Settings work in a log hook: a setting applies up to 10 s late
+  and only while net_svc beats. Seen moving it in the main.cpp split.
+- **2026-11-04 — `[stk]` repeats `[task]`.** Its own comment says it is a
+  subset of `[task]`, "kept until Step 6 retires it" so old and new logs
+  compare. `src/app/NetHooks.cpp` hkBeat.
+- **2026-11-04 — comments point at main.cpp code that is gone.**
+  `Settings.h:104` "the BUS_OFF circuit breaker in main.cpp",
+  `MediaPane.h:23` "the double buffer in main.cpp", `MediaScreen.h:56`
+  "main.cpp's repaint gate": none is in main.cpp (before or after the split);
+  the render policy is `UiTask` since Step 4.
+- **2026-11-04 — a check_rules rule could never fire (fixed in the split).**
+  "the emitter is the hu task's" matched `g_emitter.x` on a pointer, so no
+  call through it was ever caught. The rule moved with the glue and now
+  matches `->`; it finds nothing today.
 - **2026-11-03 — older blob layouts are still read.** Not NVS keys but the
   layout versions inside a blob: `Knobs::Config::fromBlob` reads v3/v4
   (`BLOB_SIZE_V3`, the retired potentiometer fields stay in the layout),

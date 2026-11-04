@@ -7,7 +7,7 @@
 #include "../input/EncoderDecoder.h"
 
 // Portable input path: scan -> debounce -> map -> encoder decode -> sinks.
-// main.cpp supplies GPIO callbacks and a clock.
+// app/KeyPath supplies GPIO callbacks and a clock.
 //
 // Two halves on two tasks (docs/design/event-tasks.md, Step 2): poll() and the
 // map/debounce/encoder state belong to the matrix scan task, and with an emit

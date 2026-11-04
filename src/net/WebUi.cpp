@@ -180,7 +180,7 @@ void WebUi::begin(Cfg::Config& cfg, KeyEngine& engine, KeyMap& map,
     // are ~38 kB). The body is buffered by malloc, in PSRAM at this size.
     _server.maxRequestBodySize = 64 * 1024;
 
-    // [mem] marks per step of begin() (serial only; memMark is in main.cpp).
+    // [mem] marks per step of begin() (serial only; memMark is app/BootLog's).
     auto mem = [](const char* what) {
         LOGI("mem", "web.%-8s free=%6u big=%6u\n", what,
                       (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());

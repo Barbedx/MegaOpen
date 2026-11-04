@@ -3,7 +3,7 @@
 
 // Where the panel's clock comes from, and the health chain `clock` built on
 // it. Two automatic sources: the phone (CTS, while it is connected) and the
-// head unit's 0x9D (once a minute, unprompted; src/main.cpp onHuClock). Either
+// head unit's 0x9D (once a minute, unprompted; src/app/HuLink.cpp onHuClock). Either
 // one alone keeps the panel's clock right. Pure: native-tested (test_media).
 namespace App
 {

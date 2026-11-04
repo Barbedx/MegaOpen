@@ -3,7 +3,7 @@
 
 // When to put the board's address on the panel (docs/BACKLOG.md): once per
 // connection, not on every flap. Portable: the host tests drive it with
-// numbers; main.cpp feeds it the link from net_svc every pass and queues the
+// numbers; app/NetHooks feeds it the link from net_svc every pass and queues the
 // notification when it says so.
 //
 // A link that comes back within FLAP_MS with the same mode and address is the

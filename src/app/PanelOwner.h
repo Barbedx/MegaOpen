@@ -20,7 +20,7 @@
 //     and bus-off recovery (affa::TwaiLink). After it, the status is
 //     published as a Snapshot<PanelStatus> for every other reader.
 //   * between passes the loop sleeps in the link's waitRx(), so a panel key
-//     frame wakes it at once, paced by affa::WakePacer (main.cpp, loopWait).
+//     frame wakes it at once, paced by affa::WakePacer (LoopTask.cpp, loopWait).
 //
 // Not AffaTask, which now sleeps in the link the same way: this loop also
 // runs the TWAI status sample, the frame trace and the heartbeat, publishes

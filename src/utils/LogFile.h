@@ -16,7 +16,7 @@
 // in a RAM buffer, and the file is written only:
 //   * when the buffer holds FLUSH_BYTES (16 kB),
 //   * on an event: a line at warning level or above ("E [", "W [" from Log::),
-//   * on an explicit dump: flushNow() before a reboot (main.cpp's shutdown
+//   * on an explicit dump: flushNow() before a reboot (app/LogSetup's shutdown
 //     handler), or through LogBus::flushAndWait (the web reading /log/0.log).
 // There is deliberately NO timer: a periodic flush is a periodic stall.
 // The cost: a panic or a power cut loses what is still in the buffer (up to

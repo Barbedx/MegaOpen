@@ -329,7 +329,7 @@ namespace App
             }
 
             // The row's actions: the popup through the queue above, the rest
-            // posted to the task that owns each (main.cpp performAction).
+            // posted to the task that owns each (App::RuleActions::perform).
             void performRow(uint16_t row, bool test)
             {
                 const Vehicle::RuleSet& set = s_ruleSet.live();

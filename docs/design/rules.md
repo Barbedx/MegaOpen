@@ -268,7 +268,7 @@ bounded by what the keys task scans per event (32).
   glass is free, dropped if the rule no longer holds, a test shows regardless)
   and writes the shown ones into the alerts ring (`rule` = the name: the apps'
   key in `/api/alerts` and the USB `A0` event). Other actions go through
-  `Setup::perform` = `main.cpp performAction`, which posts to the owner of
+  `Setup::perform` = `App::RuleActions::perform`, which posts to the owner of
   each (KeyBus postTap/postEvent/postLiteral, Hu post/requestSendNow, PanelOps
   postText/postFullscreen, Ui requestScene).
 - Gestures: `Rules::gestures()` makes MacroEngine's table (Keys::Macro::rule =
