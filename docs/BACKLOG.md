@@ -17,6 +17,32 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
+- **2026-11-04 — main.cpp is still the glue for every task.** 2867 lines,
+  ~165 file-scope globals, `setup()` about 800 lines (1817-2611), 133 `#if`.
+  It holds work that belongs to the task modules: the head-unit UART glue
+  (`huDrainSerial`, `onHu*`, `huLastFramesJson`) beside `app/HuTask`; the rule
+  actions (`performAction`, `macroFire`) beside `app/CarTask`/`KeysTask`; the
+  matrix and ladder GPIO and the keys task's hooks (`keys*`); net_svc's hooks
+  (`hk*`, `addressText`, `logPushSnapshot`); crash and boot-reason logging. Each
+  section could move next to its task, leaving setup() as the wiring list.
+  `src/main.cpp`.
+- **2026-11-04 — WebUi.cpp is 2559 lines, 64 routes.** The split files
+  (`WebUiMap`, `WebUiRules`, `WebUiKnobs`, `WebUiGhOta`, ...) exist, yet
+  settings, health, status, display, logs, keys and wifi routes all stay in
+  one file. `src/net/WebUi.cpp`.
+- **2026-11-04 — State has two writers' paths by build.** With no car task
+  (no vehicle source in the build) `loop()` runs `App::Car::service` and
+  `g_sniffer.applyRequests()` itself; with one, the car task does. One job,
+  two homes chosen by `#if`. `src/main.cpp` loop(), `src/app/CarTask.*`.
+- **2026-11-04 — BLE lives in two places.** `src/bluetooth.cpp` and the
+  `apple_*_service`/`current_time_service` files sit in `src/`'s root beside
+  `src/ble/`; `bluetooth.cpp` serves "legacy top-level keys" in its status
+  JSON. The stack is MeganeCAN's byte for byte and BLE is not a priority, so
+  moving it is cosmetic until BLE work resumes.
+- **2026-11-04 — "macro" names outlive the macros.** Since 1.7 the key
+  macros are rules (gesture rows); the runtime is still `Keys::MacroEngine`,
+  `MacroTable`, and main.cpp's `g_macroCfg`, `macroFilter`, `macroFire`.
+  Works; the names point at a feature that no longer exists on the page.
 - **2026-11-03 — older blob layouts are still read.** Not NVS keys but the
   layout versions inside a blob: `Knobs::Config::fromBlob` reads v3/v4
   (`BLOB_SIZE_V3`, the retired potentiometer fields stay in the layout),
