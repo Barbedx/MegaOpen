@@ -14,8 +14,8 @@ Rules, by where they bite:
                  - no portMAX_DELAY : a hot-path task never waits for ever.
   the panel      (Step 3) the library object is reached through App::Panel::lib()
                  only from the panel task's files: PanelOwner.cpp, StockRadio.cpp
-                 (the extension role's keys, stepped from loop) and main.cpp
-                 (setup and loop, never a keys or hu function). Every other task
+                 (the extension role's keys, stepped from loop), LoopTask.cpp
+                 (the loop) and main.cpp (setup, never a keys or hu function). Every other task
                  renders through MegaOpen::PanelOps, which the library makes
                  safe from any task. No g_display / g_carminat globals.
   HuTask.cpp     - no readBytes() and no bare read(): the HAL UART mutex is
@@ -119,6 +119,7 @@ TASK_FILES = [
     'src/app/KeyBus.cpp',
     'src/sinks/BleKeyProxy.cpp',
     'src/app/PanelOwner.cpp',        # Step 3: the panel task
+    'src/app/LoopTask.cpp',          # ...and its loop (main-split.md)
     'src/app/UiPolicy.cpp',
     'src/diag/CanBench.cpp',
 ]
@@ -200,7 +201,7 @@ for fn in CAR_TASK_FUNCS:
 for m in re.finditer(r'\bg_(display|carminat)\b', main):
     problems.append('%s:%d: g_%s  (the panel library is App::Panel\'s, not a global)'
                     % (main_rel, line_of(main, m.start()), m.group(1)))
-PANEL_OWNERS = {'src/app/PanelOwner.cpp', 'src/app/StockRadio.cpp', main_rel}
+PANEL_OWNERS = {'src/app/PanelOwner.cpp', 'src/app/StockRadio.cpp', 'src/app/LoopTask.cpp', main_rel}
 for dirpath, _, files in os.walk(os.path.join(ROOT, 'src')):
     for fn in files:
         if not fn.endswith(('.cpp', '.h')):
