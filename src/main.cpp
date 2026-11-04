@@ -39,6 +39,7 @@
 #include "app/RuleActions.h"
 #include "app/KeyPath.h"
 #include "app/LoopTask.h"
+#include "app/NetHooks.h"
 #include "app/OneShot.h"
 #include "app/Housekeeping.h"
 #include "app/CarTask.h"
@@ -144,16 +145,6 @@ static WifiManager           g_wifi;
 
 
 
-// Task handles for the [stk] stack high-water line, which runs on net_svc
-// and so must name the loop's own handle rather than ask for "this task".
-static TaskHandle_t bleTask()
-{
-#if FEATURE_BLE
-    return BleService::task();
-#else
-    return nullptr;
-#endif
-}
 
 // Task registry ids (src/app/TaskRegistry.h): each task beats its own, and the
 // [task] heartbeat line and the OTA verdict read them all. -1 = not running.
@@ -168,21 +159,6 @@ static Vehicle::CanSniffer g_sniffer;
 
 
 
-// ---------------------------------------------------------------------------
-// Web servicing (ElegantOTA), on net_svc (src/app/Housekeeping.h)
-// ---------------------------------------------------------------------------
-// Not BLE-specific: must stay outside any FEATURE_BLE gate.
-// The loop task owns the panel's deadlines, so the web's periodic work runs on
-// net_svc instead: priority 1, on core 0, never in front of the panel or a key.
-static void hkWeb(uint32_t now)
-{
-    (void)now;
-    g_web.loop();
-#if FEATURE_DISPLAY_CAN
-    // Values chosen in the panel menu: stored here, with every other setting.
-    App::PanelMenu::applyPending();
-#endif
-}
 
 
 
@@ -195,215 +171,6 @@ static void hkWeb(uint32_t now)
 
 
 
-// ---- net_svc's hooks (src/app/Housekeeping.h) ---------------------------------
-// WiFi usable at least once since boot: the next OTA needs it. Our own AP
-// counts: the next OTA arrives through it just as well. Counting STA only
-// meant an image flashed in the car (AP, no known network) was rolled back
-// and rebooted 180 s after every OTA.
-// The OTA trial wants a way in for the next update: WiFi up once, or the app
-// on the USB link (it carries the page and the upload too).
-static bool hkWifiSeen()
-{
-    static bool s_seen = false;
-    s_seen = s_seen || WiFi.status() == WL_CONNECTED ||
-             (!g_wifi.connecting() && !g_wifi.isSta() && (WiFi.getMode() & WIFI_AP)) ||
-             UsbLink::alive();
-    return s_seen;
-}
-
-// WiFi, then the board's address on the panel once per connection
-// (src/net/IpNotice.h): "IP 192.168.1.15 / megaopen.local boot 204" on the
-// home network, "AP MegaOpen-XXXX / 192.168.4.1 boot 204" on our own. Polite:
-// it waits out the menu and a glass hold (App::Ui::queueNotice).
-#if FEATURE_DISPLAY_CAN
-// The address as the panel shows it: "IP 192.168.1.15" over the mDNS name
-// (empty with mDNS off) and the boot number, or "AP MegaOpen-XXXX" over
-// 192.168.4.1 and the boot number. The connect notice (net_svc) and the
-// panel menu's address row (ui task; the row shows the head alone).
-static void addressText(char* head, size_t hn, char* body, size_t bn)
-{
-    body[0] = 0;
-    if (g_wifi.connecting()) {
-        snprintf(head, hn, "WiFi joining");
-    } else if (g_wifi.isSta() && WiFi.status() == WL_CONNECTED) {
-        snprintf(head, hn, "IP %s", WiFi.localIP().toString().c_str());
-        snprintf(body, bn, "%s", g_wifi.mdnsHost().c_str());
-    } else if (WiFi.getMode() & WIFI_AP) {
-        snprintf(head, hn, "AP %s", g_wifi.apSsid().c_str());
-        snprintf(body, bn, "%s", WiFi.softAPIP().toString().c_str());
-    } else {
-        snprintf(head, hn, "WiFi down");
-    }
-    // The boot number after the name or address ("megaopen.local boot 204"):
-    // read off the panel for a report, it names the pushed log's folder
-    // (boot-00204). Its own row when the first is full (wrapTwoEllipsis).
-    const size_t n = strlen(body);
-    snprintf(body + n, bn - n, "%sboot %lu", n ? " " : "", (unsigned long)MegaOpen::bootNo());
-}
-#endif
-#if FEATURE_LOG_PUSH
-// The status snapshot LogPush sends to GitHub every LogPush::SNAP_MS:
-// /api/status and /api/health in one object, for tools rather than regexes
-// (docs/design/logging.md §5). On the push task; the pools in PSRAM, beside
-// its TLS handshake.
-static size_t logPushSnapshot(char* out, size_t cap)
-{
-    // dispatch() holds the settings lock around every route; the builders
-    // read Strings in Settings (bleMode), so this takes it too (recursive).
-    Cfg::Config::Guard g(g_cfg);
-    JsonDocument d(&PsramJson::instance());
-    d["uptimeMs"] = millis();
-    g_web.statusJson(d["status"].to<JsonObject>());
-    g_web.healthJson(d["health"].to<JsonObject>());
-    const size_t n = serializeJson(d, out, cap);
-    return n < cap ? n : 0;
-}
-#endif
-
-static void hkWifi(uint32_t now)
-{
-    g_wifi.loop(now);
-#if FEATURE_LOG_PUSH
-    // Online: on WiFi with internet, or an app on the USB link that offers its own.
-    // Not on an OTA trial: a push takes internal heap down to a few kB, under
-    // the trial's healthy line (OtaTrial::HEALTH_HEAP_MIN), and each dip starts
-    // its 60 s again, so a good image rolled back. The lines wait in the spool
-    // and the flash, and go once the trial has confirmed.
-    const bool trial = App::OtaTrial::onTrial();
-    static bool s_trialSaid = false;
-    if (trial && !s_trialSaid) { s_trialSaid = true; LOGI("push", "held until the OTA trial confirms"); }
-    LogPush::tick(now, !trial && ((g_wifi.isSta() && !g_wifi.connecting() && WiFi.status() == WL_CONNECTED)
-                                  || UsbLink::netAvailable()));
-#endif
-#if FEATURE_DISPLAY_CAN
-    static IpNotice s_notice;
-    IpNotice::Mode m = IpNotice::Mode::None;
-    uint32_t ip = 0;
-    if (g_wifi.connecting()) {
-        // a join or a scan: neither link is settled
-    } else if (g_wifi.isSta()) {
-        if (WiFi.status() == WL_CONNECTED) { m = IpNotice::Mode::Sta; ip = (uint32_t)WiFi.localIP(); }
-    } else if (WiFi.getMode() & WIFI_AP) {
-        m = IpNotice::Mode::Ap;
-        ip = (uint32_t)WiFi.softAPIP();
-    }
-    if (!s_notice.tick(now, m, ip)) return;
-    char head[40], body[40];
-    addressText(head, sizeof(head), body, sizeof(body));
-    App::Ui::queueNotice(head, body);
-    LOGI("wifi", "on the panel: %s / %s\n", head, body);
-#endif
-}
-
-// Every 10 s, after [win] and [task]: the lines nobody else owns.
-static void hkBeat(uint32_t now)
-{
-    const uint32_t s = now / 1000;
-    // Settings › Reminders, live: two bytes, read without the settings lock.
-    App::Car::setReminderSpeeds(g_cfg.s().remindLightsKmh, g_cfg.s().remindBrakeKmh);
-    App::Car::setGears(g_cfg.s().gearRatio);
-    // [stk] is a subset of [task] now. Kept until Step 6 retires it, so old
-    // logs and new ones still compare line for line.
-    const TaskHandle_t net = App::Housekeeping::task();
-    // httpd: the web server's own task (4 kB), where every route runs; found
-    // by name once it exists (the server starts after this line's first pass).
-    static TaskHandle_t s_httpd = nullptr;
-    if (!s_httpd) s_httpd = xTaskGetHandle("httpd");
-    LOGS("stk", "loop=%u net=%u ble=%u knobs=%u httpd=%u",
-         App::Loop::task() ? (unsigned)uxTaskGetStackHighWaterMark(App::Loop::task()) : 0u,
-         net ? (unsigned)uxTaskGetStackHighWaterMark(net) : 0u,
-         bleTask() ? (unsigned)uxTaskGetStackHighWaterMark(bleTask()) : 0u,
-#if FEATURE_KNOBS
-         (unsigned)g_knobs.stackFree(),
-#else
-         0u,
-#endif
-         s_httpd ? (unsigned)uxTaskGetStackHighWaterMark(s_httpd) : 0u);
-    // [hu] and [key] are logged by the hu and keys tasks themselves, [car]
-    // by the car task, and [can], [panel], [stall] and [loop] by the loop,
-    // each from its own window.
-#if FEATURE_CAN2
-    // CAN A, from the car task's snapshot: no SPI from here. A silent car bus,
-    // a deaf chip and a wrong rate look the same without these.
-    // ab = searching | locked | manual at bps; fps = the last second.
-    {
-        const Mcp2518Source::Status c = Mcp2518Source::instance().status().read();
-        static const char* const kAb[] = {"searching", "locked", "manual"};
-        LOGS("can2", "live=%u ab=%s bps=%lu fps=%lu frames=%lu hwOvf=%lu ringPeak=%lu/256 "
-             "fd=%lu rtr=%lu intKicks=%lu maskMaxUs=%lu rec=%lu tec=%lu flags=0x%02lX "
-             "bdiag1=0x%08lX restarts=%lu rounds=%lu rejected=%lu err=0x%lX",
-             (unsigned)c.live, kAb[c.state <= 2 ? c.state : 0], (unsigned long)c.bps,
-             (unsigned long)c.fps, (unsigned long)c.frames, (unsigned long)c.hwOverflows,
-             (unsigned long)c.ringPeak, (unsigned long)c.fdDropped,
-             (unsigned long)c.remoteDropped, (unsigned long)c.intKicks,
-             (unsigned long)c.maskMaxUs, (unsigned long)(c.trec & 0xFF),
-             (unsigned long)((c.trec >> 8) & 0xFF), (unsigned long)((c.trec >> 16) & 0x3F),
-             (unsigned long)c.bdiag1, (unsigned long)c.restarts, (unsigned long)c.cycles,
-             (unsigned long)c.rejected, (unsigned long)c.beginErr);
-        // A newly detected rate goes to NVS here, on net_svc, once: the car
-        // task never waits for a flash write, and the next boot tries it first.
-        if (c.detected && c.detected != g_cfg.s().can2Detected) {
-            g_cfg.saveCan2Detected(c.detected);
-            LOGI("can2", "%lu saved: tried first at the next boot", (unsigned long)c.detected);
-        }
-    }
-#endif
-#if FEATURE_BLE
-    // The BLE key path since boot: q = the keys-to-ble_svc queue's drops;
-    // ams = AMS writes that went out, fail = ones the stack refused;
-    // stale = waited over 300 ms; coal = volume presses folded into one
-    // pending count; nolink = owed with no phone connected; vol = AMS
-    // commands a volume press sends (measured, sinks/AmsVolumeStep.h).
-    LOGS("ble", "keys q=%u ams=%u fail=%u hid=%u stale=%u coal=%u nolink=%u vol=%u",
-         (unsigned)Sinks::BleKeyQueue::dropped(), (unsigned)BleService::keys().amsWrites(),
-         (unsigned)BleService::keys().amsFailed(),
-         (unsigned)BleService::keys().hidPresses(), (unsigned)BleService::keys().stale(),
-         (unsigned)BleService::keys().coalesced(), (unsigned)BleService::keys().noLink(),
-         (unsigned)BleService::keys().volSteps());
-#endif
-#if FEATURE_DISPLAY_CAN || FEATURE_BLE
-    // lockMiss = head-unit frames that found a reader holding the media
-    // mutex and were applied a pass later; lost = of those, stash overflow.
-    LOGS("media", "hu frames=%u text=%u lockMiss=%u lost=%u",
-         (unsigned)App::Media::hu().frames(), (unsigned)(App::HuLink::decoder() ? App::HuLink::decoder()->stats().textFrames : 0),
-         (unsigned)App::Media::hu().lockMisses(), (unsigned)App::Media::hu().stashDropped());
-#endif
-    LOGS("hb", "up=%02u:%02u:%02u heap=%u min=%u big=%u canrx=%u keys=%u tx=%u/%u",
-         (unsigned)(s / 3600), (unsigned)((s / 60) % 60), (unsigned)(s % 60),
-         (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(),
-         (unsigned)ESP.getMaxAllocHeap(),
-#if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
-         (unsigned)*App::Loop::canRx(),
-#else
-         0u,
-#endif
-         (unsigned)App::KeyPath::engine().events(),
-         (unsigned)App::HuLink::tx().keyFrames(), (unsigned)App::HuLink::tx().vehicleFrames());
-}
-
-// Once a minute: address, SSID, BSSID and gateway, to find the board and
-// confirm which network (and radio) it is really on. Not every 10 s: WiFi.SSID()
-// and the toString() calls allocate, and this was the loop's String work.
-static void hkBeatSlow(uint32_t)
-{
-    if (g_wifi.connecting()) {
-        LOGI("net", "joining \"%s\"", g_wifi.curSsid().c_str());
-    } else if (g_wifi.isSta()) {
-        // A String whose allocation failed has a NULL buffer; strlen(NULL)
-        // in vsnprintf reboots. Print "?" instead.
-        auto nn = [](const char* s) { return s ? s : "?"; };
-        LOGS("net", "STA ssid=\"%s\" rssi=%d bssid=%s ip=%s gw=%s mask=%s %s",
-             nn(WiFi.SSID().c_str()), (int)WiFi.RSSI(), nn(WiFi.BSSIDstr().c_str()),
-             nn(WiFi.localIP().toString().c_str()),
-             nn(WiFi.gatewayIP().toString().c_str()),
-             nn(WiFi.subnetMask().toString().c_str()),
-             g_wifi.mdnsHost().length() ? nn(g_wifi.mdnsHost().c_str()) : "(no mdns)");
-    } else {
-        LOGI("net", "AP \"%s\" ip=%s %s", g_wifi.apSsid().c_str(),
-             g_wifi.ip().c_str(),
-             g_wifi.mdnsHost().length() ? g_wifi.mdnsHost().c_str() : "(no mdns)");
-    }
-}
 
 #if FEATURE_VEHICLE_CAN
 // On the car task, after a set of formulas is applied: the car screen's rows,
@@ -435,13 +202,15 @@ void setup()
 #endif
     delay(200);
 
+    // What net_svc's hooks read (the settings, the web, WiFi): addresses only.
+    App::NetHooks::bind(g_cfg, g_web, g_wifi);
     // Logging first: every line from here on goes through the LogBus.
     App::LogSetup::sinks();
 #if FEATURE_GH_OTA || FEATURE_LOG_PUSH
     NetJob::begin();   // the GitHub jobs' worker, before anything can post one
 #endif
 #if FEATURE_LOG_PUSH
-    App::LogSetup::push(logPushSnapshot);
+    App::LogSetup::push(App::NetHooks::logPushSnapshot);
 #endif
     // Below the loop task (raised in setup()'s tail), on the core WiFi lives on.
     LogBus::startTask(App::Plan::LOGBUS_PRIO, App::core(App::Plan::LOGBUS_CORE), App::Plan::LOGBUS_STACK);
@@ -499,7 +268,7 @@ void setup()
         App::Ui::begin(g_cfg, d);
     }
     // The panel menu: reads the settings and the car, hands its changes to
-    // net_svc (hkWeb), which stores them like any other setting.
+    // net_svc (App::NetHooks), which stores them like any other setting.
     {
         App::PanelMenu::Deps m;
         m.ops = &App::Panel::ops();
@@ -518,10 +287,10 @@ void setup()
             App::Media::router().setMode(MediaRouter::modeFromStr(s.mediaSource.c_str()));
         };
         // The address row, and on Select the same notice as on connect.
-        m.address = addressText;
+        m.address = App::NetHooks::addressText;
         m.showAddress = [] {
             char head[40], body[40];
-            addressText(head, sizeof(head), body, sizeof(body));
+            App::NetHooks::addressText(head, sizeof(head), body, sizeof(body));
             App::Ui::queueNotice(head, body);
             LOGI("menu", "address on the panel: %s / %s\n", head, body);
         };
@@ -631,6 +400,7 @@ void setup()
 #endif
 #if FEATURE_KNOBS
     g_web.attachKnobs(&g_knobs);
+    App::NetHooks::attachKnobs(&g_knobs);
 #endif
 #if FEATURE_CAN2
     // CAN A: the car's bus on the board itself. Listen-only in the controller, its rate found by listening; started
@@ -790,21 +560,7 @@ void setup()
                       g_wifi.apSsid().c_str(),
                       g_wifi.ip().c_str(), mdns, (unsigned)g_cfg.s().uartBaud);
 
-    // Started after every attach(): it calls into g_web immediately. The web,
-    // WiFi, the heartbeat and the OTA verdict: none of them on the
-    // panel's task any more (src/app/Housekeeping.h).
-    {
-        App::Housekeeping::Hooks h;
-        h.web      = hkWeb;
-        h.wifi     = hkWifi;
-        h.wifiSeen = hkWifiSeen;
-        h.beat     = hkBeat;
-        h.beatSlow = hkBeatSlow;
-        // net_svc checks every critical task's age from its first pass, and
-        // this one has been in setup() for seconds without a beat.
-        App::Loop::beat();
-        App::Housekeeping::start(h);
-    }
+    App::NetHooks::start();
     memMark("setup end");
 
 #if FEATURE_MATRIX
