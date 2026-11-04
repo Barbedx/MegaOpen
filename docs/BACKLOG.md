@@ -25,6 +25,14 @@ where.
   RSSI -85, the panel unregistered (`nobody ACKs` probes every 30 s), the USB
   link `reqs=68 fails=68`. Cause unknown: no reboot (no new boot folder), so
   no coredump. megaopen-logs `mo-8428/boot-00204/0052.log`, `status-0066.json`.
+  USB is dead too: Windows still lists the composite device (COM7, "MegaOpen
+  link") as OK, but opening COM7 fails "A device attached to the system is
+  not functioning" (no answer to SET_LINE_CODING), so the TinyUSB task is not
+  running either; the 1200-baud touch fails the same way. A hang, not a WiFi
+  drop: lwIP answers ICMP while httpd, the push and USB are gone, and nothing
+  rebooted it (the task watchdog watches IDLE only; Step 6b never wired the
+  critical tasks to it). On the T-2CAN's TinyUSB port there is no reset from
+  the host: only a power cycle.
 - **2026-11-04 — the heartbeat hook applies settings.** net_svc's 10 s beat
   (`hkBeat`, now `src/app/NetHooks.cpp`) also pushes the reminder speeds and
   gear ratios into the car task every pass and saves a newly detected CAN A
