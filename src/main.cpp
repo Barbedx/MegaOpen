@@ -29,6 +29,8 @@
 #include <esp_system.h>
 #include <esp_timer.h>
 #include "app/Rt.h"
+#include "app/BootLog.h"
+#include "app/LogSetup.h"
 #include "app/KeyBus.h"
 #include "app/KeysTask.h"
 #include "app/HuTask.h"
@@ -121,6 +123,8 @@ static Sinks::UsbHidKeySink g_usbKeys;
 #include "app/OtaTrial.h"
 #include "link/UsbLink.h"
 
+using App::Boot::memMark;
+
 // Wiring only — every decision lives in the objects below.
 
 static Cfg::Config           g_cfg;
@@ -170,61 +174,6 @@ static Staged<Sinks::ResistiveMap>      g_resMapCfg;
 static OneShot<App::KeysTask::ResLearn> g_resLearnReq;
 #endif
 
-// The LogBus sinks. They run on the LogBus task, so blocking here is allowed.
-//
-// Every line also stays in the LogBus ring, which is the web log
-// (GET /api/logs?since=); these sinks are Serial, the flash log and the push.
-// Each takes a line by its level alone (Log::sinkTakes, the settings logSerial /
-// logFlash / logPush): no sink looks at what a line says (docs/design/logging.md).
-// The head unit's frames are in the capture (bus 2), not text, below TRC.
-// IDF/library lines from the esp_log tap (logTapVprintf). Where the IDF
-// console is Serial itself (UART0: the DevKit) they are already on it, so the
-// serial sink skips them; on a USB-CDC build the console is not Serial, and
-// this is the only way they reach the USB port.
-static constexpr char IDF[] = "I [idf] ";   // the first byte becomes the line's level
-static bool isIdfLine(const char* line) { return !strncmp(line + 1, IDF + 1, sizeof(IDF) - 2); }
-
-static void serialSink(const char* line, int len, uint32_t)
-{
-    if (!Log::sinkTakes(Log::SINK_SERIAL, line, len)) return;
-#if !ARDUINO_USB_CDC_ON_BOOT
-    if (isIdfLine(line)) return;
-#endif
-#if ARDUINO_USB_CDC_ON_BOOT && !ARDUINO_USB_MODE
-    // TinyUSB CDC (t2can_usbhid): its write() spins, with no timeout, while
-    // the host holds DTR and does not read. Whole line or nothing.
-    if (Serial.availableForWrite() < len + 1) return;
-#endif
-    Serial.write((const uint8_t*)line, len);
-    Serial.write('\n');
-}
-#if FEATURE_LOG_PUSH
-static void pushSink(const char* line, int len, uint32_t ms)
-{
-    if (Log::sinkTakes(Log::SINK_PUSH, line, len)) LogPush::sink(line, len, ms);
-}
-#endif
-#if FEATURE_LOGFS
-// The flash log never takes TRC (Log::setSinkLevel caps it at DBG): a line per
-// frame would erase sectors with both cores stopped.
-static void fileSink(const char* line, int len, uint32_t ms)
-{
-    if (Log::sinkTakes(Log::SINK_FLASH, line, len)) LogFile::sink(line, len, ms);
-}
-
-// Every software reboot (ESP.restart, esp_restart, the OTA and rollback
-// reboots): what is still in the LogBus ring and the flash log's RAM buffer
-// goes to /log/0.log first. Not run on a panic or a power cut.
-static void logShutdown()
-{
-    LOGI("log", "rebooting: log flushed");
-#if FEATURE_CAPTURE
-    // The capture's last chunk first: it is the one a drive was recorded for.
-    Capture::flush(500);
-#endif
-    LogBus::flushAndWait(500);
-}
-#endif
 
 
 // Task handles for the [stk] stack high-water line, which runs on net_svc
@@ -237,15 +186,6 @@ static TaskHandle_t g_bleTask = nullptr;
 static int g_loopTaskId = -1, g_bleTaskId = -1;
 static int g_logbusTaskId = -1, g_scanTaskId = -1;
 
-// Free heap at each setup() stage, with the delta since the last mark.
-static void memMark(const char* what)
-{
-    static uint32_t s_last = 0;
-    const uint32_t now = ESP.getFreeHeap();
-    LOGI("mem", "%-12s free=%6u big=%6u %+d", what, (unsigned)now,
-         (unsigned)ESP.getMaxAllocHeap(), s_last ? (int)now - (int)s_last : 0);
-    s_last = now;
-}
 
 #if FEATURE_DISPLAY_CAN
 // ---- the OEM display --------------------------------------------------------
@@ -551,50 +491,6 @@ static MegaOpen::AffaLogSink g_affaLog;
 // loop, the driver's owner.
 #endif
 
-// esp_log tap: IDF/library log lines into the LogBus as "[idf] ...", so they
-// reach the flash log and the web (and USB serial where the IDF console is not
-// Serial already; see serialSink). The console write itself is unchanged.
-static int (*s_idfVprintf)(const char*, va_list) = nullptr;
-
-// Bytes of stack left below this frame on the calling task.
-static size_t stackLeft()
-{
-    const uint8_t* base = pxTaskGetStackStart(nullptr);
-    const uint8_t* sp   = (const uint8_t*)__builtin_frame_address(0);
-    return (base && sp > base) ? (size_t)(sp - base) : 0;
-}
-
-static int logTapVprintf(const char* fmt, va_list ap)
-{
-    // Lines logged by the LogBus task itself (a sink: LittleFS) are not fed
-    // back into the LogBus: the console only. That is the
-    // whole re-entry guard: LogBus::line never logs and never blocks, so no
-    // other task can loop through here. (The shared s_tapOwner it replaces was
-    // one global for every task, and any logging task cleared another's claim.)
-    // Also skipped on a task without the room for the buffer plus vsnprintf
-    // (NimBLE's host task runs this too).
-    const TaskHandle_t self = xTaskGetCurrentTaskHandle();
-    if (self != LogBus::task() && stackLeft() > 1536) {
-        char b[160];
-        memcpy(b, IDF, sizeof(IDF) - 1);
-        constexpr int P = (int)sizeof(IDF) - 1;
-        va_list copy;
-        va_copy(copy, ap);
-        int n = vsnprintf(b + P, sizeof(b) - P, fmt, copy);
-        va_end(copy);
-        if (n > (int)sizeof(b) - P - 1) n = (int)sizeof(b) - P - 1;
-        // Strip the IDF's trailing newline.
-        while (n > 0 && (b[P + n - 1] == '\n' || b[P + n - 1] == '\r')) b[P + --n] = '\0';
-        // The IDF's own level letter (E W I D V) is the line's ("idf").
-        const char c = n > 0 ? b[P] : 'I';
-        const LogLevel lvl = c == 'E' ? LogLevel::ERR : c == 'W' ? LogLevel::WRN : c == 'D' ? LogLevel::DBG
-                           : c == 'V' ? LogLevel::TRC : LogLevel::INF;
-        static int8_t s_idfTag = -1;
-        b[0] = "EWIDT"[(uint8_t)lvl];
-        if (n > 0 && Log::on(lvl, "idf", s_idfTag)) LogBus::line(b);
-    }
-    return s_idfVprintf ? s_idfVprintf(fmt, ap) : vprintf(fmt, ap);
-}
 
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
 
@@ -1702,16 +1598,6 @@ static void hkBeatSlow(uint32_t)
     }
 }
 
-// The last crash, from the coredump partition (the prebuilt SDK writes an ELF
-// coredump there on every panic): which task, where, why, and the backtrace,
-// as one warning line, so the flash log and the log push carry it home. Then
-// the image is erased: the next crash writes a new one, and this line is never
-// repeated for an old one. Decode with the ELF of that build (`elf=`):
-//   xtensa-esp32s3-elf-addr2line -pfiaC -e firmware.elf <pc> <bt...>
-// The whole image is kept too, as /crash/<boot>.cdmp on littlefs, for the log
-// push to send home (boot-<boot>/coredump.bin, the boot that crashed): every
-// task's stack, which the summary's corrupted backtrace cannot give.
-//   esp-coredump info_corefile -t raw -c coredump.bin firmware.elf
 #if FEATURE_VEHICLE_CAN
 // On the car task, after a set of formulas is applied: the car screen's rows,
 // saved by name, find their (possibly moved) signals. Under the settings lock,
@@ -1726,93 +1612,6 @@ static bool onSignalsRenamed()
 }
 #endif
 
-static void keepCrash(uint32_t boot)
-{
-#if FEATURE_LOGFS
-    size_t addr = 0, size = 0;
-    if (!LogFile::fsMounted() || esp_core_dump_image_get(&addr, &size) != ESP_OK || !size || size > 64 * 1024) return;
-    auto* buf = (uint8_t*)heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!buf) return;
-    if (esp_flash_read(esp_flash_default_chip, buf, addr, size) == ESP_OK) {
-        if (!LittleFS.exists("/crash")) LittleFS.mkdir("/crash");
-        char path[24];
-        snprintf(path, sizeof(path), "/crash/%05u.cdmp", (unsigned)boot);
-        File f = LittleFS.open(path, "w");
-        const size_t put = f ? f.write(buf, size) : 0;
-        if (f) f.close();
-        LOGI("crash", "coredump kept: %s, %u bytes%s", path, (unsigned)size, put == size ? "" : " (write failed)");
-    }
-    heap_caps_free(buf);
-#else
-    (void)boot;
-#endif
-}
-
-static void logCrash(uint32_t boot)
-{
-    if (esp_core_dump_image_check() != ESP_OK) return;
-    keepCrash(boot);
-    auto* s = (esp_core_dump_summary_t*)heap_caps_malloc(sizeof(esp_core_dump_summary_t),
-                                                         MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-    if (!s) return;
-    if (esp_core_dump_get_summary(s) == ESP_OK) {
-        char bt[16 * 11 + 1];
-        size_t n = 0;
-        const uint32_t depth = s->exc_bt_info.depth < 16 ? s->exc_bt_info.depth : 16;
-        bt[0] = 0;
-        for (uint32_t i = 0; i < depth && n < sizeof(bt) - 12; ++i)
-            n += snprintf(bt + n, sizeof(bt) - n, " 0x%08x", (unsigned)s->exc_bt_info.bt[i]);
-        s->exc_task[sizeof(s->exc_task) - 1] = 0;
-        LOGW("crash", "task=%s pc=0x%08x cause=%u vaddr=0x%08x elf=%.16s bt%s:%s", s->exc_task,
-             (unsigned)s->exc_pc, (unsigned)s->ex_info.exc_cause, (unsigned)s->ex_info.exc_vaddr,
-             (const char*)s->app_elf_sha256, s->exc_bt_info.corrupted ? "(corrupted)" : "", bt);
-    } else {
-        LOGW("crash", "a coredump is on flash but its summary did not read");
-    }
-    heap_caps_free(s);
-    esp_core_dump_image_erase();
-}
-
-// Why this boot happened, and how many there have been: tells a real reboot
-// (panic, watchdog, brownout) from a freeze that only looked like one.
-static void logBootReason()
-{
-    const esp_reset_reason_t r = esp_reset_reason();
-    // One token each, so the [boot] line splits on spaces (and a grep for
-    // reason=task_wdt finds a watchdog reboot).
-    const char* why;
-    switch (r) {
-        case ESP_RST_POWERON:   why = "poweron";   break;
-        case ESP_RST_EXT:       why = "ext";       break;   // the EN/reset pin
-        case ESP_RST_SW:        why = "sw";        break;   // esp_restart(), OTA
-        case ESP_RST_PANIC:     why = "panic";     break;   // a crash
-        case ESP_RST_INT_WDT:   why = "int_wdt";   break;
-        case ESP_RST_TASK_WDT:  why = "task_wdt";  break;
-        case ESP_RST_WDT:       why = "wdt";       break;   // any other watchdog
-        case ESP_RST_DEEPSLEEP: why = "deepsleep"; break;
-        case ESP_RST_BROWNOUT:  why = "brownout";  break;   // the supply sagged
-        case ESP_RST_SDIO:      why = "sdio";      break;
-        default:                why = "unknown";   break;
-    }
-    Preferences p;
-    p.begin("sys", false);
-    const uint32_t boots = p.getUInt("boots", 0) + 1;
-    p.putUInt("boots", boots);
-    MegaOpen::setBootNo(boots);
-    // Abnormal resets counted separately: a number that should stay at zero.
-    const bool bad = r == ESP_RST_PANIC || r == ESP_RST_INT_WDT || r == ESP_RST_TASK_WDT ||
-                     r == ESP_RST_WDT || r == ESP_RST_BROWNOUT;
-    uint32_t crashes = p.getUInt("crashes", 0);
-    if (bad) p.putUInt("crashes", ++crashes);
-    p.end();
-    // key=value, one line, the build first: the flash log keeps a file per
-    // boot, and this is the line that says which image wrote it and why the
-    // board came up. psram=0 on a board that should have it is a wrong image.
-    LOGI("boot", "build=%s fw=" MEGAOPEN_VERSION " board=%s reason=%s boots=%u crashes=%u psram=%u",
-         MegaOpen::buildId(), Board::NAME, why, (unsigned)boots, (unsigned)crashes,
-         (unsigned)ESP.getPsramSize());
-    logCrash(boots - 1);
-}
 
 void setup()
 {
@@ -1830,32 +1629,12 @@ void setup()
     delay(200);
 
     // Logging first: every line from here on goes through the LogBus.
-    LogBus::addSink(serialSink);
-#if FEATURE_LOGFS
-    const bool logfs = LogFile::begin();
-    if (logfs) {
-        LogBus::addSink(fileSink);
-        // Run on the LogBus task by flushAndWait(): the flash log's RAM buffer
-        // to /log/0.log, synced.
-        LogBus::onFlush(LogFile::flushNow);
-    }
-#endif
+    App::LogSetup::sinks();
 #if FEATURE_GH_OTA || FEATURE_LOG_PUSH
     NetJob::begin();   // the GitHub jobs' worker, before anything can post one
 #endif
 #if FEATURE_LOG_PUSH
-    const bool push = LogPush::begin();
-    if (push) LogBus::addSink(pushSink);
-    LogPush::setSnapshot(logPushSnapshot);
-    {
-        LogPush::View v;
-        LogPush::view(v);
-        if (push)
-            LOGI("push", "spool %u kB in PSRAM; %s, repo %s, device %s", (unsigned)(v.spoolBytes / 1024),
-                 v.on ? (v.hasToken ? "on" : "on, no token") : "off", v.repo, v.device);
-        else
-            LOGI("push", "no memory for the spool: log push off this boot");
-    }
+    App::LogSetup::push(logPushSnapshot);
 #endif
     // Below the loop task (raised in setup()'s tail), on the core WiFi lives on.
     LogBus::startTask(App::Plan::LOGBUS_PRIO, App::core(App::Plan::LOGBUS_CORE), App::Plan::LOGBUS_STACK);
@@ -1864,9 +1643,7 @@ void setup()
     // it). The car task pushes into it from its first frame.
     Capture::begin();
 #endif
-#if FEATURE_LOGFS
-    if (logfs) esp_register_shutdown_handler(logShutdown);
-#endif
+    App::LogSetup::onShutdown();
     // The registry, from its first entries. This task is the loop (setup()
     // runs on it) and it is critical: it owns the panel and the CAN driver,
     // and net_svc's OTA verdict reads its age. The LogBus is not: a stuck log
@@ -1877,22 +1654,12 @@ void setup()
     g_logbusTaskId = App::Tasks::add("logbus", false);
     App::Tasks::setHandle(g_logbusTaskId, LogBus::task());
     LogBus::onWake([](uint32_t busyUs) { App::Tasks::beat(g_logbusTaskId, busyUs); });
-    logBootReason();
-    LOGI("log", "ring %d B in %s%s", LogBus::ringSize(), LogBus::ringInPsram() ? "PSRAM" : "internal RAM",
-         ringGrown ? "" : " (the boot ring: no memory for a bigger one)");
-#if FEATURE_LOGFS
-    if (logfs)
-        LOGI("log", "flash log /log/0.log (previous boot: /log/1.log), %u/%u kB used; "
-             "written every %u kB, on warnings and before a reboot",
-             (unsigned)(LogFile::usedBytes() / 1024), (unsigned)(LogFile::totalBytes() / 1024),
-             (unsigned)(LogFile::FLUSH_BYTES / 1024));
-    else
-        LOGI("log", "flash log FAILED: %s; RAM and serial only", LogFile::mountError());
-#endif
+    App::Boot::logReason();
+    App::LogSetup::report(ringGrown);
 
     memMark("boot");
     // Tap the system log first, so boot output reaches the browser too.
-    s_idfVprintf = esp_log_set_vprintf(logTapVprintf);
+    App::LogSetup::tapIdf();
     Log::setLevel(LogLevel::INF);
 
     g_cfg.begin();
@@ -1905,25 +1672,12 @@ void setup()
             LOGW("hu", "protocol \"%s\" is not in this image: %s", g_cfg.s().huProtocol.c_str(),
                  Canbox::activeProtocol().id());
     }
-    // The car's configuration (/cfg/car.json; built once from 1.6.x's NVS).
+    // The car's configuration (/cfg/car.json; none yet: the factory's).
     // After the protocol (its field map is the protocol's) and the flash
     // log (which mounts LittleFS).
     CarStore::begin();
     // The log's own settings, saved (docs/design/logging.md).
-    {
-        const Cfg::Settings& s = g_cfg.s();
-        Log::setLevel((LogLevel)(s.logLevel < Log::LEVELS ? s.logLevel : 2));
-        Log::setTagSpec(s.logTags.c_str());
-        Log::setSinkLevel(Log::SINK_WEB, (LogLevel)s.logWeb);
-        Log::setSinkLevel(Log::SINK_FLASH, (LogLevel)s.logFlash);
-        Log::setSinkLevel(Log::SINK_PUSH, (LogLevel)s.logPush);
-        Log::setSinkLevel(Log::SINK_SERIAL, (LogLevel)s.logSerial);
-        static const uint32_t STATUS_MS[3] = {10000, 60000, 300000};
-        Log::setStatusInterval(STATUS_MS[s.logStatus < 3 ? s.logStatus : 1]);
-        if (s.logLevel != 2 || s.logTags.length())
-            LOGI("log", "level %s%s%s", Log::levelName(Log::level()), s.logTags.length() ? ", per tag: " : "",
-                 s.logTags.c_str());
-    }
+    App::LogSetup::apply(g_cfg.s());
     g_cfg.loadKeyMap(g_map);
 #if FEATURE_DISPLAY_CAN
     // The render policy's settings from NVS, what it draws from, and its UiQ
