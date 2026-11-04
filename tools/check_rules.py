@@ -21,7 +21,8 @@ Rules, by where they bite:
   HuTask.cpp     - no readBytes() and no bare read(): the HAL UART mutex is
                    shared with the key writes, and both of those can wait on it
                    (§3.3). read(buf, n) after available() is the only form.
-  main.cpp       functions that run on the car task (carTap, performAction,
+  the glue       (main.cpp and the app/ files it moved to: HuLink, KeyPath,
+                 PanelKeys, RuleActions, LoopTask) functions that run on the car task (carTap, performAction,
                  onSignalsRenamed) never take the settings lock: a copy or
                  tryLock (Cfg::Config). Functions that run on the keys or hu task must not write the
                  render state (App::Ui's since Step 3: they may only ask, through
@@ -131,9 +132,26 @@ hu = strip_comments(read('src/app/HuTask.cpp'))
 check('src/app/HuTask.cpp', hu, r'\breadBytes\s*\(', 'readBytes waits on the HAL UART mutex')
 check('src/app/HuTask.cpp', hu, r'\bread\s*\(\s*\)', 'a bare read() on an empty port waits 20 ms')
 
-# ---- main.cpp: what runs on the keys and hu tasks -------------------------------
+# ---- the glue: what runs on the keys, hu and car tasks ---------------------------
+# main.cpp and the files its glue moved to (docs/design/main-split.md). Each
+# function below is looked up in all of them, so a move needs no edit here.
 main_rel = 'src/main.cpp'
 main = strip_comments(read(main_rel))
+GLUE_FILES = [main_rel, 'src/app/HuLink.cpp', 'src/app/Media.cpp', 'src/app/KeyPath.cpp',
+              'src/app/PanelKeys.cpp', 'src/app/RuleActions.cpp', 'src/app/LoopTask.cpp']
+GLUE = [(rel, strip_comments(read(rel))) for rel in GLUE_FILES
+        if os.path.exists(os.path.join(ROOT, rel))]
+
+
+def glue_function(name):
+    """(file, its stripped source, the body, its offset) of a glue function."""
+    for rel, src in GLUE:
+        body, at = function_body(src, name)
+        if body is not None:
+            return rel, src, body, at
+    problems.append('function %s not found in the glue files (rename? update tools/check_rules.py)' % name)
+    return None, None, None, 0
+
 
 KEYS_TASK_FUNCS = [
     'onAffaKeyReport', 'formatKeyLine', 'onKeyEvent', 'macroEmit', 'macroFilter', 'macroFire',
@@ -154,33 +172,29 @@ RENDER_WRITES = [
      'the library object is the panel task\'s: render through PanelOps'),
 ]
 for fn in KEYS_TASK_FUNCS + HU_TASK_FUNCS:
-    body, at = function_body(main, fn)
+    rel, src, body, at = glue_function(fn)
     if body is None:
-        problems.append('%s: function %s not found (rename? update tools/check_rules.py)' % (main_rel, fn))
         continue
     for pat, why in RENDER_WRITES:
-        check(main_rel, body, pat, '%s: %s' % (fn, why), at, main)
-    check(main_rel, body, r'\bg_emitter\s*\.\s*\w+', '%s: the emitter is the hu task\'s (App::Hu)' % fn, at, main)
-for fn in KEYS_TASK_FUNCS:
-    body, at = function_body(main, fn)
-    if body is None:
-        continue
-    check(main_rel, body, r'\bg_tx\s*\.\s*write(Ack|Lane)\b',
-          '%s: only the hu task writes acks and lane frames' % fn, at, main)
+        check(rel, body, pat, '%s: %s' % (fn, why), at, src)
+    check(rel, body, r'\b(?:[gs]_emitter|emitter\(\))\s*(?:->|\.)\s*\w+',
+          '%s: the emitter is the hu task\'s (App::Hu)' % fn, at, src)
+    if fn in KEYS_TASK_FUNCS:
+        check(rel, body, r'\b(?:[gs]_tx|tx\(\))\s*\.\s*write(Ack|Lane)\b',
+              '%s: only the hu task writes acks and lane frames' % fn, at, src)
 
-# ---- main.cpp: what runs on the car task (CarTask's callbacks) ------------------
-# The settings are httpd's (Cfg::Config: one lock for the writers). A function
-# on the car task takes a copy (trySnapshot) or tryLock(), never the blocking
-# lock: a route holds it for as long as a settings-file import takes.
+# What runs on the car task (CarTask's callbacks). The settings are httpd's
+# (Cfg::Config: one lock for the writers). A function on the car task takes a
+# copy (trySnapshot) or tryLock(), never the blocking lock: a route holds it
+# for as long as a settings-file import takes.
 CAR_TASK_FUNCS = ['carTap', 'performAction', 'onSignalsRenamed']
 for fn in CAR_TASK_FUNCS:
-    body, at = function_body(main, fn)
+    rel, src, body, at = glue_function(fn)
     if body is None:
-        problems.append('%s: function %s not found (rename? update tools/check_rules.py)' % (main_rel, fn))
         continue
-    check(main_rel, body, r'\bg_cfg\s*\.\s*(?!tryLock\b|unlock\b|trySnapshot\b|resolveCarSigs\b)\w+',
-          '%s: the settings are httpd\'s: a copy (trySnapshot) or tryLock on the car task' % fn, at, main)
-    check(main_rel, body, r'Config::Guard', '%s: never the blocking settings lock on the car task' % fn, at, main)
+    check(rel, body, r'\b(?:g_cfg\s*\.|s_cfg\s*->)\s*(?!tryLock\b|unlock\b|trySnapshot\b|resolveCarSigs\b)\w+',
+          '%s: the settings are httpd\'s: a copy (trySnapshot) or tryLock on the car task' % fn, at, src)
+    check(rel, body, r'Config::Guard', '%s: never the blocking settings lock on the car task' % fn, at, src)
 
 # ---- the panel library: one owner (Step 3, §3.6) --------------------------------
 for m in re.finditer(r'\bg_(display|carminat)\b', main):
@@ -224,8 +238,9 @@ for rel in ['src/net/WebUi.cpp', 'src/net/WebUiMacro.cpp', 'src/net/WebUiRes.cpp
 # formatted. LogBus is the bus under it. LogBus::line stays only where a line is
 # built in pieces, until the status providers (step 3) and the head-unit UART in
 # the capture (step 4) replace those builders.
-# LogSetup: the IDF tap hands on a line the IDF formatted.
-RAW_LINE_ALLOWED = {'src/main.cpp', 'src/app/LogSetup.cpp'}
+# The glue builds its lines in pieces (the [hu] echo, [panelkey], [key]); the
+# IDF tap (LogSetup) hands on a line the IDF formatted.
+RAW_LINE_ALLOWED = set(GLUE_FILES) | {'src/app/LogSetup.cpp'}
 for dirpath, _, files in os.walk(os.path.join(ROOT, 'src')):
     for fn in files:
         if not fn.endswith(('.cpp', '.h')):
