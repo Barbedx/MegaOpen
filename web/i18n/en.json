@@ -124,6 +124,7 @@
  "h.recW": "{0} frames · {1} markers",
  "h.noWifi": "No known network found",
  "e.bad_json": "The board couldn't read the request",
+ "e.art_stale": "The cover is not for this track, or it is damaged",
  "e.busy": "The board is busy, try again",
  "e.no_memory": "The board is out of memory",
  "e.not_found": "Not found on the board",
