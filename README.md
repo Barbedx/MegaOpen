@@ -46,11 +46,18 @@ reuses the last rc's files byte for byte. Check a download with
 `sha256sum -c SHA256SUMS --ignore-missing` (PowerShell:
 `Get-FileHash <file>`, compare with the line in `SHA256SUMS`).
 
-**First flash (USB).** Connect the T-2CAN's Type-C. If no new serial port
-appears, unplug it, hold **BOOT** while plugging it back in, then release
-(download mode). Then either the [ESP web flasher](https://espressif.github.io/esptool-js/) in
-Chrome/Edge (connect, the file at offset `0x0`, Program), or esptool, which
-needs Python and `pip install esptool`:
+**Web installer (USB, Chrome/Edge).** <https://barbedx.github.io/MegaOpen/>
+flashes the Latest release (or a newer pre-release) from the browser, no
+Python. A board already on MegaOpen 1.6+ goes into download mode from the page
+(«Перевести в режим прошивки», no buttons); then «Встановити» on the new
+«USB JTAG/serial debug unit» port. It keeps the settings and WiFi: the image
+is written around the `nvs` partition (`tools/stage_installer.py`).
+
+**First flash by hand.** Connect the T-2CAN's Type-C. If no
+«USB JTAG/serial debug unit» port appears, hold one of the two (unlabelled)
+buttons and click the other: BOOT held + RST is download mode. Then esptool,
+which needs Python and `pip install esptool`. The whole `-factory.bin` at
+`0x0` **wipes the settings and WiFi** (it pads over `nvs` with 0xFF):
 
 ```
 esptool --chip esp32s3 write-flash 0x0 megaopen-t2can-<ver>-factory.bin

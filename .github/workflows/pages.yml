@@ -3,14 +3,26 @@
 # descriptor names (USB_WEBUSB_URL in platformio.ini). It is the shell only:
 # the board's own page comes over USB. A pull request runs the link's tests
 # and deploys nothing.
+#
+# The site root is the web installer (installer/, ESP Web Tools):
+# tools/stage_installer.py copies the Latest release's factory images (and the
+# newest pre-release's, when newer) into the site with a manifest each — the
+# bins live in the site because release downloads carry no CORS header. So it
+# also runs after every Release run (a release made with GITHUB_TOKEN fires no
+# `release` event; workflow_run does).
 name: Pages
 
 on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   push:
     branches: [master]
     paths:
       - web/usb/**
       - tools/test_webusb.mjs
+      - installer/**
+      - tools/stage_installer.py
       - .github/workflows/pages.yml
   pull_request:
     paths:
@@ -43,7 +55,9 @@ jobs:
   pages:
     name: pages on?
     needs: test
-    if: github.event_name != 'pull_request'
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-24.04
     permissions:
       pages: read
@@ -66,15 +80,23 @@ jobs:
     if: needs.pages.outputs.on == '1'
     runs-on: ubuntu-24.04
     permissions:
+      contents: read        # gh release download
       pages: write
       id-token: write
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}usb/
+      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
       - name: site
-        run: mkdir -p _site/usb && cp web/usb/* _site/usb/
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/stage_installer.py _site
+          mkdir -p _site/usb && cp web/usb/* _site/usb/
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:

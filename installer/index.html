@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MegaOpen Installer</title>
+<meta name="description" content="Flash MegaOpen onto a LilyGO T-2CAN from the browser over USB.">
+<script type="module" src="https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"></script>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #fff; --fg: #1b1f24; --muted: #5d6670; --line: #dde1e6;
+  --accent: #0b6bcb; --accent-fg: #fff; --warn-bg: #fff4e0; --warn-fg: #6b4300;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111418; --card: #1a1f25; --fg: #e6e9ed; --muted: #9aa4ae; --line: #2c333b;
+    --accent: #4c9eea; --accent-fg: #0b1320; --warn-bg: #3a2c12; --warn-fg: #f3d29b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111418; --card: #1a1f25; --fg: #e6e9ed; --muted: #9aa4ae; --line: #2c333b;
+  --accent: #4c9eea; --accent-fg: #0b1320; --warn-bg: #3a2c12; --warn-fg: #f3d29b;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+main { max-width: 640px; margin: 0 auto; padding: 32px 16px 48px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+h1 { font-size: 26px; margin: 0; }
+.lang button {
+  background: none; border: 1px solid var(--line); color: var(--muted);
+  border-radius: 6px; padding: 2px 8px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.lang button[aria-pressed="true"] { color: var(--fg); border-color: var(--fg); }
+.lead { color: var(--muted); margin: 6px 0 24px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
+label { display: block; font-size: 13px; color: var(--muted); margin: 0 0 4px; }
+select {
+  width: 100%; font: inherit; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg); margin-bottom: 14px;
+}
+.meta { font-size: 13px; color: var(--muted); margin: -4px 0 18px; word-break: break-all; }
+.meta a { color: var(--accent); }
+.install {
+  font: inherit; font-weight: 600; font-size: 17px; width: 100%;
+  padding: 12px; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-fg); cursor: pointer;
+}
+.install.alt { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.step { font-size: 14px; font-weight: 600; margin: 0 0 6px; }
+.note { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
+#dl { margin-bottom: 18px; }
+.warn { background: var(--warn-bg); color: var(--warn-fg); border-radius: 8px; padding: 12px; margin: 0; }
+h2 { font-size: 17px; margin: 28px 0 8px; }
+ol { padding-left: 20px; margin: 0; }
+li { margin: 4px 0; }
+code { font-size: 14px; }
+footer { margin-top: 32px; font-size: 13px; color: var(--muted); }
+footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>MegaOpen</h1>
+    <div class="lang"><button data-lang="uk">UA</button> <button data-lang="en">EN</button></div>
+  </header>
+  <p class="lead" data-t="lead"></p>
+
+  <div class="card">
+    <p class="warn" id="status" hidden></p>
+    <div id="form" hidden>
+      <label for="board" data-t="board"></label>
+      <select id="board"></select>
+      <label for="channel" data-t="channel"></label>
+      <select id="channel"></select>
+      <p class="meta" id="meta"></p>
+      <p class="step" data-t="step1"></p>
+      <button class="install alt" id="dl" type="button" data-t="dlBtn"></button>
+      <p class="note" id="dlNote" hidden></p>
+      <p class="step" data-t="step2"></p>
+      <esp-web-install-button id="btn">
+        <button slot="activate" class="install" data-t="install"></button>
+        <p slot="unsupported" class="warn" data-t="unsupported"></p>
+        <p slot="not-allowed" class="warn" data-t="notAllowed"></p>
+      </esp-web-install-button>
+    </div>
+  </div>
+
+  <h2 data-t="howTitle"></h2>
+  <ol>
+    <li data-t="how1"></li>
+    <li data-t="how2"></li>
+    <li data-t="how3"></li>
+    <li data-t="how4"></li>
+    <li data-t="how5"></li>
+  </ol>
+
+  <h2 data-t="afterTitle"></h2>
+  <ol>
+    <li data-t="after0"></li>
+    <li data-t="after1"></li>
+    <li data-t="after2"></li>
+  </ol>
+
+  <footer data-t="footer"></footer>
+</main>
+<script>
+const T = {
+  uk: {
+    lead: "Прошивка плати з браузера через USB — без Python і esptool.",
+    board: "Плата",
+    channel: "Версія",
+    stable: "Стабільна",
+    rc: "Тестова (pre-release)",
+    install: "Встановити",
+    unsupported: "Цей браузер не вміє Web Serial. Відкрийте сторінку в Chrome або Edge на комп'ютері.",
+    notAllowed: "Web Serial працює лише на https або localhost.",
+    loading: "Завантаження списку версій…",
+    noData: "Не вдалося прочитати список версій (channels.json).",
+    file: "файл",
+    release: "реліз",
+    step1: "1. Якщо на платі вже є MegaOpen",
+    dlBtn: "Перевести в режим прошивки",
+    dlPick: "Виберіть порт плати (USB Serial Device)…",
+    dlDone: "Готово: плата перезапускається в режим прошивки і з'явиться як новий порт «USB JTAG/serial debug unit». Тепер крок 2.",
+    dlFail: "Не вдалося відкрити порт: ",
+    step2: "2. Прошивка",
+    howTitle: "Як прошити",
+    how1: "Підключіть плату кабелем USB до комп'ютера.",
+    how2: "На платі вже MegaOpen (1.6 і новіші)? Спершу «Перевести в режим прошивки» і виберіть її порт — кнопки на платі не потрібні.",
+    how3: "«Встановити» → порт «USB JTAG/serial debug unit» → Install. Нова плата без MegaOpen зазвичай одразу має цей порт; якщо ні — затисніть кнопку BOOT і клацніть RST (на T-2CAN вони без підписів: тримайте одну, клацніть другу; не вийшло — навпаки).",
+    how4: "Після «Installation complete» <b>перепідключіть кабель</b> (або клацніть RST): з режиму прошивки плата сама не стартує.",
+    how5: "Налаштування й WiFi зберігаються: прошивка не чіпає розділ nvs. Галочка «Erase device» стирає все — лише якщо треба почати з нуля.",
+    afterTitle: "Після прошивки",
+    after0: "WiFi (MegaOpen 1.10+): ще раз «Встановити» → порт плати «USB Serial Device» → <b>Connect to Wi-Fi</b>, виберіть мережу і пароль. Плата підключиться одразу й дасть посилання на себе.",
+    after1: "Або без USB: плата підніме свою точку доступу <code>MegaOpen-XXXX</code>, пароль <code>megaopen</code>.",
+    after2: "Відкрийте <code>http://192.168.4.1</code>. Подальші оновлення — по повітрю, з GitHub, на сторінці «Плата».",
+    footer: "Файли — ті самі, що в <a href=\"https://github.com/Barbedx/MegaOpen/releases\">релізах на GitHub</a> (перевірено SHA256SUMS).",
+  },
+  en: {
+    lead: "Flash the board from the browser over USB — no Python, no esptool.",
+    board: "Board",
+    channel: "Version",
+    stable: "Stable",
+    rc: "Test (pre-release)",
+    install: "Install",
+    unsupported: "This browser has no Web Serial. Open the page in desktop Chrome or Edge.",
+    notAllowed: "Web Serial works only over https or on localhost.",
+    loading: "Loading the version list…",
+    noData: "Could not read the version list (channels.json).",
+    file: "file",
+    release: "release",
+    step1: "1. If the board already runs MegaOpen",
+    dlBtn: "Switch to download mode",
+    dlPick: "Pick the board's port (USB Serial Device)…",
+    dlDone: "Done: the board restarts in download mode and comes back as a new port, \"USB JTAG/serial debug unit\". Now step 2.",
+    dlFail: "Could not open the port: ",
+    step2: "2. Flash",
+    howTitle: "How to flash",
+    how1: "Connect the board to the computer over USB.",
+    how2: "Board already on MegaOpen (1.6 or later)? First \"Switch to download mode\" and pick its port — no buttons needed.",
+    how3: "Install → the \"USB JTAG/serial debug unit\" port → Install. A board without MegaOpen usually shows that port already; if not, hold BOOT and click RST (unlabelled on the T-2CAN: hold one, click the other; no luck — swap).",
+    how4: "After \"Installation complete\" <b>unplug and replug the cable</b> (or click RST): out of download mode the board does not start by itself.",
+    how5: "Settings and WiFi are kept: the flash leaves the nvs partition alone. \"Erase device\" wipes everything — only to start from scratch.",
+    afterTitle: "After flashing",
+    after0: "WiFi (MegaOpen 1.10+): Install again → the board's \"USB Serial Device\" port → <b>Connect to Wi-Fi</b>, pick the network and password. The board joins at once and links to itself.",
+    after1: "Or without USB: the board opens its own access point <code>MegaOpen-XXXX</code>, password <code>megaopen</code>.",
+    after2: "Open <code>http://192.168.4.1</code>. Later updates go over the air, from GitHub, on the Board page.",
+    footer: "The same files as in the <a href=\"https://github.com/Barbedx/MegaOpen/releases\">GitHub releases</a> (checked against SHA256SUMS).",
+  },
+};
+const $ = (id) => document.getElementById(id);
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+                set(k, v) { try { localStorage.setItem(k, v); } catch {} } };
+let lang = store.get("lang");
+if (!T[lang]) lang = (navigator.language || "").startsWith("uk") ? "uk" : "en";
+let data = null;
+
+function t(k) { return T[lang][k] ?? k; }
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-t]").forEach((el) => { el.innerHTML = t(el.dataset.t); });
+  document.querySelectorAll(".lang button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.lang === lang));
+  if (data) fillChannels();
+}
+document.querySelectorAll(".lang button").forEach((b) => b.addEventListener("click", () => {
+  lang = b.dataset.lang; store.set("lang", lang); applyLang();
+}));
+
+function fillBoards() {
+  const envs = {};
+  for (const c of data.channels) for (const [env, e] of Object.entries(c.envs)) envs[env] ??= e.board;
+  const sel = $("board");
+  sel.innerHTML = "";
+  const order = ["t2can", "t2can_usbhid", "direct"];
+  const rank = (e) => (order.indexOf(e) + 1) || 99;
+  for (const env of Object.keys(envs).sort((a, b) => rank(a) - rank(b))) sel.add(new Option(envs[env], env));
+  sel.value = store.get("env") in envs ? store.get("env") : "t2can";
+}
+function fillChannels() {
+  const env = $("board").value, sel = $("channel"), keep = sel.value;
+  sel.innerHTML = "";
+  for (const c of data.channels) {
+    if (!c.envs[env]) continue;
+    sel.add(new Option(`${c.version} — ${t(c.channel)}`, c.channel));
+  }
+  if ([...sel.options].some((o) => o.value === keep)) sel.value = keep;
+  update();
+}
+function update() {
+  const env = $("board").value;
+  const c = data.channels.find((x) => x.channel === $("channel").value);
+  const e = c && c.envs[env];
+  if (!e) return;
+  $("btn").manifest = e.manifest;
+  $("btn").setAttribute("manifest", e.manifest);
+  $("meta").innerHTML = `${t("file")}: <code>${e.file}</code> (${(e.size / 1048576).toFixed(2)} MB) · ` +
+    `<a href="${c.url}">${t("release")} ${c.tag}</a><br>sha256 ${e.sha256}`;
+  store.set("env", env);
+}
+// A running MegaOpen (TinyUSB CDC) reboots into the ROM's download mode when
+// the host sets 1200 baud (the Arduino core's "1200 bps touch"). The ROM comes
+// back as a different USB device, so Install then needs the new port.
+$("dl").addEventListener("click", async () => {
+  const note = $("dlNote");
+  note.hidden = false;
+  if (!("serial" in navigator)) { note.textContent = t("unsupported"); return; }
+  note.textContent = t("dlPick");
+  let port;
+  try {
+    port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x303a }] });
+    await port.open({ baudRate: 1200 });
+    await new Promise((r) => setTimeout(r, 300));
+    await port.close().catch(() => {});
+    note.textContent = t("dlDone");
+  } catch (e) {
+    // the board may drop off the bus before close() returns: that is success
+    if (port && /lost|disconnected|NetworkError/i.test(String(e))) note.textContent = t("dlDone");
+    else note.textContent = t("dlFail") + (e && e.message ? e.message : e);
+  }
+});
+$("board").addEventListener("change", fillChannels);
+$("channel").addEventListener("change", update);
+
+applyLang();
+$("status").hidden = false;
+$("status").textContent = t("loading");
+fetch("channels.json", { cache: "no-store" })
+  .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then((j) => {
+    data = j;
+    $("status").hidden = true;
+    $("form").hidden = false;
+    fillBoards();
+    fillChannels();
+  })
+  .catch(() => { $("status").textContent = t("noData"); });
+</script>
+</body>
+</html>
