@@ -50,6 +50,14 @@ public:
     void scanBegin();
     void scanEnd();
 
+    // Improv (src/net/ImprovSerial.cpp), net_svc only, like loop(): join this
+    // network now, no reboot. Joined: it becomes the first network and is
+    // saved (under tryLock, next passes until the lock is free). Failed: the
+    // old first network comes back and nothing is saved.
+    enum class Prov : uint8_t { None, Pending, Joined, Failed };
+    void provision(const char* ssid, const char* pass, uint32_t nowMs);
+    Prov provResult() const { return _prov; }
+
 private:
     static constexpr uint32_t CONNECT_TIMEOUT_MS = 15000;  // boot: then the AP comes up
     static constexpr uint32_t RETRY_JOIN_MS = 8000;        // a retry from AP mode
@@ -117,4 +125,7 @@ private:
     uint32_t _deadBase = 0;      // the probe's count at the last rejoin
     uint32_t _deadAt = 0;        // millis() of the last rejoin, 0 none
     uint32_t _deadWait = 0;      // 0: the next rejoin needs no wait
+    Prov     _prov = Prov::None;
+    bool     _provSave = false;  // joined: write _ssid1/_pass1 into cfg
+    String   _provOld1, _provOldPass1;   // to restore when the join fails
 };

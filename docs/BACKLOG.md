@@ -17,6 +17,30 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
+- **2026-11-07 — the USB serial is write-only: no command input.** The web
+  installer (`installer/`, ESP Web Tools) has «Logs & Console» with an input
+  line; our CDC port shows the log (`src/main.cpp:196`) but nothing in `src/`
+  reads `Serial`. Owner's ask: a small command handler on the CDC — the API's
+  verbs (`status`, `health`, `logLevel DBG`, `reboot`, `dl` = reboot into
+  download mode), one line in, one line out.
+- **2026-11-07 — the web installer cannot put a running board into download
+  mode.** t2can's USB is TinyUSB (`ARDUINO_USB_MODE=0`, `platformio.ini:135`),
+  so the port the browser opens is the app's (PID 80C3); esptool-js's DTR/RTS
+  reset makes it re-enumerate as the ROM's USB-JTAG (PID 1001) and the
+  install fails «Failed to initialize». BOOT+RST works, but the T-2CAN's two
+  buttons carry no labels (owner fumbled it 4 times on the bench). The
+  Arduino core already reboots into download on a 1200-baud open of the CDC
+  (`USBCDC.cpp` `_onLineCoding`). Options: a «у режим прошивки» button on the
+  installer page (open at 1200, close, then Install on the new port), the
+  `dl` command above, or one on «Плата». The installer page now has the
+  1200-baud button. Left over: after such an install ESP Web Tools' reset
+  boots into download mode again — the 1200-baud reboot sets
+  RTC_CNTL_FORCE_DOWNLOAD_BOOT (`usb_persist_restart`), esptool clears it in
+  its S3 `hard_reset` (arduino-esp32 #6762) and esptool-js 0.6 (inside ESP Web
+  Tools 10.4.0) does not: no `RTC_CNTL_OPTION1` in its S3 target. Only a
+  power cycle clears it, so the page says «replug». Fix upstream (esptool-js)
+  or flash with esptool-js directly from the page and clear the register.
+
 - **2026-11-07 — an OTA upload over the USB link left the USB addressed, never configured.**
   Bench mo-8428 on 1.9.0 (de349c5), WiFi down (AP only). Over the link from a
   PC (tools/usb_link.py's Link): `GET /ota/start?mode=fr&hash=…` answered

@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Added
+- **Web installer.** <https://barbedx.github.io/MegaOpen/> (ESP Web Tools, Chrome/Edge) flashes the Latest release, or a newer pre-release, over USB with no Python. A running board goes into download mode from the page («Перевести в режим прошивки», a 1200-baud open of its USB port; no buttons). The image is written around the `nvs` partition, so settings and WiFi survive. GitHub Pages builds the site after every release (`tools/stage_installer.py`, `.github/workflows/pages.yml`); the WebUSB page stays at `/usb/`.
+- **WiFi from the installer (Improv).** The firmware speaks Improv Wi-Fi on its USB serial (`src/net/Improv.*`, `ImprovSerial.*`): «Встановити» on a running board → «Connect to Wi-Fi» lists the networks it sees, and the board joins the chosen one at once, no reboot, and answers with its address. The network is saved as the first one only after it joined; a wrong password leaves the old one in place. Host test `test_improv`.
+
+### Fixed
+- **README's first flash wiped the settings.** The whole `-factory.bin` at `0x0` pads over `nvs` with 0xFF; README and the release notes now say so and point at the installer.
+
 ## [1.10.0] - 2026-11-07
 
 MegaOpen Companion over Bluetooth, and now playing from the head unit's apps with the cover.

@@ -114,6 +114,12 @@
 #define FEATURE_WEB_PAGE 1
 #endif
 
+// Improv Wi-Fi on the USB serial (src/net/ImprovSerial.h): the web installer
+// hands a freshly flashed board the WiFi password. ~3 kB of flash.
+#ifndef FEATURE_IMPROV
+#define FEATURE_IMPROV 1
+#endif
+
 // The USB link to the head unit's app (src/link/UsbLink.h): a TinyUSB vendor
 // interface, so ARDUINO_USB_MODE=0 like the keyboard.
 #ifndef FEATURE_USB_LINK

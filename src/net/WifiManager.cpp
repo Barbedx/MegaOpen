@@ -215,6 +215,17 @@ void WifiManager::loop(uint32_t nowMs)
         _pass2 = pw;
     }
 
+    // A network Improv joined: the first network from now on. tryLock as the
+    // panel menu does on this task; a busy lock is tried again next pass.
+    if (_provSave && _cfg->tryLock()) {
+        _cfg->s().ssid = _ssid1;
+        _cfg->s().pass = _pass1;
+        _cfg->save();
+        _cfg->unlock();
+        _provSave = false;
+        LOGI("wifi", "improv: \"%s\" saved as the first network", _ssid1.c_str());
+    }
+
     if (linkPolicy(nowMs)) return;
 
     if (_phase == Phase::Scanning) {
@@ -232,12 +243,21 @@ void WifiManager::loop(uint32_t nowMs)
             _staDownAt = 0;
             LOGI("wifi", "joined \"%s\" ip=%s\n", _curSsid.c_str(),
                           WiFi.localIP().toString().c_str());
+            if (_prov == Prov::Pending) { _prov = Prov::Joined; _provSave = true; }
             startMdns();
         } else if ((int32_t)(nowMs - _deadline) >= 0) {
             // Plain AP again; the failed attempt cycled the radio through STA.
             _phase = Phase::Idle;
             _lastRetry = nowMs;
             LOGI("wifi", "\"%s\" did not join; AP\n", _curSsid.c_str());
+            if (_prov == Prov::Pending) {
+                // The old first network again; the AP retry rejoins it.
+                _prov = Prov::Failed;
+                _ssid1 = _provOld1;
+                _pass1 = _provOldPass1;
+                _provOld1 = String();
+                _provOldPass1 = String();
+            }
             startAp();
             startMdns();
         }
@@ -313,6 +333,27 @@ void WifiManager::scanEnd()
 {
     if (_off) return;
     if (!_sta && _phase == Phase::Idle) { WiFi.mode(WIFI_AP); applySleep(); }
+}
+
+void WifiManager::provision(const char* ssid, const char* pass, uint32_t nowMs)
+{
+    // Off for the USB link: the radio is down on purpose; say so, change nothing.
+    if (_off) { _prov = Prov::Failed; return; }
+    if (_phase == Phase::Scanning) WiFi.scanDelete();
+    if (_prov != Prov::Pending) { _provOld1 = _ssid1; _provOldPass1 = _pass1; }
+    _ssid1 = ssid;
+    _pass1 = pass;
+    _prov = Prov::Pending;
+    _provSave = false;
+    useNet(0);
+    if (_sta) {
+        // Leaving the network we are on; startJoin's begin() associates anew.
+        _sta = false;
+        _staDownAt = 0;
+        if (_mdnsUp) { MDNS.end(); _mdnsUp = false; _mdns = String(); }
+    }
+    LOGI("wifi", "improv: joining \"%s\"", _curSsid.c_str());
+    startJoin(nowMs, CONNECT_TIMEOUT_MS);
 }
 
 String WifiManager::ip() const

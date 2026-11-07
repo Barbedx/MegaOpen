@@ -18,6 +18,9 @@
 #include "net/WebUi.h"
 #include "net/WifiManager.h"
 #include "net/IpNotice.h"
+#if FEATURE_IMPROV
+#include "net/ImprovSerial.h"
+#endif
 #include "net/LogPush.h"
 #include <WiFi.h>          // the heartbeat reports SSID/BSSID/gateway directly
 #include "utils/Log.h"
@@ -1563,6 +1566,9 @@ static size_t logPushSnapshot(char* out, size_t cap)
 static void hkWifi(uint32_t now)
 {
     g_wifi.loop(now);
+#if FEATURE_IMPROV
+    ImprovSerial::tick(now);   // right after: it calls WifiManager on this task
+#endif
 #if FEATURE_LOG_PUSH
     // Online: on WiFi with internet, or an app on the USB link that offers its own.
     // Not on an OTA trial: a push takes internal heap down to a few kB, under
@@ -2377,6 +2383,9 @@ void setup()
 #endif
 
     g_wifi.begin(g_cfg);
+#if FEATURE_IMPROV
+    ImprovSerial::begin(g_wifi);
+#endif
     memMark("wifi");
     g_web.attachWifi(&g_wifi);
     g_web.attachCounters(&g_ghosts, &g_encSteps);
