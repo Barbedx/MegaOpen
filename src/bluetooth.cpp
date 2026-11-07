@@ -329,7 +329,8 @@ namespace Bluetooth
                  ",\"svc\":{\"ams\":%s,\"ancs\":%s,\"cts\":%s}}"
                  ",\"hid\":{\"active\":%s,\"connected\":%s,\"address\":\"%s\"}}",
                  BleHub::mode() == BleHub::Mode::Both ? "both"
-                     : (BleHub::mode() == BleHub::Mode::Keyboard ? "keyboard" : "ams"),
+                     : BleHub::mode() == BleHub::Mode::Keyboard ? "keyboard"
+                     : BleHub::mode() == BleHub::Mode::App ? "app" : "ams",
                  IsConnected() ? "true" : "false", StatusText,
                  HasBond() ? "true" : "false", IsConnected() ? PeerAddr : "",
                  amsOn ? "true" : "false", IsConnected() ? "true" : "false",

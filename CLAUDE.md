@@ -51,7 +51,7 @@ map; this file is the "where do I look" index for a session in the car.
 1. `GET /api/health` — one object per chain with `state` and `code` (the words
    live in `web/i18n/*.json` as `w.<code>`; error replies are codes too, `e.<code>`):
    `panel`, `media`, `clock`, `keys` (+ `dest` masks), `ancs`, `hu`, `knobs`,
-   `lights`, `phone`. Start from the `code`.
+   `lights`, `app` (Companion: USB, BLE or none), `phone`. Start from the `code`.
 2. `GET /api/status` — build hash, boot number (`boots`), uptime, heap, RSSI;
    `usb` — the link in three layers (bus `sof`, `addressed`, `mounted`, the app).
 3. `GET /api/logs?since=0` — live log ring; `GET /api/logs/file` — the flash
@@ -70,6 +70,7 @@ map; this file is the "where do I look" index for a session in the car.
 | `[ble]` | iPhone link, AMS/HID queues |
 | `[ota]` | trial / CONFIRMED / rolling back |
 | `[usb]` | USB link: host SOFs / addressed / configured (link up), bus reset, suspend; the app's frames |
+| `[link]` | Companion: BLE subscribe, HELLO, gone, `app via usb`, `ble` or `none` |
 | `[page]` | the web page's own errors, sent by the page: which screen, the text, the request that failed |
 | `[push]` | log push to GitHub: file sent, bytes queued, GitHub's refusal |
 | `[rule]` | rules (docs/design/rules.md): each fire, popups shown/dropped, the gestures on the keys task |
@@ -91,6 +92,8 @@ Raise the log level for one session through `/api/settings` `{"logLevel":"DBG"}`
 | encoders / LED rings | health `knobs`, `lights`; `/api/knobs` | `src/knobs/*`, `src/input/*` |
 | head unit shows nothing / wrong | health `hu`; `/api/canbox/last?in=1`; `/api/messages` | `src/app/HuTask.*`, `src/proto/canbox/Rav4Emitter.*`, `src/sinks/CanboxUartSink.*`; `docs/raise-protocol.md`, `docs/hu-decoder.md` |
 | track title from HU | `[media]` | `src/media/HuMediaSource.*`, `MediaRouter.*` |
+| track / cover from the head unit's apps | health `app`, `media`; `/api/media` | `src/media/AppMediaSource.*`, routes `/api/app/media`, `/api/app/art`; Companion `android/`; `docs/design/companion-media.md` |
+| Companion does not connect (USB / BLE) | health `app`; `/api/status` `usb`, `ble`; `[link]`, `[usb]` | `src/link/AppLink.*`, `LinkSession.*`, `UsbPipe.*`, `BlePipe.*`; `docs/design/usb-link.md` |
 | iPhone: no track / clock / notifications | health `phone`, `media`, `clock`, `ancs`; `[ble]` | `src/ble/*`, `src/apple_*_service.cpp`, `src/current_time_service.cpp`, `src/media/AmsMediaSource.*` |
 | car value wrong / missing | «Мапа» page `#map` (`/api/map?live=1`), `[car]`, `[can2]` | `src/vehicle/decode_defaults.inc` (factory rows), `CanDecode.*`, `Signals.*`, `Derived.*` (gear, consumption, range); ids in `docs/megane-can-ids.md`, `docs/signal-glossary.md`; car checklist `docs/car-test-can-signals.md` |
 | new signals not shown | saved map hides new factory rows | press **«Заводські прив'язки»** on «Мапа» › Сигнали |

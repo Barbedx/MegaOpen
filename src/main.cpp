@@ -116,10 +116,11 @@ static Sinks::UsbHidKeySink g_usbKeys;
 #endif
 // Portable: its UTF-16 decoder also serves the exchange log in every build.
 #include "media/HuMediaSource.h"
+#include "media/AppMediaSource.h"
 #include <ArduinoJson.h>
 #include "utils/PsramJson.h"
 #include "app/OtaTrial.h"
-#include "link/UsbLink.h"
+#include "link/AppLink.h"
 
 // Wiring only — every decision lives in the objects below.
 
@@ -370,6 +371,8 @@ static Vehicle::CanSniffer g_sniffer;
 // `mediaSource` in NVS picks which one reaches the glass.
 static MediaRouter        g_media;
 static HuMediaSource      g_hu;
+// Now playing from the head unit's Android, posted by MegaOpen Companion.
+static AppMediaSource     g_appMedia;
 
 // Only the router's active source reaches the screen. May run on the NimBLE host
 // task, so it only sets a flag: MediaScreen is touched only by its owner (the
@@ -1498,13 +1501,13 @@ static void keysStart()
 // meant an image flashed in the car (AP, no known network) was rolled back
 // and rebooted 180 s after every OTA.
 // The OTA trial wants a way in for the next update: WiFi up once, or the app
-// on the USB link (it carries the page and the upload too).
+// on the link (USB or BLE) (it carries the page and the upload too).
 static bool hkWifiSeen()
 {
     static bool s_seen = false;
     s_seen = s_seen || WiFi.status() == WL_CONNECTED ||
              (!g_wifi.connecting() && !g_wifi.isSta() && (WiFi.getMode() & WIFI_AP)) ||
-             UsbLink::alive();
+             AppLink::alive();
     return s_seen;
 }
 
@@ -1570,7 +1573,7 @@ static void hkWifi(uint32_t now)
     static bool s_trialSaid = false;
     if (trial && !s_trialSaid) { s_trialSaid = true; LOGI("push", "held until the OTA trial confirms"); }
     LogPush::tick(now, !trial && ((g_wifi.isSta() && !g_wifi.connecting() && WiFi.status() == WL_CONNECTED)
-                                  || UsbLink::netAvailable()));
+                                  || AppLink::netAvailable()));
 #endif
 #if FEATURE_DISPLAY_CAN
     static IpNotice s_notice;
@@ -1934,6 +1937,7 @@ void setup()
         d.ops    = &g_panelOps;
         d.router = &g_media;
         d.hu     = &g_hu;
+        d.app    = &g_appMedia;
         d.engine = &g_engine;
         d.car    = &g_state;
 #if FEATURE_BLE
@@ -2147,6 +2151,8 @@ void setup()
     g_hu.setChangeCallback(onMediaChange, nullptr);
     // The AMS slot is filled by the BLE block below, if it starts.
     g_media.setSources(nullptr, &g_hu);
+    g_appMedia.setChangeCallback(onMediaChange, nullptr);
+    g_media.setApp(&g_appMedia);
     {
         MediaRouter::Mode m = MediaRouter::modeFromStr(g_cfg.s().mediaSource.c_str());
 #if !FEATURE_BLE
@@ -2283,18 +2289,15 @@ void setup()
     {
         const auto& bm = g_cfg.s().bleMode;
         // Off = BleHub not started (saves ~40 KB of host state).
-        const bool bleOn = (bm == "ams" || bm == "keyboard" || bm == "both");
-        // For /api/health. Not BleHub::amsActive() alone: its gMode defaults to
-        // Ams even when BLE never started.
-        g_amsSinkLive = bleOn && BleHub::amsActive(bm == "keyboard" ? BleHub::Mode::Keyboard
-                                                  : bm == "both"   ? BleHub::Mode::Both
-                                                                   : BleHub::Mode::Ams);
-        g_hidSinkLive = bleOn && BleHub::hidActive(bm == "keyboard" ? BleHub::Mode::Keyboard
-                                                  : bm == "both"   ? BleHub::Mode::Both
-                                                                   : BleHub::Mode::Ams);
+        const bool bleOn = (bm == "ams" || bm == "keyboard" || bm == "both" || bm == "app");
         BleHub::Mode mode = BleHub::Mode::Ams;
         if      (bm == "keyboard") mode = BleHub::Mode::Keyboard;
         else if (bm == "both")     mode = BleHub::Mode::Both;
+        else if (bm == "app")      mode = BleHub::Mode::App;
+        // For /api/health. Not BleHub::amsActive() alone: its gMode defaults to
+        // Ams even when BLE never started.
+        g_amsSinkLive = bleOn && BleHub::amsActive(mode);
+        g_hidSinkLive = bleOn && BleHub::hidActive(mode);
 
         if (bleOn) {
             if (BleHub::amsActive(mode)) {
@@ -2500,6 +2503,7 @@ void setup()
 #if FEATURE_BLE
     g_web.attachPhone([]() { return Bluetooth::IsConnected(); }, &g_media);
     g_web.attachHuMedia(&g_hu);
+    g_web.attachAppMedia(&g_appMedia);
     g_web.attachBle([]() { return Bluetooth::GetStatusJson(); },
                     []() { Bluetooth::ClearBonds(); });
     // Null for a sink not in the chain, so /api/health (keys.dest) can report it as not live.
@@ -2515,6 +2519,7 @@ void setup()
     g_web.attachPhone([]() { return false; }, &g_media);
     // The head-unit source is attached in both branches.
     g_web.attachHuMedia(&g_hu);
+    g_web.attachAppMedia(&g_appMedia);
 #endif
 #endif
 #if FEATURE_VEHICLE_CAN
@@ -2530,15 +2535,17 @@ void setup()
     g_web.begin(g_cfg, g_engine, g_map, g_keySink);
     memMark("web");
     // The app's link pipes to the web server: after it listens.
-    UsbLink::begin(g_wifi.apSsid().c_str());
-    // wifiAuto: WiFi off only for a client that carries the board's internet
-    // (MegaOpen Companion's "net"). The WebUSB page has none: with WiFi off
-    // under it the board had neither, no log push, no update check.
-    g_wifi.setLinkAlive(UsbLink::netAvailable);
+    AppLink::begin(g_wifi.apSsid().c_str());
+    AppLink::setWifiOnline([]() { return g_wifi.isSta() && !g_wifi.connecting() && WiFi.status() == WL_CONNECTED; });
+    // wifiAuto: WiFi off only for a USB client that carries the board's
+    // internet (MegaOpen Companion's "net"); BLE never turns it off
+    // (AppLink.h). The WebUSB page has none: with WiFi off under it the
+    // board had neither, no log push, no update check.
+    g_wifi.setLinkAlive(AppLink::usbNet);
 #if FEATURE_LOG_PUSH
     g_wifi.setUplinkProbe(LogPush::wifiNoAnswer);
 #endif
-    memMark("usblink");
+    memMark("applink");
     // The OTA trial's verdict comes from net_svc (Housekeeping).
     App::OtaTrial::begin();
 

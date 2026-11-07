@@ -7,8 +7,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import ua.megaopen.companion.board.BoardConnection
+import ua.megaopen.companion.link.BleLink
 import ua.megaopen.companion.link.UsbLink
 import ua.megaopen.companion.link.UsbSeen
+import ua.megaopen.companion.media.MediaSender
+import ua.megaopen.companion.media.MediaWatch
 import ua.megaopen.companion.settings.Settings
 import ua.megaopen.companion.update.Updater
 import ua.megaopen.companion.voice.Speaker
@@ -28,8 +31,11 @@ class AppGraph(app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val settings = Settings(app, scope)
     val usb = UsbLink(app, scope)
+    val ble = BleLink(app, scope)
     val usbSeen = UsbSeen(app, scope)
-    val connection = BoardConnection(app, scope, settings, usb)
+    val connection = BoardConnection(app, scope, settings, usb, ble)
+    val media = MediaWatch(app, scope)
+    val mediaSender = MediaSender(scope, media, connection)
     val updater = Updater(app)
     val speaker by lazy { Speaker(app) }
 

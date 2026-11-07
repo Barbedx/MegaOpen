@@ -123,6 +123,16 @@
 #error "FEATURE_USB_LINK needs ARDUINO_USB_MODE=0 (TinyUSB)"
 #endif
 
+// The same link over Bluetooth LE (src/link/BlePipe.h): a GATT service on
+// BleHub's server, in every bleMode but off. AppLink serves both.
+#ifndef FEATURE_BLE_LINK
+#define FEATURE_BLE_LINK FEATURE_BLE
+#endif
+#if FEATURE_BLE_LINK && !FEATURE_BLE
+#error "FEATURE_BLE_LINK needs FEATURE_BLE"
+#endif
+#define FEATURE_APP_LINK (FEATURE_USB_LINK || FEATURE_BLE_LINK)
+
 #if !FEATURE_DISPLAY_CAN && !FEATURE_VEHICLE_CAN
 // Not an error — a headless canbox with only the GPIO matrix is a valid build.
 #endif

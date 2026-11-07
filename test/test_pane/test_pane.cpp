@@ -154,14 +154,15 @@ static void test_setting_a_scene_out_of_range_falls_back_to_off()
     TEST_ASSERT_FALSE(p.on());
 }
 
-static void test_only_media_and_tape_claim_to_use_media()
+static void test_only_media_tape_and_cover_claim_to_use_media()
 {
     // The page says "оздоблення" on the strength of this. A scene that wrongly
     // claimed real data would be inviting somebody to read a level off a random
-    // walk. Tape's packs are the real position.
+    // walk. Tape's packs are the real position; the Cover is the track's own.
     for (uint8_t i = 0; i < MediaPane::SCENE_COUNT; ++i) {
         const auto s = (MediaPane::Scene)i;
-        TEST_ASSERT_EQUAL_MESSAGE(s == MediaPane::Scene::Media || s == MediaPane::Scene::Tape,
+        TEST_ASSERT_EQUAL_MESSAGE(s == MediaPane::Scene::Media || s == MediaPane::Scene::Tape ||
+                                      s == MediaPane::Scene::Cover,
                                   MediaPane::usesMedia(s),
                                   "usesMedia disagrees with the real scenes");
     }
@@ -405,6 +406,37 @@ static void test_the_carousel_visits_every_scene_but_off_and_custom_and_wraps()
                             (uint8_t)MediaPane::carouselNext(MediaPane::Scene::Off));
     TEST_ASSERT_EQUAL_UINT8((uint8_t)MediaPane::Scene::Media,
                             (uint8_t)MediaPane::carouselNext(MediaPane::Scene::Custom));
+}
+
+// The cover from the head unit's app: its bits as they came; with none, the
+// Media scene, so the pane never goes dark between tracks.
+static void test_the_cover_scene_shows_the_cover_or_media()
+{
+    MediaPane cover, media;
+    cover.setScene(MediaPane::Scene::Cover);
+    media.setScene(MediaPane::Scene::Media);
+    cover.setProgress(30, 200); media.setProgress(30, 200);
+    cover.setPlaying(true);     media.setPlaying(true);
+    uint8_t a[MediaPane::BYTES], b[MediaPane::BYTES];
+    cover.compose(a);
+    media.compose(b);
+    TEST_ASSERT_EQUAL_MEMORY(b, a, MediaPane::BYTES);
+    TEST_ASSERT_FALSE(cover.hasCover());
+
+    uint8_t pic[MediaPane::BYTES];
+    for (uint16_t i = 0; i < MediaPane::BYTES; ++i) pic[i] = (uint8_t)(i ^ 0x5A);
+    cover.setCover(pic);
+    pic[0] = 0;                                   // copied, not borrowed
+    cover.compose(a);
+    TEST_ASSERT_EQUAL_HEX8(0x5A, a[0]);
+    TEST_ASSERT_EQUAL_MEMORY(pic + 1, a + 1, MediaPane::BYTES - 1);
+    TEST_ASSERT_TRUE(MediaPane::usesMedia(MediaPane::Scene::Cover));
+    TEST_ASSERT_EQUAL_STRING("cover", MediaPane::sceneName(MediaPane::Scene::Cover));
+    TEST_ASSERT_EQUAL_UINT8((uint8_t)MediaPane::Scene::Cover, (uint8_t)MediaPane::sceneFromName("cover"));
+    cover.setCover(nullptr);
+    cover.compose(a);
+    media.compose(b);
+    TEST_ASSERT_EQUAL_MEMORY(b, a, MediaPane::BYTES);
 }
 
 // ---- the custom picture (POST /api/media bits=) ---------------------------
@@ -942,7 +974,7 @@ int main(int, char**)
     RUN_TEST(test_every_scene_round_trips_through_its_name);
     RUN_TEST(test_an_unknown_or_null_scene_name_falls_back_to_off);
     RUN_TEST(test_setting_a_scene_out_of_range_falls_back_to_off);
-    RUN_TEST(test_only_media_and_tape_claim_to_use_media);
+    RUN_TEST(test_only_media_tape_and_cover_claim_to_use_media);
     RUN_TEST(test_no_scene_writes_outside_the_pane);
     RUN_TEST(test_a_pane_composed_before_it_was_ever_stepped_is_safe);
     RUN_TEST(test_off_composes_an_empty_pane);
@@ -971,5 +1003,6 @@ int main(int, char**)
     RUN_TEST(test_the_gmeter_drops_its_trail_when_the_data_goes);
     RUN_TEST(test_an_unverified_gmeter_moves_with_a_dotted_ring);
     RUN_TEST(test_accel_long_converts_to_milli_g);
+    RUN_TEST(test_the_cover_scene_shows_the_cover_or_media);
     return UNITY_END();
 }

@@ -132,6 +132,7 @@ static inline esp_err_t replyDoc(PsychicRequest* r, JsonDocument& d)
 #include "../keys/KeyDests.h"
 #include "../media/MediaRouter.h"
 #include "../media/HuMediaSource.h"
+#include "../media/AppMediaSource.h"
 #include "../app/UiTask.h"
 #include "../utils/Mirror.h"
 #endif
@@ -250,6 +251,7 @@ public:
 
     // The head unit as a media source, changeable live, without a reboot.
     void attachHuMedia(HuMediaSource* hu) { _hu = hu; }
+    void attachAppMedia(AppMediaSource* a) { _appMedia = a; }
     // Which canbox profile the head unit speaks (health `hu`); hu task writes.
     // Who else is on the panel bus (health `panel`).
     void attachPanelWatch(const MegaOpen::PanelBusWatch* w) { _panelWatch = w; }
@@ -485,6 +487,7 @@ private:
     BleStatusFn            _bleStatus = nullptr;
     BleUnbondFn            _bleUnbond = nullptr;
     HuMediaSource*         _hu = nullptr;
+    AppMediaSource*        _appMedia = nullptr;
     // The newest settings (applied or not), for a reader; false when busy.
     bool mediaSettings(App::Ui::MediaSettings& out) const;
 #endif

@@ -19,7 +19,7 @@
     <!-- Home -->
     <string name="home_board">Board</string>
     <string name="home_fw">Firmware %1$s</string>
-    <string name="home_how">Plug the board into this device\'s USB, or let the app find it on WiFi.</string>
+    <string name="home_how">Plug the board into this device\'s USB, choose it on Bluetooth, or let the app find it on WiFi (More › Connection).</string>
     <string name="home_open_page">Open the board\'s settings</string>
     <string name="home_voice">Voice</string>
     <string name="home_said_none">Nothing said yet</string>
@@ -55,7 +55,7 @@
     <string name="voice_phrase_note">An empty phrase says the default (grey). {v} is replaced by the value.</string>
 
     <!-- The board's page -->
-    <string name="board_none">No board yet: plug it into USB, or let the app find it on WiFi (More › Connection).</string>
+    <string name="board_none">No board yet: plug it into USB, choose it on Bluetooth, or let the app find it on WiFi (More › Connection).</string>
     <string name="board_unreachable">The board did not answer: %1$s</string>
     <string name="board_saved">Saved: %1$s</string>
     <string name="board_not_saved">Not saved: %1$s</string>
@@ -94,7 +94,6 @@
     <string name="diag_usb_connecting">USB: connecting…</string>
     <string name="diag_usb_up">USB: firmware %1$s (%2$s)</string>
     <string name="diag_usb_failed">USB: failed, %1$s</string>
-    <string name="diag_usb_stats">Frames in %1$d, out %2$d, bad bytes %3$d; requests %4$d, failed %5$d; the board\'s internet %6$d</string>
     <string name="diag_usb_seen">USB devices the head unit sees</string>
     <string name="diag_usb_seen_none">None. Plug the board, a phone or a flash drive into the same cable and port: if nothing shows up here, that port or cable carries no data.</string>
     <string name="diag_usb_dev">%1$s (%2$s), classes %3$s</string>
@@ -114,4 +113,56 @@
     <string name="notify_title">Notifications</string>
     <string name="notify_on">Show the alerts as notifications</string>
     <string name="notify_note">On the screen while the alert lasts (lights still off), gone when it is fixed.</string>
+    <!-- Bluetooth, now playing -->
+    <string name="state_ble">On Bluetooth: %1$s</string>
+    <string name="state_waiting_usb">Waiting for the board on USB</string>
+    <string name="state_waiting_ble">Waiting for the board on Bluetooth</string>
+    <string name="diag_usb_off">USB: not used (the connection setting)</string>
+    <string name="ble_off">Bluetooth: not used</string>
+    <string name="ble_no_board">Bluetooth: no board chosen (More › Connection)</string>
+    <string name="ble_no_permission">Bluetooth: not allowed (More › Connection)</string>
+    <string name="ble_adapter_off">Bluetooth is off on this device</string>
+    <string name="ble_connecting">Bluetooth: connecting to %1$s (try %2$d)</string>
+    <string name="ble_pairing">Bluetooth: pairing with %1$s; confirm it if Android asks</string>
+    <string name="ble_up">Bluetooth: %1$s, firmware %2$s</string>
+    <string name="ble_retry">Bluetooth: %1$s did not answer (%2$s), next try in %3$d s</string>
+    <string name="ble_hint">Not found? On the board set Board › Bluetooth to any mode but «Off» («App on the head unit only» is the link alone).</string>
+    <string name="wifi_searching">WiFi: looking (mDNS, then the hotspot\'s addresses)…</string>
+    <string name="wifi_not_found">WiFi: not found, next search in %1$d s</string>
+    <string name="wifi_lost">WiFi: %1$s does not answer, next try in %2$d s</string>
+    <string name="conn_mode">How to reach the board</string>
+    <string name="conn_mode_auto">Auto: USB, then Bluetooth, then WiFi</string>
+    <string name="conn_mode_usb">USB only</string>
+    <string name="conn_mode_ble">Bluetooth only</string>
+    <string name="conn_mode_wifi">WiFi only</string>
+    <string name="conn_ble">Bluetooth board</string>
+    <string name="conn_ble_none">None chosen yet</string>
+    <string name="conn_ble_chosen">%1$s (%2$s)</string>
+    <string name="conn_ble_pick">Choose</string>
+    <string name="conn_ble_forget">Forget</string>
+    <string name="conn_ble_permission">Allow Bluetooth</string>
+    <string name="conn_ble_denied">Without the permission the app cannot use Bluetooth</string>
+    <string name="conn_ble_off">Turn Bluetooth on first</string>
+    <string name="pick_title">Choose the board</string>
+    <string name="pick_scanning">Looking for boards near by…</string>
+    <string name="pick_none">No board found.</string>
+    <string name="pick_paired">paired</string>
+    <string name="pick_rssi">%1$d dBm</string>
+    <string name="pick_cancel">Cancel</string>
+    <string name="pick_location_note">Android before 12 also needs Location turned on to scan.</string>
+    <string name="diag_link_stats">Frames in %1$d, out %2$d, bad bytes %3$d; requests %4$d, failed %5$d; the board\'s internet %6$d</string>
+    <string name="media_title">Media</string>
+    <string name="media_access_off">Give «Notification access» once: the app then sees what plays on this device (Spotify, YouTube Music, a radio app) and sends it to the board\'s panel, cover included.</string>
+    <string name="media_access_open">Open notification access</string>
+    <string name="media_access_on">Notification access given: what plays goes to the board.</string>
+    <string name="media_no_settings">This device has no notification access screen</string>
+    <string name="media_none">Nothing plays</string>
+    <string name="media_playing">%1$s · playing</string>
+    <string name="media_paused">%1$s · paused</string>
+    <string name="media_no_cover">No cover</string>
+    <string name="media_not_sent">Nothing sent to the board yet</string>
+    <string name="media_reply">%1$s «%2$s» to %3$s: %4$s</string>
+    <string name="media_ok">taken</string>
+    <string name="media_ok_art">taken, cover sent</string>
+    <string name="media_listener">MegaOpen: now playing to the panel</string>
 </resources>

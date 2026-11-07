@@ -18,7 +18,7 @@ public:
     // Settings › «WiFi off on USB» (wifiAuto): WiFi stops once the app has been
     // on the USB link for OFF_AFTER_MS, and comes back ON_AFTER_MS after it is
     // gone, so the board is never out of reach (docs/design/usb-link.md).
-    // `alive` is UsbLink::alive, asked on every pass.
+    // `alive` is AppLink::usbNet, asked on every pass (BLE never turns WiFi off).
     void setLinkAlive(bool (*alive)()) { _linkAlive = alive; }
     // A link that is "connected" and carries nothing (the head unit's hotspot
     // after its own uplink dropped, a router that lost the lease): `noAnswer`

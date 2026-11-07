@@ -6,7 +6,7 @@
 #include <Preferences.h>
 #include <Update.h>
 #include <esp_http_client.h>
-#include "../link/UsbLink.h"
+#include "../link/AppLink.h"
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
 #include <mbedtls/md.h>
@@ -213,7 +213,7 @@ namespace GhOta
         }
 
         // Where a response comes from: the board's own TLS over WiFi, or the
-        // app on the USB link (src/link/UsbLink.h, "the app's internet"), which
+        // app on the link (src/link/AppLink.h, "the app's internet"), which
         // makes the same request on the head unit's network.
         struct Src {
             esp_http_client_handle_t h = nullptr;
@@ -227,26 +227,26 @@ namespace GhOta
         {
             const char* hdr[] = {"Accept", api ? "application/vnd.github+json" : "application/octet-stream",
                                  "User-Agent", "MegaOpen/" MEGAOPEN_VERSION, nullptr};
-            UsbLink::NetHead head;
+            Link::NetHead head;
             const char* why = "";
-            if (!UsbLink::netOpen("GET", url, hdr, nullptr, 0, TIMEOUT_MS, head, why)) {
-                fail("gh_connect", "through the app on USB: %s", why);
+            if (!AppLink::netOpen("GET", url, hdr, nullptr, 0, TIMEOUT_MS, head, why)) {
+                fail("gh_connect", "through the app (%s): %s", AppLink::viaName(AppLink::via()), why);
                 return Src{};
             }
             char h[48];
             hostOf(head.url, h, sizeof(h));
             if (head.url[0] && !GhRelease::trustedUrl(head.url)) {
-                UsbLink::netClose();
+                AppLink::netClose();
                 fail("gh_host", "redirect to %s refused: not GitHub over https", h);
                 return Src{};
             }
             const int st = head.status;
             if (st == 200) {
                 len = head.len;
-                LOGI("ota", "github: through the app on USB (%s)", h[0] ? h : "?");
+                LOGI("ota", "github: through the app (%s, %s)", AppLink::viaName(AppLink::via()), h[0] ? h : "?");
                 return Src{nullptr, true};
             }
-            UsbLink::netClose();
+            AppLink::netClose();
             if (st == 403 || st == 429)
                 fail("gh_rate", "GitHub said %d: 60 checks an hour per address", st);
             else if (st == 404)
@@ -259,20 +259,20 @@ namespace GhOta
         Src get(const char* url, bool api, int64_t& len)
         {
             if (!GhRelease::trustedUrl(url)) return Src{getWifi(url, api, len)};   // refuses and says why
-            if (UsbLink::netAvailable()) return getLink(url, api, len);
+            if (AppLink::netFirst()) return getLink(url, api, len);
             return Src{getWifi(url, api, len)};
         }
 
         int readSrc(Src& c, char* b, int n)
         {
-            if (c.link) return UsbLink::netRead((uint8_t*)b, (size_t)n, TIMEOUT_MS);
+            if (c.link) return AppLink::netRead((uint8_t*)b, (size_t)n, TIMEOUT_MS);
             return esp_http_client_read(c.h, b, n);
         }
 
         void done(Src& c)
         {
             if (c.link) {
-                UsbLink::netClose();
+                AppLink::netClose();
             } else if (c.h) {
                 esp_http_client_close(c.h);
                 HEAP_CHECK("ota pre-cleanup");

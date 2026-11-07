@@ -5,6 +5,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-11-07
+
+MegaOpen Companion over Bluetooth, and now playing from the head unit's apps with the cover.
+
+### Added
+- **MegaOpen Companion over Bluetooth.** The app reaches the board over BLE as it does over USB: one GATT service (`4d4f0100-…`) carries the same frames (the settings page, the alerts, the board's internet). It runs in every Bluetooth mode but «Вимкнено»; the new mode «Лише апка на ГУ» (`bleMode` `app`) is the link alone. The first write bonds (an encrypted link only). WiFi is not touched by it: the log push and the GitHub update go through the app over BLE only when the board's WiFi is offline (the head unit's hotspot gone to 5 GHz). docs/design/usb-link.md «Over Bluetooth LE». In the app: «Підключення» Авто (USB → Bluetooth → WiFi) / only one, the board picker, the next retry on screen.
+- **Now playing from the head unit's apps.** Companion reads the playing media session on the head unit (Spotify, YouTube Music, a radio app, DUDU's player when it publishes one) and posts it (`POST /api/app/media`, `POST /api/app/art`): title, artist, album, the player's name, play state and position, and the cover as a 48×48 one-bit picture. «Джерело треку» has «апка на ГУ»; «авто» takes the app first while it plays, then the head unit's own text, then the iPhone. The pane's new scene «обкладинка» shows the cover (the Media scene until there is one); the glass preview on «Екран» shows it too. Host test `test_appmedia`. docs/design/companion-media.md.
+- `/api/health` chain `app` (`app_usb`, `app_ble`, `app_none`, `app_none_ble_off`, with `mediaPosts`, `mediaAgoMs`) and its row «Апка на ГУ» on «Огляд»; `/api/status` `linkVia` and `ble` beside `usb`; log tag `[link]`.
+
+### Changed
+- The link's code is one session over two transports: `src/link/LinkSession.*` (HELLO, the channels to httpd, the events, the app's internet), `UsbPipe.*`, `BlePipe.*`, served by one task `applink` (was `usblink`) in `AppLink.*`; `UsbLink.*` is gone. The frame buffers moved from DRAM to PSRAM: 3.5 kB less static DRAM than 1.9.0.
+- `/api/status` `usb`: the session counters as before, plus `up` and `lastRxAgoMs`.
+
 ## [1.9.0] - 2026-11-03
 
 The panel role (radio emulator or radio extension) and the clean-out of what older firmware left behind.

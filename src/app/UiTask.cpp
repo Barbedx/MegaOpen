@@ -12,6 +12,7 @@
 #include "../keys/KeyEngine.h"
 #include "../media/MediaRouter.h"
 #include "../media/HuMediaSource.h"
+#include "../media/AppMediaSource.h"
 #include "../utils/LogBus.h"
 #include "../ui/SignalText.h"
 #include "../vehicle/VehicleState.h"
@@ -336,7 +337,8 @@ namespace App
                 if (!linkUp) {
                     // Show the missing source rather than leaving a stale track up.
                     affa::toAscii(s_d.router->statusText(), t, sizeof(t));
-                    const char* none = (s_d.router->activeSource() == s_d.hu) ? "NO HEAD UNIT" : "NO PHONE";
+                    const IMediaSource* const as = s_d.router->activeSource();
+                    const char* none = as == s_d.hu ? "NO HEAD UNIT" : (s_d.app && as == s_d.app) ? "NO APP" : "NO PHONE";
                     g_media3.setTitle(t[0] ? t : none);
                     g_media3.setArtist("");
                     g_media3.setAlbum("");
@@ -380,8 +382,9 @@ namespace App
             //   3. the router's active source or its liveness changed.
             void serviceMediaScreen(uint32_t now)
             {
-                // The head-unit source expires on silence, so it needs the time.
+                // The head-unit sources expire on silence, so they need the time.
                 s_d.hu->setNow(now);
+                if (s_d.app) s_d.app->setNow(now);
 
                 static MediaInfo     s_shown;
                 static uint32_t      s_mediaMs = 0;
@@ -390,6 +393,18 @@ namespace App
 
                 IMediaSource* const src = s_d.router->activeSource();
                 const bool live = s_d.router->active();
+
+                // The cover on the pane (Scene::Cover): the app's, while the app is the
+                // source on the glass; fetched once per track (its hash moves).
+                if (s_d.app) {
+                    static uint32_t s_coverHash = 0;
+                    const uint32_t want = (src == s_d.app && live) ? s_d.app->artHash() : 0;
+                    if (want != s_coverHash) {
+                        static uint8_t s_cover[MegaOpen::MediaPane::BYTES];
+                        if (!want)                       { g_pane.setCover(nullptr);  s_coverHash = 0; }
+                        else if (s_d.app->art(s_cover))  { g_pane.setCover(s_cover);  s_coverHash = want; }
+                    }
+                }
 
                 if (g_mediaPending || src != s_wasSrc || s_wasLive != (int8_t)live) {
                     // The copy is taken under the source's mutex, which the AMS

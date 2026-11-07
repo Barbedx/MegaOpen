@@ -17,7 +17,7 @@
 
     <string name="home_board">Плата</string>
     <string name="home_fw">Прошивка %1$s</string>
-    <string name="home_how">Підключіть плату до USB цього пристрою або дайте застосунку знайти її по WiFi.</string>
+    <string name="home_how">Підключіть плату до USB цього пристрою, оберіть її по Bluetooth або дайте застосунку знайти її по WiFi (Ще › Підключення).</string>
     <string name="home_open_page">Відкрити налаштування плати</string>
     <string name="home_voice">Голос</string>
     <string name="home_said_none">Ще нічого не казав</string>
@@ -50,7 +50,7 @@
     <string name="voice_others_note">Ваші власні правила на платі, текстом плати</string>
     <string name="voice_phrase_note">Порожня фраза — стандартна (сіра). {v} замінюється значенням.</string>
 
-    <string name="board_none">Плати поки нема: підключіть її по USB або дайте застосунку знайти її по WiFi (Ще › Зв\'язок).</string>
+    <string name="board_none">Плати поки нема: підключіть її по USB, оберіть по Bluetooth або дайте застосунку знайти її по WiFi (Ще › Підключення).</string>
     <string name="board_unreachable">Плата не відповіла: %1$s</string>
     <string name="board_saved">Збережено: %1$s</string>
     <string name="board_not_saved">Не збережено: %1$s</string>
@@ -69,7 +69,7 @@
     <string name="upd_error">Не оновлено: %1$s</string>
     <string name="upd_not_installed">Не встановлено: %1$s</string>
 
-    <string name="conn_title">Зв\'язок</string>
+    <string name="conn_title">Підключення</string>
     <string name="conn_note">По USB тут нічого не треба. По WiFi застосунок сам знайде плату (mDNS, потім адреси точки доступу); адресу вписуйте, лише якщо не знаходить.</string>
     <string name="conn_host">Адреса плати</string>
     <string name="conn_host_auto">порожньо: знайти</string>
@@ -86,7 +86,6 @@
     <string name="diag_usb_connecting">USB: з\'єднуюсь…</string>
     <string name="diag_usb_up">USB: прошивка %1$s (%2$s)</string>
     <string name="diag_usb_failed">USB: збій, %1$s</string>
-    <string name="diag_usb_stats">Кадрів прийнято %1$d, надіслано %2$d, битих байтів %3$d; запитів %4$d, невдалих %5$d; інтернет плати %6$d</string>
     <string name="diag_usb_seen">USB-пристрої, які бачить магнітола</string>
     <string name="diag_usb_seen_none">Жодного. Встав плату, телефон або флешку в той самий кабель і порт: якщо тут нічого не з\'явиться, цей порт або кабель не передає даних.</string>
     <string name="diag_usb_dev">%1$s (%2$s), класи %3$s</string>
@@ -106,4 +105,55 @@
     <string name="notify_title">Сповіщення</string>
     <string name="notify_on">Показувати попередження сповіщеннями</string>
     <string name="notify_note">На екрані, поки попередження триває (фари досі вимкнені), і зникає, коли виправлено.</string>
+    <string name="state_ble">По Bluetooth: %1$s</string>
+    <string name="state_waiting_usb">Чекаю плату на USB</string>
+    <string name="state_waiting_ble">Чекаю плату по Bluetooth</string>
+    <string name="diag_usb_off">USB: не використовується (налаштування «Підключення»)</string>
+    <string name="ble_off">Bluetooth: не використовується</string>
+    <string name="ble_no_board">Bluetooth: плату не обрано (Ще › Підключення)</string>
+    <string name="ble_no_permission">Bluetooth: немає дозволу (Ще › Підключення)</string>
+    <string name="ble_adapter_off">Bluetooth на цьому пристрої вимкнено</string>
+    <string name="ble_connecting">Bluetooth: з\'єднуюсь з %1$s (спроба %2$d)</string>
+    <string name="ble_pairing">Bluetooth: сполучаюсь з %1$s; підтвердіть, якщо Android спитає</string>
+    <string name="ble_up">Bluetooth: %1$s, прошивка %2$s</string>
+    <string name="ble_retry">Bluetooth: %1$s не відповіла (%2$s), наступна спроба через %3$d с</string>
+    <string name="ble_hint">Не знаходить? На платі встановіть Плата › Bluetooth у будь-який режим, крім «Вимкнено» («Лише апка на ГУ» — тільки зв\'язок).</string>
+    <string name="wifi_searching">WiFi: шукаю (mDNS, потім адреси точки доступу)…</string>
+    <string name="wifi_not_found">WiFi: не знайдено, наступний пошук через %1$d с</string>
+    <string name="wifi_lost">WiFi: %1$s не відповідає, наступна спроба через %2$d с</string>
+    <string name="conn_mode">Як підключатися до плати</string>
+    <string name="conn_mode_auto">Авто: USB, потім Bluetooth, потім WiFi</string>
+    <string name="conn_mode_usb">Лише USB</string>
+    <string name="conn_mode_ble">Лише Bluetooth</string>
+    <string name="conn_mode_wifi">Лише WiFi</string>
+    <string name="conn_ble">Плата по Bluetooth</string>
+    <string name="conn_ble_none">Ще не обрано</string>
+    <string name="conn_ble_chosen">%1$s (%2$s)</string>
+    <string name="conn_ble_pick">Обрати</string>
+    <string name="conn_ble_forget">Забути</string>
+    <string name="conn_ble_permission">Дозволити Bluetooth</string>
+    <string name="conn_ble_denied">Без дозволу застосунок не може користуватися Bluetooth</string>
+    <string name="conn_ble_off">Спершу увімкніть Bluetooth</string>
+    <string name="pick_title">Оберіть плату</string>
+    <string name="pick_scanning">Шукаю плати поруч…</string>
+    <string name="pick_none">Плату не знайдено.</string>
+    <string name="pick_paired">сполучена</string>
+    <string name="pick_rssi">%1$d дБм</string>
+    <string name="pick_cancel">Скасувати</string>
+    <string name="pick_location_note">Android до 12-го для пошуку ще потребує увімкненої геолокації.</string>
+    <string name="diag_link_stats">Кадрів прийнято %1$d, надіслано %2$d, битих байтів %3$d; запитів %4$d, невдалих %5$d; інтернет плати %6$d</string>
+    <string name="media_title">Медіа</string>
+    <string name="media_access_off">Надайте «Доступ до сповіщень» один раз: тоді застосунок бачить, що грає на цьому пристрої (Spotify, YouTube Music, радіо), і передає це на панель плати разом з обкладинкою.</string>
+    <string name="media_access_open">Відкрити доступ до сповіщень</string>
+    <string name="media_access_on">Доступ до сповіщень надано: що грає, іде на плату.</string>
+    <string name="media_no_settings">На цьому пристрої немає екрана доступу до сповіщень</string>
+    <string name="media_none">Нічого не грає</string>
+    <string name="media_playing">%1$s · грає</string>
+    <string name="media_paused">%1$s · пауза</string>
+    <string name="media_no_cover">Без обкладинки</string>
+    <string name="media_not_sent">На плату ще нічого не надсилалось</string>
+    <string name="media_reply">%1$s «%2$s» на %3$s: %4$s</string>
+    <string name="media_ok">прийнято</string>
+    <string name="media_ok_art">прийнято, обкладинку надіслано</string>
+    <string name="media_listener">MegaOpen: що грає — на панель</string>
 </resources>

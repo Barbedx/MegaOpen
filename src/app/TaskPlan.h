@@ -139,13 +139,14 @@ namespace App
         // more stack than setup() has; the task deletes itself after.
         constexpr uint32_t    BT_BEGIN_STACK = 16384;
 
-        // The USB link (src/link/UsbLink.h): the app's frames, the sockets it
-        // pipes to httpd, the alert events. httpd's priority on its core, so
-        // neither starves the other; woken by TinyUSB's rx callback. 4096: one
-        // JSON document and lwIP calls, the frame buffers are static.
-        constexpr UBaseType_t USBLINK_PRIO  = 2;
-        constexpr int         USBLINK_CORE  = 0;
-        constexpr uint32_t    USBLINK_STACK = 4096;
+        // The app link (src/link/AppLink.h), USB and BLE: the app's frames,
+        // the sockets it pipes to httpd, the alert events. httpd's priority on
+        // its core, so neither starves the other; woken by TinyUSB's rx callback
+        // and BLE's write callback. 4096: one JSON document and lwIP calls, the
+        // frame buffers are in the sessions (PSRAM).
+        constexpr UBaseType_t APPLINK_PRIO  = 2;
+        constexpr int         APPLINK_CORE  = 0;
+        constexpr uint32_t    APPLINK_STACK = 4096;
 
         // esp_http_server, set in WebUi::begin. HTTPD_DEFAULT_CONFIG gives it 5
         // on either core, which put every web request above the loop. It takes

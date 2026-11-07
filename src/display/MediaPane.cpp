@@ -44,6 +44,7 @@ namespace MegaOpen
         {"tryzub", nullptr},
         {"tryzubclock", nullptr},
         {"renault", nullptr},
+        {"cover",  nullptr},
         {"custom", nullptr},
     };
     static_assert(sizeof(kScenes) / sizeof(kScenes[0]) == (size_t)MediaPane::SCENE_COUNT,
@@ -76,7 +77,7 @@ namespace MegaOpen
         return s != Scene::Off && s != Scene::Custom && s != Scene::Tryzub && s != Scene::Renault;
     }
 
-    bool MediaPane::usesMedia(Scene s) { return s == Scene::Media || s == Scene::Tape; }
+    bool MediaPane::usesMedia(Scene s) { return s == Scene::Media || s == Scene::Tape || s == Scene::Cover; }
 
     MediaPane::Scene MediaPane::carouselNext(Scene s)
     {
@@ -765,6 +766,10 @@ namespace MegaOpen
             case Scene::TryzubClock: drawTryzubClock(out); break;
             case Scene::Renault: memcpy(out, PaneImages::kRenault, BYTES); break;
             case Scene::Custom: if (_custom) memcpy(out, _custom, BYTES); break;
+            case Scene::Cover:
+                if (_cover) memcpy(out, _cover, BYTES);
+                else drawMedia(out);
+                break;
             // Off composes an empty pane: no capture shows a "remove layer"
             // command, so an all-zero image is the only way to blank the glass.
             case Scene::Off:

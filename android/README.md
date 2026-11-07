@@ -1,8 +1,9 @@
 # MegaOpen Companion
 
 The board's app on the Android head unit (package `ua.megaopen.companion`): the
-panel alerts out loud, the board's page, the board's way to the internet. Over
-the USB link when the board is plugged in, over WiFi otherwise.
+panel alerts out loud, the board's page, the board's way to the internet, what plays on the head unit for the panel.
+Over the USB link when the board is plugged in, the same link on Bluetooth LE,
+or WiFi.
 
 Design, layers and configuration: `docs/design/companion-app.md`; the link:
 `docs/design/usb-link.md`.

@@ -24,13 +24,13 @@ import kotlinx.coroutines.launch
 import ua.megaopen.companion.App
 import ua.megaopen.companion.R
 import ua.megaopen.companion.alerts.Phrases
-import ua.megaopen.companion.board.BoardConnection
+import ua.megaopen.companion.ui.stateText
 import ua.megaopen.companion.ui.MainActivity
 
 /**
  * The app at work while no screen is open: the connection to the board and
  * the voice. A foreground service of type connectedDevice (the board on USB,
- * or on the network); its notification says which way the board is reached.
+ * Bluetooth or the network); its notification says which way the board is reached.
  */
 class CompanionService : LifecycleService() {
     private val graph get() = (application as App).graph
@@ -57,6 +57,8 @@ class CompanionService : LifecycleService() {
 
         graph.connection.start()
         graph.usbSeen.start()
+        graph.media.refresh()
+        graph.mediaSender.start()
         reminders = Reminders(this, lifecycleScope, graph.settings, graph.connection) { text -> speak(text) }
         lifecycleScope.launch {
             graph.connection.alerts.collect { a ->
@@ -66,7 +68,7 @@ class CompanionService : LifecycleService() {
             }
         }
         lifecycleScope.launch {
-            graph.connection.state.combine(graph.settings.values) { st, _ -> stateText(st) }
+            graph.connection.state.combine(graph.settings.values) { st, _ -> stateText(this@CompanionService, st) }
                 .distinctUntilChanged()
                 .collect { nm.notify(NOTE_ID, note(it)) }
         }
@@ -82,20 +84,18 @@ class CompanionService : LifecycleService() {
         graph.speaker.say(text, s.voiceLang, s.volume)
     }
 
+    // Started again (the board plugged in opened the app): look for it now.
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        graph.connection.poke()
+        return super.onStartCommand(intent, flags, startId)
+    }
+
     override fun onDestroy() {
         reminders?.stop()
+        graph.mediaSender.stop()
         try { unregisterReceiver(detach) } catch (_: Exception) {}
         graph.connection.stop()
         super.onDestroy()
-    }
-
-    private fun stateText(s: BoardConnection.State): String = when (s) {
-        BoardConnection.State.Starting -> getString(R.string.state_starting)
-        BoardConnection.State.Searching -> getString(R.string.state_searching)
-        BoardConnection.State.NotFound -> getString(R.string.state_not_found)
-        is BoardConnection.State.Usb -> getString(R.string.state_usb, s.name)
-        is BoardConnection.State.Wifi -> getString(R.string.state_wifi, s.host)
-        is BoardConnection.State.Lost -> getString(R.string.state_lost, s.host)
     }
 
     private fun note(text: String): Notification {

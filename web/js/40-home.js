@@ -16,6 +16,7 @@ SCR.home={title:'nav.home',async render(m){
   (D?row(t('h.music'),'<span id="hSrc" class="chip off">…</span>','<span id="hTrack"></span><span class="bar" style="display:block"><i id="hProg"></i></span>')+
   row(t('h.clock'),'<span id="hClk" class="chip off">…</span>','<span id="hClkW"></span>'):'')+
   (has('ble')?`<div id="hPhoneRow">${row(t('h.phone'),'<span id="hPhone" class="chip off">…</span>','<span id="hPhoneW"></span>')}</div>`:'')+
+  `<div id="hAppRow" hidden>${row(t('h.app'),'<span id="hApp" class="chip off">…</span>','<span id="hAppW"></span>')}</div>`+
   row(t('h.keys'),'<span id="hKeys" class="chips"></span>')+
   (has('capture')?row(t('h.rec'),'<button class="btn rec" id="hRec" type="button">…</button>','<span id="hRecW"></span>'):'')+
   row(t('h.wifi'),'<span id="hWifi" class="chip off">…</span>','<span id="hWifiW"></span>'),'','full');
@@ -49,7 +50,8 @@ SCR.home={title:'nav.home',async render(m){
   chip('#hKnob',k,k.state==='ok'?'0x'+(k.addr||0).toString(16).toUpperCase():'');
   $('#hKnobW').textContent=k.state==='ok'?[t('h.knobsW',k.left,k.right,k.clicks),k.i2cErrors?t('h.i2c',fmtN(k.i2cErrors)):''].filter(Boolean).join(' · '):whyT(k);
   chip('#hLed',l,l.state==='ok'?t('h.leds',l.leds):'');$('#hLedW').textContent=whyT(l)}
- if(has('ble')){const ph=ch('phone');$('#hPhoneRow').hidden=h.bleMode==='off';chip('#hPhone',ph);$('#hPhoneW').textContent=[whyT(ph),nameOf(CAT.bleModes,h.bleMode)].filter(Boolean).join(' · ')}
+ if(has('ble')){const ph=ch('phone');$('#hPhoneRow').hidden=h.bleMode==='off'||h.bleMode==='app';chip('#hPhone',ph);$('#hPhoneW').textContent=[whyT(ph),nameOf(CAT.bleModes,h.bleMode)].filter(Boolean).join(' · ')}
+ {const ap=(h.chains||[]).find(c=>c.id==='app');$('#hAppRow').hidden=!ap;if(ap){chip('#hApp',ap);$('#hAppW').textContent=[whyT(ap),ap.mediaPosts?t('h.appMedia',fmtUp(ap.mediaAgoMs)):''].filter(Boolean).join(' · ')}}
  const kd=ch('keys').dest||{};$('#hKeys').innerHTML=CAT.dests.filter(d=>d.built&&kd[d.id]).map(d=>chipH(kd[d.id].live?'ok':'off',d.name)).join('');
  if(c2){canChip($('#hCan'),c2);$('#hCanW').textContent=c2.fps?'':c2.autobaud!=='manual'?t('h.canNone'):t('h.canRate')}
  if(cp){recBtn($('#hRec'),cp);$('#hRecW').textContent=cp.recording?t('h.recW',fmtN(cp.frames),cp.markers):cp.error?errLine(cp.error):''}

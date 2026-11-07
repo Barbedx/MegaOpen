@@ -1,6 +1,6 @@
 #include "WebUi.h"
 #include "../utils/HeapSentinel.h"
-#include "../link/UsbLink.h"
+#include "../link/AppLink.h"
 #include "RescuePage.h"
 #include "lwip/sockets.h"
 #include "../cfg/SettingsJson.h"
@@ -1671,6 +1671,13 @@ void WebUi::routesMedia()
                 memset(pw->bits, 0, sizeof(pw->bits));
                 if (_ui.paneBits)
                     _ui.paneBits->read([&](const App::Ui::PaneBits& p) { memcpy(pw->bits, p.bits, sizeof(pw->bits)); });
+            } else if (pw->snap.scene() == MegaOpen::MediaPane::Scene::Cover) {
+                // The same for the cover: the source's copy, under its mutex;
+                // none, and the scene draws Media (on our copy, pointer dropped).
+                if (!_appMedia || !_appMedia->art(pw->bits)) {
+                    pw->snap.setCover(nullptr);
+                    pw->snap.compose(pw->bits);
+                }
             } else {
                 pw->snap.compose(pw->bits);
             }
@@ -1700,6 +1707,56 @@ void WebUi::routesMedia()
                         "{\"ok\":true,\"note\":\"forget it on the phone as well\"}");
     });
 #endif
+
+    // ---- now playing from the head unit's app (docs/design/companion-media.md)
+    // MegaOpen Companion posts what plays on the head unit, on every change
+    // and every 20 s; the same over USB, BLE and WiFi (it is plain HTTP).
+    route("/api/app/media", HTTP_POST, [this](PsychicRequest* r) {
+        if (!_appMedia) return r->reply(503, "text/plain", "not_built media");
+        JsonDocument d(&PsramJson::instance());
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
+        const char* st = d["state"] | "";
+        AppMediaSource::Update u;
+        if      (!strcmp(st, "playing")) u.state = AppMediaSource::State::Playing;
+        else if (!strcmp(st, "paused"))  u.state = AppMediaSource::State::Paused;
+        else if (!strcmp(st, "none"))    u.state = AppMediaSource::State::None;
+        else return r->reply(400, "text/plain", "param state");
+        u.app    = d["app"] | "";
+        u.title  = d["title"] | "";
+        u.artist = d["artist"] | "";
+        u.album  = d["album"] | "";
+        const int64_t pos = d["pos"] | (int64_t)0, dur = d["dur"] | (int64_t)0;
+        u.posMs  = pos < 0 ? 0 : pos > 0x7FFFFFFF ? 0x7FFFFFFF : (uint32_t)pos;
+        u.durMs  = dur < 0 ? 0 : dur > 0x7FFFFFFF ? 0x7FFFFFFF : (uint32_t)dur;
+        u.rate   = d["rate"] | 1.0f;
+        const char* art = d["art"] | "";
+        if (art[0]) {
+            char* end = nullptr;
+            const unsigned long h = strtoul(art, &end, 16);
+            if (strlen(art) != 8 || !end || *end) return r->reply(400, "text/plain", "param art");
+            u.artHash = (uint32_t)h;
+        }
+        const bool needArt = _appMedia->post(u, millis());
+        return r->reply(200, "application/json", needArt ? "{\"ok\":true,\"needArt\":true}"
+                                                         : "{\"ok\":true,\"needArt\":false}");
+    });
+
+    // The cover the last post named: 48x48, one bit (MediaPane.h format, 576
+    // hex), its CRC-32 as `h`. Refused when the bits do not match `h` or the
+    // track has moved on.
+    route("/api/app/art", HTTP_POST, [this](PsychicRequest* r) {
+        if (!_appMedia) return r->reply(503, "text/plain", "not_built media");
+        JsonDocument d(&PsramJson::instance());
+        if (deserializeJson(d, r->body())) return r->reply(400, "text/plain", "bad_json");
+        const char* h = d["h"] | "";
+        char* end = nullptr;
+        const unsigned long hash = strtoul(h, &end, 16);
+        if (strlen(h) != 8 || !end || *end) return r->reply(400, "text/plain", "param h");
+        uint8_t bits[AppMediaSource::ART_BYTES];
+        if (!MegaOpen::MediaPane::fromHex(d["bits"] | "", bits)) return r->reply(400, "text/plain", "param bits");
+        if (!_appMedia->putArt((uint32_t)hash, bits)) return r->reply(409, "text/plain", "art_stale");
+        return r->reply(200, "application/json", "{\"ok\":true}");
+    });
 
     route("/api/media", HTTP_POST, [this](PsychicRequest* r) {
         if (!_ui.settings) return r->reply(503, "text/plain", "not_built display");
@@ -2306,38 +2363,65 @@ void WebUi::statusJson(JsonObject d)
         d["ghosts"]    = _ghosts ? *_ghosts : 0;
         d["encSteps"]  = _encSteps ? *_encSteps : 0;
         d["heap"]      = ESP.getFreeHeap();
-#if FEATURE_USB_LINK
+#if FEATURE_APP_LINK
         {
-            UsbLink::Stats u;
-            UsbLink::stats(u);
-            JsonObject o = d["usb"].to<JsonObject>();
-            o["mounted"] = u.mounted;
-            o["alive"]   = u.alive;
-            o["hello"]   = u.hello;
-            o["open"]    = u.open;
-            o["reqs"]    = u.reqs;
-            o["fails"]   = u.fails;
-            o["events"]  = u.events;
-            o["rx"]      = u.rxFrames;
-            o["tx"]      = u.txFrames;
-            o["bad"]     = u.bad;
-            o["txWaitMax"]   = u.txWaitMax;
-            o["connectMax"]  = u.connectMax;
-            o["sockSendMax"] = u.sockSendMax;
-            o["cut"]         = u.cut;
-            o["dropped"]     = u.dropped;
-            o["mounts"]      = u.mounts;
-            o["unmounts"]    = u.unmounts;
-            o["suspends"]    = u.suspends;
-            o["resumes"]     = u.resumes;
-            // The bus itself, whatever TinyUSB reported (UsbLink.h Stats,
-            // docs/design/usb-link.md "Diagnostics").
-            o["sof"]         = u.sof;
-            if (u.sofAgoMs == UINT32_MAX) o["sofAgoMs"] = nullptr;
-            else                          o["sofAgoMs"] = u.sofAgoMs;
-            o["busUps"]      = u.busUps;
-            o["addressed"]   = u.addressed;
-            o["suspended"]   = u.suspended;
+            AppLink::Stats a;
+            AppLink::stats(a);
+            d["linkVia"] = AppLink::viaName(a.via);
+            // One object per transport; the counters are the session's
+            // (Link::SessionStats), then what only that transport knows.
+            auto session = [&](JsonObject o, const Link::SessionStats& u) {
+                o["up"]      = u.up;
+                o["alive"]   = u.alive;
+                o["hello"]   = u.hello;
+                o["open"]    = u.open;
+                o["reqs"]    = u.reqs;
+                o["fails"]   = u.fails;
+                o["events"]  = u.events;
+                o["rx"]      = u.rxFrames;
+                o["tx"]      = u.txFrames;
+                o["bad"]     = u.bad;
+                o["txWaitMax"]   = u.txWaitMax;
+                o["connectMax"]  = u.connectMax;
+                o["sockSendMax"] = u.sockSendMax;
+                o["cut"]         = u.cut;
+                o["dropped"]     = u.dropped;
+                if (u.lastRxAgoMs == UINT32_MAX) o["lastRxAgoMs"] = nullptr;
+                else                             o["lastRxAgoMs"] = u.lastRxAgoMs;
+            };
+#if FEATURE_USB_LINK
+            {
+                JsonObject o = d["usb"].to<JsonObject>();
+                session(o, a.usb);
+                o["mounted"]     = a.bus.mounted;
+                o["mounts"]      = a.bus.mounts;
+                o["unmounts"]    = a.bus.unmounts;
+                o["suspends"]    = a.bus.suspends;
+                o["resumes"]     = a.bus.resumes;
+                // The bus itself, whatever TinyUSB reported (UsbPipe.h
+                // BusStats, docs/design/usb-link.md "Diagnostics").
+                o["sof"]         = a.bus.sof;
+                if (a.bus.sofAgoMs == UINT32_MAX) o["sofAgoMs"] = nullptr;
+                else                              o["sofAgoMs"] = a.bus.sofAgoMs;
+                o["busUps"]      = a.bus.busUps;
+                o["addressed"]   = a.bus.addressed;
+                o["suspended"]   = a.bus.suspended;
+            }
+#endif
+#if FEATURE_BLE_LINK
+            {
+                JsonObject o = d["ble"].to<JsonObject>();
+                session(o, a.ble);
+                o["on"]            = a.peer.on;
+                o["subscribed"]    = a.peer.subscribed;
+                o["mtu"]           = a.peer.mtu;
+                o["peer"]          = a.peer.addr;
+                o["subscribes"]    = a.peer.subscribes;
+                o["overflow"]      = a.peer.overflow;
+                o["unencrypted"]   = a.peer.unencrypted;
+                o["notifyRetries"] = a.peer.notifyRetries;
+            }
+#endif
         }
 #endif
 }
@@ -2547,6 +2631,26 @@ void WebUi::healthJson(JsonObject d)
                                                : "lights_fail");
             l["leds"]   = v.leds;
             l["frames"] = v.frames;
+        }
+#endif
+
+#if FEATURE_APP_LINK
+        // 6c. MegaOpen Companion: on which link it is, and what it posted.
+        {
+            const AppLink::Via via = AppLink::via();
+            const bool bleOff = _cfg->s().bleMode == "off";
+            JsonObject o = chain("app", via != AppLink::Via::None ? "ok" : "idle",
+                                 via == AppLink::Via::Usb ? "app_usb"
+                                 : via == AppLink::Via::Ble ? "app_ble"
+                                 : bleOff ? "app_none_ble_off" : "app_none");
+            o["via"] = AppLink::viaName(via);
+            o["net"] = AppLink::netAvailable();
+            if (_appMedia) {
+                o["mediaPosts"] = _appMedia->posts();
+                const uint32_t last = _appMedia->lastPostMs();
+                if (_appMedia->posts()) o["mediaAgoMs"] = millis() - last;
+                else                    o["mediaAgoMs"] = nullptr;
+            }
         }
 #endif
 

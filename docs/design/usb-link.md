@@ -101,7 +101,7 @@ The server's sockets have TCP_NODELAY (`WebUi::begin`): httpd writes the headers
 and the body separately, and Nagle held the body for the ACK, which lwIP as the
 loopback peer delays: 250 ms a small reply, 7 ms without.
 
-Two channels at a time (`UsbLink::CHANS`): the server keeps 4 sockets and each
+Two channels at a time (`Link::CHANS`): the server keeps 4 sockets and each
 link request holds two (both ends of the loopback). A third request gets `91
 busy` and the app queues it. A channel quiet for 15 s is closed (`91 timeout`).
 
@@ -143,6 +143,54 @@ checked, the image booted and passed its OTA trial.
 
 Any frame from the app marks the host alive; the app pings every second. Alive
 means a frame within 3 s. The WiFi policy (later in 1.6) reads that.
+
+## Over Bluetooth LE (1.10)
+
+Owner, 2026-11-07: the head unit's WiFi switches to 5 GHz on its own (the S3
+sees 2.4 GHz only) and USB never enumerated in the car, so the app needs a
+third way in. The S3 has no classic Bluetooth (no SPP): the same frame stream
+goes over one GATT service on BleHub's server.
+
+| what | UUID | properties |
+| --- | --- | --- |
+| service | `4d4f0100-6c69-6e6b-8000-4d6567614f70` | |
+| RX, app → board | `4d4f0101-6c69-6e6b-8000-4d6567614f70` | write, write without response, **encrypted** |
+| TX, board → app | `4d4f0102-6c69-6e6b-8000-4d6567614f70` | notify |
+
+- The bytes are the USB link's, frames split anywhere: the app writes chunks of
+  MTU-3 (it asks for 247), the board notifies chunks of MTU-3; both parsers
+  reassemble. Everything above the frames is shared: `Link::Session`
+  (src/link/LinkSession.*) runs the same HELLO, channels, events and net over a
+  `Link::Pipe`, `UsbPipe` or `BlePipe`; one task, `applink`, serves both
+  sessions (`AppLink`, src/link/AppLink.*). HELLO's reply says `"via"`.
+- **Security.** RX needs an encrypted link, so the first write bonds (Just
+  Works, SC, as the iPhone and the HID host do). The board answers nothing
+  before a HELLO on an encrypted link. The settings page over BLE is as open as
+  over the AP: whoever bonds is in. Плата › Bluetooth › «Забути телефон» forgets
+  every bond.
+- **Modes.** The service is there in every `bleMode` but `off`; `app` («Лише
+  апка на ГУ») is the link alone. The board takes two connections in every
+  mode (the head unit's app beside an iPhone). Discovery: the advertising name
+  is `MEGA`; `keyboard`, `both` and `app` put `MegaOpen` in the scan response,
+  `app` also the service UUID; `ams` keeps MeganeCAN's iPhone-proven packet
+  untouched (no scan response), so there the app matches `MEGA`.
+  In `ams` and `both` with no iPhone on, the head unit's connection gets the
+  iPhone probe first (src/bluetooth.cpp `ServiceAms`): the board asks for the
+  bond itself, looks for AMS for the probe's budget, then marks the peer
+  `NotAms` and leaves it alone. Harmless (the app needs the bond anyway), one
+  pairing prompt on the head unit either way; `app` mode has no probe.
+- **WiFi stays.** USB with an app that offered `net` turns WiFi off (`wifiAuto`,
+  below); BLE never does. The board's own GitHub requests take the USB app
+  first, then WiFi when the station is online, then the BLE app
+  (`AppLink::netFirst`): the log push and the update still go out when the head
+  unit's hotspot has moved to 5 GHz, slowly.
+- **Speed.** Not measured yet on a board. Expect 10-30 kB/s: the page is a few
+  seconds, a GitHub update (1.7 MB through the app) a minute or two.
+- **Diagnostics.** `/api/status` `linkVia` and `ble` (the session counters plus
+  `subscribed`, `mtu`, `peer`, `overflow` = RX bytes the 8 kB buffer had no
+  room for, `unencrypted` = writes refused, `notifyRetries`); `/api/health`
+  chain `app` (`app_usb`, `app_ble`, `app_none`, `app_none_ble_off`); log tag
+  `[link]` (subscribe, HELLO, gone, `app via usb|ble|none`).
 
 ## Cost
 

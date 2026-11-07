@@ -8,6 +8,7 @@ const MediaRouter::SourceRow MediaRouter::SOURCES[SOURCE_ROWS] = {
     {"auto", nullptr,   true,  false, Mode::Auto},
     {"hu",   nullptr,     true,  false, Mode::Hu},
     {"ams",  "iPhone", true,  true,  Mode::Ams},
+    {"app",  nullptr,  true,  false, Mode::App},
     {"none", nullptr, false, false, Mode::Ams},
 };
 
@@ -28,10 +29,13 @@ IMediaSource* MediaRouter::activeSource() const
 {
     switch (_mode) {
         case Mode::Hu:   return _hu;
-        // The head unit while it talks; the phone only when it is actually
-        // connected, so a quiet unit never hands the glass to a phone that
-        // is not there ("NO PHONE" instead of the last track).
+        case Mode::App:  return _app;
+        // The app while something plays on the head unit, then the head
+        // unit while it talks; the phone only when it is actually connected,
+        // so a quiet unit never hands the glass to a phone that is not there
+        // ("NO PHONE" instead of the last track).
         case Mode::Auto:
+            if (_app && _app->active()) return _app;
             if (_hu && _hu->active()) return _hu;
             if (_ams && _ams->active()) return _ams;
             return _hu ? _hu : _ams;

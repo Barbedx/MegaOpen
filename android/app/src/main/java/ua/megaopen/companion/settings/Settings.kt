@@ -23,8 +23,13 @@ class Settings(ctx: Context, scope: CoroutineScope) {
         val loaded: Boolean = false,
         /** Say the board's alerts. The service runs while this is on. */
         val voiceOn: Boolean = true,
-        /** Empty: find the board (USB first, then mDNS and the hotspot's addresses). */
+        /** Empty: find the board on WiFi (mDNS, then the hotspot's addresses). */
         val host: String = "",
+        /** Which ways to the board the app tries. */
+        val connMode: ConnMode = ConnMode.Auto,
+        /** The board on Bluetooth, chosen once in the picker: its address, "" for none. */
+        val bleAddress: String = "",
+        val bleName: String = "",
         val autostart: Boolean = true,
         /** "uk", "en" or "" (the system's). */
         val voiceLang: String = "uk",
@@ -63,6 +68,9 @@ class Settings(ctx: Context, scope: CoroutineScope) {
             loaded = true,
             voiceOn = p[VOICE_ON] ?: true,
             host = p[HOST] ?: "",
+            connMode = ConnMode.of(p[CONN_MODE]),
+            bleAddress = p[BLE_ADDRESS] ?: "",
+            bleName = p[BLE_NAME] ?: "",
             autostart = p[AUTOSTART] ?: true,
             voiceLang = p[LANG] ?: "uk",
             volume = p[VOLUME] ?: 100,
@@ -81,6 +89,8 @@ class Settings(ctx: Context, scope: CoroutineScope) {
 
     suspend fun setVoiceOn(v: Boolean) = edit { it[VOICE_ON] = v }
     suspend fun setHost(v: String) = edit { it[HOST] = v.trim() }
+    suspend fun setConnMode(v: ConnMode) = edit { it[CONN_MODE] = v.key }
+    suspend fun setBleBoard(address: String, name: String) = edit { it[BLE_ADDRESS] = address; it[BLE_NAME] = name }
     suspend fun setAutostart(v: Boolean) = edit { it[AUTOSTART] = v }
     suspend fun setVoiceLang(v: String) = edit { it[LANG] = v }
     suspend fun setVolume(v: Int) = edit { it[VOLUME] = v.coerceIn(0, 100) }
@@ -104,6 +114,9 @@ class Settings(ctx: Context, scope: CoroutineScope) {
     private companion object {
         val VOICE_ON = booleanPreferencesKey("voiceOn")
         val HOST = stringPreferencesKey("host")
+        val CONN_MODE = stringPreferencesKey("connMode")
+        val BLE_ADDRESS = stringPreferencesKey("bleAddress")
+        val BLE_NAME = stringPreferencesKey("bleName")
         val AUTOSTART = booleanPreferencesKey("autostart")
         val LANG = stringPreferencesKey("voiceLang")
         val VOLUME = intPreferencesKey("volume")
@@ -115,5 +128,17 @@ class Settings(ctx: Context, scope: CoroutineScope) {
         const val OFF = "off_"
         const val SAY = "say_"
         const val REP = "rep_"
+    }
+}
+
+/** The ways to the board the app tries, in this order: USB, Bluetooth, WiFi. */
+enum class ConnMode(val key: String, val usb: Boolean, val ble: Boolean, val wifi: Boolean) {
+    Auto("auto", true, true, true),
+    Usb("usb", true, false, false),
+    Ble("ble", false, true, false),
+    Wifi("wifi", false, false, true);
+
+    companion object {
+        fun of(key: String?): ConnMode = entries.firstOrNull { it.key == key } ?: Auto
     }
 }

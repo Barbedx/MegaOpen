@@ -12,6 +12,7 @@
 
 class MediaRouter;
 class HuMediaSource;
+class AppMediaSource;
 namespace Cfg { class Config; struct Settings; }
 namespace Keys { class KeyEngine; }
 namespace Vehicle { class State; }
@@ -116,6 +117,7 @@ namespace App
             MegaOpen::PanelOps*     ops    = nullptr;
             MediaRouter*            router = nullptr;
             HuMediaSource*          hu     = nullptr;
+            AppMediaSource*         app    = nullptr;     // the head unit's app: its clock and its cover
             const Keys::KeyEngine*  engine = nullptr;     // events(): the pane's key-quiet gate
             const Vehicle::State*   car    = nullptr;     // the car screen's values; null: none
             // The phone, without the BLE headers. Null in an image with no radio.

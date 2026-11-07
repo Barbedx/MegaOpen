@@ -35,6 +35,7 @@ namespace Catalog
         {"ams",      nullptr, true},
         {"keyboard", nullptr,                       false},
         {"both",     nullptr,              true},
+        {"app",      nullptr,                       false},   // the app link alone (it runs in every mode but off)
     };
 
     bool bleModeKnown(const char* id)

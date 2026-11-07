@@ -5,6 +5,7 @@
 
 #include "BleHub.h"
 #include "HidRole.h"
+#include "../link/BlePipe.h"
 #include "../bluetooth.h"
 #include "../utils/Log.h"
 
@@ -97,7 +98,23 @@ namespace BleHub
         // Generic HID (0x03C0) | Keyboard (0x01).
         const uint16_t kAppearanceKeyboard = 0x03C1;
 
-        enum class AdvProfile : uint8_t { AmsOnly, HidOnly, Dual };
+        enum class AdvProfile : uint8_t { AmsOnly, HidOnly, Dual, AppOnly };
+
+        // The full name (the board's AP name) in the scan response: the app's
+        // picker finds the board by it (HID, Dual and App profiles).
+        void scanResponse(NimBLEAdvertising *adv, bool hid)
+        {
+            NimBLEAdvertisementData sr;
+            if (hid)
+            {
+                sr.setAppearance(kAppearanceKeyboard);
+                sr.addServiceUUID(NimBLEUUID((uint16_t)0x1812));
+            }
+            if (gFullName[0]) sr.setName(gFullName);
+            adv->setScanResponseData(sr);
+            // m_scanResp defaults false; without this it is never sent.
+            adv->enableScanResponse(true);
+        }
 
         void applyAdvertising(AdvProfile profile)
         {
@@ -115,8 +132,17 @@ namespace BleHub
                 advData.setAppearance(kAppearanceKeyboard);
                 advData.addServiceUUID(NimBLEUUID((uint16_t)0x1812));
                 adv->setAdvertisementData(advData);
-                adv->enableScanResponse(false);
+                scanResponse(adv, false);
             }
+#if FEATURE_BLE_LINK
+            else if (profile == AdvProfile::AppOnly)
+            {
+                // 3 + 6 ("MEGA") + 18 (the link's 128-bit UUID) = 27 of 31.
+                advData.addServiceUUID(NimBLEUUID(BlePipe::SERVICE_UUID));
+                adv->setAdvertisementData(advData);
+                scanResponse(adv, false);
+            }
+#endif
             else
             {
                 // AMS solicitation, hand-built: addData() takes a complete AD
@@ -155,26 +181,18 @@ namespace BleHub
                 }
                 adv->setAdvertisementData(advData);
 
+                // AmsOnly keeps no scan response: the one iPhone-pairing config
+                // ever proven (MeganeCAN's) had none. The app finds "MEGA" there.
                 if (profile == AdvProfile::Dual)
-                {
-                    NimBLEAdvertisementData sr;
-                    sr.setAppearance(kAppearanceKeyboard);
-                    sr.addServiceUUID(NimBLEUUID((uint16_t)0x1812));
-                    // Readable name here, where there is room.
-                    if (gFullName[0]) sr.setName(gFullName);
-                    adv->setScanResponseData(sr);
-                    // m_scanResp defaults false; without this it is never sent.
-                    adv->enableScanResponse(true);
-                }
+                    scanResponse(adv, true);
                 else
-                {
                     adv->enableScanResponse(false);
-                }
             }
 
             adv->start();
             LOGI("ble", "advertising '%s' profile=%s", gName,
-                 profile == AdvProfile::Dual ? "dual" : (profile == AdvProfile::HidOnly ? "hid" : "ams"));
+                 profile == AdvProfile::Dual ? "dual" : profile == AdvProfile::HidOnly ? "hid"
+                 : profile == AdvProfile::AppOnly ? "app" : "ams");
         }
 
         AdvProfile profileForMode()
@@ -183,6 +201,7 @@ namespace BleHub
             {
             case Mode::Keyboard: return AdvProfile::HidOnly;
             case Mode::Both:     return AdvProfile::Dual;
+            case Mode::App:      return AdvProfile::AppOnly;
             default:             return AdvProfile::AmsOnly;
             }
         }
@@ -280,6 +299,9 @@ namespace BleHub
                 }
 
                 gPeers.remove(h);
+#if FEATURE_BLE_LINK
+                BlePipe::onDisconnect(h);
+#endif
 
                 // Only the AMS peer owns the cached remote characteristics.
                 if (wasClientBound)
@@ -418,7 +440,10 @@ namespace BleHub
         }
     }
 
-    uint8_t maxPeers() { return gMode == Mode::Both ? Ble::PeerTable::kMax : 1; }
+    uint8_t maxPeers()
+    {
+        return (FEATURE_BLE_LINK || gMode == Mode::Both) ? Ble::PeerTable::kMax : 1;
+    }
 
     void classifyAsAms(uint16_t handle)
     {
@@ -438,7 +463,7 @@ namespace BleHub
         loadKnownAddrs();
 
         LOGI("ble", "Begin mode=%s name=%s (known ams=%s hid=%s)",
-             m == Mode::Both ? "both" : (m == Mode::Keyboard ? "keyboard" : "ams"),
+             m == Mode::Both ? "both" : m == Mode::Keyboard ? "keyboard" : m == Mode::App ? "app" : "ams",
              gName, gAmsAddr[0] ? gAmsAddr : "-", gHidAddr[0] ? gHidAddr : "-");
 
         esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
@@ -470,6 +495,9 @@ namespace BleHub
 
         if (hidActive())
             Hid::begin(gServer);
+#if FEATURE_BLE_LINK
+        BlePipe::addService(gServer);
+#endif
 
         // Must happen once, after every role's services exist and before advertising.
         gServer->start();

@@ -33,6 +33,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    // Back from the system's settings: the notification access may have changed.
+    override fun onResume() {
+        super.onResume()
+        (application as App).graph.media.refresh()
+    }
+
     // The board plugged into USB opened us (USB_DEVICE_ATTACHED): the service connects.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)

@@ -58,6 +58,7 @@ namespace MegaOpen
             Tryzub,    // the Ukrainian tryzub, still
             TryzubClock, // a smaller tryzub with the time, HH:MM, under it
             Renault,   // the Renault losange, still
+            Cover,     // the track's cover from the head unit's app (AppMediaSource); Media until there is one — REAL DATA
             Custom,    // the owner's own 48x48 picture (POST /api/media bits=), still
             _Count
         };
@@ -73,7 +74,7 @@ namespace MegaOpen
         // Moves on its own? Media stops when paused and settled, Custom never
         // moves; the caller skips identical frames.
         static bool animates(Scene s);
-        // Shows real phone/head-unit data? Media, and Tape's position.
+        // Shows real phone/head-unit data? Media, Tape's position, the Cover.
         static bool usesMedia(Scene s);
 
         // Stored by name, never by index.
@@ -108,6 +109,14 @@ namespace MegaOpen
             if (bits) memcpy(_customBits, bits, BYTES);
             _custom = bits ? _customBits : nullptr;
         }
+        // The Cover scene's picture, BYTES, copied as setCustom's. Null: no cover
+        // for this track, and the scene draws the Media scene instead.
+        void setCover(const uint8_t* bits)
+        {
+            if (bits) memcpy(_coverBits, bits, BYTES);
+            _cover = bits ? _coverBits : nullptr;
+        }
+        bool hasCover() const { return _cover != nullptr; }
 
         // The G-meter's input, in milli-g, drawn as the force a driver feels:
         // a left turn pushes the dot right, braking up, speeding up down. Not
@@ -245,6 +254,8 @@ namespace MegaOpen
 
         const uint8_t* _custom = nullptr;   // Scene::Custom: _customBits, or null
         uint8_t        _customBits[BYTES] = {0};
+        const uint8_t* _cover = nullptr;    // Scene::Cover: _coverBits, or null
+        uint8_t        _coverBits[BYTES] = {0};
 
         // GMeter: pixel offsets from the centre, newest first; the peak.
         static constexpr uint8_t kGTrail = 6;

@@ -1,10 +1,26 @@
 # Companion over USB: now playing, keys anywhere, a virtual panel
 
-Status: **plan**, 2026-10-28, owner's ask: "take as much information as we can
+Status: slices **1 and 2 written** (2026-11-07, branch feat/ble-link), not yet
+on a board; 3-5 still a plan. Owner's ask of 2026-10-28: "take as much information as we can
 and make a great media screen, maybe with the cover as a bitmap; use USB HID
 instead of the UART for keys and map them where we want; a «virtual keyboard»
 page to check every key." Builds on the USB link (docs/design/usb-link.md) and
-MegaOpen Companion (docs/design/companion-app.md). Not started.
+MegaOpen Companion (docs/design/companion-app.md).
+
+**What was built, and how it differs from the plan below.** The media and the
+cover go as plain HTTP, not as link frames `B0`/`B1`: `POST /api/app/media`
+(JSON: `app`, `pkg`, `title`, `artist`, `album`, `state`
+playing|paused|none, `pos`/`dur` ms, `rate`, `art` = CRC-32 of the cover as 8
+hex) answers `{"ok":true,"needArt":bool}`; `POST /api/app/art` (`h`, `bits` =
+576 hex in MediaPane's format) sends the cover once per track. HTTP rides every
+way the app reaches the board (USB, Bluetooth, WiFi) with nothing per
+transport. On the board: `AppMediaSource` (src/media/, host test
+`test_appmedia`), `MediaRouter` mode `app`, and `auto` = the app while it plays,
+then the head unit's text, then the iPhone; the source is gone 60 s after the
+last post (the app posts every 20 s). The pane's new scene «обкладинка»
+(`cover`) shows the cover, the Media scene while there is none. The header row
+is the player's name. The «Екран» page (also inside the app) picks the source,
+the layout and the scene, and its glass preview shows the cover.
 
 ## Today
 

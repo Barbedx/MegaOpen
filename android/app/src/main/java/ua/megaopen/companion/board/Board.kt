@@ -4,7 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import ua.megaopen.companion.link.HttpWire
-import ua.megaopen.companion.link.UsbLink
+import ua.megaopen.companion.link.Link
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -12,10 +12,10 @@ import java.util.zip.GZIPInputStream
 
 /** The board's web API, whichever way in: the rest of the app does not care. */
 interface Board {
-    enum class Via { Usb, Wifi }
+    enum class Via { Usb, Ble, Wifi }
 
     val via: Via
-    /** "MegaOpen-8428" on USB, the address on WiFi. */
+    /** "MegaOpen-8428" on USB and Bluetooth (its HELLO), the address on WiFi. */
     val label: String
     /** The board's firmware version, "" until known. */
     val fw: String
@@ -33,8 +33,8 @@ interface Board {
         request("POST", path, mapOf("Content-Type" to "application/json"), body.toString().toByteArray())
 }
 
-class UsbBoard(private val link: UsbLink, override val label: String, override val fw: String) : Board {
-    override val via = Board.Via.Usb
+/** The board over a link (USB or Bluetooth): HTTP as frames, one [Link] whichever. */
+class LinkBoard(private val link: Link, override val via: Board.Via, override val label: String, override val fw: String) : Board {
     override suspend fun request(method: String, path: String, headers: Map<String, String>,
                                  body: ByteArray?, timeoutMs: Long) = link.request(method, path, headers, body, timeoutMs)
 }
@@ -43,6 +43,8 @@ class WifiBoard(val host: String) : Board {
     override val via = Board.Via.Wifi
     override val label = host
     @Volatile override var fw: String = ""
+    /** The board's name (its access point's), from [probe]; "" until known. */
+    @Volatile var name: String = ""
 
     override suspend fun request(method: String, path: String, headers: Map<String, String>,
                                  body: ByteArray?, timeoutMs: Long): HttpWire.Response = withContext(Dispatchers.IO) {
@@ -79,7 +81,10 @@ class WifiBoard(val host: String) : Board {
     suspend fun probe(timeoutMs: Long): String? = try {
         val r = request("GET", "/api/status", timeoutMs = timeoutMs)
         val j = JSONObject(r.text())
-        if (r.code == 200 && j.has("fw") && j.has("apName")) j.getString("fw") else null
+        if (r.code == 200 && j.has("fw") && j.has("apName")) {
+            name = j.optString("apName")
+            j.getString("fw")
+        } else null
     } catch (e: Exception) {
         null
     }

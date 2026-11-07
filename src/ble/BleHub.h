@@ -15,6 +15,7 @@ namespace BleHub
         Ams,      // iPhone only (legacy "ams")
         Keyboard, // head unit only (legacy "keyboard")
         Both,     // iPhone AMS + head-unit HID simultaneously
+        App,      // MegaOpen Companion's link only (the link runs in every mode)
     };
 
     // `deviceName` goes in the primary advertising packet: keep it 4 chars. It
@@ -48,7 +49,9 @@ namespace BleHub
     // auth completes before AMS discovery can run.
     void classifyAsAms(uint16_t handle);
 
-    // 1 for single-role modes, so they stop advertising once the peer is up.
+    // 1 for single-role modes, so they stop advertising once the peer is up;
+    // with the app link, always room for a second peer (the head unit's app
+    // beside the iPhone).
     uint8_t maxPeers();
 
     // The only gate on NimBLEServer::getClient(). It keeps ONE client per server

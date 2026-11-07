@@ -17,6 +17,27 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
+- **2026-11-07 — the head unit's hotspot drops to 5 GHz, the board loses it.**
+  Owner: the tablet switches its hotspot to 5 GHz by default, and then the app
+  does not connect (the S3 is 2.4 GHz only). Nothing on the board says so: the
+  station just never joins. The BLE link (feat/ble-link) carries the app and the
+  board's internet meanwhile; the board could still name the cause (its scan
+  sees no `megayozh` on 2.4 GHz while the app says the head unit has a hotspot).
+  `src/net/WifiManager.*`.
+- **2026-11-07 — "NO HU TEXT" on the panel reads as "no head unit".** Owner: the
+  panel lies, it is not clear whether the head unit is connected, yet it shows
+  NO HU TEXT. `HuMediaSource::statusText()` says `HU: NO TEXT YET` when frames
+  do arrive (the UART link is fine) but DUDU's own player never sent a title:
+  the words mix "link" and "content". Candidates: say the link and the content
+  apart (e.g. `HU OK, NO TRACK`), or show the app's media (feat/ble-link) and
+  keep the HU status for the health page. `src/media/HuMediaSource.cpp:156`,
+  `src/app/UiTask.cpp` (the `!linkUp` branch).
+- **2026-11-07 — when the app retries is not visible.** Owner: "не зрозуміло
+  коли реконект". The Companion's connection loop retried USB, then WiFi, with
+  no word on the screen of what it tried or when it tries next; the BLE work
+  adds a "next try in N s" line (android/, feat/ble-link). The board side has
+  no such line either: `/api/health` chain `app` now says the link
+  (`app_usb`/`app_ble`/`app_none`).
 - **2026-11-04 — main.cpp is still the glue for every task.** 2867 lines,
   ~165 file-scope globals, `setup()` about 800 lines (1817-2611), 133 `#if`.
   It holds work that belongs to the task modules: the head-unit UART glue
