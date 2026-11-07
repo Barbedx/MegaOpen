@@ -17,6 +17,21 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
+- **2026-11-07 — an OTA file upload over the USB link left the bench deaf on USB.**
+  Bench mo-8428 on 1.9.0 (de349c5), WiFi down (AP only). Over the link from a
+  PC (tools/usb_link.py's Link): `GET /ota/start?mode=fr&hash=…` answered
+  only after >10 s (the client had given up: `91 timeout` on the channel, the
+  late `OK` then arrived as the next request's reply); a second try's
+  multipart `POST /ota/upload` (1.8 MB) stopped with the host's USB write
+  timing out (2 s, then 30 s); from then on the board never read the vendor
+  FIFO again, HELLO included, for 10+ minutes. Windows still listed the
+  device OK; DTR/RTS on COM7 did not reset it (TinyUSB CDC). Suspects: the
+  usblink task blocked for good in `::send` to httpd while ElegantOTA's
+  upload handler waited on a body that would not come, or the Update session
+  left open (`GhOta.cpp:656`, "a /ota/start with no upload after it holds
+  Update open for ever"). Same code path as the BLE link now (LinkSession).
+  Needs a power cycle, then the flash log. `src/link/LinkSession.cpp`
+  (onRequest), `src/net/WebUi.cpp` (gateOta), ElegantOTA.
 - **2026-11-07 — the head unit's hotspot drops to 5 GHz, the board loses it.**
   Owner: the tablet switches its hotspot to 5 GHz by default, and then the app
   does not connect (the S3 is 2.4 GHz only). Nothing on the board says so: the
