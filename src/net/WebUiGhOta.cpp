@@ -4,12 +4,17 @@
 #include <WiFi.h>
 #include <ElegantOTA.h>
 #include "../Version.h"
+#include "../link/AppLink.h"
 
 // ---------------------------------------------------------------------------
 // /api/fw — firmware updates from GitHub Releases (src/net/GhOta.h)
 // ---------------------------------------------------------------------------
 // GET is the state the Плата page polls; check and install are POST and only
 // ever start a job, so httpd never waits on the network. Never automatic.
+
+// A way to GitHub: the board's WiFi, or MegaOpen Companion on the link (USB or
+// BLE) that offered its internet (AppLink::netFirst picks which one goes).
+static bool online() { return WiFi.isConnected() || AppLink::netAvailable(); }
 
 static int fwBusy(PsychicRequest* r, const char* why)
 {
@@ -60,15 +65,15 @@ void WebUi::routesGhOta()
     });
 
     route("/api/fw/check", HTTP_POST, [](PsychicRequest* r) {
-        if (!WiFi.isConnected())
-            return fwBusy(r, "fw_ap");   // on its own AP: join a WiFi network with internet
+        if (!online())
+            return fwBusy(r, "fw_ap");   // on its own AP, no app with internet: join a WiFi network
         const char* why = GhOta::check();
         return why ? fwBusy(r, why) : r->reply(200, "application/json", "{\"ok\":true}");
     });
 
     route("/api/fw/install", HTTP_POST, [](PsychicRequest* r) {
-        if (!WiFi.isConnected())
-            return fwBusy(r, "fw_ap");   // on its own AP: join a WiFi network with internet
+        if (!online())
+            return fwBusy(r, "fw_ap");   // on its own AP, no app with internet: join a WiFi network
         const char* why = GhOta::install();
         return why ? fwBusy(r, why) : r->reply(200, "application/json", "{\"ok\":true}");
     });

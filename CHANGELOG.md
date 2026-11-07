@@ -18,6 +18,9 @@ MegaOpen Companion over Bluetooth, and now playing from the head unit's apps wit
 - The link's code is one session over two transports: `src/link/LinkSession.*` (HELLO, the channels to httpd, the events, the app's internet), `UsbPipe.*`, `BlePipe.*`, served by one task `applink` (was `usblink`) in `AppLink.*`; `UsbLink.*` is gone. The frame buffers moved from DRAM to PSRAM: 3.5 kB less static DRAM than 1.9.0.
 - `/api/status` `usb`: the session counters as before, plus `up` and `lastRxAgoMs`.
 
+### Fixed
+- «Перевірити» and «Встановити» (GitHub update) refused with `fw_ap` whenever the board's WiFi was not connected, even with the app on the link offering its internet: now any way out counts (WiFi, or Companion over USB or Bluetooth). Its words say so.
+
 ## [1.9.0] - 2026-11-03
 
 The panel role (radio emulator or radio extension) and the clean-out of what older firmware left behind.

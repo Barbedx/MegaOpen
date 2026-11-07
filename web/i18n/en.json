@@ -189,7 +189,7 @@
  "e.too_many": "Too many settings at once: {0} at most",
  "e.macro_hex": "Data must be hex bytes, up to {0}",
  "e.macro_incomplete": "Incomplete: check the buttons, taps and action",
- "e.fw_ap": "The board is on its own hotspot: connect it to Wi-Fi with internet",
+ "e.fw_ap": "The board has no internet: connect it to Wi-Fi with internet, or open MegaOpen Companion on the head unit (USB or Bluetooth)",
  "e.fw_written": "An update is written and waiting for a restart",
  "e.fw_running": "A check or download is still running",
  "e.fw_no_newer": "No newer release: check first",
