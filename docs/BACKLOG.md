@@ -17,6 +17,15 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
+- **2026-11-08 — WifiManager's boot scan probably always "fails".**
+  `WifiManager::start()` scans with `WiFi.scanNetworks(true, false, false, 120)`
+  when two networks are saved. arduino-esp32 2.0.17 (`WiFiScan.cpp:63`) sets
+  the async timeout to `max_ms_per_chan * 20` = 2.4 s, and `scanComplete()`
+  returns -2 once it passes; a 13-channel scan takes longer. Seen on the bench
+  with the same call in Improv: `scan ended with -2 after 2419 ms`. Then
+  `pickFromScan(0)` sees neither network and always picks home first, so the
+  "second network when home is absent" choice at boot never happens (the AP
+  retry still alternates). Fix: 300 ms a channel (6 s), as ImprovSerial does.
 - **2026-11-07 — the USB serial is write-only: no command input.** The web
   installer (`installer/`, ESP Web Tools) has «Logs & Console» with an input
   line; our CDC port shows the log (`src/main.cpp:196`) but nothing in `src/`

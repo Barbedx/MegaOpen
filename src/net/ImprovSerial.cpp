@@ -75,10 +75,21 @@ public:
     // scanning itself: the radio is its.
     bool scanStart() override
     {
-        if (w->connecting() || w->off()) return false;
+        if (w->connecting() || w->off()) {
+            LOGW("improv", "scan refused: wifi %s", w->off() ? "off (USB link)" : "busy joining");
+            return false;
+        }
         w->scanBegin();
         scanOwn = true;
-        if (WiFi.scanNetworks(true, false, false, 120) == WIFI_SCAN_FAILED) { finish(); return false; }
+        // 300 ms a channel: arduino-esp32 2.0.17 times an async scan out at
+        // max_ms_per_chan * 20, and at 120 that is 2.4 s, shorter than a scan
+        // of 13 channels: scanComplete() said "failed" at 2419 ms on the bench.
+        const int16_t r = WiFi.scanNetworks(true, false, false, 300);
+        if (r == WIFI_SCAN_FAILED) {
+            LOGW("improv", "scan did not start (mode %d)", (int)WiFi.getMode());
+            finish();
+            return false;
+        }
         scanAt = millis();
         return true;
     }
@@ -86,6 +97,8 @@ public:
     {
         const int n = WiFi.scanComplete();
         if (n == WIFI_SCAN_RUNNING && millis() - scanAt < SCAN_MAX_MS) return -1;
+        if (n < 0) LOGW("improv", "scan ended with %d after %u ms (mode %d)", n,
+                        (unsigned)(millis() - scanAt), (int)WiFi.getMode());
         int k = 0;
         for (int i = 0; i < n; ++i) {
             const String s = WiFi.SSID(i);
