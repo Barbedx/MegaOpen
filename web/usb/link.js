@@ -90,6 +90,10 @@ export class Parser {
       if (!crcOk(b, at, len)) { ++at; ++this.bad; continue; }
       onFrame({ type: b[at + 2], flags: b[at + 3], chan: b[at + 4] | b[at + 5] << 8, payload: b.slice(at + HEAD, at + HEAD + len) });
       at += HEAD + len + 2;
+      // The board pads a frame whose length is a multiple of 64 with one 0x00
+      // in the same transfer (src/link/LinkFrame.h usbFiller): without it the
+      // transfer ends on a full packet and the host waits for more. Not bad.
+      if ((HEAD + len + 2) % 64 === 0 && at < b.length && b[at] === 0) ++at;
     }
     this.rest = b.slice(at);
   }

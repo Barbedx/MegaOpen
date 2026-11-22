@@ -44,6 +44,10 @@ eq(crc16(te.encode('123456789')), 0x29B1, 'crc16 check value');
   r.feed(big.subarray(0, 600), x => got2.push(x));
   r.feed(big.subarray(600), x => got2.push(x));
   ok(got2.length === 1 && got2[0].payload.length === 1024 && r.bad === 0, 'a frame in two pieces is still one frame');
+  // The board's filler after a frame of a multiple of 64 bytes (1.12 S1).
+  const f128 = encode(T.HELLO_ACK, FIN, 0, new Uint8Array(118).fill(0x20)), s = new Parser(), got3 = [];
+  s.feed(L.concat(L.concat(f128, new Uint8Array([0])), encode(T.PONG, FIN, 0)), x => got3.push(x));
+  ok(got3.length === 2 && s.bad === 0, 'a filler 0x00 after a 128-byte frame is not bad');
 }
 
 // ---- HTTP framing --------------------------------------------------------------
