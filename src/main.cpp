@@ -37,6 +37,7 @@
 #include "app/HuTask.h"
 #include "app/OneShot.h"
 #include "app/Housekeeping.h"
+#include "app/Supervisor.h"
 #include "app/CarTask.h"
 #include "app/CarDiag.h"
 #include "utils/Staged.h"
@@ -1601,6 +1602,33 @@ static void hkWifi(uint32_t now)
 #endif
 }
 
+// httpd: the web server's own task, where every route runs; found by name
+// once it exists (the server starts after hkBeat's first pass). Never deleted.
+static TaskHandle_t g_httpdTask = nullptr;
+
+// [win] ctx= at each new heap minimum (App::Housekeeping::Hooks::ctx): plain
+// reads, no lock, no lookup. httpd idles in select(), blocked or suspended:
+// ready or running is a request being served (one held in a send() or a
+// Request/Reply wait reads as idle).
+static uint32_t hkCtx()
+{
+    using namespace App::Housekeeping;
+    uint32_t c = 0;
+#if FEATURE_GH_OTA || FEATURE_LOG_PUSH
+    if (NetJob::running()) c |= CTX_JOB;
+#endif
+    const TaskHandle_t h = g_httpdTask;
+    if (h) {
+        const eTaskState st = eTaskGetState(h);
+        if (st == eRunning || st == eReady) c |= CTX_HTTP;
+    }
+#if FEATURE_BLE
+    c |= ctxBle(BleHub::connectedCount());
+#endif
+    if (g_wifi.connecting()) c |= CTX_JOIN;
+    return c;
+}
+
 // Every 10 s, after [win] and [task]: the lines nobody else owns.
 static void hkBeat(uint32_t now)
 {
@@ -1611,11 +1639,14 @@ static void hkBeat(uint32_t now)
     // [stk] is a subset of [task] now. Kept until Step 6 retires it, so old
     // logs and new ones still compare line for line.
     const TaskHandle_t net = App::Housekeeping::task();
-    // httpd: the web server's own task (4 kB), where every route runs; found
-    // by name once it exists (the server starts after this line's first pass).
-    static TaskHandle_t s_httpd = nullptr;
-    if (!s_httpd) s_httpd = xTaskGetHandle("httpd");
-    LOGS("stk", "loop=%u net=%u ble=%u knobs=%u httpd=%u",
+    if (!g_httpdTask) g_httpdTask = xTaskGetHandle("httpd");
+    const TaskHandle_t httpd = g_httpdTask;
+    const unsigned httpdFree = httpd ? (unsigned)uxTaskGetStackHighWaterMark(httpd) : 0u;
+    if (httpd) App::Housekeeping::stackGuard("httpd", httpdFree);
+    // Then the core's own tasks, whose stacks we do not size (S6).
+    char core[160];
+    App::Housekeeping::coreStacks(core, sizeof(core));
+    LOGS("stk", "loop=%u net=%u ble=%u knobs=%u httpd=%u%s",
          g_loopTask ? (unsigned)uxTaskGetStackHighWaterMark(g_loopTask) : 0u,
          net ? (unsigned)uxTaskGetStackHighWaterMark(net) : 0u,
          g_bleTask ? (unsigned)uxTaskGetStackHighWaterMark(g_bleTask) : 0u,
@@ -1624,7 +1655,7 @@ static void hkBeat(uint32_t now)
 #else
          0u,
 #endif
-         s_httpd ? (unsigned)uxTaskGetStackHighWaterMark(s_httpd) : 0u);
+         httpdFree, core);
     // [hu] and [key] are logged by the hu and keys tasks themselves, [car]
     // by the car task, and [can], [panel], [stall] and [loop] by the loop,
     // each from its own window.
@@ -1888,7 +1919,11 @@ void setup()
     App::Tasks::setHandle(g_loopTaskId, g_loopTask);
     g_logbusTaskId = App::Tasks::add("logbus", false);
     App::Tasks::setHandle(g_logbusTaskId, LogBus::task());
-    LogBus::onWake([](uint32_t busyUs) { App::Tasks::beat(g_logbusTaskId, busyUs); });
+    // The supervisor runs on this tick, not on net_svc, which it watches.
+    LogBus::onWake([](uint32_t busyUs) {
+        App::Tasks::beat(g_logbusTaskId, busyUs);
+        App::Supervisor::tick(millis());
+    });
     logBootReason();
     LOGI("log", "ring %d B in %s%s", LogBus::ringSize(), LogBus::ringInPsram() ? "PSRAM" : "internal RAM",
          ringGrown ? "" : " (the boot ring: no memory for a bigger one)");
@@ -2587,10 +2622,13 @@ void setup()
         h.wifiSeen = hkWifiSeen;
         h.beat     = hkBeat;
         h.beatSlow = hkBeatSlow;
+        h.ctx      = hkCtx;
         // net_svc checks every critical task's age from its first pass, and
         // this one has been in setup() for seconds without a beat.
         App::Tasks::beat(g_loopTaskId, 0);
         App::Housekeeping::start(h);
+        // From here a task late past its Plan::LATE_LIMITS is logged.
+        App::Supervisor::begin();
     }
     memMark("setup end");
 

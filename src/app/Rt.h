@@ -18,9 +18,11 @@ namespace App
         UBaseType_t    prio = 1;
         int            core = -1;         // through App::core(): -1 = either core
         bool           critical = false;  // its liveness gates the OTA verdict
-        // Subscribe to the task watchdog. Accepted and IGNORED until Step 6:
-        // a task with a hidden long block would reboot-loop the box, so the
-        // [task] busyMax numbers get read first.
+        // Subscribe to the task watchdog, with FEATURE_TASK_WDT only (off:
+        // ignored). A task with a hidden long block would reboot-loop the box,
+        // so 1.12 logs late tasks first (Supervisor.h). With the feature on,
+        // the tasks of Plan::LATE_LIMITS up to WDT_LATE_LIMIT_MAX subscribe
+        // without asking.
         bool           wdt = false;
         // Where the registry id goes. Written BEFORE the task is created, so
         // the task can read it on its first pass even if it preempts spawn().

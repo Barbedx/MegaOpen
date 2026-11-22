@@ -1,5 +1,9 @@
 #include "TaskRegistry.h"
 #include "TaskAge.h"
+#include "../Features.h"
+#if FEATURE_TASK_WDT
+#include <esp_task_wdt.h>
+#endif
 
 namespace App
 {
@@ -48,6 +52,11 @@ namespace App
             if (busyUs > e.busyMaxUs) e.busyMaxUs = busyUs;
             e.wakes = e.wakes + 1;
             e.lastAliveMs = millis();
+#if FEATURE_TASK_WDT
+            // The calling task's own feed; a task not subscribed (Rt.cpp)
+            // gets ESP_ERR_NOT_FOUND back and nothing else.
+            esp_task_wdt_reset();
+#endif
         }
 
         int count() { return g_n; }

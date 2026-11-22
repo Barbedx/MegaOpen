@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <string.h>
 
 // Every task's priority, core and stack in one table (docs/design/event-tasks.md
 // §2.1). Read this before adding a task or moving one: who preempts whom is
@@ -175,5 +176,40 @@ namespace App
         // set is applied (Expr's recursion, bounded by Program::MAX_NEST),
         // then LOGW's 320 B line and the NVS writes of odoKeep/svcKeep.
         constexpr uint32_t    CAR_STACK  = 6144;
+
+        // ---- the supervisor (src/app/Supervisor.h) ---------------------------------
+        // How long each task may go without a beat before `W [sup] late`. The
+        // hot ones wake every few ms (keys 100 ms at most, knobs 1 ms), the
+        // render and car ones every 50 ms; applink and ble_svc can be held by
+        // a socket or a GATT round trip; net_svc's 2 s is the OTA verdict's
+        // own limit for a critical task (Housekeeping.cpp, healthy()). netjob
+        // runs one job for as long as it takes: not watched, nor is any task
+        // missing here (logbus runs the supervisor; scan, capwr).
+        struct LateLimit { const char* task; uint32_t ms; };
+        inline constexpr LateLimit LATE_LIMITS[] = {
+            {"keys", 500}, {"hu", 500}, {"loop", 500}, {"knobs", 500},
+            {"car", 1000}, {"ui", 1000},
+            {"applink", 3000}, {"ble_svc", 3000},
+            {"net_svc", 2000},
+        };
+        // 0: not watched.
+        inline uint32_t lateLimitMs(const char* task)
+        {
+            if (!task) return 0;
+            for (const LateLimit& l : LATE_LIMITS)
+                if (strcmp(l.task, task) == 0) return l.ms;
+            return 0;
+        }
+        // FEATURE_TASK_WDT only: App::spawn subscribes every task watched at
+        // this limit or tighter to the task watchdog (5 s, panic), and
+        // Supervisor::begin the loop: the tasks of docs/design/event-tasks.md
+        // 6b (keys, hu, knobs, car, ui, the loop).
+        constexpr uint32_t WDT_LATE_LIMIT_MAX = 1000;
+
+        // Guards, once per episode: `W [mem] low` when a [win] minimum is
+        // under HEAP_LOW, `W [stk] low` when a task has less stack than
+        // STACK_LOW never touched.
+        constexpr uint32_t HEAP_LOW  = 20000;
+        constexpr uint32_t STACK_LOW = 1024;
     }
 }

@@ -35,12 +35,36 @@ namespace App
             void (*beat)(uint32_t nowMs) = nullptr;
             // Once a minute, and on the first pass: the String-heavy [net] line.
             void (*beatSlow)(uint32_t nowMs) = nullptr;
+            // At each new [win] minimum: what was going on (the CTX_* bits,
+            // the BLE connections in bits 8-15), for `[win] ... at=<ms>
+            // ctx=job,http,ble1,join`. Plain reads of flags and counters only:
+            // it runs where the heap is sampled.
+            uint32_t (*ctx)() = nullptr;
         };
+        enum : uint32_t {
+            CTX_JOB  = 1u << 0,   // a NetJob job is running
+            CTX_HTTP = 1u << 1,   // httpd is serving a request
+            CTX_JOIN = 1u << 2,   // WiFi is scanning or joining
+        };
+        constexpr uint32_t ctxBle(uint32_t n) { return (n > 255 ? 255 : n) << 8; }
 
         // Creates net_svc. Critical: it serves the web, which is how the next
         // OTA arrives, and it now gives the verdict.
         void start(const Hooks& h);
 
         TaskHandle_t task();
+
+        // The [stk] guard, any task's number: `W [stk] low task=<n> free=<b>
+        // limit=<b>` once per episode (free under Plan::STACK_LOW), quiet
+        // again once it is back above. [task] runs it for every registered
+        // task; main.cpp's [stk] for the rest.
+        void stackGuard(const char* task, uint32_t freeBytes);
+
+        // The [stk] line's tail for the tasks that are the core's, not ours
+        // (nimble_host, arduino_usb_eve, arduino_events, usbd, wifi, tiT):
+        // " <name>=<bytes never touched>", or "=-" when the task does not
+        // exist in this build. Looks each up by name (the stack guard runs on
+        // each too). The length written.
+        int coreStacks(char* out, size_t n);
     }
 }
