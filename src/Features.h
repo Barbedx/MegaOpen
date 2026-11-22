@@ -139,6 +139,14 @@
 #endif
 #define FEATURE_APP_LINK (FEATURE_USB_LINK || FEATURE_BLE_LINK)
 
+// The task watchdog on our hot tasks (src/app/Rt.cpp, Supervisor.h): keys,
+// hu, knobs, car, ui and the loop subscribe to the core's TWDT (5 s, panic,
+// reboot). Off: 1.12 only logs a late task (`[sup]`). env:t2can_wdt builds it
+// on, so the path compiles in CI.
+#ifndef FEATURE_TASK_WDT
+#define FEATURE_TASK_WDT 0
+#endif
+
 #if !FEATURE_DISPLAY_CAN && !FEATURE_VEHICLE_CAN
 // Not an error — a headless canbox with only the GPIO matrix is a valid build.
 #endif

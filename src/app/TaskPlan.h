@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <string.h>
 
 // Every task's priority, core and stack in one table (docs/design/event-tasks.md
 // §2.1). Read this before adding a task or moving one: who preempts whom is
@@ -95,6 +96,10 @@ namespace App
         constexpr UBaseType_t NET_PRIO  = 1;
         constexpr int         NET_CORE  = 0;
         constexpr uint32_t    NET_STACK = 6144;
+        // Its pass when no heartbeat is due sooner (S7, 1.12). The web, WiFi
+        // and the verdict work in seconds; the 20 ms it had was for the heap
+        // sampling, an esp_timer now. Under the supervisor's 2 s.
+        constexpr uint32_t    NET_PASS_MS = 250;
 
         // BleHub::Service (AMS, ANCS) and the BLE key commands: AMS writes and
         // HID presses posted by the keys task. 2 on core 0, with the radio and
@@ -103,6 +108,11 @@ namespace App
         constexpr UBaseType_t BLE_PRIO  = 2;
         constexpr int         BLE_CORE  = 0;
         constexpr uint32_t    BLE_STACK = 4096;
+        // ble_svc's wait for a key while no peer is connected (S7, 1.12): it
+        // polled every 20 ms with nothing to do. A new peer waits this long
+        // at most for its next pass (BleHub::Service: AMS setup, advertising).
+        // Connected, it is 20 ms as before. Under the supervisor's 3 s.
+        constexpr uint32_t    BLE_IDLE_MS = 200;
 
         // The network worker (src/net/NetJob.h): the GitHub update and the
         // log push, one job after the other, on one task for the whole boot.
@@ -175,5 +185,40 @@ namespace App
         // set is applied (Expr's recursion, bounded by Program::MAX_NEST),
         // then LOGW's 320 B line and the NVS writes of odoKeep/svcKeep.
         constexpr uint32_t    CAR_STACK  = 6144;
+
+        // ---- the supervisor (src/app/Supervisor.h) ---------------------------------
+        // How long each task may go without a beat before `W [sup] late`. The
+        // hot ones wake every few ms (keys 100 ms at most, knobs 1 ms), the
+        // render and car ones every 50 ms; applink and ble_svc can be held by
+        // a socket or a GATT round trip; net_svc's 2 s is the OTA verdict's
+        // own limit for a critical task (Housekeeping.cpp, healthy()). netjob
+        // runs one job for as long as it takes: not watched, nor is any task
+        // missing here (logbus runs the supervisor; scan, capwr).
+        struct LateLimit { const char* task; uint32_t ms; };
+        inline constexpr LateLimit LATE_LIMITS[] = {
+            {"keys", 500}, {"hu", 500}, {"loop", 500}, {"knobs", 500},
+            {"car", 1000}, {"ui", 1000},
+            {"applink", 3000}, {"ble_svc", 3000},
+            {"net_svc", 2000},
+        };
+        // 0: not watched.
+        inline uint32_t lateLimitMs(const char* task)
+        {
+            if (!task) return 0;
+            for (const LateLimit& l : LATE_LIMITS)
+                if (strcmp(l.task, task) == 0) return l.ms;
+            return 0;
+        }
+        // FEATURE_TASK_WDT only: App::spawn subscribes every task watched at
+        // this limit or tighter to the task watchdog (5 s, panic), and
+        // Supervisor::begin the loop: the tasks of docs/design/event-tasks.md
+        // 6b (keys, hu, knobs, car, ui, the loop).
+        constexpr uint32_t WDT_LATE_LIMIT_MAX = 1000;
+
+        // Guards, once per episode: `W [mem] low` when a [win] minimum is
+        // under HEAP_LOW, `W [stk] low` when a task has less stack than
+        // STACK_LOW never touched.
+        constexpr uint32_t HEAP_LOW  = 20000;
+        constexpr uint32_t STACK_LOW = 1024;
     }
 }

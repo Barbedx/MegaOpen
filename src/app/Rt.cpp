@@ -1,5 +1,9 @@
 #include "Rt.h"
 #include "../utils/LogBus.h"
+#include "../Features.h"
+#if FEATURE_TASK_WDT
+#include <esp_task_wdt.h>
+#endif
 
 namespace App
 {
@@ -24,6 +28,15 @@ namespace App
             return nullptr;
         }
         Tasks::setHandle(id, h);
+#if FEATURE_TASK_WDT
+        // Fed by Tasks::beat on every pass. Off by default: 1.12 only logs
+        // (Supervisor.h); env:t2can_wdt builds this path.
+        const uint32_t lim = Plan::lateLimitMs(s.name);
+        if (s.wdt || (lim && lim <= Plan::WDT_LATE_LIMIT_MAX)) {
+            const esp_err_t e = esp_task_wdt_add(h);
+            LOGI("task", "%s: task watchdog %s", s.name, e == ESP_OK ? "on" : "FAILED");
+        }
+#endif
         return h;
     }
 }
