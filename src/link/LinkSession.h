@@ -68,6 +68,10 @@ namespace Link
         // A frame stalled while the app keeps writing is given up after
         // TX_RX_WAITING_MS (USB: a host that writes and does not read).
         virtual bool cutWhileTalking() const { return false; }
+        // Every pass, after the session's reads and writes: whatever the
+        // transport needs to keep moving (USB: re-arm OUT, flush IN). True:
+        // it did not take yet, call again next tick.
+        virtual bool kick() { return false; }
     };
 
     class Session {
@@ -79,7 +83,7 @@ namespace Link
         void begin(const char* name) { _name = name ? name : ""; }
         void service(uint32_t now);
         bool busy() const;                      // a channel is open: poll fast
-        bool txBusy() const { return !txIdle(); }   // a frame waits for room: poll faster
+        bool txBusy() const { return !txIdle() || _kickAgain; }   // a frame waits for room: poll every tick
 
         // ---- any task ----------------------------------------------------
         bool alive() const;                     // up, and a frame lately
@@ -178,6 +182,7 @@ namespace Link
         uint8_t      _rr = 0;             // the data producer to ask first
         uint8_t      _pumpC = 0;          // the channel to read first
         bool         _up = false;
+        bool         _kickAgain = false;  // the pipe's kick() did not take
         bool         _hello = false;
         bool         _evMore = false;     // the last ask found an alert: ask again now
         uint32_t     _evSeq = 0;

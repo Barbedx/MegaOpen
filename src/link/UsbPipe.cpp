@@ -5,6 +5,7 @@
 #include "esp32-hal-tinyusb.h"
 #include "USB.h"
 #include "soc/usb_dwc_struct.h"
+#include "device/usbd_pvt.h"
 #include "../utils/LogBus.h"
 
 namespace UsbPipe
@@ -16,11 +17,14 @@ namespace UsbPipe
         // USB in app_main (CDC on boot), before setup(). The core's USBVendor
         // is not used: its byte queue drops what does not fit, where reading
         // TinyUSB's FIFO ourselves leaves the host NAKed until we read.
+        uint8_t s_epOut = 0;   // the OUT endpoint's address (IN is 0x80 | it)
+
         uint16_t loadDescriptor(uint8_t* dst, uint8_t* itf)
         {
             const uint8_t str = tinyusb_add_string_descriptor("MegaOpen link");
             const uint8_t ep = tinyusb_get_free_duplex_endpoint();
             TU_VERIFY(ep != 0);
+            s_epOut = ep;
             uint8_t d[TUD_VENDOR_DESC_LEN] = {
                 TUD_VENDOR_DESCRIPTOR(*itf, str, ep, (uint8_t)(0x80 | ep), 64)
             };
@@ -77,6 +81,31 @@ namespace UsbPipe
                 return w;
             }
             bool cutWhileTalking() const override { return true; }
+            // The usbd task is not pinned (esp32-hal-tinyusb.c:718) and arms
+            // the endpoints as we do, through usbd_edpt_claim; when both claim
+            // at once one gives up and nobody arms. OUT: the packet that
+            // filled the 64 B FIFO does not re-arm it, our read does, and a
+            // lost claim there left OUT NAKing for good (bench 2026-11-22,
+            // `usb_link.py cable`: rx stopped at 1566 frames, no rx callback
+            // after). IN: the last frame's tail stayed in the FIFO (2 echoes
+            // lost). A zero-byte read re-arms OUT when the FIFO has room (a
+            // busy endpoint refuses the claim, harmless); a flush sends a
+            // tail.
+            // Again next tick while OUT is still not armed with an empty FIFO,
+            // or a tail waits with IN idle: a lost claim costs a tick, not
+            // the 50 ms poll.
+            bool kick() override
+            {
+                if (!tud_vendor_n_mounted(ITF)) return false;
+                uint8_t none;
+                const bool empty = !tud_vendor_n_available(ITF);
+                if (empty) tud_vendor_n_read(ITF, &none, 0);
+                if (tud_vendor_n_write_available(ITF) < FIFO) tud_vendor_n_write_flush(ITF);
+                // A busy IN completes and flushes by itself (a host that
+                // stopped reading must not keep us polling every tick).
+                const bool tail = tud_vendor_n_write_available(ITF) < FIFO;
+                return (empty && !usbd_edpt_busy(0, s_epOut)) || (tail && !usbd_edpt_busy(0, (uint8_t)(0x80 | s_epOut)));
+            }
         } s_pipe;
     }
 
