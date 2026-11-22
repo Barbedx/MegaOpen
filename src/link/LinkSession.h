@@ -32,6 +32,7 @@ namespace Link
         uint8_t  open = 0;            // channels with a socket
         uint32_t rxFrames = 0, txFrames = 0, bad = 0;
         uint32_t reqs = 0, fails = 0, events = 0;
+        uint32_t hellos = 0, helloAckFails = 0;   // HELLOs in, HELLO_ACKs that did not go out
         uint32_t rxBytes = 0, txBytes = 0;
         uint32_t lastRxAgoMs = 0;     // UINT32_MAX: never
         // The longest single wait, ms: for room in the transport, connect(),

@@ -43,6 +43,8 @@ namespace UsbPipe
         bool     s_sofSeen = false;
         uint32_t s_sof = 0;              // the last DSTS.SOFFN read
         uint32_t s_sofAt = 0;
+        // The event counts watch() has said (written by the core's event task).
+        uint32_t s_saidUnmounts = 0, s_saidSuspends = 0, s_saidResumes = 0;
 
         class Pipe final : public Link::Pipe {
         public:
@@ -89,13 +91,16 @@ namespace UsbPipe
         // The frame number as it stands: a change from here on is a host.
         s_sof = USB_DWC.dsts_reg.soffn;
         // What the host does to the bus, for a link that drops: the core's
-        // event loop calls this (tud_mount/umount/suspend/resume_cb).
+        // event loop calls this (tud_mount/umount/suspend/resume_cb). Counts
+        // only: that task's stack is 2 kB (ARDUINO_SERIAL_EVENT_TASK_STACK_SIZE),
+        // and a LOGI there overflowed it on every replug (car boots 289/290,
+        // 2026-11-22, task arduino_usb_eve). watch() says it, on applink.
         USB.onEvent([](void*, esp_event_base_t, int32_t id, void*) {
             switch (id) {
                 case ARDUINO_USB_STARTED_EVENT: ++s_bus.mounts;   break;
-                case ARDUINO_USB_STOPPED_EVENT: ++s_bus.unmounts; LOGI("usb", "host: bus reset or unplugged"); break;
-                case ARDUINO_USB_SUSPEND_EVENT: ++s_bus.suspends; LOGI("usb", "host: bus suspended"); break;
-                case ARDUINO_USB_RESUME_EVENT:  ++s_bus.resumes;  LOGI("usb", "host: bus resumed"); break;
+                case ARDUINO_USB_STOPPED_EVENT: ++s_bus.unmounts; break;
+                case ARDUINO_USB_SUSPEND_EVENT: ++s_bus.suspends; break;
+                case ARDUINO_USB_RESUME_EVENT:  ++s_bus.resumes;  break;
                 default: break;
             }
         });
@@ -111,6 +116,13 @@ namespace UsbPipe
     // is a host that refused them.
     void watch(uint32_t now)
     {
+        // The core's event task wrote these; one word each, read whole.
+        const uint32_t un = *(volatile uint32_t*)&s_bus.unmounts;
+        const uint32_t su = *(volatile uint32_t*)&s_bus.suspends;
+        const uint32_t re = *(volatile uint32_t*)&s_bus.resumes;
+        if (un != s_saidUnmounts) { LOGI("usb", "host: bus reset or unplugged (x%lu)", (unsigned long)(un - s_saidUnmounts)); s_saidUnmounts = un; }
+        if (su != s_saidSuspends) { LOGI("usb", "host: bus suspended (x%lu)", (unsigned long)(su - s_saidSuspends)); s_saidSuspends = su; }
+        if (re != s_saidResumes)  { LOGI("usb", "host: bus resumed (x%lu)", (unsigned long)(re - s_saidResumes)); s_saidResumes = re; }
         const uint32_t sof = USB_DWC.dsts_reg.soffn;
         if (sof != s_sof) { s_sof = sof; s_sofAt = now; s_sofSeen = true; }
         const bool on = s_sofSeen && now - s_sofAt < BUS_IDLE_MS;

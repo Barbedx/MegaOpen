@@ -230,7 +230,16 @@ namespace Link
         closeAll();     // a new HELLO is a new app: its old requests are gone
         if (!_hello) LOGI("link", "%s: the app said HELLO (net %s)", tag(), _appNet ? "offered" : "no");
         _hello = true;
-        send(HELLO_ACK, FIN, 0, (const uint8_t*)out, n);
+        ++_st.hellos;
+        // The car (boot 291, 2026-11-22): HELLO in every 5 s, the app never
+        // saw the answer. Whether it went out is the first question.
+        const uint32_t cut = _st.cut, dropped = _st.dropped;
+        if (!send(HELLO_ACK, FIN, 0, (const uint8_t*)out, n)) {
+            ++_st.helloAckFails;
+            LOGW("link", "%s: HELLO_ACK not sent (%s, wait %lu ms)", tag(),
+                 _st.cut != cut ? "cut" : _st.dropped != dropped ? "dropped" : "no host",
+                 (unsigned long)_st.txWaitMax);
+        }
     }
 
     void Session::onFrame(const Frame& f)

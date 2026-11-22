@@ -40,6 +40,47 @@ namespace AppLink
             return Via::None;
         }
 
+        void sayOne(char* b, size_t n, const char* tag, const Link::Session* s)
+        {
+            if (!s) { snprintf(b, n, "%s=-", tag); return; }
+            Link::SessionStats st;
+            s->stats(st);
+            char ago[12];
+            if (st.lastRxAgoMs == UINT32_MAX) snprintf(ago, sizeof(ago), "never");
+            else snprintf(ago, sizeof(ago), "%lus", (unsigned long)(st.lastRxAgoMs / 1000));
+            snprintf(b, n, "%s=%s%s%s rx=%lu tx=%lu hello=%lu ackFail=%lu bad=%lu cut=%lu drop=%lu txWaitMax=%lu reqs=%lu fails=%lu lastRx=%s",
+                     tag, st.up ? "up" : "down", st.alive ? ",alive" : "", st.hello ? ",hello" : "",
+                     (unsigned long)st.rxFrames, (unsigned long)st.txFrames, (unsigned long)st.hellos,
+                     (unsigned long)st.helloAckFails, (unsigned long)st.bad, (unsigned long)st.cut,
+                     (unsigned long)st.dropped, (unsigned long)st.txWaitMax, (unsigned long)st.reqs,
+                     (unsigned long)st.fails, ago);
+        }
+
+        // The counters /api/status has, in the log too: the flash log is all
+        // a boot that never got online leaves (car boot 291, 2026-11-22).
+        void status()
+        {
+            static int8_t linkTag = -1, busTag = -1;
+            const uint32_t now = millis();
+            // Static: applink's stack has ~1.5 kB to spare (car boot 291).
+            static char u[200], b[200];
+            if (Log::statusOn("link", linkTag, now)) {
+                sayOne(u, sizeof(u), "usb", s_usb);
+                sayOne(b, sizeof(b), "ble", s_ble);
+                Log::write(LogLevel::INF, "link", "via=%s %s", viaName(s_via), u);
+                Log::write(LogLevel::INF, "link", "via=%s %s", viaName(s_via), b);
+            }
+#if FEATURE_USB_LINK
+            if (Log::statusOn("usbbus", busTag, now)) {
+                UsbPipe::BusStats bs;
+                UsbPipe::bus(bs);
+                Log::write(LogLevel::INF, "usbbus", "mounted=%d sof=%d addr=%d susp=%d busUps=%lu unmounts=%lu suspends=%lu resumes=%lu",
+                           bs.mounted, bs.sof, bs.addressed, bs.suspended, (unsigned long)bs.busUps,
+                           (unsigned long)bs.unmounts, (unsigned long)bs.suspends, (unsigned long)bs.resumes);
+            }
+#endif
+        }
+
         void run(void*)
         {
             for (;;) {
@@ -60,6 +101,7 @@ namespace AppLink
                     LOGI("link", "app via %s (was %s)", viaName(v), viaName(s_via));
                     s_via = v;
                 }
+                status();
                 App::Tasks::beat(s_id, micros() - t0);
             }
         }
