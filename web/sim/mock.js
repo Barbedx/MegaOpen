@@ -95,7 +95,7 @@ const S={
  hu:{connected:true,rx:0,bad:0,trunc:0,txKey:418,txVeh:0,acks:0,learnedTitle:0x13,learnedArtist:0x14,count:0},
  emitter:false,tun:defTun(),map:defMap(),tests:{},
  can2:{setting:0,state:'locked',bitrate:500000,detected:500000,saved:500000,fps:850,frames:9123456,rec:0,tec:0,hwOverflows:0,ringPeak:212,restarts:0,quiet:false},
- cap:{recording:true,mode:'change',frames:1834220,written:6123456,dropped:0,markers:3,session:12,error:'',settings:{ring:true,fill:85,fileMB:4,autoProtect:true,mode:'change',autostart:true}},
+ cap:{recording:true,mode:'change',frames:1834220,written:6123456,dropped:0,markers:3,session:12,error:'',settings:{ring:true,fill:85,fileMB:4,autoProtect:true,mode:'change',autostart:true,ramMB:2,spill:'standing'}},
  budget:10380902,
  files:[{f:'0009',session:9,part:0,size:1048576,wall:day(9,18,2),protected:true},{f:'0010',session:10,part:0,size:1048576,wall:day(14,8,11),protected:false},{f:'0011',session:10,part:1,size:734003,wall:day(14,8,24),protected:false},{f:'0012',session:12,part:0,size:612345,wall:0,protected:false,current:true}],
  sniff:false,ids:{},
@@ -228,7 +228,7 @@ g('/api/health',health);
 const role=()=>S.set.panelRole||'emulator';
 const regDef=f=>f.type==='bool'?false:f.type==='int'?f.min:f.type==='str'?'':f.enum[0].v;
 /* cap.* реєстру живуть у S.cap.settings, як у прошивці — у рекордера (свій простір NVS) */
-const CAPK=['ring','fill','fileMB','autoProtect','mode','autostart'];
+const CAPK=['ring','fill','fileMB','autoProtect','mode','autostart','ramMB','spill'];
 const mRouteId=d=>'route'+d[0].toUpperCase()+d.slice(1);
 /* raise.* реєстру = S.tun (Canbox::Tuning): [ключ S.tun, у значення реєстру, назад] */
 const FUELID={2:'l100km',1:'kml',0:'mpg'},TRIPID={2:'km',1:'miles',0:'hide'},byVal=(o,v)=>+Object.keys(o).find(k=>o[k]===v);
@@ -376,10 +376,13 @@ po('/api/can2',q=>{const v=String(q.bitrate==null?'':q.bitrate),bps=v==='auto'||
  c.setting=bps;if(bps){c.bitrate=bps;c.quiet=bps!==500000;c.rec=c.quiet?96:0}else{c.bitrate=500000;c.quiet=false;c.rec=0}return ok});
 const capStatus=()=>{const c=S.cap,used=S.files.reduce((a,f)=>a+f.size,0),cur=S.files.find(f=>f.current);
  return {ready:true,recording:c.recording,mode:c.mode,frames:c.frames,written:c.written,dropped:c.dropped,markers:c.markers,ringUsed:3,ringCap:64,file:c.recording&&cur?+cur.f:0,fileBytes:cur?cur.size:0,session:c.session,
-  capBytes:used,budget:S.budget,free:Math.max(0,S.budget-used),fsFree:S.budget-used,rateFps:S.can2.quiet?0:S.can2.fps,ids:41,filterOverflow:0,files:S.files.length,bitrate:[S.can2.bitrate,500000],error:c.error,settings:{...c.settings}}};
+  capBytes:used,budget:S.budget,free:Math.max(0,S.budget-used),fsFree:S.budget-used,rateFps:S.can2.quiet?0:S.can2.fps,ids:41,filterOverflow:0,files:S.files.length,bitrate:[S.can2.bitrate,500000],error:c.error,settings:{...c.settings},
+  /* S4: кільце сегментів у RAM */
+  segs:32,segBytes:65536,unsent:c.recording?3*65536+21000:0,unsentSegs:c.recording?3:0,sealed:118,sent:115,spilled:0,lostSegs:0,lostRecs:0,bytesPerRec:4.8,spillMaxUs:0,spill:c.settings.spill,standing:false,moving:false,saving:false}};
 g('/api/cap',capStatus);
 po('/api/cap/start',()=>{const c=S.cap;if(!c.recording){c.recording=true;c.session++;S.files.forEach(f=>f.current=false);
  S.files.push({f:String(Math.max(...S.files.map(f=>+f.f),0)+1).padStart(4,'0'),session:c.session,part:0,size:0,wall:unixNow(),protected:false,current:true});c.markers=0}return ok});
+po('/api/cap/save',()=>({ok:true,segments:3}));
 po('/api/cap/stop',()=>{S.cap.recording=false;S.files.forEach(f=>f.current=false);return ok});
 po('/api/cap/mark',q=>{S.cap.markers++;if(S.cap.recording&&S.cap.settings.autoProtect){const f=S.files.find(x=>x.current);if(f)S.files.filter(x=>x.session===f.session).forEach(x=>x.protected=true)}emit(2,'CAP','marker "'+(q.t||'')+'"');return ok});
 /* і GET, як на платі (мітку можна вбити в адресний рядок), але теж лише з X-MegaOpen */

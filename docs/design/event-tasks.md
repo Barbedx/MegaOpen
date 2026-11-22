@@ -717,6 +717,7 @@ The head unit's receive side is now decoded (`docs/hu-decoder.md`). The main wor
 - **Recorder** (`src/capture/CanRecorder.{h,cpp}`, with the record format portable and tested):
   - The car task, and optionally the panel bus, push frames into a PSRAM ring (1 MB when `psramFound()`, 32 kB otherwise). A `capwr` task (priority 1, core 0) writes 16 kB chunks to `/cap/NNNN.bin`. When the files reach 90 % of the filesystem, the oldest is deleted.
   - Recording never blocks a producer. A full ring drops frames and counts them.
+  - **Since 1.12** (`docs/design/stabilisation-1-12.md` S4) `capwr` no longer writes chunks: it keeps format-v2 segments (`MOCAP2`, self-contained, 64 kB / 60 s, ~5 B a record) in a RAM ring, the log push sends them from RAM as `cap/<session>/r<seq>.bin`, and only a segment nobody sent is spilled to `/cap/<seq>.bin`, in 4 kB pieces, by default only while the car stands (`cap.spill`). The fixed-size records below are v1; every reader takes both.
 - **Format.**
   - File header: magic `MOCAP1`, the build id, the boot number, the bitrate of each bus, and the wall clock if it is known.
   - Each record is fixed-size: `u32 t_ms`, `u32 id | ext<<31 | bus<<29`, `u8 len`, `u8 kind (frame/marker/stats)`, `u8 data[8]`.

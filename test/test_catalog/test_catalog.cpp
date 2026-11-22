@@ -134,7 +134,7 @@ static void test_required_keys()
     }
     const V* e = cat().get("enums");
     TEST_ASSERT_NOT_NULL(e);
-    for (const char* k : {"arrows", "icons", "src", "fmt", "mediaSrc", "canRates", "capModes",
+    for (const char* k : {"arrows", "icons", "src", "fmt", "mediaSrc", "canRates", "capModes", "capSpill",
                           "mapSrc", "ruleTriggers", "ruleEffects",
                           "ledOrder", "ledIdle", "ledReact", "logLevels"}) {
         const V* l = e->get(k);

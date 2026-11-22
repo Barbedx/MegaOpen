@@ -45,6 +45,7 @@ static int capRes(PsychicRequest* r, Capture::Res res)
         case Capture::Res::OK:        return r->reply(200, "application/json", "{\"ok\":true}");
         case Capture::Res::NOT_FOUND: return r->reply(404, "text/plain", "no_capture");
         case Capture::Res::BUSY:      return r->reply(409, "text/plain", "file_busy");
+        case Capture::Res::MOVING:    return r->reply(409, "text/plain", "moving");
         default:                      return r->reply(500, "text/plain", "failed");
     }
 }
@@ -57,6 +58,8 @@ static void capSettingsOut(JsonObject o, const Capture::Settings& s)
     o["autoProtect"] = s.autoProtect;
     o["mode"]        = uiId(CapFormat::MODE_NAMES, s.mode);
     o["autostart"]   = s.autostart;
+    o["ramMB"]       = s.ramMB;
+    o["spill"]       = uiId(Capture::SPILL_NAMES, s.spill);
 }
 
 static int capOk(PsychicRequest* r, const char* key, uint32_t n)
@@ -81,8 +84,24 @@ void WebUi::routesCap()
         d["markers"]   = s.markers;
         d["ringUsed"]  = s.ringUsed;
         d["ringCap"]   = s.ringCap;
-        d["file"]      = s.curFile;     // 0 = none open
+        d["file"]      = s.curFile;     // the open segment's number; 0 = none
         d["fileBytes"] = s.curBytes;
+        // The RAM ring (S4): unsent is what a power cut would lose now.
+        d["segs"]       = s.segs;
+        d["segBytes"]   = s.segBytes;
+        d["unsent"]     = s.unsentBytes;
+        d["unsentSegs"] = s.unsentSegs;
+        d["sealed"]     = s.sealed;
+        d["sent"]       = s.sent;
+        d["spilled"]    = s.spilled;
+        d["lostSegs"]   = s.lostSegs;
+        d["lostRecs"]   = s.lostRecs;
+        d["bytesPerRec"] = s.bytesPerRec100 / 100.0;
+        d["spillMaxUs"] = s.spillMaxUs;
+        d["spill"]      = uiId(Capture::SPILL_NAMES, s.spill);
+        d["standing"]   = s.standing;
+        d["moving"]     = s.moving;
+        d["saving"]     = s.saving;
         d["session"]   = s.session;
         d["capBytes"]  = s.capBytes;
         d["budget"]    = s.budget;      // what /cap may use: (fs - log) x fill %
@@ -108,6 +127,14 @@ void WebUi::routesCap()
     route("/api/cap/stop", HTTP_POST, [](PsychicRequest* r) {
         Capture::stop();
         return r->reply(200, "application/json", "{\"ok\":true}");
+    });
+    // «Зберегти»: what RAM holds goes to flash now, in the background, paced.
+    // 409 moving while the car moves (a flash write stalls the cores).
+    route("/api/cap/save", HTTP_POST, [](PsychicRequest* r) {
+        uint32_t n = 0;
+        const Capture::Res res = Capture::save(&n);
+        if (res != Capture::Res::OK) return capRes(r, res);
+        return capOk(r, "segments", n);
     });
     auto mark = [](PsychicRequest* r) {
         const String t = capParam(r, "t");
