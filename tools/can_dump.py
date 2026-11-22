@@ -2,7 +2,10 @@
 """can_dump.py - read MegaOpen CAN captures (/cap/NNNN.bin) on the PC.
 
 The format is src/capture/CapFormat.h; this file is its second reader and is
-checked against the same layout by `selftest`. Python stdlib only.
+checked against the same layout by `selftest`. Python stdlib only. It reads
+both versions: v1 (MOCAP1, 18-byte records, the files of 1.11 and before) and
+v2 (MOCAP2, self-contained segments of variable-length records: what 1.12
+keeps in RAM, pushes as cap/<session>/rNNNN.bin and spills to flash).
 
     can_dump.py info     FILE...
     can_dump.py convert  FILE... [--to gvret|candump] [-o OUT]
@@ -11,6 +14,7 @@ checked against the same layout by `selftest`. Python stdlib only.
     can_dump.py slow     FILE... [--bus N] [--min-span S]
     can_dump.py track    ID BYTE FILE... [--bus N] [-o OUT.csv]
     can_dump.py hu       FILE...            the head unit's UART (bus 2), frame by frame
+    can_dump.py pack     FILE... -o OUT     v1 (or v2) to v2 segments; prints bytes/record
     can_dump.py selftest
 
 FILE... are the files of one session in order (a session that crossed the
@@ -36,8 +40,16 @@ import sys
 import tempfile
 
 MAGIC = b"MOCAP1"
+MAGIC2 = b"MOCAP2"
 HEADER_SIZE = 64
+HEADER2_SIZE = 80
 REC_SIZE = 18
+SEG_MAX = 64 * 1024
+SEG_MS = 60000
+SEG_IDS = 255
+IDX_ESC = 0xFF
+F_FULL = 0x08
+DT_ESC = 15
 FRAME, KEYFRAME, MARKER, STATS, GAP, BITRATE, MODE = range(7)
 KIND_NAMES = {FRAME: "frame", KEYFRAME: "key", MARKER: "marker", STATS: "stats",
               GAP: "gap", BITRATE: "bitrate", MODE: "mode"}
@@ -45,8 +57,9 @@ ID_MASK = 0x1FFFFFFF
 EXT_BIT = 1 << 31
 
 HDR = struct.Struct("<6sHIHBBIIIIIHH24s")
+HDR2 = struct.Struct("<IIII")              # t0, segLen, seq, records (v2, at 64)
 REC = struct.Struct("<IIBB8s")
-assert HDR.size == HEADER_SIZE and REC.size == REC_SIZE
+assert HDR.size == HEADER_SIZE and REC.size == REC_SIZE and HEADER_SIZE + HDR2.size == HEADER2_SIZE
 
 
 def id_word(cid, ext, bus):
@@ -61,12 +74,22 @@ def split_word(w):
 
 class Header:
     def __init__(self, raw):
+        if len(raw) < HEADER_SIZE:
+            raise ValueError("short header (%d bytes)" % len(raw))
         (magic, hlen, self.session, self.part, self.mode, recsize, br0, br1, self.boot,
          self.wall_sec, self.wall_at_ms, self.keyframe_ms, self.stats_ms, build) = HDR.unpack(raw[:HEADER_SIZE])
-        if magic != MAGIC:
+        if magic == MAGIC:
+            self.version = 1
+            if recsize != REC_SIZE:
+                raise ValueError("record size %d, this tool reads %d" % (recsize, REC_SIZE))
+            self.t0 = self.seg_len = self.seq = self.records = 0
+        elif magic == MAGIC2:
+            self.version = 2
+            if recsize != 0 or hlen < HEADER2_SIZE or len(raw) < HEADER2_SIZE:
+                raise ValueError("not a v2 segment header")
+            self.t0, self.seg_len, self.seq, self.records = HDR2.unpack_from(raw, HEADER_SIZE)
+        else:
             raise ValueError("not a MegaOpen capture (magic %r)" % magic)
-        if recsize != REC_SIZE:
-            raise ValueError("record size %d, this tool reads %d" % (recsize, REC_SIZE))
         self.header_len = hlen
         self.bitrate = [br0, br1]
         self.build = build.split(b"\0", 1)[0].decode("ascii", "replace")
@@ -109,11 +132,319 @@ class Marker:
         return "#%d %r at %.3f s" % (self.no, self.text, self.t / 1000.0)
 
 
+# ---- v2 -------------------------------------------------------------------------
+
+class _Short(Exception):
+    """A record runs past the end: the segment was cut there."""
+
+
+def _get_var(b, q, end):
+    v, s = 0, 0
+    while True:
+        if q >= end or s >= 35:
+            raise _Short()
+        x = b[q]
+        q += 1
+        v |= (x & 0x7F) << s
+        if not x & 0x80:
+            return v, q
+        s += 7
+
+
+def _put_var(v):
+    out = bytearray()
+    while v >= 0x80:
+        out.append((v & 0x7F) | 0x80)
+        v >>= 7
+    out.append(v)
+    return bytes(out)
+
+
+def _zig(v):
+    v = ((v + 0x80000000) & 0xFFFFFFFF) - 0x80000000     # as int32
+    return ((v << 1) ^ (v >> 31)) & 0xFFFFFFFF
+
+
+def _unzig(z):
+    return (z >> 1) ^ -(z & 1)
+
+
+def read_segment(blob, off=0, path=None):
+    """One v2 segment at blob[off:]: (header, [Rec], whole). A segment cut
+    short gives the records up to its last whole one and whole=False."""
+    h = Header(blob[off:off + HEADER2_SIZE])
+    if h.version != 2:
+        raise ValueError("not a v2 segment")
+    avail = len(blob) - off
+    end = off + (h.seg_len if h.seg_len and h.seg_len <= avail else avail)
+    whole = bool(h.seg_len) and h.seg_len <= avail
+    q = off + h.header_len
+    recs = []
+    if q >= end:
+        return h, recs, False
+    n = blob[q]
+    if q + 1 + 4 * n > end:
+        return h, recs, False
+    q += 1
+    ids = [[w, 0, bytes(8)] for w in struct.unpack_from("<%dI" % n, blob, q)]
+    q += 4 * n
+    t, stats_ms = h.t0, 0
+    try:
+        while q < end:
+
+            b0 = blob[q]
+            q += 1
+            kind, full, z = b0 & 7, bool(b0 & F_FULL), b0 >> 4
+            if z == DT_ESC:
+                z, q = _get_var(blob, q, end)
+            rt = (t + _unzig(z)) & 0xFFFFFFFF
+            if kind in (FRAME, KEYFRAME, STATS):
+                if q >= end:
+                    raise _Short()
+                if blob[q] == IDX_ESC:
+                    if q + 5 > end:
+                        raise _Short()
+                    w = struct.unpack_from("<I", blob, q + 1)[0]
+                    q += 5
+                    idx = next((i for i, e in enumerate(ids) if e[0] == w), None)
+                    esc = idx is None
+                else:
+                    idx = blob[q]
+                    q += 1
+                    if idx >= len(ids):
+                        raise _Short()
+                    w, esc = ids[idx][0], False
+                if kind == STATS:
+                    cnt, q = _get_var(blob, q, end)
+                    ch, q = _get_var(blob, q, end)
+                    ms = stats_ms
+                    if full:
+                        ms, q = _get_var(blob, q, end)
+                    if esc and len(ids) < SEG_IDS:
+                        ids.append([w, 0, bytes(8)])
+                    stats_ms = ms
+                    recs.append(Rec(rt, w, 8, STATS, struct.pack("<IHH", cnt & 0xFFFFFFFF, ms & 0xFFFF, ch & 0xFFFF),
+                                    path, h))
+                else:
+                    if q >= end:
+                        raise _Short()
+                    if full:
+                        ln = blob[q]
+                        q += 1
+                        if ln > 8 or q + ln > end:
+                            raise _Short()
+                        data = blob[q:q + ln].ljust(8, b"\0")
+                        q += ln
+                    else:
+                        mask = blob[q]
+                        q += 1
+                        c = bin(mask).count("1")
+                        if q + c > end:
+                            raise _Short()
+                        changed = blob[q:q + c]
+                        q += c
+                        base = ids[idx] if idx is not None else [w, 0, bytes(8)]
+                        ln, data, k = base[1], bytearray(base[2]), 0
+                        for i in range(8):
+                            if mask >> i & 1:
+                                data[i] = changed[k]
+                                k += 1
+                        data = bytes(data)
+                    if esc and len(ids) < SEG_IDS:
+                        ids.append([w, 0, bytes(8)])
+                        idx = len(ids) - 1
+                    if idx is not None:
+                        ids[idx][1], ids[idx][2] = ln, data
+                    recs.append(Rec(rt, w, ln, kind, data, path, h))
+            elif kind == MARKER:
+                no, q = _get_var(blob, q, end)
+                if q + 3 > end:
+                    raise _Short()
+                total, piece, ln = blob[q], blob[q + 1], blob[q + 2]
+                q += 3
+                if ln > 8 or q + ln > end:
+                    raise _Short()
+                recs.append(Rec(rt, (no & 0xFFFF) | total << 16 | piece << 24, ln, MARKER,
+                                blob[q:q + ln].ljust(8, b"\0"), path, h))
+                q += ln
+            elif kind in (GAP, BITRATE):
+                bus = 0
+                if kind == BITRATE:
+                    if q >= end:
+                        raise _Short()
+                    bus = blob[q]
+                    q += 1
+                v, q = _get_var(blob, q, end)
+                w = (1 if full else 0) if kind == GAP else (bus & 3) << 29
+                recs.append(Rec(rt, w, 4, kind, struct.pack("<I", v & 0xFFFFFFFF) + bytes(4), path, h))
+            elif kind == MODE:
+                if q >= end:
+                    raise _Short()
+                recs.append(Rec(rt, 0, 1, MODE, bytes([blob[q]]) + bytes(7), path, h))
+                q += 1
+            else:
+                raise _Short()        # not a kind of this version
+            t = rt
+    except _Short:
+        whole = False
+    return h, recs, whole
+
+
+def read_segments(blob, path=None):
+    """Segments back to back: ([header], [Rec]). Stops at one cut short."""
+    headers, recs, off = [], [], 0
+    while off + HEADER2_SIZE <= len(blob):
+        h, r, whole = read_segment(blob, off, path)
+        headers.append(h)
+        recs.extend(r)
+        if not whole:
+            break
+        off += h.seg_len
+    return headers, recs
+
+
+class SegWriter:
+    """Encodes v1 records into v2 segments exactly as the board does
+    (src/capture/CapFormat.cpp SegEncoder): same bytes for the same records
+    (selftest checks GOLDEN_V2). Ids keep their index from one segment to the
+    next; each segment starts with the whole table."""
+
+    def __init__(self, session=1, boot=0, bitrate=(0, 0), mode=0, build="pack",
+                 wall_sec=0, wall_at_ms=0, seg_max=SEG_MAX, seg_ms=SEG_MS):
+        self.session, self.boot, self.bitrate, self.mode, self.build = session, boot, bitrate, mode, build
+        self.wall_sec, self.wall_at_ms, self.seg_max, self.seg_ms = wall_sec, wall_at_ms, seg_max, seg_ms
+        self.ids = []          # [w, len, data(8), seen]
+        self.index = {}
+        self.buf = None
+        self.segments = []     # sealed segment bytes
+        self.part = 0
+        self.seq = 0
+
+    def open(self, t0, seq=None, part=None):
+        self.seq = self.seq + 1 if seq is None else seq
+        self.part_now = self.part if part is None else part
+        self.part += 1
+        self.t0 = self.last = t0 & 0xFFFFFFFF
+        self.recs = 0
+        self.stats_known = False
+        self.stats_ms = 0
+        for e in self.ids:
+            e[3] = False
+        self.buf = bytearray(HEADER2_SIZE)
+        self.buf += bytes([len(self.ids)]) + b"".join(struct.pack("<I", e[0]) for e in self.ids)
+        self._patch()
+
+    def _patch(self):
+        hdr = HDR.pack(MAGIC2, HEADER2_SIZE, self.session, self.part_now & 0xFFFF, self.mode, 0,
+                       self.bitrate[0], self.bitrate[1], self.boot, self.wall_sec, self.wall_at_ms,
+                       5000, 1000, self.build.encode("ascii")[:23].ljust(24, b"\0"))
+        self.buf[0:HEADER2_SIZE] = hdr + HDR2.pack(self.t0, len(self.buf), self.seq, self.recs)
+
+    def seal(self):
+        if self.buf is not None:
+            self.segments.append(bytes(self.buf))
+            self.buf = None
+
+    def add(self, r):
+        """Appends one record; seals and opens the next segment when this one
+        is full (seg_max) or old (seg_ms)."""
+        if self.buf is not None and ((r.t - self.t0) & 0xFFFFFFFF) >= self.seg_ms:
+            self.seal()
+        if self.buf is None:
+            self.open(r.t)
+        enc = self._encode(r)
+        if len(self.buf) + 24 > self.seg_max:
+            self.seal()
+            self.open(r.t)
+            enc = self._encode(r)
+        self._commit(enc)
+
+    def _encode(self, r):
+        """(bytes, state change) of r against the current segment."""
+        z = _zig(r.t - self.last)
+        b0 = r.kind & 7
+        out = bytearray()
+        if z < DT_ESC:
+            b0 |= z << 4
+        else:
+            b0 |= DT_ESC << 4
+            out += _put_var(z)
+        st = None
+        if r.kind in (FRAME, KEYFRAME, STATS):
+            idx = self.index.get(r.w)
+            new = idx is None
+            if new:
+                out += bytes([IDX_ESC]) + struct.pack("<I", r.w)
+                idx = len(self.ids) if len(self.ids) < SEG_IDS else None
+            else:
+                out.append(idx)
+            if r.kind == STATS:
+                cnt, ms, ch = struct.unpack("<IHH", bytes(r.data[:8]).ljust(8, b"\0"))
+                out += _put_var(cnt) + _put_var(ch)
+                if not self.stats_known or ms != self.stats_ms:
+                    b0 |= F_FULL
+                    out += _put_var(ms)
+                st = ("stats", new, idx, r.w, ms)
+            else:
+                ln = min(r.len, 8)
+                data = bytes(r.data[:ln])
+                e = self.ids[idx] if idx is not None and not new else None
+                if e is None or not e[3] or e[1] != ln:
+                    b0 |= F_FULL
+                    out += bytes([ln]) + data
+                else:
+                    mask, ch = 0, bytearray()
+                    for i in range(ln):
+                        if data[i] != e[2][i]:
+                            mask |= 1 << i
+                            ch.append(data[i])
+                    out += bytes([mask]) + ch
+                st = ("frame", new, idx, r.w, ln, data.ljust(8, b"\0"))
+        elif r.kind == MARKER:
+            ln = min(r.len, 8)
+            out += _put_var(r.w & 0xFFFF) + bytes([(r.w >> 16) & 0xFF, (r.w >> 24) & 0xFF, ln]) + bytes(r.data[:ln])
+        elif r.kind == GAP:
+            if r.w == 1:
+                b0 |= F_FULL
+            out += _put_var(struct.unpack("<I", bytes(r.data[:4]))[0])
+        elif r.kind == BITRATE:
+            out += bytes([(r.w >> 29) & 3]) + _put_var(struct.unpack("<I", bytes(r.data[:4]))[0])
+        elif r.kind == MODE:
+            out.append(r.data[0])
+        else:
+            return None
+        return bytes([b0]) + bytes(out), st, r.t
+
+    def _commit(self, enc):
+        if enc is None:
+            return
+        b, st, t = enc
+        if st:
+            if st[1] and st[2] is not None:
+                self.index[st[3]] = st[2]
+                self.ids.append([st[3], 0, bytes(8), False])
+            if st[0] == "stats":
+                self.stats_known, self.stats_ms = True, st[4]
+            elif st[2] is not None:
+                e = self.ids[st[2]]
+                e[1], e[2], e[3] = st[4], st[5], True
+        self.buf += b
+        self.last = t & 0xFFFFFFFF
+        self.recs += 1
+        self._patch()
+
+
 def read_file(path):
-    """(header, [Rec]) for one file. A torn last record is ignored."""
+    """(header, [Rec]) for one file: v1 records, or v2 segments back to back
+    (the header is the first segment's; each Rec carries its own). A torn last
+    record is ignored."""
     with open(path, "rb") as f:
         blob = f.read()
     h = Header(blob)
+    if h.version == 2:
+        headers, recs = read_segments(blob, path)
+        h.segments = len(headers)
+        return h, recs
     recs = []
     off = h.header_len
     while off + REC_SIZE <= len(blob):
@@ -434,8 +765,11 @@ def cmd_info(a):
         for r in recs:
             kinds[KIND_NAMES.get(r.kind, str(r.kind))] = kinds.get(KIND_NAMES.get(r.kind, str(r.kind)), 0) + 1
         span = (recs[-1].t - recs[0].t) / 1000.0 if recs else 0
-        sys.stdout.write("%s: session %04d part %d boot %d mode %s build %s\n" % (
-            os.path.basename(p), h.session, h.part, h.boot, "full" if h.mode else "change-only", h.build))
+        size = os.path.getsize(p)
+        sys.stdout.write("%s: v%d%s session %04d part %d boot %d mode %s build %s; %d bytes, %.2f B/rec\n" % (
+            os.path.basename(p), h.version, " (%d segment(s))" % h.segments if h.version == 2 else "",
+            h.session, h.part, h.boot, "full" if h.mode else "change-only", h.build, size,
+            size / float(len(recs)) if recs else 0.0))
         sys.stdout.write("  bitrate car %d panel %d; wall %s; %d records over %.1f s: %s\n" % (
             h.bitrate[0], h.bitrate[1], h.wall_sec or "unknown", len(recs), span,
             ", ".join("%s=%d" % kv for kv in sorted(kinds.items()))))
@@ -455,6 +789,32 @@ def cmd_convert(a):
             out.close()
     if a.o:
         sys.stderr.write("%d frame(s) -> %s\n" % (n, a.o))
+    return 0
+
+
+def pack(paths):
+    """The records of FILE... (v1 or v2) as v2 segments: (bytes, records)."""
+    headers, recs, _ = read_files(paths)
+    h = headers[0]
+    w = SegWriter(session=h.session, boot=h.boot, bitrate=tuple(h.bitrate), mode=h.mode,
+                  build=h.build, wall_sec=h.wall_sec, wall_at_ms=h.wall_at_ms)
+    for r in recs:
+        w.add(r)
+    w.seal()
+    return b"".join(w.segments), recs
+
+
+def cmd_pack(a):
+    blob, recs = pack(a.files)
+    before = sum(os.path.getsize(p) for p in a.files)
+    with open(a.o, "wb") as f:
+        f.write(blob)
+    _, back = read_segments(blob)
+    assert len(back) == len(recs), (len(back), len(recs))
+    n = max(1, len(recs))
+    sys.stdout.write("%d records: %d bytes (%.2f B/rec) -> %s %d bytes (%.2f B/rec), %.1fx smaller\n" % (
+        len(recs), before, before / float(n), a.o, len(blob), len(blob) / float(n),
+        before / float(max(1, len(blob)))))
     return 0
 
 
@@ -517,8 +877,59 @@ class Writer:
         return self.marker_no
 
 
+# src/capture/CapFormat.cpp encodes these records to these bytes
+# (test/test_capture golden_v2.inc, test_v2_bytes_are_the_golden_ones).
+GOLDEN_V2 = bytes.fromhex(
+    "4D4F434150325000050000000700000020A10700000000000300000000000000"
+    "000000008813E803676F6C64656E000000000000000000000000000000000000"
+    "E80300009D000000070000000D0000000008FF2301000003010203A0000209F1"
+    "904E00000B001401E80798FF10F1DAB801AA2800020109220109000868692074"
+    "6865726502010901012124030CB009250190A10F0601F3D20F00AC0200")
+
+
+def golden_recs():
+    w123 = id_word(0x123, False, 0)
+    st = lambda t, c, ms, ch: Rec(t, w123, 8, STATS, struct.pack("<IHH", c, ms, ch))
+    fr = lambda t, w, d, k=FRAME: Rec(t, w, len(d), k, bytes(d).ljust(8, b"\0"))
+    text = b"hi there!"
+    mk = [Rec(6002, 1 | len(text) << 16 | i << 24, len(text[i * 8:i * 8 + 8]), MARKER,
+              text[i * 8:i * 8 + 8].ljust(8, b"\0")) for i in range(2)]
+    u32 = lambda t, k, w, v, n=4: Rec(t, w, n, k, struct.pack("<I", v) + bytes(4))
+    return [fr(1000, w123, [1, 2, 3]), fr(1005, w123, [1, 9, 3]), fr(6005, w123, [1, 9, 3], KEYFRAME),
+            st(6005, 20, 1000, 1), fr(6000, id_word(0x18DAF110, True, 1), [0xAA]), fr(6001, w123, [1, 9]),
+            mk[0], mk[1], u32(6003, GAP, 0, 3), u32(6003, GAP, 1, 1200),
+            u32(6004, BITRATE, 1 << 29, 250000), u32(6004, MODE, 0, 1, 1), st(7005, 300, 1000, 0)]
+
+
+def same(a, b):
+    return (a.t, a.w, a.kind, a.len, bytes(a.data[:min(a.len, 8)])) == \
+           (b.t, b.w, b.kind, b.len, bytes(b.data[:min(b.len, 8)]))
+
+
+def selftest_v2(tmp):
+    # The board's bytes, byte for byte.
+    w = SegWriter(session=5, boot=3, bitrate=(500000, 0), build="golden")
+    w.open(1000, seq=7, part=7)
+    recs = golden_recs()
+    for r in recs:
+        w._commit(w._encode(r))
+    w.seal()
+    assert w.segments[0] == GOLDEN_V2, w.segments[0].hex().upper()
+    h, back, whole = read_segment(GOLDEN_V2)
+    assert whole and h.seq == 7 and h.records == len(recs) and h.seg_len == len(GOLDEN_V2)
+    assert all(same(a, b) for a, b in zip(recs, back)) and len(back) == len(recs)
+    # Cut anywhere: a prefix, never a wrong record.
+    last = 0
+    for cut in range(HEADER2_SIZE, len(GOLDEN_V2) + 1):
+        _, got, _ = read_segment(GOLDEN_V2[:cut])
+        assert len(got) >= last and all(same(a, b) for a, b in zip(recs, got)), cut
+        last = len(got)
+    assert last == len(recs)
+
+
 def cmd_selftest(_a):
     tmp = tempfile.mkdtemp(prefix="can_dump_")
+    selftest_v2(tmp)
     p1 = os.path.join(tmp, "0001.bin")
     p2 = os.path.join(tmp, "0002.bin")
     # Two files of one session: a 10-minute drive at 20 Hz per id.
@@ -607,8 +1018,34 @@ def cmd_selftest(_a):
         sys.stdout = old
     with open(os.path.join(tmp, "t.csv")) as f:
         assert f.readline().strip() == "t_s,value,marker"
+
+    # v1 -> v2: the same records, read back by every command; segments of
+    # 64 kB / 60 s, each one readable alone.
+    p3 = os.path.join(tmp, "packed.bin")
+    sys.stdout = io.StringIO()
+    try:
+        assert main(["pack"] + files + ["-o", p3]) == 0
+        line = sys.stdout.getvalue()
+    finally:
+        sys.stdout = old
+    h3, recs3, markers3 = read_files([p3])
+    assert h3[0].version == 2 and h3[0].segments > 1, h3[0].__dict__
+    assert len(recs3) == len(recs) and all(same(a, b) for a, b in zip(recs, recs3))
+    assert [m.text for m in markers3] == [m.text for m in markers]
+    with open(p3, "rb") as f:
+        blob = f.read()
+    hs, _ = read_segments(blob)
+    second = blob[hs[0].seg_len:hs[0].seg_len + hs[1].seg_len]
+    _, alone, whole = read_segment(second)
+    assert whole and alone and all(same(a, b) for a, b in zip(recs[hs[0].records:], alone))
+    try:
+        for argv in (["info", p3], ["ids", p3], ["slow", p3], ["between", "1", "long stretch", p3]):
+            sys.stdout = io.StringIO()
+            assert main(argv) == 0, argv
+    finally:
+        sys.stdout = old
     shutil.rmtree(tmp, ignore_errors=True)
-    print("selftest OK (%d records, %d markers)" % (len(recs), len(markers)))
+    print("selftest OK (%d records, %d markers; v2 golden, %s)" % (len(recs), len(markers), line.strip()))
     return 0
 
 
@@ -657,6 +1094,11 @@ def main(argv=None):
     s = sub.add_parser("hu", help="the head unit's UART frames (bus 2)")
     s.add_argument("files", nargs="+")
     s.set_defaults(fn=cmd_hu)
+
+    s = sub.add_parser("pack", help="re-encode FILE... (v1 or v2) as v2 segments; bytes per record")
+    s.add_argument("files", nargs="+")
+    s.add_argument("-o", required=True, help="output v2 file")
+    s.set_defaults(fn=cmd_pack)
 
     s = sub.add_parser("selftest", help="write a synthetic capture and run every command on it")
     s.set_defaults(fn=cmd_selftest)

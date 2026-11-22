@@ -25,6 +25,7 @@
 #if FEATURE_CAPTURE
 #include <time.h>
 #include "../capture/CanRecorder.h"
+#include "../capture/CapFormat.h"
 #include "../utils/WallClock.h"
 #endif
 
@@ -84,9 +85,13 @@ namespace LogPush
 
         // The CAN part (NVS "can", "canMB"; progress "cnum"/"coff": the file
         // being sent and how far; "cday"/"cused": the day and its bytes).
+        // Progress is kept in RAM and written to NVS only while the car
+        // stands (S4: no NVS write per PUT); a reboot in between sends a
+        // file again, and GitHub's 422 says it is there.
         bool     s_can = false;
         uint32_t s_canMB = CAN_MB_DEFAULT;
         uint32_t s_cnum = 0, s_coff = 0, s_cday = 0, s_cused = 0;
+        bool     s_cdirty = false;      // progress not in NVS yet (the job only)
         bool     s_canBudget = false;
         bool     s_canStarted = false;  // the recorder was started for it this boot
         uint32_t s_spoolAt = 0;         // millis() of the last spool push
@@ -626,15 +631,66 @@ namespace LogPush
             return WallClock::known() ? (uint32_t)(time(nullptr) / 86400) : s_cday;
         }
 
+        // The CAN progress to NVS, when it moved and the car stands (or force).
+        void saveCanProgress(bool force)
+        {
+            if (!s_cdirty || (!force && !Capture::standing())) return;
+            Preferences p;
+            p.begin("logpush", false);
+            p.putUInt("cnum", s_cnum);
+            p.putUInt("coff", s_coff);
+            p.putUInt("cday", s_cday);
+            p.putUInt("cused", s_cused);
+            p.end();
+            s_cdirty = false;
+        }
+
+        // Today's CAN bytes are not spent yet.
+        bool canBudgetLeft()
+        {
+            const uint32_t day = today();
+            if (day != s_cday) { s_cday = day; s_cused = 0; s_cdirty = true; }
+            s_canBudget = (uint64_t)s_cused >= (uint64_t)s_canMB * 1024 * 1024;
+            return !s_canBudget;
+        }
+
+        // The oldest sealed segment in the recorder's RAM ring (S4), straight
+        // from RAM: <dev>/cap/<session>/r<seq>.bin. True when a PUT was tried.
+        // These go before the flash files: RAM is what a power cut loses.
+        bool segStep(const char* repo, const char* tok)
+        {
+            if (!s_can || !canBudgetLeft() || !Capture::unsentSegments()) return false;
+            uint8_t* data = (uint8_t*)PsHeap::malloc(CapFormat::SEG_MAX);
+            if (!data) return false;
+            Capture::SegInfo si;
+            if (!Capture::takeSegment(data, CapFormat::SEG_MAX, si)) { heap_caps_free(data); return false; }
+            char msg[72], rel[48];
+            snprintf(msg, sizeof(msg), "%s cap r%04u (" MEGAOPEN_VERSION ")", s_dev, (unsigned)si.seq);
+            snprintf(rel, sizeof(rel), "cap/%04u/r%04u.bin", (unsigned)si.session, (unsigned)si.seq);
+            esp_err_t err = ESP_OK;
+            uint32_t ms = 0, dummy = 0;
+            const int st = putFile(repo, tok, rel, msg, (const char*)data, si.len, 0, err, ms);
+            heap_caps_free(data);
+            const bool ok = st == 201 || st == 200 || st == 422;   // 422: sent before, the reply was lost
+            Capture::segmentDone(si.seq, ok);
+            if (ok) {
+                s_cused += si.len;
+                s_cdirty = true;
+                sentPast(st, si.len);
+                LOGI("push", "%s/%s: %u bytes, %u records in %u ms; today %u kB of %u MB", s_dev, rel,
+                     (unsigned)si.len, (unsigned)si.records, (unsigned)ms, (unsigned)(s_cused / 1024),
+                     (unsigned)s_canMB);
+            } else {
+                failed(st, err, ms, &dummy);
+            }
+            return true;
+        }
+
         // The next part of the oldest closed recording file not sent yet: true
         // when a PUT was tried.
         bool canStep(const char* repo, const char* tok)
         {
-            if (!s_can) return false;
-            const uint32_t day = today();
-            if (day != s_cday) { s_cday = day; s_cused = 0; }
-            s_canBudget = (uint64_t)s_cused >= (uint64_t)s_canMB * 1024 * 1024;
-            if (s_canBudget) return false;
+            if (!s_can || !canBudgetLeft()) return false;
             const size_t n = capFiles();
             const Capture::FileInfo* files = s_capList;
             const Capture::FileInfo* f = nullptr;
@@ -672,13 +728,7 @@ namespace LogPush
             if (st == 201 || st == 200 || st == 422) {   // 422: sent before, the reply was lost
                 s_coff += want;
                 s_cused += want;
-                Preferences p;
-                p.begin("logpush", false);
-                p.putUInt("cnum", s_cnum);
-                p.putUInt("coff", s_coff);
-                p.putUInt("cday", s_cday);
-                p.putUInt("cused", s_cused);
-                p.end();
+                s_cdirty = true;
                 sentPast(st, want);
                 LOGI("push", "%s/%s: %u bytes in %u ms; today %u kB of %u MB", s_dev, rel,
                                (unsigned)want, (unsigned)ms, (unsigned)(s_cused / 1024), (unsigned)s_canMB);
@@ -745,12 +795,16 @@ namespace LogPush
             if (snapStep(repo, tok)) { memset(tok, 0, sizeof(tok)); return; }
 #if FEATURE_CAPTURE
             // The log every PERIOD_MS; the CAN recording in between.
+            saveCanProgress(false);
             if (s_can && s_spoolAt && millis() - s_spoolAt < PERIOD_MS) {
                 xSemaphoreTake(s_lock, portMAX_DELAY);
                 const bool backlog = s_w - (s_p > s_o ? s_p : s_o) >= BACKLOG_BYTES;
                 xSemaphoreGive(s_lock);
                 if (!backlog) {
-                    if (!canStep(repo, tok)) {   // nothing to send: the log at its time
+                    // RAM first (a power cut loses it), then what was spilled.
+                    const bool tried = segStep(repo, tok) || canStep(repo, tok);
+                    saveCanProgress(false);
+                    if (!tried) {   // nothing to send: the log at its time
                         portENTER_CRITICAL(&s_mux);
                         s_nextAt = s_spoolAt + PERIOD_MS;
                         portEXIT_CRITICAL(&s_mux);
@@ -913,8 +967,11 @@ namespace LogPush
         if (!due) return;
 
         xSemaphoreTake(s_lock, portMAX_DELAY);
-        const bool any = s_w > s_p;
+        bool any = s_w > s_p;
         xSemaphoreGive(s_lock);
+#if FEATURE_CAPTURE
+        if (!any && s_can) any = Capture::unsentSegments() > 0;
+#endif
         if (!any) { portENTER_CRITICAL(&s_mux); s_nextAt = now + PERIOD_MS; portEXIT_CRITICAL(&s_mux); return; }
 
         // The heap budget (NetBudget.h): held, not failed. Every kind goes

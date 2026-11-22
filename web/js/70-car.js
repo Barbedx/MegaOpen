@@ -58,11 +58,15 @@ SCR.car={title:'nav.car',async render(m){
  (CP?card(t('ca.rec'),`<div class="fr"><button class="btn rec big" id="cRec" type="button" style="flex:1">…</button></div>`+
   `<div class="fr"><input class="in" id="mkT" placeholder="${esc(t('ca.markPh'))}" maxlength="40" data-nosave><button class="btn pri" type="button" id="mkGo">${t('ca.mark')}</button></div>`+
   `<div class="pad"><div class="seg wrap" id="quick">${quickMarks().map(q=>`<button type="button" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></div>`+
-  `<div class="kv"><div><small>${t('ca.recorded')}</small><b id="pFr"></b></div><div><small>${t('ca.lost')}</small><b id="pDr"></b></div><div><small>${t('ca.marks')}</small><b id="pMk"></b></div><div><small>ID</small><b id="pId"></b></div><div><small>${t('ca.file')}</small><b id="pFile"></b></div><div><small>${t('ca.storage')}</small><b id="pSt"></b></div></div>`+
+  `<div class="kv"><div><small>${t('ca.recorded')}</small><b id="pFr"></b></div><div><small>${t('ca.lost')}</small><b id="pDr"></b></div><div><small>${t('ca.marks')}</small><b id="pMk"></b></div><div><small>ID</small><b id="pId"></b></div><div><small>${t('ca.file')}</small><b id="pFile"></b></div><div><small>${t('ca.storage')}</small><b id="pSt"></b></div><div><small>${t('ca.unsent')}</small><b id="pUn"></b></div></div>`+
   '<div class="pad"><div class="bar big"><i id="pBar"></i></div></div>'+
   row(t('k.set.cap.autostart'),sw('/api/settings|cap.autostart',cp.settings.autostart),'',t('ca.autostartH'))+
   (lp?row(t('bd.push'),`<a class="btn" href="#board">${t('ca.pushWhere')}</a>`,'',t('ca.pushMoved')):'')+
-  row(t('k.set.cap.mode'),seg('/api/settings|cap.mode',enumOpts('capModes'),cp.settings.mode)))+
+  row(t('k.set.cap.mode'),seg('/api/settings|cap.mode',enumOpts('capModes'),cp.settings.mode))+
+  /* S4: сегменти в RAM; на флеш — «Зберегти» (у русі ні: e.moving) і політика cap.spill */
+  row(t('ca.capSave'),`<button class="btn" type="button" id="cSave">${t('ca.capSaveB')}</button>`,'',t('ca.capSaveH'))+
+  row(t('k.set.cap.spill'),seg('/api/settings|cap.spill',enumOpts('capSpill'),cp.settings.spill),'',t('ca.spillH'))+
+  row(t('k.set.cap.ramMB'),num('/api/settings|cap.ramMB',cp.settings.ramMB,'min="1" max="8"'),'',t('ca.ramH')))+
  card(t('ca.files'),row('','',t('ca.filesH'))+`<div id="files"></div><div class="fr"><button class="btn dng" type="button" id="fUnp">${t('ca.delUnp')}</button></div>`,'cFiles','custom'):C2?notBuilt(t('ca.rec'),t('ca.noRec')):'')+
  fold(t('ca.hu'),row(t('ca.show'),seg('#huIn',[['1',t('ca.fromHu')],['0',t('ca.everything')]],'1'),'',t('ca.huH'))+`<div class="tw"><table><thead><tr><th>${t('ca.ago')}</th><th>${t('ca.who')}</th><th>${t('ca.cmd')}</th><th>${t('ca.data')}</th></tr></thead><tbody id="huLog"></tbody></table></div>`,'cHu')+
  (V?fold(t('ca.ids'),row(t('ca.idTable'),sw('/api/can/sniff|on',!!cb.sniff),'',t('ca.idTableH'))+`<div class="fr"><button class="btn" type="button" id="idBase">${t('ca.baseline')}</button><button class="btn" type="button" id="idClr">${t('ca.clear')}</button></div><div class="tw"><table><thead><tr><th>ID</th><th>${t('ca.count')}</th><th>${t('ca.bytes')}</th></tr></thead><tbody id="ids"></tbody></table></div>`,'cIds'):'');
@@ -76,6 +80,7 @@ SCR.car={title:'nav.car',async render(m){
  const mk=(tx,b)=>run(b,()=>API.post('/api/cap/mark?t='+encodeURIComponent(tx)),t('ca.marked',tx));
  $('#mkGo').onclick=e=>{const tx=$('#mkT').value.trim()||t('ca.markDefault');mk(tx,e.target).then(()=>$('#mkT').value='')};
  $('#mkT').onkeydown=e=>{if(e.key==='Enter')$('#mkGo').click()};
+ $('#cSave').onclick=e=>run(e.target,()=>API.post('/api/cap/save').then(r=>({note:t('ca.capSaved',r.segments)}))).then(()=>this.files(true));
  $('#quick').onclick=e=>{const b=e.target.closest('[data-q]');if(b)mk(b.dataset.q,b)};
  $('#files').onclick=e=>{const b=e.target.closest('button');if(!b)return;const r=b.closest('[data-file]');if(!r)return;const f=r.dataset.file;
   if(b.dataset.dl!==undefined)run(b,()=>download('/api/cap/get?f='+f,f+'.bin'));
@@ -109,8 +114,8 @@ async tick(force){this.n++;await this.gears();const[c2,cp]=await Promise.all([ge
  put($('[data-k="/api/can2|bitrate"]'),c2.setting||0)}
  if(cp){recBtn($('#cRec'),cp);
  $('#pFr').textContent=fmtN(cp.frames);$('#pDr').textContent=cp.dropped;$('#pMk').textContent=cp.markers;$('#pId').textContent=cp.ids;$('#pFile').textContent=cp.file?String(cp.file).padStart(4,'0'):DASH;
- $('#pSt').textContent=fmtB(cp.capBytes)+' / '+fmtB(cp.budget);const pb=$('#pBar');pb.style.width=(cp.capBytes/cp.budget*100)+'%';pb.style.background=cp.capBytes/cp.budget>cp.settings.fill/100*.95?'var(--warn)':'var(--acc)';
- put($('[data-k="/api/settings|cap.autostart"]'),cp.settings.autostart);put($('[data-k="/api/settings|cap.mode"]'),cp.settings.mode)}
+ $('#pSt').textContent=fmtB(cp.capBytes)+' / '+fmtB(cp.budget);$('#pUn').textContent=t('ca.unsentV',fmtB(cp.unsent||0),(cp.bytesPerRec||0).toFixed(1));const pb=$('#pBar');pb.style.width=(cp.capBytes/cp.budget*100)+'%';pb.style.background=cp.capBytes/cp.budget>cp.settings.fill/100*.95?'var(--warn)':'var(--acc)';
+ put($('[data-k="/api/settings|cap.autostart"]'),cp.settings.autostart);put($('[data-k="/api/settings|cap.mode"]'),cp.settings.mode);put($('[data-k="/api/settings|cap.spill"]'),cp.settings.spill)}
  if(cp&&(this.n%10===0||force))await this.files();
  await this.diag();
  const hl=$('#cHu');if(hl&&hl.open){const r=await API.get('/api/canbox/last?in='+$('#huIn').dataset.v);const tb=$('#huLog');if(tb)tb.innerHTML=(r.frames||[]).map(huRow).join('')||`<tr><td colspan="4" class="muted">${esc(t('ca.empty'))}</td></tr>`}

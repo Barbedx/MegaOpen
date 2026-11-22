@@ -1910,6 +1910,8 @@ void setup()
     // The CAN recorder, after the flash log has mounted littlefs (they share
     // it). The car task pushes into it from its first frame.
     Capture::begin();
+    // The spill policy and «зберегти» ask whether the car stands (speed, handbrake).
+    Capture::setVehicle(&g_state);
 #endif
 #if FEATURE_LOGFS
     if (logfs) esp_register_shutdown_handler(logShutdown);

@@ -239,6 +239,7 @@ namespace Cfg
         const SEnum kReact = UI_NAMES_ENUM(Knobs::REACT_NAMES, "ledReact");
         const SEnum kAnim  = UI_NAMES_ENUM(Knobs::ANIM_NAMES, "ledIdle");
         const SEnum kCapModes = UI_NAMES_ENUM(CapFormat::MODE_NAMES, "capModes");
+        const SEnum kCapSpill = UI_NAMES_ENUM(Capture::SPILL_NAMES, "capSpill");
 
         // Log levels: row i = LogLevel i, the id is also the name.
         const SEnum kLogLevels = {
@@ -550,6 +551,12 @@ namespace Cfg
              1, 8, 1, "MB", nullptr, C_GET(c.fileMB), C_PUT(c.fileMB = (uint8_t)v)},
             {"cap.autoProtect", "Mark protects", "cap", SType::Bool, W, AP_CAP,
              0, 1, 0, nullptr, nullptr, C_GET(c.autoProtect), C_PUT(c.autoProtect = v != 0)},
+            // The RAM ring of segments (read at boot; PSRAM may give less) and
+            // when a segment nobody sent may go to flash (docs/design/stabilisation-1-12.md S4).
+            {"cap.ramMB", "RAM ring", "cap", SType::Int, W, AP_CAP,
+             1, 8, 1, "MB", nullptr, C_GET(c.ramMB), C_PUT(c.ramMB = (uint8_t)v)},
+            {"cap.spill", "Flash writes", "cap", SType::Enum, W, AP_CAP,
+             0, 0, 0, nullptr, &kCapSpill, C_GET(c.spill), C_PUT(c.spill = (uint8_t)v)},
 
             // ---- which Raise messages go to the head unit: RAM only ---------
             // A bench switch (every boot sends them all); drawn by the service

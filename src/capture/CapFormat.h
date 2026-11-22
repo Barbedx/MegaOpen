@@ -52,6 +52,48 @@
 //             w = 0. Where a GAP sits, the change-only state is uncertain.
 //   BITRATE   bus w>>29 now runs at data = u32 bps (autobaud settled late).
 //   MODE      the mode changed mid-file: data[0] = Mode.
+//
+// ---- VERSION 2 (docs/design/stabilisation-1-12.md S4) -------------------------
+// The same record stream, re-encoded: a v2 record decodes to exactly the v1 Rec
+// it was made from (test/test_capture holds the round trip). What the board
+// keeps in RAM, pushes and spills is v2; v1 files on flash stay v1, and every
+// reader takes both (tools/can_dump.py, tools/cap_fetch.py).
+//
+// A SEGMENT (64 kB or 60 s at most, SegEncoder) is SELF-CONTAINED: its header,
+// the whole id table, an absolute base time, and every id's first record in it
+// carries the full data. A pushed, spilled or lost segment never breaks
+// another; one cut short decodes up to its last whole record. A file or a
+// pushed object is one or more segments back to back.
+//
+// HEADER (80 bytes): the v1 header with magic "MOCAP2", length 80 and byte 15
+// = 0 (variable-length records), then
+//   64  u32 t0        uptime ms the first record's delta counts from
+//   68  u32 segLen    the segment's bytes, header included (kept current
+//                     after every record, so a segment written at any moment
+//                     says where it ends)
+//   72  u32 seq       the segment's number (the recorder's file numbers)
+//   76  u32 records   records in it
+// part (12) is the segment's index in its session.
+// ID TABLE: u8 n, then n x u32 id words; index i names table[i].
+//
+// RECORD: byte 0 = kind (bits 0-2) | F_FULL (bit 3) | dt (bits 4-7). dt is
+// the zigzag time delta from the previous record (from t0 for the first),
+// 0..14 in the nibble, 15 = a zigzag varint follows. Then, per kind:
+//   FRAME, KEYFRAME  id; F_FULL: u8 len + len bytes; else u8 mask (bit i =
+//                    byte i changed) + the changed bytes. F_FULL is set on an
+//                    id's first record in the segment, on a length change, and
+//                    for an id past the table.
+//   STATS            id, varint count, varint changes; F_FULL: varint
+//                    interval ms follows (else the segment's last one).
+//   MARKER           varint markerNo, u8 total length, u8 piece, u8 len, bytes.
+//   GAP              varint count; F_FULL: the records of whole segments the
+//                    RAM ring overwrote (decoded with w = 1), else frames the
+//                    queue dropped (w = 0).
+//   BITRATE          u8 bus, varint bps.
+//   MODE             u8 mode.
+// "id" is one byte, the table index, or 0xFF + the u32 id word: for an id new
+// in the segment (it then enters the table at the next index, in reader and
+// writer alike) or one past the table's 255.
 namespace CapFormat
 {
     constexpr size_t   HEADER_SIZE = 64;
@@ -79,7 +121,23 @@ namespace CapFormat
     inline uint8_t  busOf(uint32_t w) { return (uint8_t)((w >> BUS_SHIFT) & 3); }
     inline bool     extOf(uint32_t w) { return (w & EXT_BIT) != 0; }
 
+    // ---- v2 ----------------------------------------------------------------
+    constexpr char     MAGIC2[7]    = "MOCAP2";
+    constexpr size_t   HEADER2_SIZE = 80;
+    constexpr size_t   SEG_MAX      = 64 * 1024;   // a segment's bytes at most
+    constexpr uint32_t SEG_MS       = 60000;       // and its time span
+    constexpr uint16_t SEG_IDS      = 255;         // table entries
+    constexpr uint8_t  IDX_ESC      = 0xFF;
+    constexpr uint8_t  F_FULL       = 0x08;
+    constexpr uint8_t  DT_ESC       = 15;
+    constexpr size_t   REC2_MAX     = 24;          // one record's bytes at most
+    // What open() needs beyond the records: the header and a full table.
+    constexpr size_t   SEG_HEAD_MAX = HEADER2_SIZE + 1 + 4 * SEG_IDS;
+
     struct Header {
+        uint8_t  version = 1;       // decodeHeader: 1 or 2
+        uint16_t headerLen = HEADER_SIZE;
+        uint32_t t0 = 0, segLen = 0, seq = 0, records = 0;   // v2 only
         uint32_t session = 0;
         uint16_t part = 0;
         uint8_t  mode = MODE_CHANGE;
@@ -101,7 +159,9 @@ namespace CapFormat
     };
 
     void encodeHeader(const Header& h, uint8_t out[HEADER_SIZE]);
-    // False when the magic is wrong or n is short.
+    // v2: the same fields plus t0, segLen, seq, records.
+    void encodeHeader2(const Header& h, uint8_t out[HEADER2_SIZE]);
+    // v1 or v2 (h.version says which). False when the magic is wrong or n is short.
     bool decodeHeader(const uint8_t* in, size_t n, Header& h);
 
     void encodeRec(const Rec& r, uint8_t out[REC_SIZE]);
@@ -174,5 +234,61 @@ namespace CapFormat
         uint32_t _overflow = 0;
         uint32_t _statsAt = 0;
         Entry*   find(uint32_t w, bool insert);
+    };
+
+    // ---- v2 segments -------------------------------------------------------------
+    // One segment at a time into the caller's buffer. The id table and the
+    // per-id last data are the caller's memory (Mem, PSRAM on the board) and
+    // outlive a segment: ids keep their index from one segment to the next.
+    class SegEncoder {
+    public:
+        struct Id { uint32_t w; uint8_t len; uint8_t seen; uint8_t data[8]; };
+        struct Mem { Id ids[SEG_IDS]; uint8_t hash[512]; };
+
+        void begin(Mem* m) { _m = m; reset(); }
+        // Forget every id (a new session).
+        void reset();
+        // Starts a segment in buf (cap > SEG_HEAD_MAX + REC2_MAX): header
+        // (h.t0 the base time, h.seq, h.session, h.part ...), the table.
+        // False: cap too small.
+        bool open(uint8_t* buf, size_t cap, const Header& h);
+        // False when r does not fit: the segment is full (open the next, add again).
+        bool add(const Rec& r);
+        void close() { _buf = nullptr; }
+
+        bool     isOpen() const   { return _buf != nullptr; }
+        size_t   size() const     { return _n; }
+        uint32_t records() const  { return _recs; }
+        uint32_t t0() const       { return _t0; }
+        uint16_t ids() const      { return _nIds; }
+
+    private:
+        Mem*     _m = nullptr;
+        uint8_t* _buf = nullptr;
+        size_t   _cap = 0, _n = 0;
+        uint32_t _recs = 0, _t0 = 0, _last = 0, _statsMs = 0;
+        uint16_t _nIds = 0;
+        bool     _statsKnown = false;
+        int      find(uint32_t w) const;
+        int      insert(uint32_t w);
+        void     patch();
+    };
+
+    // Reads segments back into v1 Recs. Not used by the firmware (the PC and
+    // the host tests read); its table is a member, so keep one instance.
+    class SegDecoder {
+    public:
+        using Out = void (*)(const Rec& r, void* ctx);
+        // One segment at in[0, n): its header into h, every whole record to
+        // out. Returns the bytes it spans (h.segLen when whole; less when cut
+        // short, up to its last whole record), 0 when it is not a v2 segment.
+        size_t segment(const uint8_t* in, size_t n, Header& h, Out out, void* ctx, uint32_t* recs = nullptr);
+        // Segments back to back (a file, a pushed object); records decoded.
+        uint32_t stream(const uint8_t* in, size_t n, Out out, void* ctx, uint32_t* segs = nullptr);
+
+    private:
+        struct Id { uint32_t w; uint8_t len; uint8_t data[8]; };
+        Id       _ids[SEG_IDS];
+        uint16_t _n = 0;
     };
 }

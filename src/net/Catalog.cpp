@@ -13,6 +13,7 @@
 #include "../vehicle/Signals.h"
 #include "../media/MediaRouter.h"
 #include "../capture/CapFormat.h"
+#include "../capture/CanRecorder.h"
 #include "../bus/Autobaud.h"
 #include "../proto/canbox/Protocol.h"
 #include "../vehicle/DecodeTable.h"
@@ -395,6 +396,7 @@ namespace Catalog
             j.endArr();
 
             names(j, "capModes", CapFormat::MODE_NAMES);
+            names(j, "capSpill", Capture::SPILL_NAMES);
 
             // The KEY1/KEY2 ladder's spin modes, by the number /api/res uses.
             j.k("resSpin").arr();
