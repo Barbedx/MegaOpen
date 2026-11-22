@@ -20,8 +20,8 @@
 // the switch live in NVS namespace "logpush"; the token is never sent back.
 //
 // The job runs on the network worker (NetJob.h), one job at a time with the
-// GitHub update, mbedTLS in PSRAM for it. It never runs below MIN_HEAP of
-// internal heap.
+// GitHub update, mbedTLS in PSRAM for it. It starts only when NetBudget
+// (NetBudget.h) admits it; held, it goes on the next pass.
 #if FEATURE_LOG_PUSH
 namespace LogPush
 {
@@ -30,10 +30,6 @@ namespace LogPush
     constexpr size_t   CHUNK_MAX   = 64 * 1024;    // one file, before base64
     constexpr uint32_t PERIOD_MS   = 60000;
     constexpr uint32_t BACKOFF_MAX_MS = 10 * 60000;
-    // Internal heap free before a push starts. 40 kB when each push took
-    // its 10 kB stack out of the heap first; the worker's stack is there
-    // already (NetJob), so the same margin is 30 kB.
-    constexpr uint32_t MIN_HEAP    = 30 * 1024;
     constexpr size_t   TOKEN_MAX   = 255;
     constexpr size_t   REPO_MAX    = 100;          // "owner/name"
     constexpr const char* REPO_DEFAULT = "Barbedx/megaopen-logs";
@@ -88,6 +84,7 @@ namespace LogPush
         uint32_t lastOkAgoMs = 0;       // 0: none this boot
         uint32_t nextInMs = 0;
         uint32_t heapMin = 0;           // internal heap low during the last job
+        uint32_t held = 0;              // pushes held by NetBudget this boot (episodes)
         // The car's CAN recording (src/capture/CanRecorder.h), sent too.
         bool     canOn = false;
         uint32_t canMB = CAN_MB_DEFAULT; // a day at most

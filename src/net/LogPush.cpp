@@ -12,6 +12,7 @@
 #include <atomic>
 #include "GhRoots.h"
 #include "NetJob.h"
+#include "NetBudget.h"
 #include "../utils/PsHeap.h"
 #include "../utils/HeapSentinel.h"
 #include "../Version.h"
@@ -89,6 +90,10 @@ namespace LogPush
         bool     s_canBudget = false;
         bool     s_canStarted = false;  // the recorder was started for it this boot
         uint32_t s_spoolAt = 0;         // millis() of the last spool push
+        // NetBudget said no (S3): the push waits for the next pass, the
+        // backoff untouched. One line and one count per episode.
+        bool     s_held = false;        // net_svc only
+        uint32_t s_heldN = 0;           // episodes this boot, under s_mux
         std::atomic<uint32_t> s_noAnswer{0};   // wifiNoAnswer()
         SnapshotFn s_snapFn = nullptr;
         uint32_t s_snapAt = 0;          // millis() of the last snapshot sent, 0 none
@@ -912,14 +917,24 @@ namespace LogPush
         xSemaphoreGive(s_lock);
         if (!any) { portENTER_CRITICAL(&s_mux); s_nextAt = now + PERIOD_MS; portEXIT_CRITICAL(&s_mux); return; }
 
-        // Never the last of the internal heap: the next pass may find more.
-        if (heapNow() < MIN_HEAP) {
-            portENTER_CRITICAL(&s_mux);
-            s_nextAt = now + PERIOD_MS;
-            portEXIT_CRITICAL(&s_mux);
-            setErr(State::Waiting, "push_heap", 0);
+        // The heap budget (NetBudget.h): held, not failed. Every kind goes
+        // through here (log part, status, coredump, past flash log, CAN): one
+        // job sends one file. s_nextAt stays due, so the next pass asks again;
+        // no backoff grows from a hold.
+        NetBudget::Sample b;
+        if (!NetBudget::admit(&b)) {
+            if (!s_held) {
+                s_held = true;
+                portENTER_CRITICAL(&s_mux);
+                ++s_heldN;
+                portEXIT_CRITICAL(&s_mux);
+                setErr(State::Waiting, "push_heap", 0);
+                LOGI("push", "held: heap free=%u big=%u need=%u (%s)", (unsigned)b.free, (unsigned)b.big,
+                     (unsigned)b.need, b.path == NetBudget::Path::App ? "app" : "wifi");
+            }
             return;
         }
+        s_held = false;   // the push's own result replaces push_heap
         // The worker is on GhOta's job: try again on a later pass.
         if (NetJob::busy()) {
             portENTER_CRITICAL(&s_mux);
@@ -979,6 +994,7 @@ namespace LogPush
         v.lastOkAgoMs = s_okAt ? now - s_okAt : 0;
         v.nextInMs = s_nextSet && (int32_t)(s_nextAt - now) > 0 ? s_nextAt - now : 0;
         v.heapMin = s_heapMin;
+        v.held = s_heldN;
         v.canOn = s_can;
         v.canMB = s_canMB;
         v.canToday = s_cused;

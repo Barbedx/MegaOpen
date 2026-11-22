@@ -194,6 +194,7 @@
  "e.fw_running": "A check or download is still running",
  "e.fw_no_newer": "No newer release: check first",
  "e.fw_upload": "An upload from the page is running",
+ "e.heap_low": "Low on free memory: try again in a minute",
  "e.hu_busy": "Head unit busy: its part wasn't applied",
  "e.no_signal": "The firmware has no signal for this yet",
  "e.twice": "Twice in one request",

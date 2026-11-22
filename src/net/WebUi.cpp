@@ -9,6 +9,8 @@
 #include "../cfg/SettingsRegistry.h"
 #include "../keys/KeyDests.h"
 #include "GhOta.h"
+#include "LogPush.h"
+#include "../utils/AllocWatch.h"
 #include <ArduinoJson.h>
 #include <ElegantOTA.h>
 #include <WiFi.h>
@@ -2363,6 +2365,30 @@ void WebUi::statusJson(JsonObject d)
         d["ghosts"]    = _ghosts ? *_ghosts : 0;
         d["encSteps"]  = _encSteps ? *_encSteps : 0;
         d["heap"]      = ESP.getFreeHeap();
+        {
+            // Failed allocations since boot (src/utils/AllocWatch.h), the last one's detail.
+            AllocWatch::Snap f;
+            AllocWatch::get(f);
+            JsonObject o = d["allocFail"].to<JsonObject>();
+            o["n"] = f.count;
+            if (f.count) {
+                o["size"] = f.size;
+                o["caps"] = f.caps;
+                o["atMs"] = f.atMs;
+                o["task"] = f.task;
+            }
+        }
+#if FEATURE_LOG_PUSH
+        {
+            // The push's counters; held = waits NetBudget asked for (src/net/NetBudget.h).
+            LogPush::View v;
+            LogPush::view(v);
+            JsonObject o = d["push"].to<JsonObject>();
+            o["state"] = LogPush::stateId(v.state);
+            o["files"] = v.files;
+            o["held"]  = v.held;
+        }
+#endif
 #if FEATURE_APP_LINK
         {
             AppLink::Stats a;
