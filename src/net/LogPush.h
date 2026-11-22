@@ -33,10 +33,15 @@ namespace LogPush
     constexpr size_t   TOKEN_MAX   = 255;
     constexpr size_t   REPO_MAX    = 100;          // "owner/name"
     constexpr const char* REPO_DEFAULT = "Barbedx/megaopen-logs";
-    // The CAN recording: closed /cap files, in parts of CAN_PART bytes, as
+    // The CAN recording (src/capture/CanRecorder.h): first the v2 segments
+    // still in the recorder's RAM ring, one a job, straight from RAM, as
+    //   <repo>/<device>/cap/<session>/r<seq>.bin
+    // then the files spilled to flash (or older v1 files), in parts of
+    // CAN_PART bytes, as
     //   <repo>/<device>/cap/<session>/<file>-<part>.bin
-    // (tools/cap_fetch.py joins them; tools/can_dump.py reads the file). Off
-    // by default; on, it also starts the recorder. At most canMB a day.
+    // (tools/cap_fetch.py joins them; tools/can_dump.py reads both). Off by
+    // default; on, it also starts the recorder. At most canMB a day. The
+    // progress is written to NVS only while the car stands, never per PUT.
     constexpr size_t   CAN_PART = 512 * 1024;
     constexpr uint32_t CAN_MB_DEFAULT = 200;
     constexpr uint32_t CAN_MB_MAX = 5000;
