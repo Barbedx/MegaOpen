@@ -55,8 +55,11 @@ namespace Log {
 #define LOGD(cat, ...) ((void)0)
 #define LOGT(cat, ...) ((void)0)
 #define LOGS(cat, ...) ((void)0)
+#define LOGQ(cat, ...) ((void)0)
 #else // ---- firmware build ------------------------------------------------------
 #include <Arduino.h>
+#include <type_traits>
+#include "LogQ.h"
 
 // ============================================================================
 // Leveled, categorized logger.
@@ -120,6 +123,24 @@ namespace Log {
 
     // printf() = INF with no category.
     void   printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+
+    // The logbus task, before each drain: LOGQ's records (LogQ.h) formatted
+    // into INF lines with their own uptime, gated by their tag as LOGI is.
+    void drainQueued();
+
+    // LOGQ's body. qFormat only checks the format against the numbers (it is
+    // never called).
+    inline void qFormat(const char*, ...) __attribute__((format(printf, 1, 2)));
+    inline void qFormat(const char*, ...) {}
+    template <typename... A>
+    inline void q(const char* cat, const char* fmt, A... a)
+    {
+        static_assert(sizeof...(A) <= 4, "LOGQ: four numbers at most");
+        static_assert(((std::is_integral<A>::value || std::is_enum<A>::value) && ...),
+                      "LOGQ: numbers only (a pointer or a float would not survive the queue)");
+        const uint32_t v[sizeof...(A) + 4] = {static_cast<uint32_t>(a)...};
+        LogQ::post(cat, fmt, v[0], v[1], v[2], v[3]);
+    }
 }
 
 // Category: short stable literal ("BT", "CAN", "AFFA", ...); used as a filter key.
@@ -140,5 +161,13 @@ namespace Log {
     do {                                                                             \
         static int8_t s_logTag_ = -1;                                                \
         if (Log::statusOn(cat, s_logTag_, millis())) Log::write(LogLevel::INF, cat, __VA_ARGS__); \
+    } while (0)
+// The log of a foreign context (an event handler, tud_*_cb, an ISR; LogQ.h):
+// INF, posted as numbers and formatted later by the logbus task. `cat` and
+// `fmt` must be string literals; at most four integer arguments.
+#define LOGQ(cat, fmt, ...)                                                          \
+    do {                                                                             \
+        if (false) Log::qFormat(fmt, ##__VA_ARGS__);                                 \
+        Log::q(cat "", fmt "", ##__VA_ARGS__);                                       \
     } while (0)
 #endif // NATIVE

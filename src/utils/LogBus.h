@@ -35,6 +35,9 @@ namespace LogBus
     // a frame FROM the head unit ("[hu] R ..."), which the [hur] line already
     // carries decoded. In the ring like every line; its readers skip it.
     void line(const char* s);      // never blocks
+    // The LogBus task only: a line with the uptime it was asked at (LOGQ's
+    // records, Log::drainQueued).
+    void lineAt(const char* s, uint32_t ms);
     void printf(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
     // The numbers are the plan's (src/app/TaskPlan.h LOGBUS_*): utils/ stays off app/.
     void startTask(UBaseType_t prio, BaseType_t core, uint32_t stack);
