@@ -170,8 +170,8 @@ namespace App
                         beatAt = now;
                         // `big` = largest free block (fragmentation); `at` =
                         // uptime of the free minimum, `ctx` = what ran then.
-                        // TODO(S3 merge): the failed-alloc stats (lane C's
-                        // AllocWatch::get()) add `task=` to this line.
+                        // A failed allocation says its task in its own line
+                        // (AllocWatch::report, `[mem] alloc failed`).
                         const Win w = takeWindow();
                         char ctx[40];
                         ctxText(w.ctx, ctx, sizeof(ctx));
