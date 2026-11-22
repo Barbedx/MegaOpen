@@ -38,13 +38,15 @@ void WifiManager::begin(Cfg::Config& cfg)
     // (`[win] min=13292 dma=168`, the empty-DRAM floor).
 
     // Disconnect reason tells coexistence (200) from router (8) from bad key (15).
-    // Serial only: this runs on the WiFi event task.
+    // These run on the core's event task (arduino_events), not ours: LOGQ
+    // posts the numbers and the logbus task writes the line (rule R1,
+    // tools/check_rules.py).
     WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t info) {
-        LOGI("wifi", "STA disconnected reason=%u heap=%u\n",
-                      (unsigned)info.wifi_sta_disconnected.reason, (unsigned)ESP.getFreeHeap());
+        LOGQ("wifi", "STA disconnected reason=%u heap=%u",
+             (unsigned)info.wifi_sta_disconnected.reason, (unsigned)ESP.getFreeHeap());
     }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
     WiFi.onEvent([](arduino_event_id_t, arduino_event_info_t) {
-        LOGI("wifi", "STA got IP heap=%u\n", (unsigned)ESP.getFreeHeap());
+        LOGQ("wifi", "STA got IP heap=%u", (unsigned)ESP.getFreeHeap());
     }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
 
     start(millis());

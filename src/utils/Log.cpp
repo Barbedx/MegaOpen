@@ -126,6 +126,30 @@ namespace Log
         LogBus::line(line);
     }
 
+    void drainQueued()
+    {
+        LogQ::Rec r;
+        while (LogQ::take(r)) {
+            int8_t slot = -1;
+            if (!on(LogLevel::INF, r.cat, slot))
+                continue;
+            char line[LogBus::MAX_LINE];
+            int p = snprintf(line, sizeof(line), "I [%s] ", r.cat ? r.cat : "");
+            if (p < 0)
+                continue;
+            if (p > (int)sizeof(line) - 1)
+                p = sizeof(line) - 1;
+            // The format is a literal from LOGQ, checked against its numbers there.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+            snprintf(line + p, sizeof(line) - p, r.fmt ? r.fmt : "",
+                     r.a[0], r.a[1], r.a[2], r.a[3]);
+#pragma GCC diagnostic pop
+            rstripEol(line);
+            LogBus::lineAt(line, r.ms);
+        }
+    }
+
     // --- back-compat shims --------------------------------------------------------
     void printf(const char *fmt, ...)
     {

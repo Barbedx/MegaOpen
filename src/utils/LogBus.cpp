@@ -97,6 +97,7 @@ namespace LogBus
                 // Woken by line(); the timeout only bounds a missed notify.
                 ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
                 const uint32_t wokeUs = micros();
+                Log::drainQueued();   // LOGQ's records first: they are older
                 drainAll(buf);
                 if (g_flushReq) {
                     g_flushReq = false;
@@ -154,6 +155,15 @@ namespace LogBus
         if (ok && g_task) xTaskNotifyGive(g_task);
     }
 
+    // On the LogBus task, just before its drain: no notify needed.
+    void lineAt(const char* s, uint32_t ms)
+    {
+        const int n = (int)strnlen(s, MAX_LINE);
+        portENTER_CRITICAL(&g_mux);
+        if (!g_ring.push(s, (uint16_t)n, ms)) ++g_dropped;
+        portEXIT_CRITICAL(&g_mux);
+    }
+
     void printf(const char* fmt, ...)
     {
         char b[MAX_LINE];
@@ -169,6 +179,7 @@ namespace LogBus
         if (g_task) return;
         if (!g_flushDone) g_flushDone = xSemaphoreCreateBinary();
         xTaskCreatePinnedToCore(taskBody, "logbus", stack, nullptr, prio, &g_task, core);
+        LogQ::setWake(g_task);
     }
 
     void onFlush(void (*fn)()) { g_onFlush = fn; }
@@ -179,6 +190,7 @@ namespace LogBus
         if (xTaskGetCurrentTaskHandle() == g_task) {
             // Already the LogBus task (a sink that rebooted): do it here.
             char buf[MAX_LINE + 1];
+            Log::drainQueued();
             drainAll(buf);
             void (*f)() = g_onFlush;
             if (f) f();

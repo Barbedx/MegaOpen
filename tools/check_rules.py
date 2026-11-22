@@ -34,6 +34,12 @@ Rules, by where they bite:
                  Step 3 it never calls twai_* or reinstalls the driver, and never
                  calls the panel library except through PanelOps.
 
+foreign        (R1, docs/design/stabilisation-1-12.md) code on a stack that is
+contexts       not ours: a lambda given to .onEvent(, a tud_*_cb, an IRAM_ATTR
+               body. It never logs except through LOGQ; `// ctx: task <name>`
+               on its first line or the line above says it runs on our task.
+               NimBLE callback classes: listed as warnings, never an error.
+
 Config.cpp     reads only the NVS keys it writes: an old key is rewritten by a
                step in src/cfg/Migrations.cpp (the recipe is in Migrations.h).
 
@@ -103,12 +109,84 @@ def function_body(src, name):
 
 
 problems = []
+warnings = []
 
 
-def check(rel, text, pattern, why, base=0, whole=None):
+def check(rel, text, pattern, why, base=0, whole=None, out=None):
     for m in re.finditer(pattern, text):
         ln = line_of(whole if whole is not None else text, base + m.start())
-        problems.append('%s:%d: %s  (%s)' % (rel, ln, m.group(0).strip(), why))
+        (problems if out is None else out).append('%s:%d: %s  (%s)' % (rel, ln, m.group(0).strip(), why))
+
+
+# ---- multi-line scans: blocks, argument lists, lambdas ----------------------------
+# On comment-stripped text. String and character literals are blanked first
+# (same length, so offsets and line numbers hold), so a brace or a paren in a
+# format string never moves a block's end.
+def mask_strings(src):
+    out, i, n = [], 0, len(src)
+    while i < n:
+        c = src[i]
+        if c == '"' or c == "'":
+            j = i + 1
+            while j < n and src[j] != c:
+                j += 2 if src[j] == '\\' else 1
+            out.append(c + re.sub(r'[^\n]', ' ', src[i + 1:j]) + (c if j < n else ''))
+            i = j + 1
+        else:
+            out.append(c)
+            i += 1
+    return ''.join(out)
+
+
+def matching(masked, i):
+    """The offset of the bracket that closes the one at i ('{' or '('), or -1."""
+    o = masked[i]
+    c = {'{': '}', '(': ')', '[': ']'}[o]
+    depth = 0
+    for j in range(i, len(masked)):
+        if masked[j] == o:
+            depth += 1
+        elif masked[j] == c:
+            depth -= 1
+            if depth == 0:
+                return j
+    return -1
+
+
+def blocks_after(masked, pattern):
+    """(start, end) of every `{...}` whose opening brace ends a match of
+    pattern (the pattern must end in a literal \\{)."""
+    for m in re.finditer(pattern, masked):
+        i = m.end() - 1
+        j = matching(masked, i)
+        if j > 0:
+            yield m.start(), i, j + 1
+
+
+def lambdas_in_call(masked, call_pattern):
+    """(start, body_start, body_end) of every lambda in the argument list of a
+    call matching call_pattern (which must end in a literal \\()."""
+    for m in re.finditer(call_pattern, masked):
+        p = m.end() - 1
+        q = matching(masked, p)
+        if q < 0:
+            continue
+        args = masked[p:q]
+        for lm in re.finditer(r'\[[^\[\]]*\]\s*(?:\([^()]*\))?\s*(?:mutable\s*)?(?:->\s*[\w:<>*&\s]+?)?\{', args):
+            i = p + lm.end() - 1
+            j = matching(masked, i)
+            if j > 0:
+                yield m.start(), i, j + 1
+
+
+# `// ctx: task <name>` on a construct's first line or the line above it: the
+# author says it runs on a task of ours (a callback called synchronously from
+# that task), so the foreign-context rule does not apply to it.
+CTX_ESCAPE = re.compile(r'//\s*ctx:\s*task\s+\w+')
+
+
+def escaped(raw_lines, ln):
+    return any(CTX_ESCAPE.search(raw_lines[k]) for k in (ln - 2, ln - 1) if 0 <= k < len(raw_lines))
 
 
 # ---- task files ---------------------------------------------------------------
@@ -237,6 +315,45 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, 'src')):
         if rel not in RAW_LINE_ALLOWED:
             check(rel, src, r'\bLogBus::line\s*\(', 'log through LOGE..LOGT (a level and a tag), not LogBus::line')
 
+# ---- R1: foreign contexts only count, flag, post or notify (stabilisation 1.12) --
+# Code that runs on a stack that is not ours: lambdas handed to an
+# `.onEvent(` (WiFi's and USB's event tasks), TinyUSB's tud_*_cb, and IRAM_ATTR
+# bodies (ISRs, driver callbacks). Their log is LOGQ (utils/LogQ.h): numbers
+# posted, formatted later on the logbus task. A LOGI there formats a 320 B line
+# on a 2 kB stack (car boots 289/290). NimBLE's callback classes run on its
+# host task: their logs are reported as warnings (BLE is MeganeCAN's code, this
+# release measures before it changes them). Escape: `// ctx: task <name>`.
+FOREIGN_LOG = (r'\bLOG[EWIDTS]\s*\(|\bLog::(?:write|emit|printf)\s*\(|\bLogBus::(?:line|lineAt|printf)\s*\('
+               r'|\bSerial\d?\s*\.\s*(?:print|printf|println|write)\b|(?<![\w.:])printf\s*\(|\bESP_LOG[EWIDV]\s*\(')
+FOREIGN_SCANS = [
+    ('a lambda given to onEvent: the core\'s event task', 'lambda', r'\.\s*onEvent\s*\('),
+    ('a TinyUSB callback: the USB task', 'block', r'\btud_\w+_cb\s*\([^;{)]*\)\s*\{'),
+    ('an IRAM_ATTR body: an ISR or a driver callback', 'block', r'\bIRAM_ATTR\b[^;{}]*?\([^;{)]*\)\s*\{'),
+]
+for dirpath, _, files in os.walk(os.path.join(ROOT, 'src')):
+    for fn in files:
+        if not fn.endswith(('.cpp', '.h')):
+            continue
+        rel = os.path.relpath(os.path.join(dirpath, fn), ROOT).replace(os.sep, '/')
+        raw = read(rel)
+        raw_lines = raw.split('\n')
+        src = mask_strings(strip_comments(raw))
+        for what, kind, pat in FOREIGN_SCANS:
+            found = lambdas_in_call(src, pat) if kind == 'lambda' else blocks_after(src, pat)
+            for start, i, j in found:
+                if escaped(raw_lines, line_of(src, start)):
+                    continue
+                check(rel, src[i:j], FOREIGN_LOG, '%s: LOGQ, or count and log on a task of ours (R1)' % what,
+                      i, src)
+        # NimBLE: a report, not a rule (yet).
+        for m in re.finditer(r'\b(?:class|struct)\s+(\w+)\s*(?:final\s*)?:\s*public\s+NimBLE\w*Callbacks\b[^{;]*\{', src):
+            i = m.end() - 1
+            j = matching(src, i)
+            if j < 0 or escaped(raw_lines, line_of(src, m.start())):
+                continue
+            check(rel, src[i:j + 1], FOREIGN_LOG, '%s: a NimBLE callback logs on the host task' % m.group(1),
+                  i, src, warnings)
+
 # ---- CAN A: listen-only, but for the climate read ---------------------------------
 # The car bus is written in one place: Mcp2518Source puts the chip in normal mode
 # and sends, and only CarDiag (through Diag::Exchange's allowlist) asks it to.
@@ -268,6 +385,10 @@ for m in re.finditer(r'_p\.(?:get\w+|isKey|remove)\s*\(\s*"([^"]+)"', cfg_src):
                         '(an old key: a step in src/cfg/Migrations.cpp, not Config)'
                         % (cfg_rel, line_of(cfg_src, m.start()), m.group(1)))
 
+if warnings:
+    print('check_rules: %d warning(s), not errors' % len(warnings))
+    for w in warnings:
+        print('  ' + w)
 if problems:
     print('check_rules: %d problem(s)' % len(problems))
     for p in problems:

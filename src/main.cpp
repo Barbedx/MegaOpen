@@ -1674,7 +1674,9 @@ static void hkBeat(uint32_t now)
          (unsigned)g_hu.frames(), (unsigned)(g_huRx ? g_huRx->stats().textFrames : 0),
          (unsigned)g_hu.lockMisses(), (unsigned)g_hu.stashDropped());
 #endif
-    LOGS("hb", "up=%02u:%02u:%02u heap=%u min=%u big=%u canrx=%u keys=%u tx=%u/%u",
+    // logq drops = LOGQ records (foreign contexts, utils/LogQ.h) lost to a
+    // full queue since boot.
+    LOGS("hb", "up=%02u:%02u:%02u heap=%u min=%u big=%u canrx=%u keys=%u tx=%u/%u logq drops=%u",
          (unsigned)(s / 3600), (unsigned)((s / 60) % 60), (unsigned)(s % 60),
          (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap(),
          (unsigned)ESP.getMaxAllocHeap(),
@@ -1684,7 +1686,8 @@ static void hkBeat(uint32_t now)
          0u,
 #endif
          (unsigned)g_engine.events(),
-         (unsigned)g_tx.keyFrames(), (unsigned)g_tx.vehicleFrames());
+         (unsigned)g_tx.keyFrames(), (unsigned)g_tx.vehicleFrames(),
+         (unsigned)LogQ::dropped());
 }
 
 // Once a minute: address, SSID, BSSID and gateway, to find the board and
