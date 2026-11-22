@@ -82,6 +82,17 @@ in a 10 s window: a blocking connect/send to the loopback (5 s) and a TX wait
   (5 s without progress: `91 send`). While any are unsent the pipe is not read:
   USB NAKs the host, BLE's 8 kB buffer fills (`overflow`). `recv` waits while a
   data frame is pending.
+- **The claim race.** TinyUSB's `usbd` task is not pinned to a core
+  (esp32-hal-tinyusb.c:718) and arms the endpoints as applink does, through
+  `usbd_edpt_claim`; when both claim at once, one backs off and nobody arms.
+  The packet that fills the 64-byte OUT FIFO never re-arms it (our read does),
+  so a lost claim left OUT NAKing for good: bench 2026-11-22, `usb_link.py
+  cable` stalled after 1566 frames, the host's writes timed out, and on IN the
+  last frame's tail stayed in the FIFO (2 echoes lost). `UsbPipe` `kick()`
+  runs every pass: a zero-byte read re-arms OUT, a flush sends a tail, and
+  while OUT is idle with an empty FIFO (or a tail waits with IN idle) applink
+  comes back next tick. Bench after: `cable 30` GOOD, ~200 kB/s, p99 ~50 ms;
+  `bench` ping 1.5 ms (9 ms when only the 50 ms poll caught the race).
 - applink is woken by TinyUSB's tx callback (room in the FIFO) and polls every
   tick while a frame waits; `netOpen` still blocks its caller (NetJob) until
   the request is out.

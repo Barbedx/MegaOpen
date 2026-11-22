@@ -456,6 +456,7 @@ namespace Link
         _cur = nullptr;
         _data.n = 0;
         _ctlN = 0;
+        _kickAgain = false;
         if (_hello) LOGI("link", "%s: the app is gone", tag());
         _hello = false;
         _appNet = false;
@@ -481,6 +482,7 @@ namespace Link
             }
             netService();
             txService();
+            _kickAgain = _pipe.kick();
         }
         uint8_t open = 0;
         for (const auto& c : _ch) open += c.fd >= 0;
