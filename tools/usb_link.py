@@ -155,6 +155,8 @@ class Link:
             except usb.core.USBError:
                 return
             while True:
+                # Skips the board's filler 0x00 after a frame of 64*k bytes
+                # (a USB read ends on a short packet; LinkFrame.h usbFiller).
                 i = buf.find(b"MO")
                 if i < 0:
                     buf = buf[-1:]

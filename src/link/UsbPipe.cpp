@@ -36,6 +36,9 @@ namespace UsbPipe
         // While the host is writing to us and not reading: its frames (a new
         // app's HELLO) come first.
         constexpr uint32_t TX_RX_WAITING_MS = 500;
+        // The TX FIFO is one packet: all room means empty.
+        constexpr uint32_t FIFO = CFG_TUD_VENDOR_TX_BUFSIZE;
+        static_assert(FIFO == Link::USB_PACKET, "the filler assumes a one-packet FIFO");
 
         void (*s_wake)() = nullptr;
         BusStats s_bus;
@@ -59,14 +62,20 @@ namespace UsbPipe
             // The whole frame into the FIFO, waiting while the host reads. An
             // unplug is seen at once (tud_vendor_n_mounted), so giveUpMs only
             // bounds a host that hangs.
+            //
+            // A frame starts on an empty FIFO: the driver takes the FIFO whole
+            // into one packet, so the frame's packets start at its first byte
+            // and Link::usbFiller makes its last one short.
             Tx write(const uint8_t* f, size_t n, uint32_t giveUpMs, uint32_t& waitMax) override
             {
+                static const uint8_t filler = 0x00;
+                const size_t total = n + Link::usbFiller(n);
                 size_t at = 0;
                 uint32_t since = millis();
-                while (at < n) {
+                while (at < total) {
                     if (!tud_vendor_n_mounted(ITF)) return at ? Tx::Cut : Tx::Dropped;
                     const uint32_t room = tud_vendor_n_write_available(ITF);
-                    if (!room) {
+                    if (!room || (at == 0 && room < FIFO)) {
                         tud_vendor_n_write_flush(ITF);
                         const uint32_t w = millis() - since;
                         if (w > waitMax) waitMax = w;
@@ -75,7 +84,8 @@ namespace UsbPipe
                         vTaskDelay(1);
                         continue;
                     }
-                    const uint32_t w = tud_vendor_n_write(ITF, f + at, n - at < room ? n - at : room);
+                    const uint32_t w = at < n ? tud_vendor_n_write(ITF, f + at, n - at < room ? n - at : room)
+                                              : tud_vendor_n_write(ITF, &filler, 1);
                     at += w;
                     if (w) since = millis();
                 }

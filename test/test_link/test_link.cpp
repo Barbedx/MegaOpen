@@ -144,6 +144,37 @@ void test_oversize_length_is_garbage()
     TEST_ASSERT_EQUAL(1, g_got.size());
 }
 
+void test_usb_filler_on_packet_boundaries()
+{
+    // Frames of 64/128/192 B end on a full packet: one filler byte each.
+    for (size_t n : {size_t(64), size_t(128), size_t(192), size_t(1024)}) {
+        TEST_ASSERT_EQUAL(1, usbFiller(n));
+        TEST_ASSERT_TRUE((n + usbFiller(n)) % USB_PACKET != 0);
+    }
+    // Every other length is untouched.
+    for (size_t n = 1; n <= MAX_FRAME; ++n)
+        if (n % USB_PACKET) TEST_ASSERT_EQUAL(0, usbFiller(n));
+    TEST_ASSERT_EQUAL(0, usbFiller(0));
+}
+
+void test_hello_ack_never_ends_on_a_packet()
+{
+    // The car's HELLO_ACK (boot 291): 8 + 118 + 2 = 128 B with a 5-digit
+    // upMs, every name length up to a packet: never a full last packet.
+    bool sawBoundary = false;
+    std::string up = "1";
+    for (int digits = 1; digits <= 10; ++digits, up += "0") {
+        for (size_t k = 0; k <= USB_PACKET; ++k) {
+            const std::string p = std::string("{\"proto\":1,\"fw\":\"1.11.0\",\"build\":\"38249bd\",\"name\":\"")
+                                  + std::string(k, 'X') + "\",\"chans\":2,\"upMs\":" + up + ",\"via\":\"usb\"}";
+            const size_t n = frame(HELLO_ACK, FIN, 0, p).size();
+            if (n % USB_PACKET == 0) sawBoundary = true;
+            TEST_ASSERT_TRUE((n + usbFiller(n)) % USB_PACKET != 0);
+        }
+    }
+    TEST_ASSERT_TRUE(sawBoundary);   // the case the filler is for did come up
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
@@ -156,5 +187,7 @@ int main(int, char**)
     RUN_TEST(test_cut_frame_then_new_one);
     RUN_TEST(test_oversize_length_is_garbage);
     RUN_TEST(test_long_frame_in_pieces_is_not_cut);
+    RUN_TEST(test_usb_filler_on_packet_boundaries);
+    RUN_TEST(test_hello_ack_never_ends_on_a_packet);
     return UNITY_END();
 }

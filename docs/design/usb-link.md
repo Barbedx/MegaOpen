@@ -64,6 +64,18 @@ cut by a writer that gave up would otherwise swallow the frames after it.
 The board gives up writing a frame only after 3 s with no room in the FIFO (a
 flash write stalls it half a second), and then says `91 send` for the channel.
 
+**The filler (1.12).** A host's bulk read ends on a short packet. A frame whose
+length is a multiple of 64 ends on a full one, and the app's read (16 kB, 250
+ms) waits for more: in the car (boot 291, 2026-11-22) a 128-byte HELLO_ACK
+(5-digit `upMs`) was never seen and the app said HELLO every 5 s. The prebuilt
+vendor driver has no ZLP call, so over USB such a frame gets one `0x00` after
+it, in the same write, and every frame starts on an empty FIFO (one packet), so
+its packets start at its first byte. Board to app only. A lone `0x00` between
+frames is skipped by `tools/usb_link.py`; the APK before the next one counts it
+as `bad`. The WebUSB page's parser (`web/usb/link.js`) counts it as `bad` too,
+and a `bad` there cuts the answers in flight: it needs the same skip. A PC's libusb
+returns what came on a timeout and so never showed the bug: verify on Android.
+
 | type | way | payload |
 | --- | --- | --- |
 | `01` HELLO | app → board | JSON `{"app":"1.6.0"}` |

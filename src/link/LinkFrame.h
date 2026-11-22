@@ -41,6 +41,15 @@ namespace Link
     size_t encode(uint8_t type, uint8_t flags, uint16_t chan, const uint8_t* payload, size_t len,
                   uint8_t* out);
 
+    // USB bulk: a host read ends on a short packet. A frame that ends on a
+    // 64-byte boundary leaves the app's read waiting for more (the car, boot
+    // 291, 2026-11-22: a 128 B HELLO_ACK never seen, 129/130 B worked), and
+    // the prebuilt vendor driver has no ZLP call. Such a frame gets one 0x00
+    // after it, in the same write; a lone 0x00 between frames is skipped by
+    // the parsers. The filler bytes a frame of `n` needs, board to app only.
+    constexpr size_t USB_PACKET = 64;
+    constexpr size_t usbFiller(size_t n) { return n && n % USB_PACKET == 0 ? 1 : 0; }
+
     struct Frame {
         uint8_t        type;
         uint8_t        flags;
