@@ -2,8 +2,12 @@
 """Fetch a board's CAN recording from the log repository and join the parts.
 
 The board sends each closed /cap file as <device>/cap/<session>/<file>-<part>.bin
-(src/net/LogPush.h). This puts <out>/<session>/<file>.bin back together, ready
-for tools/can_dump.py. Uses the GitHub CLI (`gh`), logged in with read access.
+(src/net/LogPush.h), and since 1.12 each v2 segment straight from RAM as
+<device>/cap/<session>/r<seq>.bin. This puts <out>/<session>/<file>.bin back
+together (the parts joined; a segment as <seq>.bin: segments and files share
+one numbering), ready for tools/can_dump.py, which reads v1 and v2 and a
+session's files in number order as one stream. Uses the GitHub CLI (`gh`),
+logged in with read access.
 
     python tools/cap_fetch.py mo-4580                 # every session
     python tools/cap_fetch.py mo-4580 --session 12    # one
@@ -37,12 +41,23 @@ def main():
     if a.session is not None:
         sessions = [s for s in sessions if int(s) == a.session]
     for s in sorted(sessions):
-        parts = {}
+        parts, segs = {}, {}
         for e in gh(["%s/%s" % (base, s)]):
             m = re.fullmatch(r"(\d+)-(\d+)\.bin", e["name"])
             if m:
                 parts.setdefault(m.group(1), []).append((int(m.group(2)), e["name"]))
+            m = re.fullmatch(r"r(\d+)\.bin", e["name"])
+            if m:
+                segs[m.group(1)] = e["name"]
         os.makedirs(os.path.join(a.out, s), exist_ok=True)
+        for f, name in sorted(segs.items()):
+            if f in parts:
+                print("session %s: %s and %s-NN.bin both exist; keeping the parts" % (s, name, f))
+                continue
+            path = os.path.join(a.out, s, f + ".bin")
+            with open(path, "wb") as out:
+                out.write(gh(["-H", "Accept: application/vnd.github.raw", "%s/%s/%s" % (base, s, name)], raw=True))
+            print("%s: segment, %d bytes" % (path, os.path.getsize(path)))
         for f, ps in sorted(parts.items()):
             ps.sort()
             want = list(range(len(ps)))
