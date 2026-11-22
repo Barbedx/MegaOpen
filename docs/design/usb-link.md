@@ -64,6 +64,28 @@ cut by a writer that gave up would otherwise swallow the frames after it.
 The board gives up writing a frame only after 3 s with no room in the FIFO (a
 flash write stalls it half a second), and then says `91 send` for the channel.
 
+**Nothing waits (1.12).** The car (2026-11-22) showed `applink busy=3597703us`
+in a 10 s window: a blocking connect/send to the loopback (5 s) and a TX wait
+(3 s) held the one task both sessions share. Now no applink pass waits:
+
+- Each session has one pending data frame (an HTTP answer, an event, the net
+  request and body, one frame at a time) and four control slots (PONG,
+  HELLO_ACK, NET_ACK, NET_CANCEL, `91`), each with its offset; control goes
+  first at frame boundaries. The USB filler is part of the frame. The give-up
+  (3 s, 20 ms for an app gone quiet, 500 ms over USB while the host writes and
+  does not read) is counted across passes. A full control queue drops the frame
+  (`dropped`).
+- The data producers take turns: the channels' answers, the alerts, the net
+  request, so a long download does not hold the others back.
+- Loopback sockets are non-blocking: `connect` goes on over passes (5 s), and
+  each channel keeps its own copy of the request bytes, sent `MSG_DONTWAIT`
+  (5 s without progress: `91 send`). While any are unsent the pipe is not read:
+  USB NAKs the host, BLE's 8 kB buffer fills (`overflow`). `recv` waits while a
+  data frame is pending.
+- applink is woken by TinyUSB's tx callback (room in the FIFO) and polls every
+  tick while a frame waits; `netOpen` still blocks its caller (NetJob) until
+  the request is out.
+
 **The filler (1.12).** A host's bulk read ends on a short packet. A frame whose
 length is a multiple of 64 ends on a full one, and the app's read (16 kB, 250
 ms) waits for more: in the car (boot 291, 2026-11-22) a 128-byte HELLO_ACK
