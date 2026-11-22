@@ -35,9 +35,9 @@ namespace Link
         uint32_t hellos = 0, helloAckFails = 0;   // HELLOs in, HELLO_ACKs that did not go out
         uint32_t rxBytes = 0, txBytes = 0;
         uint32_t lastRxAgoMs = 0;     // UINT32_MAX: never
-        // The longest single wait, ms: for room in the transport, connect(),
-        // a socket send(). And frames given up half-written / not sent
-        // because the app had gone quiet.
+        // The longest stall, ms, counted across applink passes: for room in
+        // the transport, connect(), a socket send(). And frames given up
+        // half-written / not sent (the app gone quiet, a full control queue).
         uint32_t txWaitMax = 0, connectMax = 0, sockSendMax = 0, cut = 0, dropped = 0;
     };
 
@@ -50,17 +50,24 @@ namespace Link
 
 namespace Link
 {
-    // The bytes' way. Every call but the constructor's on the applink task.
+    // The bytes' way. Every call but the constructor's on the applink task;
+    // none waits (R2: no applink pass blocks, car 2026-11-22 `applink
+    // busy=3597703us` in a 10 s window).
     class Pipe {
     public:
         virtual ~Pipe() = default;
         virtual const char* tag() const = 0;    // "usb", "ble": the log's and the API's name
         virtual bool up() = 0;                  // a host / a subscribed peer is there
-        virtual size_t read(uint8_t* buf, size_t n) = 0;   // what is there, never waits
-        enum class Tx : uint8_t { Ok, Cut, Dropped };
-        // The whole frame, waiting at most giveUpMs for room; `waitMax`
-        // grows to the longest wait seen. Cut: given up half-way.
-        virtual Tx write(const uint8_t* f, size_t n, uint32_t giveUpMs, uint32_t& waitMax) = 0;
+        virtual size_t read(uint8_t* buf, size_t n) = 0;   // what is there
+        // A frame may start now (USB: the FIFO is empty, LinkFrame.h usbFiller).
+        virtual bool ready() { return true; }
+        // Bytes appended to a frame of n (USB: the filler, 0x00).
+        virtual size_t pad(size_t n) const { (void)n; return 0; }
+        // As much of f as there is room for now; the bytes taken.
+        virtual size_t write(const uint8_t* f, size_t n) = 0;
+        // A frame stalled while the app keeps writing is given up after
+        // TX_RX_WAITING_MS (USB: a host that writes and does not read).
+        virtual bool cutWhileTalking() const { return false; }
     };
 
     class Session {
@@ -72,6 +79,7 @@ namespace Link
         void begin(const char* name) { _name = name ? name : ""; }
         void service(uint32_t now);
         bool busy() const;                      // a channel is open: poll fast
+        bool txBusy() const { return !txIdle(); }   // a frame waits for room: poll faster
 
         // ---- any task ----------------------------------------------------
         bool alive() const;                     // up, and a frame lately
@@ -92,25 +100,63 @@ namespace Link
         static constexpr uint32_t NET_ACK_STEP = 4096;
         static constexpr uint32_t TX_GIVE_UP_MS = 3000;
         static constexpr uint32_t TX_GONE_MS = 20;
+        // While the host is writing to us and not reading: its frames (a new
+        // app's HELLO) come first.
+        static constexpr uint32_t TX_RX_WAITING_MS = 500;
+        // A request body (an OTA upload) waits on the server reading it, and
+        // connect() on the server's accept: this long without progress, then
+        // the channel fails. Counted across passes, never waited in one.
+        static constexpr uint32_t SOCK_GIVE_UP_MS = 5000;
         static constexpr uint32_t EVENT_MS = 200;
+        static constexpr size_t   RX_CHUNK = 256;
+        static constexpr uint8_t  CTL_SLOTS = 4;
+        static constexpr uint8_t  TX_FRAMES_PASS = 8;
 
-        struct Chan { int fd = -1; uint32_t lastMs = 0; };
+        // A channel's request bytes are its own: the parser's buffer is
+        // reused by the next frame. While any are unsent the pipe is not
+        // read (USB NAKs, BLE fills its buffer), so one frame's payload plus
+        // what was left of that read is the most a channel holds.
+        struct Chan {
+            int      fd = -1;
+            bool     connecting = false;
+            uint32_t lastMs = 0;
+            uint32_t since = 0;           // connect() started / the last bytes the server took
+            uint16_t reqN = 0, reqAt = 0;
+            uint8_t  req[MAX_PAYLOAD + RX_CHUNK];
+        };
+        // One frame on its way out: the bytes (and the USB filler), how far.
+        struct Out {
+            uint16_t n = 0, at = 0;       // n 0: empty
+            uint8_t  type = 0, flags = 0;
+            uint16_t chan = 0;
+            uint8_t  buf[MAX_FRAME + 1];
+        };
 
         bool hostLive() const;
-        bool send(uint8_t type, uint8_t flags, uint16_t chan, const uint8_t* p, size_t len);
-        bool sendText(uint8_t type, uint16_t chan, const char* s);
+        bool fill(Out& o, uint8_t type, uint8_t flags, uint16_t chan, const uint8_t* p, size_t len);
+        bool control(uint8_t type, uint8_t flags, uint16_t chan, const uint8_t* p, size_t len);
+        bool controlText(uint8_t type, uint16_t chan, const char* s);
+        bool txIdle() const { return !_cur && !_ctlN && !_data.n; }
+        void txService();
+        bool txStalled(uint32_t t);
+        void txDone(bool ok);
+        bool nextData(uint32_t now);
         void closeChan(uint16_t c);
         void fail(uint16_t c, const char* why);
         void closeAll();
         bool openChan(uint16_t c);
+        bool reqWaiting() const;
+        void sockService(uint32_t now);
+        void reqFlush(uint16_t c, uint32_t now);
         void onRequest(const Frame& f);
-        void pump(uint32_t now);
+        bool pumpOne(uint32_t now);
+        bool eventOne(uint32_t now);
+        bool netOne();
         void netFail(const char* why);
         void netService();
         void onNet(const Frame& f);
         void hello(const Frame& f);
         void onFrame(const Frame& f);
-        void events(uint32_t now);
         void down();
         static void frameCb(const Frame& f, void* ctx) { static_cast<Session*>(ctx)->onFrame(f); }
 
@@ -118,11 +164,22 @@ namespace Link
         const char*  _name = "";
         Parser       _parser;
         Chan         _ch[CHANS];
-        uint8_t      _rx[256];
-        uint8_t      _tx[MAX_FRAME];
+        uint8_t      _rx[RX_CHUNK];
         uint8_t      _body[MAX_PAYLOAD];
+        // Out: one data frame (HTTP, an event, the net request) and a few
+        // control frames (PONG, HELLO_ACK, NET_ACK, NET_CANCEL, 91), sent at
+        // frame boundaries before the data.
+        Out          _data;
+        Out          _ctl[CTL_SLOTS];
+        uint8_t      _ctlHead = 0, _ctlN = 0;
+        Out*         _cur = nullptr;      // the frame being written
+        uint32_t     _txSince = 0;        // its last progress
+        uint32_t     _txRx = 0;           // rxFrames then
+        uint8_t      _rr = 0;             // the data producer to ask first
+        uint8_t      _pumpC = 0;          // the channel to read first
         bool         _up = false;
         bool         _hello = false;
+        bool         _evMore = false;     // the last ask found an alert: ask again now
         uint32_t     _evSeq = 0;
         uint32_t     _evAt = 0;
         volatile uint32_t _lastRx = 0;
@@ -141,6 +198,8 @@ namespace Link
         size_t             _netReqLen = 0;
         const uint8_t*     _netBody = nullptr;
         size_t             _netBodyLen = 0;
+        size_t             _netAt = 0;        // body bytes framed so far (applink's)
+        bool               _netReqOut = false; // the NET_REQ frame made (applink's)
         NetHead            _netHead;
         char               _netWhy[40] = {0};
         StreamBufferHandle_t _netSb = nullptr;
@@ -149,6 +208,7 @@ namespace Link
         uint32_t           _netAcked = 0;     // what the app was last told
         volatile bool      _netEof = false;
         volatile bool      _netCancel = false;
+        volatile uint16_t  _netCancelId = 0;  // the transfer the cancel is for
         bool               _appNet = false;   // the app's HELLO offered it
     };
 }

@@ -87,31 +87,22 @@ namespace BlePipe
             {
                 return s_rx ? xStreamBufferReceive(s_rx, buf, n, 0) : 0;
             }
-            // The frame in notifications of MTU-3. A notification the host has
-            // no buffer for (its mbufs are busy with earlier ones) is retried
-            // until giveUpMs without progress.
-            Tx write(const uint8_t* f, size_t n, uint32_t giveUpMs, uint32_t& waitMax) override
+            // Notifications of MTU-3 while the host has buffers for them. One
+            // it has none for (its mbufs busy with earlier ones) is tried
+            // again next pass; the session gives up the frame.
+            size_t write(const uint8_t* f, size_t n) override
             {
                 const uint16_t h = s_conn;
                 uint16_t mtu = 23;
-                if (!s_tx || !linkUp(h, &mtu)) return Tx::Dropped;
+                if (!s_tx || !linkUp(h, &mtu)) return 0;
                 const size_t chunk = mtu > 23 ? mtu - 3 : 20;
                 size_t at = 0;
-                uint32_t since = millis();
                 while (at < n) {
                     const size_t k = n - at < chunk ? n - at : chunk;
-                    if (s_tx->notify(f + at, k, h)) {
-                        at += k;
-                        since = millis();
-                        continue;
-                    }
-                    ++s_st.notifyRetries;
-                    const uint32_t w = millis() - since;
-                    if (w > waitMax) waitMax = w;
-                    if (w > giveUpMs || !linkUp(h)) return at ? Tx::Cut : Tx::Dropped;
-                    vTaskDelay(pdMS_TO_TICKS(5));
+                    if (!s_tx->notify(f + at, k, h)) { ++s_st.notifyRetries; break; }
+                    at += k;
                 }
-                return Tx::Ok;
+                return at;
             }
         } s_pipe;
     }

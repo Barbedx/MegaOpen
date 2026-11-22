@@ -12,7 +12,8 @@ namespace AppLink
     {
         TaskHandle_t   s_task = nullptr;
         int            s_id = -1;
-        // Each session holds ~4.5 kB of frame buffers: PSRAM, not BSS.
+        // Each session holds ~12 kB of frame buffers (the pending frames, the
+        // channels' requests): PSRAM, not BSS.
         Link::Session* s_usb = nullptr;
         Link::Session* s_ble = nullptr;
         bool         (*s_wifiOnline)() = nullptr;
@@ -85,10 +86,13 @@ namespace AppLink
         {
             for (;;) {
                 // Woken by data from the app (TinyUSB's rx callback, BLE's
-                // write callback); polled faster while a response may be
-                // waiting on a socket.
-                const bool busy = (s_usb && s_usb->busy()) || (s_ble && s_ble->busy());
-                ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(busy ? 2 : 50));
+                // write callback) and by room for a frame (TinyUSB's tx
+                // callback); polled faster while a response may be waiting on
+                // a socket, every tick while a frame waits for room. No pass
+                // waits itself (R2).
+                const bool tx = (s_usb && s_usb->txBusy()) || (s_ble && s_ble->txBusy());
+                const bool busy = tx || (s_usb && s_usb->busy()) || (s_ble && s_ble->busy());
+                ulTaskNotifyTake(pdTRUE, tx ? 1 : pdMS_TO_TICKS(busy ? 2 : 50));
                 const uint32_t t0 = micros();
                 const uint32_t now = millis();
 #if FEATURE_USB_LINK
