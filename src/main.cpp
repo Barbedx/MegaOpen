@@ -483,8 +483,9 @@ static void bleServiceTask(void*)
         // Woken by a key for the phone or the head unit, or after 20 ms (the
         // old fixed sleep). While AMS steps are owed it does not sleep beyond
         // a tick: each write waits for its response, and that paces it. While
-        // a HID release is owed, it wakes when that is due.
-        uint32_t waitMs = amsPending ? 1 : 20;
+        // a HID release is owed, it wakes when that is due. With no peer
+        // connected there is nothing to poll for: BLE_IDLE_MS (S7).
+        uint32_t waitMs = amsPending ? 1 : BleHub::connectedCount() ? 20 : App::Plan::BLE_IDLE_MS;
         uint32_t holdLeft = 0;
         if (g_bleKeys.hidHoldLeft(millis(), holdLeft) && holdLeft < waitMs)
             waitMs = holdLeft ? holdLeft : 1;

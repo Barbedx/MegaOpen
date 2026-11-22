@@ -96,6 +96,10 @@ namespace App
         constexpr UBaseType_t NET_PRIO  = 1;
         constexpr int         NET_CORE  = 0;
         constexpr uint32_t    NET_STACK = 6144;
+        // Its pass when no heartbeat is due sooner (S7, 1.12). The web, WiFi
+        // and the verdict work in seconds; the 20 ms it had was for the heap
+        // sampling, an esp_timer now. Under the supervisor's 2 s.
+        constexpr uint32_t    NET_PASS_MS = 250;
 
         // BleHub::Service (AMS, ANCS) and the BLE key commands: AMS writes and
         // HID presses posted by the keys task. 2 on core 0, with the radio and
@@ -104,6 +108,11 @@ namespace App
         constexpr UBaseType_t BLE_PRIO  = 2;
         constexpr int         BLE_CORE  = 0;
         constexpr uint32_t    BLE_STACK = 4096;
+        // ble_svc's wait for a key while no peer is connected (S7, 1.12): it
+        // polled every 20 ms with nothing to do. A new peer waits this long
+        // at most for its next pass (BleHub::Service: AMS setup, advertising).
+        // Connected, it is 20 ms as before. Under the supervisor's 3 s.
+        constexpr uint32_t    BLE_IDLE_MS = 200;
 
         // The network worker (src/net/NetJob.h): the GitHub update and the
         // log push, one job after the other, on one task for the whole boot.

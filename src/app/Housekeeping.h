@@ -3,7 +3,8 @@
 
 // net_svc: everything that is neither a key nor the panel (docs/design/event-
 // tasks.md, Step 3). Priority 1 on core 0, with WiFi, lwIP and httpd, woken
-// every 20 ms.
+// every Plan::NET_PASS_MS (250 ms; 20 ms before 1.12). The heap is sampled
+// every 20 ms all the same, by an esp_timer that only samples (S7).
 //
 // It used to be the second half of loop(): the WiFi state machine, the
 // heartbeat (whose WiFi.SSID() and String work allocate) and the OTA
@@ -23,7 +24,7 @@ namespace App
     namespace Housekeeping
     {
         struct Hooks {
-            // Every pass (20 ms): the web server (ElegantOTA).
+            // Every pass (Plan::NET_PASS_MS): the web server (ElegantOTA).
             void (*web)(uint32_t nowMs) = nullptr;
             // Every pass: the WiFi state machine.
             void (*wifi)(uint32_t nowMs) = nullptr;
@@ -38,7 +39,7 @@ namespace App
             // At each new [win] minimum: what was going on (the CTX_* bits,
             // the BLE connections in bits 8-15), for `[win] ... at=<ms>
             // ctx=job,http,ble1,join`. Plain reads of flags and counters only:
-            // it runs where the heap is sampled.
+            // it runs on the esp_timer task, in the heap sampler.
             uint32_t (*ctx)() = nullptr;
         };
         enum : uint32_t {
