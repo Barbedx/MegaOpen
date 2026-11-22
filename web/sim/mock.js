@@ -218,7 +218,7 @@ function health(){
  return {fw:S.fw,build:S.build,chains:ch,bleMode:S.set.bleMode};
 }
 g('/api/catalog',()=>deep(CATALOG));
-g('/api/status',()=>{const w=S.wifi;return {ip:w.ip,mode:w.mode,ssid:w.mode==='sta'?w.ssid:w.apName,rssi:w.mode==='sta'?w.rssi:0,uptimeMs:now()-S.bootAt,boots:S.boots,framesSent:S.hu.txKey,events:S.events,ghosts:0,encSteps:0,heap:S.heap,
+g('/api/status',()=>{const w=S.wifi;return {ip:w.ip,mode:w.mode,ssid:w.mode==='sta'?w.ssid:w.apName,rssi:w.mode==='sta'?w.rssi:0,uptimeMs:now()-S.bootAt,boots:S.boots,framesSent:S.hu.txKey,events:S.events,ghosts:0,encSteps:0,heap:S.heap,allocFail:{n:0},push:{state:'waiting',files:0,held:0},
  fw:S.fw,build:S.build,apName:w.apName}});   /* fw, build, apName — НОВЕ */
 g('/api/health',health);
 /* прошивка зберігає в cfg одразу, тож GET бачить збережене; діє воно після перезавантаження */

@@ -30,6 +30,7 @@ void WebUi::routesLogPush()
         d["okAgoMs"]  = v.lastOkAgoMs;
         d["nextInMs"] = v.nextInMs;
         d["heapMin"]  = v.heapMin;
+        d["held"]     = v.held;
         d["can"]      = v.canOn;
         d["canMB"]    = v.canMB;
         d["canToday"] = v.canToday;

@@ -72,7 +72,8 @@ namespace GhOta
     const char* setPre(bool on);
 
     // nullptr: the job started. Otherwise why not (a job is running, or for
-    // install(), no newer release from a check this boot).
+    // install(), no newer release from a check this boot; "heap_low": the
+    // internal heap is under NetBudget's need now, nothing was queued).
     const char* check();
     const char* install();
     // A job owns the OTA slot: the local upload must wait.

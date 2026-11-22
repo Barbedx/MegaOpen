@@ -44,6 +44,7 @@
 #include <esp_heap_caps.h>
 #include <esp_core_dump.h>
 #include "utils/HeapSentinel.h"
+#include "utils/AllocWatch.h"
 #include "utils/JsonEscape.h"
 #include "app/StockRadio.h"
 #include "display/PanelRole.h"
@@ -1566,6 +1567,7 @@ static size_t logPushSnapshot(char* out, size_t cap)
 static void hkWifi(uint32_t now)
 {
     g_wifi.loop(now);
+    AllocWatch::report(now);   // the failed-alloc hook's line, here on a task (R1)
 #if FEATURE_IMPROV
     ImprovSerial::tick(now);   // right after: it calls WifiManager on this task
 #endif
@@ -1825,6 +1827,7 @@ static void logBootReason()
 
 void setup()
 {
+    AllocWatch::begin();   // counts only, from the first allocation on
 #if HEAP_SENTINEL
     HeapSentinel::begin();
 #endif

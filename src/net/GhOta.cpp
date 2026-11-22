@@ -15,6 +15,7 @@
 #include "NetJob.h"
 #include "../utils/PsHeap.h"
 #include "../utils/HeapSentinel.h"
+#include "NetBudget.h"
 #include "../Version.h"
 #include "../app/TaskPlan.h"
 #include "../utils/LogBus.h"
@@ -552,6 +553,11 @@ namespace GhOta
         const char* start(Job job)
         {
             const bool queued = NetJob::busy();
+            // The owner asked (the page's check or install; there is no
+            // periodic check): never held in silence. It runs now, or the
+            // page says why at once (NetBudget.h).
+            NetBudget::Sample b;
+            const bool fits = NetBudget::admit(&b);
             portENTER_CRITICAL(&s_mux);
             if (s_busy) {
                 const bool written = s_v.phase == Phase::Written;
@@ -561,6 +567,13 @@ namespace GhOta
             if (job == Job::Install && s_v.phase != Phase::Available) {
                 portEXIT_CRITICAL(&s_mux);
                 return "fw_no_newer";   // check first
+            }
+            if (!fits) {
+                portEXIT_CRITICAL(&s_mux);
+                LOGI("ota", "github: %s refused: heap free=%u big=%u need=%u (%s)",
+                     job == Job::Check ? "check" : "install", (unsigned)b.free, (unsigned)b.big,
+                     (unsigned)b.need, b.path == NetBudget::Path::App ? "app" : "wifi");
+                return "heap_low";
             }
             // The log push may be mid-upload (one part, seconds): the job
             // queues behind it on the worker and goes next.
