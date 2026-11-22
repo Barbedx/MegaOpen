@@ -16,6 +16,9 @@
 // in a RAM buffer, and the file is written only:
 //   * when the buffer holds FLUSH_BYTES (16 kB),
 //   * on an event: a line at warning level or above ("E [", "W [" from Log::),
+//     at most every WARN_FLUSH_MS (5 s): a burst of warnings is one write, and
+//     a warning inside the window goes out with the first line after it
+//     (docs/design/stabilisation-1-12.md S4, E4),
 //   * on an explicit dump: flushNow() before a reboot (main.cpp's shutdown
 //     handler), or through LogBus::flushAndWait (the web reading /log/0.log).
 // There is deliberately NO timer: a periodic flush is a periodic stall.
@@ -28,6 +31,7 @@ namespace LogFile
     static constexpr int      FILES       = 8;
     static constexpr size_t   FILE_MAX    = 256 * 1024;   // 8 x 256 kB = 2 MB
     static constexpr size_t   FLUSH_BYTES = 16 * 1024;
+    static constexpr uint32_t WARN_FLUSH_MS = 5000;
     // What the log may hold on flash at most (its files plus one buffer that
     // can push the newest past FILE_MAX). The capture recorder budgets the
     // rest of littlefs and never this (src/capture/CanRecorder.h).

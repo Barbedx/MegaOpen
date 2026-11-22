@@ -22,6 +22,10 @@ namespace LogFile
         size_t   g_bufCap = 0;
         size_t   g_bufLen = 0;
         volatile uint32_t g_rotations = 0;
+        // The warning trigger's window (sink's line stamps, LogBus task only).
+        bool     g_warnPending = false;
+        bool     g_warnFlushed = false;   // once: the first warning flushes at once
+        uint32_t g_warnAt = 0;
 
         void nameOf(int n, char* out, size_t cap) { snprintf(out, cap, "/log/%d.log", n); }
 
@@ -121,6 +125,7 @@ namespace LogFile
         if (!g_mounted || !g_cur) return;
         writeOut((const uint8_t*)g_buf, g_bufLen);
         g_bufLen = 0;
+        g_warnPending = false;   // whatever waited is on flash now
         g_cur.flush();
         if (g_curSize >= FILE_MAX) rotate();
     }
@@ -149,8 +154,11 @@ namespace LogFile
             }
         }
 
-        if (isWarning(line, len)) {
+        if (isWarning(line, len)) g_warnPending = true;
+        if (g_warnPending && (!g_warnFlushed || (uint32_t)(ms - g_warnAt) >= WARN_FLUSH_MS)) {
             flushNow();
+            g_warnFlushed = true;
+            g_warnAt = ms;
         } else if (!g_buf && g_curSize >= FILE_MAX) {
             g_cur.flush();
             rotate();
