@@ -5,6 +5,26 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-11-23
+
+Stabilisation after the car's 2026-11-22 drive (boots 282–292): panics on a USB replug, the app's USB link that never came up, heap dips, panel stalls from flash writes. Plan and evidence: `docs/design/stabilisation-1-12.md`.
+
+### Fixed
+- **Panic on a USB replug.** The USB event handler logged on the core's 2 kB `arduino_usb_events` stack and overflowed it (car boots 289/290). It now only counts; applink says it.
+- **The app over USB never got the board's HELLO answer.** A 128-byte reply ended on a full 64-byte packet with no short packet, and Android's read never completed. A frame of a multiple of 64 bytes now carries one filler byte (the APK, WebUSB page and `tools/usb_link.py` skip it).
+- **The USB link stopped taking data under load.** applink and TinyUSB's `usbd` task raced to arm the endpoints; applink re-arms them every pass (`Pipe::kick`).
+- **applink blocked for seconds.** Non-blocking loopback sockets and resumable writes: one pipe never stalls the other, control frames go first.
+- **Flash writes froze both cores ~21 ms every ~2 s.** CAN capture keeps its data in RAM and pushes it from there; warnings flush the flash log at most every 5 s.
+
+### Added
+- **CAN capture v2** (`MOCAP2`): ~4.9 B a record instead of 18, self-contained 64 kB / 60 s segments, a 2 MB RAM ring (`cap.ramMB`), pushed from RAM while online; flash only when standing (`cap.spill`: `standing` | `paced`), «зберегти» refused while moving (`e.moving`). `tools/can_dump.py` reads v1 and v2 (`pack` converts).
+- **Heap budget for network jobs** (`NetBudget`): background pushes wait (`[push] held`); a user's check/install runs or answers `e.heap_low`. Failed allocations counted (`allocFail` in `/api/status`, `[mem] alloc failed`).
+- **Diagnostics:** `[link]`/`[usbbus]` status lines; `W [link] HELLO_ACK not sent`; supervisor `W [sup] late task=`; `[stk]` with the core's tasks; `[win]` with `at=`/`ctx=`; `W [mem] low` / `W [stk] low`; `LOGQ` for foreign contexts (`logq drops` in `[hb]`); `tools/check_rules.py` rejects logging in event handlers and `tud_*_cb`.
+- `env:t2can_wdt`: the task watchdog path (off in the release builds).
+
+### Changed
+- `ble_svc` waits 200 ms with no peer; `net_svc` sleeps to its next deadline; the heap window is sampled by a timer.
+
 ## [1.11.0] - 2026-11-08
 
 The web installer, and WiFi from it (Improv).
