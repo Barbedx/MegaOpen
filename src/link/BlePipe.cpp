@@ -113,7 +113,7 @@ namespace BlePipe
         if (!s_rx) {
             uint8_t* store = (uint8_t*)PsHeap::malloc(RX_BUF + 1);
             if (!store) { LOGW("link", "ble: no memory for the RX buffer, no link over BLE"); return; }
-            s_rx = xStreamBufferCreateStatic(RX_BUF, 1, store, &s_rxStruct);
+            s_rx = xStreamBufferCreateStatic(RX_BUF + 1, 1, store, &s_rxStruct);
         }
         NimBLEService* svc = server->createService(SERVICE_UUID);
         NimBLECharacteristic* rx = svc->createCharacteristic(

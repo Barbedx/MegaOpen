@@ -510,7 +510,10 @@ namespace Link
             // The body's buffer in PSRAM: as much as the app may send unasked.
             uint8_t* store = (uint8_t*)PsHeap::malloc(NET_WINDOW + 1);
             if (!store) { why = "no_memory"; return false; }
-            _netSb = xStreamBufferCreateStatic(NET_WINDOW, 1, store, &_netSbStruct);
+            // The size is the store's: a static stream buffer holds one byte
+            // less than its size, and at NET_WINDOW a full window failed
+            // "window" (car boot 294: every release check, IncompleteInput).
+            _netSb = xStreamBufferCreateStatic(NET_WINDOW + 1, 1, store, &_netSbStruct);
         }
         {
             JsonDocument d;

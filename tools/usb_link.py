@@ -56,7 +56,7 @@ NET_HEAD, NET_DATA, NET_FAIL = 0x40, 0x41, 0x42
 HELLO_ACK, PONG, HTTP_RESP, HTTP_FAIL, EVENT = 0x81, 0x82, 0x90, 0x91, 0xA0
 NET_REQ, NET_BODY, NET_ACK, NET_CANCEL = 0xC0, 0xC1, 0xC2, 0xC3
 FIN = 1
-NET_WINDOW = 16384
+NET_WINDOW = 16383   # one less than the board's: boards up to 1.12.0 hold 16383
 NET_HOSTS = {"api.github.com", "github.com", "objects.githubusercontent.com",
              "release-assets.githubusercontent.com"}
 CRLF = bytes([13, 10])

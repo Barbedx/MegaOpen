@@ -13,6 +13,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
+- **The update check through the app failed («gh_json: IncompleteInput»).** The board's buffer for a reply fetched through the app held one byte less than the app was allowed to send ahead, so any reply over 16 kB (GitHub's release list since 1.11.0) was cut. The board holds the full window now; the app (and `tools/usb_link.py`) sends one byte less, so a board up to 1.12.0 can be updated through the new app.
 - **Panel menu: the cursor is the panel's highlight, the window slides.** The menu drew a `>` into the row and kept the cursor on the top row, the panel's highlight never moved. Now as MeganeCAN: two rows, the highlight (`29 01`) moves inside them, the text scrolls by a row only past an edge; no down arrow on the last row. A step inside the window sends only the highlight; the header lost its `2/6` counter so it does not redraw on every step. The highlight goes FIFO, so it can never overtake a newer screen.
 
 

@@ -28,8 +28,11 @@ object Frames {
     const val NET_ACK = 0xC2
     const val NET_CANCEL = 0xC3
 
-    /** Bytes the app may send ahead of the board's NET_ACK (UsbLink::NET_WINDOW). */
-    const val NET_WINDOW = 16384
+    /**
+     * Bytes the app may send ahead of the board's NET_ACK: one less than the board's
+     * NET_WINDOW (16384). Boards up to 1.12.0 hold 16383 and fail the transfer on the last byte.
+     */
+    const val NET_WINDOW = 16383
 
     /** CRC-16/CCITT-FALSE (poly 0x1021, init 0xFFFF), the board's crc16(). */
     fun crc16(d: ByteArray, from: Int, n: Int): Int {
