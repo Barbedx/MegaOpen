@@ -311,7 +311,7 @@ void setup()
         st.volToAms = []() { return App::KeyPath::volToAms(); };
 #endif
         st.keymap  = &App::KeyPath::keymapCfg();
-        st.macros  = &App::KeyPath::macroCfg();
+        st.gestures = &App::KeyPath::gestureCfg();
 #if FEATURE_DISPLAY_CAN
         st.affa    = &App::KeyPath::affaCfg();
 #endif

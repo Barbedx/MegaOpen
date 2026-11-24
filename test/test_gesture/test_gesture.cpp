@@ -18,7 +18,7 @@
 #include <unity.h>
 #include <string.h>
 
-#include "keys/MacroEngine.h"
+#include "keys/GestureEngine.h"
 
 using namespace Keys;
 
@@ -29,11 +29,11 @@ void tearDown() {}
 
 static Event    g_emitted[32];
 static uint8_t  g_emitN = 0;
-static Macro    g_fired[8];
+static Gesture    g_fired[8];
 static uint8_t  g_fireN = 0;
 
 static void onEmit(const Event& e, void*) { if (g_emitN < 32) g_emitted[g_emitN++] = e; }
-static void onFire(const Macro& m, void*) { if (g_fireN < 8)  g_fired[g_fireN++] = m; }
+static void onFire(const Gesture& m, void*) { if (g_fireN < 8)  g_fired[g_fireN++] = m; }
 
 // What actually reached the sinks, in order: the events the engine let through
 // plus the ones it emitted itself. This is the only thing the head unit sees, so
@@ -41,7 +41,7 @@ static void onFire(const Macro& m, void*) { if (g_fireN < 8)  g_fired[g_fireN++]
 static Event   g_out[64];
 static uint8_t g_outN = 0;
 
-static void feed(MacroEngine& m, Action a, State s, uint32_t t)
+static void feed(GestureEngine& m, Action a, State s, uint32_t t)
 {
     g_emitN = 0;
     Event e; e.action = a; e.state = s; e.tMs = t;
@@ -50,7 +50,7 @@ static void feed(MacroEngine& m, Action a, State s, uint32_t t)
     if (!consumed && g_outN < 64) g_out[g_outN++] = e;
 }
 
-static void reset(MacroEngine& m)
+static void reset(GestureEngine& m)
 {
     g_emitN = g_fireN = g_outN = 0;
     m.clear();
@@ -69,7 +69,7 @@ static void assertOut(uint8_t i, Action a, State s)
 
 static void test_an_empty_table_passes_everything_through()
 {
-    MacroEngine m; reset(m);
+    GestureEngine m; reset(m);
     feed(m, Action::VolUp, State::Press,   0);
     feed(m, Action::VolUp, State::Release, 40);
     TEST_ASSERT_EQUAL(2, g_outN);
@@ -78,7 +78,7 @@ static void test_an_empty_table_passes_everything_through()
 
 static void test_a_disabled_macro_is_not_a_macro()
 {
-    MacroEngine m; reset(m);
+    GestureEngine m; reset(m);
     m.at(0).enabled = false;
     m.at(0).trigger = Trigger::Combo;
     m.at(0).keys[0] = Action::VolUp; m.at(0).keys[1] = Action::VolDown;
@@ -93,9 +93,9 @@ static void test_a_disabled_macro_is_not_a_macro()
 
 // ---- combos ----------------------------------------------------------------
 
-static void armCombo(MacroEngine& m, bool swallow)
+static void armCombo(GestureEngine& m, bool swallow)
 {
-    Macro& a = m.at(0);
+    Gesture& a = m.at(0);
     a.enabled = true;
     a.trigger = Trigger::Combo;
     a.keys[0] = Action::VolUp; a.keys[1] = Action::VolDown; a.members = 2;
@@ -105,7 +105,7 @@ static void armCombo(MacroEngine& m, bool swallow)
 
 static void test_a_combo_fires_when_the_second_member_lands()
 {
-    MacroEngine m; reset(m); armCombo(m, true);
+    GestureEngine m; reset(m); armCombo(m, true);
 
     feed(m, Action::VolUp, State::Press, 0);
     TEST_ASSERT_EQUAL(0, m.fired());          // one key is not a combination
@@ -119,7 +119,7 @@ static void test_a_combo_fires_when_the_second_member_lands()
 // nothing may be left HELD when the macro fires.
 static void test_a_swallowed_combo_releases_the_member_it_already_sent()
 {
-    MacroEngine m; reset(m); armCombo(m, true);
+    GestureEngine m; reset(m); armCombo(m, true);
 
     feed(m, Action::VolUp,   State::Press, 0);
     feed(m, Action::VolDown, State::Press, 30);
@@ -133,7 +133,7 @@ static void test_a_swallowed_combo_releases_the_member_it_already_sent()
 
 static void test_the_real_releases_of_a_swallowed_combo_never_reach_a_sink()
 {
-    MacroEngine m; reset(m); armCombo(m, true);
+    GestureEngine m; reset(m); armCombo(m, true);
 
     feed(m, Action::VolUp,   State::Press,   0);
     feed(m, Action::VolDown, State::Press,   30);
@@ -147,7 +147,7 @@ static void test_the_real_releases_of_a_swallowed_combo_never_reach_a_sink()
 
 static void test_a_combo_re_arms_after_the_fingers_come_off()
 {
-    MacroEngine m; reset(m); armCombo(m, true);
+    GestureEngine m; reset(m); armCombo(m, true);
 
     for (uint32_t round = 0; round < 3; ++round) {
         const uint32_t t = round * 1000;
@@ -163,7 +163,7 @@ static void test_a_combo_re_arms_after_the_fingers_come_off()
 
 static void test_a_combo_does_not_re_fire_while_it_is_still_held()
 {
-    MacroEngine m; reset(m); armCombo(m, true);
+    GestureEngine m; reset(m); armCombo(m, true);
 
     feed(m, Action::VolUp,   State::Press, 0);
     feed(m, Action::VolDown, State::Press, 30);
@@ -174,7 +174,7 @@ static void test_a_combo_does_not_re_fire_while_it_is_still_held()
 
 static void test_a_combo_that_does_not_swallow_lets_both_keys_through()
 {
-    MacroEngine m; reset(m); armCombo(m, false);
+    GestureEngine m; reset(m); armCombo(m, false);
 
     feed(m, Action::VolUp,   State::Press,   0);
     feed(m, Action::VolDown, State::Press,   30);
@@ -187,7 +187,7 @@ static void test_a_combo_that_does_not_swallow_lets_both_keys_through()
 
 static void test_a_partial_combo_is_just_two_ordinary_keys()
 {
-    MacroEngine m; reset(m); armCombo(m, true);
+    GestureEngine m; reset(m); armCombo(m, true);
 
     feed(m, Action::VolUp,   State::Press,   0);
     feed(m, Action::VolUp,   State::Release, 100);
@@ -200,8 +200,8 @@ static void test_a_partial_combo_is_just_two_ordinary_keys()
 
 static void test_a_three_key_combo_needs_all_three()
 {
-    MacroEngine m; reset(m);
-    Macro& a = m.at(0);
+    GestureEngine m; reset(m);
+    Gesture& a = m.at(0);
     a.enabled = true; a.trigger = Trigger::Combo;
     a.keys[0] = Action::VolUp; a.keys[1] = Action::VolDown; a.keys[2] = Action::Mute;
     a.members = 3; a.effect = Effect::KeyCode; a.code = 0x08;
@@ -215,9 +215,9 @@ static void test_a_three_key_combo_needs_all_three()
 
 // ---- sequences -------------------------------------------------------------
 
-static void armSequence(MacroEngine& m, uint8_t taps, uint16_t window, bool swallow)
+static void armSequence(GestureEngine& m, uint8_t taps, uint16_t window, bool swallow)
 {
-    Macro& b = m.at(0);
+    Gesture& b = m.at(0);
     b.enabled  = true;
     b.trigger  = Trigger::Sequence;
     b.keys[0]  = Action::Mute;
@@ -225,12 +225,12 @@ static void armSequence(MacroEngine& m, uint8_t taps, uint16_t window, bool swal
     b.windowMs = window;
     b.swallow  = swallow;
     b.effect   = Effect::Popup;
-    strncpy(b.arg, "HI", Macro::ARG_LEN - 1);
+    strncpy(b.arg, "HI", Gesture::ARG_LEN - 1);
 }
 
 static void test_three_taps_inside_the_window_fire_and_mute_nothing()
 {
-    MacroEngine m; reset(m); armSequence(m, 3, 500, true);
+    GestureEngine m; reset(m); armSequence(m, 3, 500, true);
 
     for (uint32_t i = 0; i < 3; ++i) {
         feed(m, Action::Mute, State::Press,   i * 200);
@@ -247,7 +247,7 @@ static void test_three_taps_inside_the_window_fire_and_mute_nothing()
 // never fired.
 static void test_the_longest_valid_sequence_fires_and_mutes_nothing()
 {
-    MacroEngine m; reset(m); armSequence(m, 10, 500, true);
+    GestureEngine m; reset(m); armSequence(m, 10, 500, true);
     TEST_ASSERT_TRUE(m.at(0).valid());
 
     for (uint32_t i = 0; i < 10; ++i) {
@@ -261,7 +261,7 @@ static void test_the_longest_valid_sequence_fires_and_mutes_nothing()
 
 static void test_two_taps_and_a_lapse_give_both_taps_back_in_order()
 {
-    MacroEngine m; reset(m); armSequence(m, 3, 500, true);
+    GestureEngine m; reset(m); armSequence(m, 3, 500, true);
 
     feed(m, Action::Mute, State::Press,   0);
     feed(m, Action::Mute, State::Release, 50);
@@ -284,7 +284,7 @@ static void test_two_taps_and_a_lapse_give_both_taps_back_in_order()
 
 static void test_a_tap_too_late_starts_a_new_sequence_rather_than_extending_one()
 {
-    MacroEngine m; reset(m); armSequence(m, 2, 300, true);
+    GestureEngine m; reset(m); armSequence(m, 2, 300, true);
 
     feed(m, Action::Mute, State::Press,   0);
     feed(m, Action::Mute, State::Release, 40);
@@ -301,7 +301,7 @@ static void test_the_sequence_survives_with_no_tick_at_all()
     // A host with no clock, or a tick that was missed: the gap check on the
     // press itself has to notice the lapse too, or a sequence spread over a
     // minute would fire.
-    MacroEngine m; reset(m); armSequence(m, 2, 300, false);
+    GestureEngine m; reset(m); armSequence(m, 2, 300, false);
 
     feed(m, Action::Mute, State::Press, 0);
     feed(m, Action::Mute, State::Press, 60000);
@@ -312,7 +312,7 @@ static void test_the_sequence_survives_with_no_tick_at_all()
 
 static void test_a_hold_aborts_a_sequence_and_returns_the_taps()
 {
-    MacroEngine m; reset(m); armSequence(m, 3, 500, true);
+    GestureEngine m; reset(m); armSequence(m, 3, 500, true);
 
     feed(m, Action::Mute, State::Press,   0);
     feed(m, Action::Mute, State::Release, 50);
@@ -327,7 +327,7 @@ static void test_a_hold_aborts_a_sequence_and_returns_the_taps()
 
 static void test_a_different_key_breaks_a_sequence_and_frees_its_taps()
 {
-    MacroEngine m; reset(m); armSequence(m, 3, 5000, true);
+    GestureEngine m; reset(m); armSequence(m, 3, 5000, true);
 
     feed(m, Action::Mute,  State::Press,   0);
     feed(m, Action::Mute,  State::Release, 50);
@@ -342,7 +342,7 @@ static void test_a_different_key_breaks_a_sequence_and_frees_its_taps()
 
 static void test_a_sequence_that_does_not_swallow_taps_the_key_as_well()
 {
-    MacroEngine m; reset(m); armSequence(m, 3, 500, false);
+    GestureEngine m; reset(m); armSequence(m, 3, 500, false);
 
     for (uint32_t i = 0; i < 3; ++i) {
         feed(m, Action::Mute, State::Press,   i * 100);
@@ -354,7 +354,7 @@ static void test_a_sequence_that_does_not_swallow_taps_the_key_as_well()
 
 static void test_a_completed_sequence_swallows_the_final_release_too()
 {
-    MacroEngine m; reset(m); armSequence(m, 2, 500, true);
+    GestureEngine m; reset(m); armSequence(m, 2, 500, true);
 
     feed(m, Action::Mute, State::Press,   0);
     feed(m, Action::Mute, State::Release, 40);
@@ -381,8 +381,8 @@ static void test_a_completed_sequence_swallows_the_final_release_too()
 // because the release that clears a mute is never coming.
 static void test_a_wheel_sequence_never_leaves_the_wheel_muted()
 {
-    MacroEngine m; reset(m);
-    Macro& b = m.at(0);
+    GestureEngine m; reset(m);
+    Gesture& b = m.at(0);
     b.enabled = true; b.trigger = Trigger::Sequence;
     b.keys[0] = Action::EncCw; b.taps = 2; b.windowMs = 400; b.swallow = true;
     b.effect = Effect::KeyCode; b.code = 0x85;
@@ -406,8 +406,8 @@ static void test_a_wheel_sequence_never_leaves_the_wheel_muted()
 
 static void test_a_hold_macro_fires_on_long_and_releases_the_key()
 {
-    MacroEngine m; reset(m);
-    Macro& a = m.at(0);
+    GestureEngine m; reset(m);
+    Gesture& a = m.at(0);
     a.enabled = true; a.trigger = Trigger::Hold; a.keys[0] = Action::Load;
     a.effect = Effect::Raw; a.code = 0x21; a.swallow = true;
 
@@ -426,8 +426,8 @@ static void test_a_hold_macro_fires_on_long_and_releases_the_key()
 
 static void test_a_hold_macro_re_arms()
 {
-    MacroEngine m; reset(m);
-    Macro& a = m.at(0);
+    GestureEngine m; reset(m);
+    Gesture& a = m.at(0);
     a.enabled = true; a.trigger = Trigger::Hold; a.keys[0] = Action::Load;
     a.effect = Effect::Raw; a.code = 0x21; a.swallow = true;
 
@@ -443,7 +443,7 @@ static void test_a_hold_macro_re_arms()
 
 static void test_a_combo_needs_two_distinct_holdable_keys()
 {
-    Macro m;
+    Gesture m;
     m.trigger = Trigger::Combo; m.effect = Effect::KeyCode; m.code = 1;
     m.keys[0] = Action::VolUp; m.members = 1;
     TEST_ASSERT_FALSE(m.valid());                      // one key is not a combo
@@ -460,7 +460,7 @@ static void test_a_combo_needs_two_distinct_holdable_keys()
 
 static void test_an_effect_with_nothing_to_send_is_invalid()
 {
-    Macro m;
+    Gesture m;
     m.trigger = Trigger::Hold; m.keys[0] = Action::Mute;
 
     m.effect = Effect::None;    TEST_ASSERT_FALSE(m.valid());
@@ -471,13 +471,13 @@ static void test_an_effect_with_nothing_to_send_is_invalid()
     m.code = 0x21;              TEST_ASSERT_TRUE(m.valid());
 
     m.effect = Effect::Text;    TEST_ASSERT_FALSE(m.valid());   // no text
-    strncpy(m.arg, "HELLO", Macro::ARG_LEN - 1);
+    strncpy(m.arg, "HELLO", Gesture::ARG_LEN - 1);
     TEST_ASSERT_TRUE(m.valid());
 }
 
 static void test_a_sequence_needs_at_least_two_taps()
 {
-    Macro m;
+    Gesture m;
     m.trigger = Trigger::Sequence; m.keys[0] = Action::Mute;
     m.effect = Effect::KeyCode; m.code = 0x07;
     m.taps = 1;   TEST_ASSERT_FALSE(m.valid());
@@ -505,16 +505,16 @@ static void test_the_names_round_trip()
 
 // ---- one task, a staged table (Step 2) ---------------------------------------
 // The engine has no lock any more: the keys task is its only caller, and the
-// web edits a MacroTable that the keys task swaps in with setTable().
+// web edits a GestureTable that the keys task swaps in with setTable().
 
 static void test_a_new_table_keeps_each_rows_fire_count()
 {
-    MacroEngine m; reset(m); armCombo(m, true);
+    GestureEngine m; reset(m); armCombo(m, true);
     feed(m, Action::VolUp,   State::Press, 0);
     feed(m, Action::VolDown, State::Press, 30);
     TEST_ASSERT_EQUAL(1, m.at(0).fires);
 
-    MacroTable t;
+    GestureTable t;
     m.table(t);
     t.m[0].code = 0x08;                     // an edit from the page
     t.m[0].fires = 99;                      // whatever the page had: not configuration
@@ -525,10 +525,10 @@ static void test_a_new_table_keeps_each_rows_fire_count()
 
 static void test_a_new_table_drops_mutes_from_the_old_one()
 {
-    MacroEngine m; reset(m); armCombo(m, true);
+    GestureEngine m; reset(m); armCombo(m, true);
     feed(m, Action::VolUp,   State::Press, 0);
     feed(m, Action::VolDown, State::Press, 30);          // VOL- muted until released
-    MacroTable t;                                         // every row gone
+    GestureTable t;                                         // every row gone
     m.setTable(t);
     g_outN = 0;
     feed(m, Action::VolDown, State::Release, 80);
@@ -542,11 +542,11 @@ static void test_a_new_table_drops_mutes_from_the_old_one()
 
 static void test_held_taps_tell_the_keys_task_when_to_wake()
 {
-    MacroEngine m; reset(m);
-    Macro& s = m.at(0);
+    GestureEngine m; reset(m);
+    Gesture& s = m.at(0);
     s.enabled = true; s.trigger = Trigger::Sequence; s.keys[0] = Action::Mute;
     s.taps = 3; s.windowMs = 400; s.swallow = true; s.effect = Effect::Popup;
-    strncpy(s.arg, "X", Macro::ARG_LEN - 1);
+    strncpy(s.arg, "X", Gesture::ARG_LEN - 1);
     uint32_t due = 0;
     TEST_ASSERT_FALSE(m.nextDue(due));
     feed(m, Action::Mute, State::Press, 1000);

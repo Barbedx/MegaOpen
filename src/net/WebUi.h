@@ -147,7 +147,7 @@ static inline esp_err_t replyDoc(PsychicRequest* r, JsonVariantConst v)
 #include "../cfg/SettingsJson.h"
 #include "WifiManager.h"
 #include "../keys/KeyEngine.h"
-#include "../keys/MacroEngine.h"
+#include "../keys/GestureEngine.h"
 #include "../sinks/CanboxUartSink.h"
 #include "../sinks/UartTx.h"
 #if FEATURE_RESISTIVE_KEYS
@@ -319,7 +319,7 @@ public:
     struct Staging {
         Staged<App::KeysTask::Routing>*   routing = nullptr;   // the keys task
         Staged<App::KeysTask::KeyMapCfg>* keymap  = nullptr;   // the scan task, or keys
-        Staged<Keys::MacroTable>*         macros  = nullptr;   // the keys task
+        Staged<Keys::GestureTable>*         gestures = nullptr;   // the keys task
 #if FEATURE_DISPLAY_CAN
         Staged<Keys::AffaMap>*            affa    = nullptr;   // the keys task
 #endif

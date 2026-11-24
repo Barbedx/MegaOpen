@@ -7,7 +7,7 @@
 #include "../utils/Log.h"
 #include "../keys/KeyAction.h"
 #include "../keys/KeyDests.h"
-#include "../keys/MacroEngine.h"
+#include "../keys/GestureEngine.h"
 #include "../knobs/KnobConfig.h"
 #include "../cfg/SettingsRegistry.h"
 #include "../vehicle/Signals.h"

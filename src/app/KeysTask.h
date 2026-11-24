@@ -10,7 +10,7 @@ class UartTx;
 // Priority 7 on core 1, above everything that renders: a key never waits for
 // a panel repaint, a BLE write, a web request or a telemetry frame.
 //
-// It owns KeyEngine dispatch, MacroEngine, the panel key mapping, the UART key
+// It owns KeyEngine dispatch, GestureEngine, the panel key mapping, the UART key
 // sink and its release table, USB HID and the resistive ladder. Everyone else
 // posts to the KeyBus (src/app/KeyBus.h), and the web stages its edits
 // (Staged<T>, applied here with a try-take, never a wait).

@@ -193,8 +193,8 @@ void test_a_threshold_rule_fires_on_the_crossing()
     TEST_ASSERT_TRUE(r.holds(0));
 }
 
-// A gesture rule: MacroEngine detects it on the keys task; here it is only
-// armed by its "only if", and it becomes a Macro for the detector.
+// A gesture rule: GestureEngine detects it on the keys task; here it is only
+// armed by its "only if", and it becomes a Gesture for the detector.
 void test_a_gesture_rule_is_armed_by_its_formula_and_becomes_a_macro()
 {
     RuleSet set;
@@ -220,8 +220,8 @@ void test_a_gesture_rule_is_armed_by_its_formula_and_becomes_a_macro()
     pass(r, s, 2000);
     TEST_ASSERT_FALSE(r.armed(1));
     // The detector's table: two macros, standing for rows 1 and 2.
-    Keys::MacroTable t;
-    TEST_ASSERT_EQUAL_UINT8(2, Rules::gestures(set, t, Keys::MacroTable::COUNT));
+    Keys::GestureTable t;
+    TEST_ASSERT_EQUAL_UINT8(2, Rules::gestures(set, t, Keys::GestureTable::COUNT));
     TEST_ASSERT_EQUAL_UINT16(1, t.m[0].rule);
     TEST_ASSERT_EQUAL_UINT16(2, t.m[1].rule);
     TEST_ASSERT_EQUAL_UINT16(0xFFFF, t.m[2].rule);
@@ -229,7 +229,7 @@ void test_a_gesture_rule_is_armed_by_its_formula_and_becomes_a_macro()
     // of another save (the two tables are staged apart).
     TEST_ASSERT_EQUAL_UINT16(0, t.m[0].gen);
     set.gen = 7;
-    Rules::gestures(set, t, Keys::MacroTable::COUNT);
+    Rules::gestures(set, t, Keys::GestureTable::COUNT);
     TEST_ASSERT_EQUAL_UINT16(7, t.m[0].gen);
     TEST_ASSERT_EQUAL_UINT16(7, t.m[1].gen);
     // The keys task saw the combo: armed and the pause decide, and it counts.
@@ -319,13 +319,13 @@ void test_rules_round_trip_through_the_car_file()
 {
     RuleSet set;
     set.rows.push(signalRule("fast", "speed > 100 && !light_pos", 30));
-    strncpy(set.rows[0].act[0].arg, "FAST {speed}", Keys::Macro::ARG_LEN - 1);
+    strncpy(set.rows[0].act[0].arg, "FAST {speed}", Keys::Gesture::ARG_LEN - 1);
     set.rows[0].act[1].effect = Keys::Effect::Raw;
     set.rows[0].act[1].code = 0x28;
     set.rows[0].act[1].data[0] = 0x01; set.rows[0].act[1].data[1] = 0xA0;
     set.rows[0].act[1].dataLen = 2;
     set.rows[0].act[2].effect = Keys::Effect::Pane;
-    strncpy(set.rows[0].act[2].arg, "tryzub", Keys::Macro::ARG_LEN - 1);
+    strncpy(set.rows[0].act[2].arg, "tryzub", Keys::Gesture::ARG_LEN - 1);
     set.rows[0].nAct = 3;
     set.rows[0].on = false;
     RuleRow g = gestureRule("mute3", Keys::Trigger::Sequence, Keys::Action::Mute);

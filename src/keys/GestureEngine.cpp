@@ -1,4 +1,4 @@
-#include "MacroEngine.h"
+#include "GestureEngine.h"
 #include <string.h>
 
 namespace Keys
@@ -10,7 +10,7 @@ namespace Keys
     static inline uint32_t bitOf(Action a) { return 1u << (uint8_t)a; }
 
     // Row i is the enum value i. `taps`: the trigger counts presses; `field`:
-    // the one Macro member the effect reads ("" none) — the page shows only that.
+    // the one Gesture member the effect reads ("" none) — the page shows only that.
     const TriggerRow TRIGGERS[] = {
         {"off",      nullptr,      false},
         {"combo",    nullptr,     false},
@@ -72,7 +72,7 @@ namespace Keys
 
     // Whether a row can ever fire; an invalid macro never matches. Shown per row
     // in the UI.
-    bool Macro::valid() const
+    bool Gesture::valid() const
     {
         if (effect == Effect::None) return false;
         switch (effect) {
@@ -102,22 +102,22 @@ namespace Keys
         }
     }
 
-    void MacroEngine::clear()
+    void GestureEngine::clear()
     {
-        for (uint8_t i = 0; i < MAX_MACROS; ++i) { _m[i] = Macro{}; _r[i] = Run{}; }
+        for (uint8_t i = 0; i < MAX_GESTURES; ++i) { _m[i] = Gesture{}; _r[i] = Run{}; }
         reset();
     }
 
-    void MacroEngine::reset()
+    void GestureEngine::reset()
     {
         _pendN = 0; _pendMacro = -1; _pendDeadline = 0;
         _down = 0; _muted = 0;
-        for (uint8_t i = 0; i < MAX_MACROS; ++i) { _r[i].taps = 0; _r[i].engaged = false; }
+        for (uint8_t i = 0; i < MAX_GESTURES; ++i) { _r[i].taps = 0; _r[i].engaged = false; }
     }
 
-    void MacroEngine::setTable(const MacroTable& t)
+    void GestureEngine::setTable(const GestureTable& t)
     {
-        for (uint8_t i = 0; i < MAX_MACROS; ++i) {
+        for (uint8_t i = 0; i < MAX_GESTURES; ++i) {
             const uint32_t fires = _m[i].fires;
             const uint32_t last  = _m[i].lastMs;
             _m[i] = t.m[i];
@@ -129,21 +129,21 @@ namespace Keys
         reset();
     }
 
-    void MacroEngine::table(MacroTable& out) const
+    void GestureEngine::table(GestureTable& out) const
     {
-        for (uint8_t i = 0; i < MAX_MACROS; ++i) out.m[i] = _m[i];
+        for (uint8_t i = 0; i < MAX_GESTURES; ++i) out.m[i] = _m[i];
     }
 
-    int8_t MacroEngine::sequenceFor(Action a) const
+    int8_t GestureEngine::sequenceFor(Action a) const
     {
-        for (uint8_t i = 0; i < MAX_MACROS; ++i)
+        for (uint8_t i = 0; i < MAX_GESTURES; ++i)
             if (_m[i].enabled && _m[i].trigger == Trigger::Sequence &&
                 _m[i].keys[0] == a && _m[i].taps >= 2)
                 return (int8_t)i;
         return -1;
     }
 
-    void MacroEngine::push(const Event& e)
+    void GestureEngine::push(const Event& e)
     {
         if (_pendN < PEND_MAX) { _pend[_pendN++] = e; ++_swallowed; return; }
         // Buffer full: replay everything rather than drop a press.
@@ -152,7 +152,7 @@ namespace Keys
         ++_replayed;
     }
 
-    void MacroEngine::flush()
+    void GestureEngine::flush()
     {
         for (uint8_t i = 0; i < _pendN; ++i) {
             if (_emit) _emit(_pend[i], _emitCtx);
@@ -163,21 +163,21 @@ namespace Keys
         _pendMacro = -1;
     }
 
-    void MacroEngine::fire(uint8_t i, const Event& e)
+    void GestureEngine::fire(uint8_t i, const Event& e)
     {
-        Macro& m = _m[i];
+        Gesture& m = _m[i];
         ++m.fires;
         m.lastMs = e.tMs;
         ++_fired;
         if (_fire) _fire(m, _fireCtx);
     }
 
-    bool MacroEngine::matchCombo(const Event& e)
+    bool GestureEngine::matchCombo(const Event& e)
     {
         if (e.state != State::Press) return false;
 
-        for (uint8_t i = 0; i < MAX_MACROS; ++i) {
-            const Macro& m = _m[i];
+        for (uint8_t i = 0; i < MAX_GESTURES; ++i) {
+            const Gesture& m = _m[i];
             if (!m.enabled || m.trigger != Trigger::Combo || !m.valid()) continue;
             if (_r[i].engaged) continue;
 
@@ -216,12 +216,12 @@ namespace Keys
         return false;
     }
 
-    bool MacroEngine::matchHold(const Event& e)
+    bool GestureEngine::matchHold(const Event& e)
     {
         if (e.state != State::Long) return false;
 
-        for (uint8_t i = 0; i < MAX_MACROS; ++i) {
-            const Macro& m = _m[i];
+        for (uint8_t i = 0; i < MAX_GESTURES; ++i) {
+            const Gesture& m = _m[i];
             if (!m.enabled || m.trigger != Trigger::Hold || !m.valid()) continue;
             if (m.keys[0] != e.action || _r[i].engaged) continue;
 
@@ -242,11 +242,11 @@ namespace Keys
         return false;
     }
 
-    bool MacroEngine::matchSequence(const Event& e)
+    bool GestureEngine::matchSequence(const Event& e)
     {
         const int8_t idx = sequenceFor(e.action);
         if (idx < 0) return false;
-        const Macro& m = _m[idx];
+        const Gesture& m = _m[idx];
 
         // Long/Repeat are not taps: replay what was collected, in order.
         if (e.state == State::Long || e.state == State::Repeat) {
@@ -298,7 +298,7 @@ namespace Keys
         return false;
     }
 
-    bool MacroEngine::observe(const Event& e)
+    bool GestureEngine::observe(const Event& e)
     {
         if (e.action == Action::None || isEncoderPhase(e.action)) return false;
 
@@ -313,8 +313,8 @@ namespace Keys
         // Re-arm before the mute check: a swallowed member's Release is consumed
         // below and would never reach matchCombo.
         if (e.state == State::Release) {
-            for (uint8_t i = 0; i < MAX_MACROS; ++i) {
-                const Macro& m = _m[i];
+            for (uint8_t i = 0; i < MAX_GESTURES; ++i) {
+                const Gesture& m = _m[i];
                 if (m.trigger == Trigger::Combo) {
                     for (uint8_t j = 0; j < m.members; ++j)
                         if (m.keys[j] == e.action) { _r[i].engaged = false; break; }
@@ -341,7 +341,7 @@ namespace Keys
         return consumed;
     }
 
-    void MacroEngine::tick(uint32_t nowMs)
+    void GestureEngine::tick(uint32_t nowMs)
     {
         if (_pendN && (int32_t)(nowMs - _pendDeadline) >= 0) flush();
     }

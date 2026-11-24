@@ -150,7 +150,7 @@ namespace Keys
             void (*panelKey)(uint16_t code, bool hold, uint32_t tMs, void* ctx) = nullptr;
             // The UART sink's sendKey, with an optional release.
             void (*literal)(uint8_t code, uint8_t state, bool release, void* ctx) = nullptr;
-            // MacroEngine::run.
+            // GestureEngine::run.
             void* ctx = nullptr;
         };
         void begin(const Hooks& h) { _h = h; }

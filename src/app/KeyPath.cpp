@@ -58,7 +58,7 @@ namespace App
             //   matrix map and timing       -> the scan task (the keys task without a matrix)
             static Staged<App::KeysTask::Routing>   g_routingCfg;
             static Staged<App::KeysTask::KeyMapCfg> g_keymapCfg;
-            static Staged<Keys::MacroTable>         g_macroCfg;
+            static Staged<Keys::GestureTable>         g_gestureCfg;
 #if FEATURE_RESISTIVE_KEYS
             // Asked of the keys task: release every ladder rung (a class mask changed, or
             // the page stopped a learn hold).
@@ -329,30 +329,30 @@ namespace App
             }
 
             // ---- macros -----------------------------------------------------------------
-            // Matching lives in src/keys/MacroEngine.* (host tested); here is the executor.
+            // Matching lives in src/keys/GestureEngine.* (host tested); here is the executor.
             // All of it runs on the keys task, the engine's only caller, so there is no
             // lock: an effect on state another task owns is posted to that task.
-            static Keys::MacroEngine  g_macros;
+            static Keys::GestureEngine  g_gestures;
 
             // Held taps and synthetic releases. dispatchRaw, not dispatch: the filter must
             // not see its own output.
-            static void macroEmit(const Keys::Event& e, void*) { g_engine.dispatchRaw(e); }
+            static void onGestureEmit(const Keys::Event& e, void*) { g_engine.dispatchRaw(e); }
 
             // The panel menu first (App::PanelMenu): a key the menu takes is no macro's.
-            static bool macroFilter(const Keys::Event& e, void*)
+            static bool gestureFilter(const Keys::Event& e, void*)
             {
 #if FEATURE_DISPLAY_CAN
                 if (App::PanelMenu::filter(e)) return true;
 #endif
-                return g_macros.observe(e);
+                return g_gestures.observe(e);
             }
 
 
 
-            // A gesture MacroEngine detected on the keys task: the car task checks the
-            // rule's "only if" and pause and performs its actions. Keys::Macro::rule is
+            // A gesture GestureEngine detected on the keys task: the car task checks the
+            // rule's "only if" and pause and performs its actions. Keys::Gesture::rule is
             // the row the macro stands for (Vehicle::Rules::gestures).
-            static void macroFire(const Keys::Macro& m, void*)
+            static void onGestureFire(const Keys::Gesture& m, void*)
             {
                 if (m.rule != 0xFFFF) App::Car::fireRule(m.rule, m.gen);
             }
@@ -459,7 +459,7 @@ namespace App
 #if FEATURE_BLE
                 keysVolumeFallback();
 #endif
-                if (g_macroCfg.applyIfDirty())   g_macros.setTable(g_macroCfg.live());
+                if (g_gestureCfg.applyIfDirty())   g_gestures.setTable(g_gestureCfg.live());
 #if FEATURE_DISPLAY_CAN
                 if (g_affaCfg.applyIfDirty())    g_affaMap = g_affaCfg.live();
 #endif
@@ -500,7 +500,7 @@ namespace App
 #if FEATURE_RESISTIVE_KEYS
                 g_resSink.tick(now);           // every ladder deadline
 #endif
-                g_macros.tick(now);            // sequence windows; held taps replay here
+                g_gestures.tick(now);            // sequence windows; held taps replay here
             }
 
             static bool keysNextDue(uint32_t now, uint32_t& due)
@@ -512,7 +512,7 @@ namespace App
                 };
                 uint32_t d;
                 if (g_keySink.nextDue(d)) earliest(d);
-                if (g_macros.nextDue(d))  earliest(d);
+                if (g_gestures.nextDue(d))  earliest(d);
 #if FEATURE_USB_HID
                 if (g_usbKeys.nextDue(d)) earliest(d);
 #endif
@@ -644,17 +644,17 @@ namespace App
             // one. Its table is the gesture rules of the car file (Rules::gestures);
             // httpd rebuilds it on POST /api/rules.
             {
-                Keys::MacroTable t;
+                Keys::GestureTable t;
                 Vehicle::RuleSet rs;
                 CarStore::loadRules(rs);
-                const uint8_t n = Vehicle::Rules::gestures(rs, t, Keys::MacroTable::COUNT);
-                g_macros.setTable(t);
-                g_macroCfg.init(t);
+                const uint8_t n = Vehicle::Rules::gestures(rs, t, Keys::GestureTable::COUNT);
+                g_gestures.setTable(t);
+                g_gestureCfg.init(t);
                 LOGI("rule", "%u gesture rule(s) on the keys task", (unsigned)n);
             }
-            g_macros.onFire(macroFire, nullptr);
-            g_macros.onEmit(macroEmit, nullptr);
-            g_engine.onFilter(macroFilter, nullptr);
+            g_gestures.onFire(onGestureFire, nullptr);
+            g_gestures.onEmit(onGestureEmit, nullptr);
+            g_engine.onFilter(gestureFilter, nullptr);
         }
 
 #if FEATURE_DISPLAY_CAN
@@ -695,7 +695,7 @@ namespace App
         const uint32_t*         engineEvents() { return &g_engineEvents; }
         Staged<KeysTask::Routing>&   routingCfg() { return g_routingCfg; }
         Staged<KeysTask::KeyMapCfg>& keymapCfg()  { return g_keymapCfg; }
-        Staged<Keys::MacroTable>&    macroCfg()   { return g_macroCfg; }
+        Staged<Keys::GestureTable>&    gestureCfg()   { return g_gestureCfg; }
 #if FEATURE_RESISTIVE_KEYS
         Sinks::ResistiveKeySink&     resSink()      { return g_resSink; }
         Staged<Sinks::ResistiveMap>& resMapCfg()    { return g_resMapCfg; }

@@ -136,7 +136,7 @@ namespace App
         // tick). One popup is pending at a time, newest wins: it waits for the
         // glass and is dropped if its rule no longer holds by then.
         Staged<Vehicle::RuleSet>& ruleSet();
-        // A gesture rule MacroEngine detected on the keys task: the car task
+        // A gesture rule GestureEngine detected on the keys task: the car task
         // checks its "only if" and pause and performs its actions. Any task.
         void fireRule(uint16_t row, uint16_t gen);
         // The page's «Спробувати»: the row's actions now, no trigger, no pause.

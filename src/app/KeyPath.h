@@ -4,7 +4,7 @@
 #include "../cfg/Config.h"
 #include "../keys/KeyEngine.h"
 #include "../keys/KeyMap.h"
-#include "../keys/MacroEngine.h"
+#include "../keys/GestureEngine.h"
 #include "../sinks/CanboxUartSink.h"
 #include "../utils/Staged.h"
 #include "../utils/Snapshot.h"
@@ -65,7 +65,7 @@ namespace App
         const uint32_t*         engineEvents();
         Staged<KeysTask::Routing>&   routingCfg();
         Staged<KeysTask::KeyMapCfg>& keymapCfg();
-        Staged<Keys::MacroTable>&    macroCfg();
+        Staged<Keys::GestureTable>&    gestureCfg();
 #if FEATURE_RESISTIVE_KEYS
         Sinks::ResistiveKeySink&           resSink();
         Staged<Sinks::ResistiveMap>&       resMapCfg();

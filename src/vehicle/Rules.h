@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include "Expr.h"
 #include "VehicleState.h"
-#include "../keys/MacroEngine.h"
+#include "../keys/GestureEngine.h"
 #include "../utils/PsArray.h"
 
 // Rules (docs/design/rules.md, slice 4): one event mechanism for what the panel
@@ -16,7 +16,7 @@
 //     goes false. There is no "set a signal" action and no ELSE: a state a
 //     rule would keep is a formula (a user signal), and "when it clears" is a
 //     second rule on !(...) or falls(...).
-//   * a GESTURE rule's trigger is a key gesture MacroEngine detects on the keys
+//   * a GESTURE rule's trigger is a key gesture GestureEngine detects on the keys
 //     task (a combo, N taps, a hold); its formula, when there is one, is
 //     "only if": the gesture fires only while it holds. The keys task posts
 //     the row to the car task (App::Car::fireRule), which checks and performs.
@@ -39,22 +39,22 @@ namespace Vehicle
         Keys::Effect effect = Keys::Effect::None;
         Keys::Action action = Keys::Action::None;             // Action
         uint8_t      code = 0;                                 // Action's code override, KeyCode, Raw's command, Message's index
-        uint8_t      data[Keys::Macro::MAX_DATA] = {};         // Raw's payload
+        uint8_t      data[Keys::Gesture::MAX_DATA] = {};         // Raw's payload
         uint8_t      dataLen = 0;
-        char         arg[Keys::Macro::ARG_LEN] = {0};          // Text ('|' between rows), Popup ({signal} placeholders), Pane (the scene)
-        // The effect has what it needs (Macro::valid's effect half).
+        char         arg[Keys::Gesture::ARG_LEN] = {0};          // Text ('|' between rows), Popup ({signal} placeholders), Pane (the scene)
+        // The effect has what it needs (Gesture::valid's effect half).
         bool valid() const;
     };
 
     // The gesture half of a macro. Trigger Off: the rule is a signal rule.
     struct RuleGesture {
         Keys::Trigger trigger = Keys::Trigger::Off;
-        Keys::Action  keys[Keys::Macro::MAX_MEMBERS] = {Keys::Action::None, Keys::Action::None, Keys::Action::None};
+        Keys::Action  keys[Keys::Gesture::MAX_MEMBERS] = {Keys::Action::None, Keys::Action::None, Keys::Action::None};
         uint8_t       members = 0;        // Combo: how many of keys[]
         uint8_t       taps = 3;           // Sequence
         uint16_t      windowMs = 600;     // Sequence: between taps
         bool          swallow = true;     // keep the presses from the sinks
-        bool valid() const;               // Macro::valid's trigger half
+        bool valid() const;               // Gesture::valid's trigger half
     };
 
     struct RuleRow {
@@ -106,7 +106,7 @@ namespace Vehicle
         // Every row sound: a name, a formula that compiles (a signal rule must
         // have one), a pause of PAUSE_MIN_S or more for a signal rule, at
         // least one action and each with what it needs, a gesture that
-        // Macro::valid would take. False with the first problem.
+        // Gesture::valid would take. False with the first problem.
         static bool check(const RuleSet& set, RuleProblem& p);
 
         // The car task: compiles every row and starts their state afresh. Rows
@@ -154,12 +154,12 @@ namespace Vehicle
         // State holds it; 0 when there is none.
         static int32_t popupValue(const RuleRow& r, const Expr::SigSet& inputs, const State& st);
 
-        // The gesture rows of a set as the keys task's MacroTable: macro i
-        // stands for rule `rule` (Keys::Macro::rule), its effect the rule's
-        // first action (Macro::valid wants one; the car task performs them
-        // all). How many, at most `cap` (MacroTable::COUNT); the rest of
+        // The gesture rows of a set as the keys task's GestureTable: macro i
+        // stands for rule `rule` (Keys::Gesture::rule), its effect the rule's
+        // first action (Gesture::valid wants one; the car task performs them
+        // all). How many, at most `cap` (GestureTable::COUNT); the rest of
         // `out` is cleared.
-        static uint8_t gestures(const RuleSet& set, Keys::MacroTable& out, uint8_t cap);
+        static uint8_t gestures(const RuleSet& set, Keys::GestureTable& out, uint8_t cap);
 
 
     private:

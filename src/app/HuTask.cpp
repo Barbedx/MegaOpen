@@ -58,7 +58,7 @@ namespace App
             uint8_t            s_sendNowStore[SEND_NOW_DEPTH];
             QueueHandle_t      s_out = nullptr;
             QueueHandle_t      s_rrQ = nullptr;
-            // Macro Message effects: a queue, not a latest-wins slot, so two
+            // Gesture Message effects: a queue, not a latest-wins slot, so two
             // macros fired close together both send.
             QueueHandle_t      s_sendNowQ = nullptr;
             std::atomic<uint32_t> s_sendNowDrops{0};

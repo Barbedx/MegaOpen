@@ -152,9 +152,9 @@ namespace CarFile
                 case Keys::Effect::Raw: {
                     snprintf(hex, sizeof(hex), "%02X", a.code);
                     o["codeHex"] = hex;
-                    char data[Keys::Macro::MAX_DATA * 3];
+                    char data[Keys::Gesture::MAX_DATA * 3];
                     int n = 0;
-                    for (uint8_t j = 0; j < a.dataLen && j < Keys::Macro::MAX_DATA; ++j)
+                    for (uint8_t j = 0; j < a.dataLen && j < Keys::Gesture::MAX_DATA; ++j)
                         n += snprintf(data + n, sizeof(data) - n, "%s%02X", j ? " " : "", a.data[j]);
                     data[n] = 0;
                     o["data"] = data;    // copied by the document
@@ -199,13 +199,13 @@ namespace CarFile
             }
             const char* data = o["data"] | "";
             if (data[0]) {
-                const int n = hexBytes(data, a.data, Keys::Macro::MAX_DATA);
+                const int n = hexBytes(data, a.data, Keys::Gesture::MAX_DATA);
                 if (n < 0) return "do.data: macro_hex 8";
                 a.dataLen = (uint8_t)n;
             }
             const char* arg = o["arg"] | "";
-            if (strlen(arg) >= Keys::Macro::ARG_LEN) return "do.arg: too_long";
-            strncpy(a.arg, arg, Keys::Macro::ARG_LEN - 1);
+            if (strlen(arg) >= Keys::Gesture::ARG_LEN) return "do.arg: too_long";
+            strncpy(a.arg, arg, Keys::Gesture::ARG_LEN - 1);
             return nullptr;
         }
     }
@@ -219,7 +219,7 @@ namespace CarFile
             g["trigger"] = Keys::triggerName(r.gesture.trigger);
             JsonArray k = g["keys"].to<JsonArray>();
             const uint8_t n = r.gesture.trigger == Keys::Trigger::Combo ? r.gesture.members : 1;
-            for (uint8_t j = 0; j < n && j < Keys::Macro::MAX_MEMBERS; ++j) k.add(Keys::name(r.gesture.keys[j]));
+            for (uint8_t j = 0; j < n && j < Keys::Gesture::MAX_MEMBERS; ++j) k.add(Keys::name(r.gesture.keys[j]));
             if (r.gesture.trigger == Keys::Trigger::Sequence) {
                 g["taps"]     = r.gesture.taps;
                 g["windowMs"] = r.gesture.windowMs;
@@ -251,7 +251,7 @@ namespace CarFile
             if (r.gesture.trigger == Keys::Trigger::Off) return "gesture.trigger: param";
             r.gesture.members = 0;
             for (JsonVariantConst v : g["keys"].as<JsonArrayConst>()) {
-                if (r.gesture.members >= Keys::Macro::MAX_MEMBERS) break;
+                if (r.gesture.members >= Keys::Gesture::MAX_MEMBERS) break;
                 const Keys::Action a = Keys::fromName(v | "None");
                 if (a != Keys::Action::None) r.gesture.keys[r.gesture.members++] = a;
             }

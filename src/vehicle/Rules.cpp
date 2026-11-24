@@ -121,7 +121,7 @@ namespace Vehicle
     {
         switch (trigger) {
             case Keys::Trigger::Combo: {
-                if (members < 2 || members > Keys::Macro::MAX_MEMBERS) return false;
+                if (members < 2 || members > Keys::Gesture::MAX_MEMBERS) return false;
                 for (uint8_t i = 0; i < members; ++i) {
                     if (keys[i] == Keys::Action::None || !canHold(keys[i])) return false;
                     for (uint8_t j = 0; j < i; ++j) if (keys[j] == keys[i]) return false;
@@ -335,18 +335,18 @@ namespace Vehicle
         return s < SIG_COUNT && st.has(s) ? st.get(s) : 0;
     }
 
-    uint8_t Rules::gestures(const RuleSet& set, Keys::MacroTable& out, uint8_t cap)
+    uint8_t Rules::gestures(const RuleSet& set, Keys::GestureTable& out, uint8_t cap)
     {
         out.clear();
         uint8_t n = 0;
-        for (uint16_t i = 0; i < set.rows.size() && n < cap && n < Keys::MacroTable::COUNT; ++i) {
+        for (uint16_t i = 0; i < set.rows.size() && n < cap && n < Keys::GestureTable::COUNT; ++i) {
             const RuleRow& r = set.rows[i];
             if (!r.isGesture()) continue;
-            Keys::Macro& m = out.m[n];
+            Keys::Gesture& m = out.m[n];
             m.enabled  = r.on && r.gesture.valid() && r.nAct;
             m.gen      = set.gen;
             m.trigger  = r.gesture.trigger;
-            for (uint8_t k = 0; k < Keys::Macro::MAX_MEMBERS; ++k) m.keys[k] = r.gesture.keys[k];
+            for (uint8_t k = 0; k < Keys::Gesture::MAX_MEMBERS; ++k) m.keys[k] = r.gesture.keys[k];
             m.members  = r.gesture.members;
             m.taps     = r.gesture.taps;
             m.windowMs = r.gesture.windowMs;

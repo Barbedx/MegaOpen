@@ -17,7 +17,7 @@
 //                             the factory's back. Checked first (400 "<row
 //                             name>: <code> [byte]"), then staged for the car
 //                             task, the gesture rows re-tabled for the keys task
-//                             (MacroEngine), and saved in the car file.
+//                             (GestureEngine), and saved in the car file.
 //   POST /api/rules/test?id=N the row's actions now: no trigger, no pause (202).
 void WebUi::routesRules()
 {
@@ -103,7 +103,7 @@ void WebUi::routesRules()
 }
 
 // A checked set into the car task first, then the gesture rows into the keys
-// task's table (MacroEngine, Keys::Macro::rule pointing back at the row), then
+// task's table (GestureEngine, Keys::Gesture::rule pointing back at the row), then
 // the car file. nullptr, "busy" (the car task holds its set), "file_failed"
 // (applied, not saved). POST /api/rules and the settings file import.
 const char* WebUi::applyRules(const Vehicle::RuleSet& set, bool factory, uint8_t& gestures)
@@ -114,10 +114,10 @@ const char* WebUi::applyRules(const Vehicle::RuleSet& set, bool factory, uint8_t
     if (!++s_gen) s_gen = 1;
     const uint16_t gen = s_gen;
     if (!App::Car::ruleSet().edit([&](Vehicle::RuleSet& s) { s = set; s.gen = gen; })) return "busy";
-    if (_st.macros) {
-        const bool ok = _st.macros->edit([&](Keys::MacroTable& t) {
-            gestures = Vehicle::Rules::gestures(set, t, Keys::MacroTable::COUNT);
-            for (uint8_t i = 0; i < Keys::MacroTable::COUNT; ++i) t.m[i].gen = gen;
+    if (_st.gestures) {
+        const bool ok = _st.gestures->edit([&](Keys::GestureTable& t) {
+            gestures = Vehicle::Rules::gestures(set, t, Keys::GestureTable::COUNT);
+            for (uint8_t i = 0; i < Keys::GestureTable::COUNT; ++i) t.m[i].gen = gen;
         });
         if (ok) App::KeyBus::kick();
         else    LOGW("rule", "the gesture table is busy: the keys task keeps the old gestures until the next save");

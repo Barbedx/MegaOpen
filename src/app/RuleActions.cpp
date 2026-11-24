@@ -2,7 +2,7 @@
 #include "../Features.h"
 #include "KeyBus.h"
 #include "HuTask.h"
-#include "../keys/MacroEngine.h"
+#include "../keys/GestureEngine.h"
 #include "../proto/canbox/Protocol.h"
 #include "../utils/Log.h"
 #if FEATURE_DISPLAY_CAN
@@ -19,7 +19,7 @@ namespace App
         {
 #if FEATURE_DISPLAY_CAN
             // `arg` carries up to three panel rows separated by '|'.
-            static void macroRows(const char* arg, char* a, char* b, char* c, size_t cap)
+            static void gestureRows(const char* arg, char* a, char* b, char* c, size_t cap)
             {
                 a[0] = b[0] = c[0] = '\0';
                 char* out[3] = { a, b, c };
@@ -75,7 +75,7 @@ namespace App
                         static char l1[MegaOpen::PanelOps::STR_MAX];
                         static char l2[MegaOpen::PanelOps::STR_MAX];
                         static char l3[MegaOpen::PanelOps::STR_MAX];
-                        macroRows(a.arg, l1, l2, l3, sizeof(l1));
+                        gestureRows(a.arg, l1, l2, l3, sizeof(l1));
                         if (l2[0] || l3[0]) App::Panel::ops().postFullscreen(l1, l2, l3);
                         else                App::Panel::ops().postText(l1);
                     }

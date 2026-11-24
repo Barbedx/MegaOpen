@@ -233,7 +233,7 @@ def glue_function(name):
 
 
 KEYS_TASK_FUNCS = [
-    'onAffaKeyReport', 'formatKeyLine', 'onKeyEvent', 'macroEmit', 'macroFilter', 'macroFire',
+    'onAffaKeyReport', 'formatKeyLine', 'onKeyEvent', 'onGestureEmit', 'gestureFilter', 'onGestureFire',
     'keysApplyRouting', 'keysApply', 'keysDeadlines', 'keysNextDue', 'writeKeyFrame',
 ]
 HU_TASK_FUNCS = [

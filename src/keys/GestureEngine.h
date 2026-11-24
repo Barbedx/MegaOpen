@@ -12,7 +12,7 @@
 //
 // One task only (docs/design/event-tasks.md, Step 2): the keys task runs
 // observe(), tick() and run(), so there is no lock. The web edits a staged
-// MacroTable and the keys task applies it with setTable().
+// GestureTable and the keys task applies it with setTable().
 namespace Keys
 {
     enum class Trigger : uint8_t {
@@ -59,7 +59,7 @@ namespace Keys
     };
     EffectRoute effectRoute(Effect e);
 
-    struct Macro {
+    struct Gesture {
         static constexpr uint8_t MAX_MEMBERS = 3;
         static constexpr uint8_t MAX_DATA    = 8;
         static constexpr uint8_t ARG_LEN     = 40;
@@ -104,22 +104,22 @@ namespace Keys
     };
 
     // The configuration, as the web edits it and the keys task applies it.
-    struct MacroTable {
+    struct GestureTable {
         static constexpr uint8_t COUNT = 8;
-        Macro m[COUNT];
+        Gesture m[COUNT];
 
-        void clear() { for (uint8_t i = 0; i < COUNT; ++i) m[i] = Macro{}; }
+        void clear() { for (uint8_t i = 0; i < COUNT; ++i) m[i] = Gesture{}; }
     };
 
-    class MacroEngine {
+    class GestureEngine {
     public:
-        static constexpr uint8_t  MAX_MACROS = MacroTable::COUNT;
+        static constexpr uint8_t  MAX_GESTURES = GestureTable::COUNT;
         // Two events per tap (press + release) for the longest sequence
-        // Macro::valid() accepts (10 taps), with a tap to spare. At 12 an 8- to
+        // Gesture::valid() accepts (10 taps), with a tap to spare. At 12 an 8- to
         // 10-tap macro overflowed on tap 7, replayed its taps and never fired.
         static constexpr uint8_t  PEND_MAX   = 2 * 10 + 2;
 
-        using FireFn = void (*)(const Macro& m, void* ctx);
+        using FireFn = void (*)(const Gesture& m, void* ctx);
         // Re-dispatch with the filter bypassed (replayed taps, synthetic
         // releases). Must not re-enter observe(), or a replayed tap restarts
         // its sequence.
@@ -128,17 +128,17 @@ namespace Keys
         void onFire(FireFn f, void* ctx) { _fire = f; _fireCtx = ctx; }
         void onEmit(EmitFn f, void* ctx) { _emit = f; _emitCtx = ctx; }
 
-        Macro&       at(uint8_t i)       { return _m[i < MAX_MACROS ? i : 0]; }
-        const Macro& at(uint8_t i) const { return _m[i < MAX_MACROS ? i : 0]; }
-        static constexpr uint8_t count() { return MAX_MACROS; }
+        Gesture&       at(uint8_t i)       { return _m[i < MAX_GESTURES ? i : 0]; }
+        const Gesture& at(uint8_t i) const { return _m[i < MAX_GESTURES ? i : 0]; }
+        static constexpr uint8_t count() { return MAX_GESTURES; }
 
         void clear();
 
         // Replace the configuration (a staged table becoming live). The fire
         // counts are diagnostics, not configuration: each row keeps its own.
         // Half-collected sequences and mutes from the old table are dropped.
-        void setTable(const MacroTable& t);
-        void table(MacroTable& out) const;
+        void setTable(const GestureTable& t);
+        void table(GestureTable& out) const;
 
         // Call after editing the table from the web UI: drops half-finished
         // sequences and any mute left over from a macro that no longer exists.
@@ -175,8 +175,8 @@ namespace Keys
         void push(const Event& e);
         int8_t sequenceFor(Action a) const;
 
-        Macro  _m[MAX_MACROS];
-        Run    _r[MAX_MACROS];
+        Gesture  _m[MAX_GESTURES];
+        Run    _r[MAX_GESTURES];
         Event  _pend[PEND_MAX];
         uint8_t _pendN = 0;
         int8_t  _pendMacro = -1;
