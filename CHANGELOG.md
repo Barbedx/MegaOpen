@@ -5,7 +5,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.12.1] - 2026-11-24
+
 ### Changed
+- `main.cpp` is the wiring only (510 lines, was 2931): each task's glue lives beside it (`app/NetHooks`, `KeyPath`, `HuLink`, `Media`, `LoopTask`, `RuleActions`, `BootLog`, `LogSetup`, `ble/BleService`). No behaviour change intended.
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
 - From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
 
