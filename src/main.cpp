@@ -270,11 +270,7 @@ void setup()
     App::Media::begin(g_cfg.s());
 #endif
 
-#if FEATURE_VEHICLE_CAN
-    App::Loop::begin(g_cfg, &g_sniffer);
-#else
-    App::Loop::begin(g_cfg, nullptr);
-#endif
+    App::Loop::begin(g_cfg);
 
 #if FEATURE_BLE
     BleService::begin(g_cfg.s());
@@ -340,8 +336,7 @@ void setup()
                      [](uint32_t bps) { Mcp2518Source::instance().requestRate(bps); });
 #endif
     // ---- the car task: its sources are chosen here, at boot -----------------
-    // CAN A on the T-2CAN, the TWAI on env:direct. None:
-    // no task, and the loop does its chores (App::Car::service).
+    // CAN A on the T-2CAN, the TWAI on env:direct.
     {
         App::Car::Setup cs;
 #if FEATURE_CAN2

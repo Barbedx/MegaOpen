@@ -803,7 +803,8 @@ namespace App
 
         void start()
         {
-            if (!s_s.n) return;
+            // With no source too: the commands, the staged maps and the test
+            // expiry are this task's in every build (State has one writer).
             // Critical: a hung car task is a frozen State, sent on to the head
             // unit as if it were current.
             TaskSpec spec;
@@ -819,7 +820,6 @@ namespace App
                            (unsigned)s_decode.rows());
         }
 
-        bool         running() { return s_task != nullptr; }
         TaskHandle_t task()    { return s_task; }
 
         uint8_t gearPeaks(uint16_t* ratio, uint32_t* secs, uint8_t max) { return peaks(ratio, secs, max); }
@@ -856,11 +856,6 @@ namespace App
             c.op = Op::Unpin;
             c.sig = sig;
             post(c);
-        }
-
-        void service(uint32_t nowMs)
-        {
-            if (!s_task) chores(nowMs);
         }
 
         void store()

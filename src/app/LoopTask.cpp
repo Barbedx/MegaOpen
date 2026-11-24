@@ -35,8 +35,6 @@ namespace App
     {
         namespace
         {
-            // The per-ID table (CanSniffer); null without one.
-            Vehicle::CanSniffer* s_sniffer = nullptr;
             // The registry id and handle of this task (the [stk] line names it
             // from net_svc).
             TaskHandle_t g_loopTask = nullptr;
@@ -169,14 +167,8 @@ namespace App
                 // Feed the raw frame ring: the panel bus is not a car source.
                 ringPut((d == affa::Direction::Tx) ? 'T' : 'R', f.id, f.data, f.len);
 
-                // Feed the per-ID table too: it keeps a single sighting (e.g. the panel's
-                // `1C1 70`) that the 24-entry ring loses within ~15 ms in a storm.
-                // Received frames only. NOT when a car task runs: the table is then its
-                // own (one writer), and holds the car's bus, not the panel's.
-#if FEATURE_VEHICLE_CAN
-                if (d != affa::Direction::Tx && !App::Car::running())
-                    s_sniffer->ingest(f.id, f.data, f.len > 8 ? 8 : f.len, millis());
-#endif
+                // The per-ID table is the car task's (one writer) and holds the car's
+                // bus: the panel's frames stay in the ring above.
 
                 if (!g_affaTrace) return;
                 AffaTrace& t = g_affaTrace[g_affaTraceHead];
@@ -408,18 +400,11 @@ namespace App
                 g_passWorstUs = 0;
                 g_passWorst = "-";
 
-                // No car task (no source in this build): its pins, staged decode map and
-                // test expiry are done here, so State still has one writer.
-                App::Car::service(now);
-
 #if FEATURE_VEHICLE_CAN
                 // No display only; the display link drains itself inside AffaDisplay::poll().
 #if !FEATURE_DISPLAY_CAN
                 carLinkPump(now);
 #endif
-                // A web reset/baseline lands here when no frame arrives to apply it,
-                // unless the car task owns the table (it applies them itself).
-                if (!App::Car::running()) s_sniffer->applyRequests();
 #endif
 
                 // The head-unit UART (RX, acks, telemetry) is the hu task's, and every
@@ -490,9 +475,8 @@ namespace App
             App::Tasks::setHandle(g_loopTaskId, g_loopTask);
         }
 
-        void begin(Cfg::Config& config, Vehicle::CanSniffer* sniffer)
+        void begin(Cfg::Config& config)
         {
-            s_sniffer = sniffer;
 #if FEATURE_DISPLAY_CAN || FEATURE_VEHICLE_CAN
             LOGI("can", "rx=GPIO%d tx=GPIO%d", (int)Board::PIN_CAN_RX, (int)Board::PIN_CAN_TX);
 #endif

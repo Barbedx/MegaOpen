@@ -285,6 +285,10 @@ after another, each researched, planned, then implemented.
    `src/app/LoopTask.cpp`). Note: the matrix and the resistive sink compile
    only in env:direct today (`FEATURE_MATRIX=0`, `FEATURE_RESISTIVE_KEYS`
    default 0 on t2can).
+   DONE 2026-11-24: the car task starts in every build, with no source too;
+   `Car::service`, `Car::running` and the loop's branches are gone. With them
+   went the panel-bus feed of the per-ID table, which no env built (it needed
+   a display and no car source: the old devkit env).
 4. **BLE lives in two places.** `src/bluetooth.cpp` and the
    `apple_*_service`/`current_time_service` files sit in `src/`'s root beside
    `src/ble/`; `bluetooth.cpp` serves "legacy top-level keys" in its status

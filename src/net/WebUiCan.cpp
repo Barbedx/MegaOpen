@@ -92,7 +92,7 @@ void WebUi::routesCan()
             d["sniff"]    = _sniffer->enabled();
         }
         // The car task (Step 5): who decodes, and how much matched.
-        if (App::Car::running()) {
+        {
             const App::Car::Stats c = App::Car::stats();
             JsonObject car = d["car"].to<JsonObject>();
             car["sources"]  = c.sources;

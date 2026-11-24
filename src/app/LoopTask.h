@@ -3,7 +3,6 @@
 #include <Arduino.h>
 #include "../bus/Frame.h"
 #include "../cfg/Config.h"
-#include "../vehicle/CanSniffer.h"
 #if FEATURE_DISPLAY_CAN
 #include "../display/PanelBusWatch.h"
 #endif
@@ -23,9 +22,7 @@ namespace App
         // setup(): this task in the registry, critical (src/app/TaskRegistry.h).
         void registerTask();
         // setup(): the TWAI and what it carries, then the controller sample.
-        // `sniffer`: the per-ID table, fed from the panel bus while no car
-        // task owns it; null without one.
-        void begin(Cfg::Config& config, Vehicle::CanSniffer* sniffer);
+        void begin(Cfg::Config& config);
         // A beat now: net_svc checks every critical task's age from its first pass.
         void beat();
         // The end of setup(): this task's priority, and a beat.

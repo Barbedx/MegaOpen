@@ -36,9 +36,8 @@
 // applies them between two frames, no reboot. A constant binding is a pin it
 // keeps. Its two buffers are in PSRAM where there is some.
 //
-// Not created when the list is empty: the loop then
-// calls service(), which does the task's command and staging work, so State
-// still has one writer.
+// Created in every build, with no source too: the commands, the staging and
+// the test expiry have one home, so State has one writer.
 namespace App
 {
     namespace Car
@@ -83,14 +82,11 @@ namespace App
 
         // setup(), before start(): the command queue and the decode table.
         void begin(const Setup& s);
-        // setup(): creates the task when the list has a source. The sources'
-        // begin() runs on the task, which is what puts their hardware on it.
+        // setup(): creates the task. The sources' begin() runs on the task,
+        // which is what puts their hardware on it.
         void start();
-        bool         running();
         TaskHandle_t task();
 
-        // The loop, when no task was created: commands, staging, test expiry.
-        void service(uint32_t nowMs);
         // net_svc, every beat: the odometer and the service edge the car task
         // published go to NVS here, never on the car task.
         void store();
