@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.12.4] - 2026-11-24
+
+### Changed
+- The car task runs in every build, with no bus source too: the commands, the staged maps and the test expiry have one home, and the loop's fallback for a build without a car source is gone. With it went the panel-bus feed of the per-ID table (`/api/can`), which no build used; the panel's frames stay in the raw frame ring.
+
 ## [1.12.3] - 2026-11-24
 
 ### Fixed
