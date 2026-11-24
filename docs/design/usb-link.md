@@ -249,7 +249,7 @@ console. WiFi off gives back 27 kB (bench: 55 -> 82 kB free); the rest of the
 
 Settings › «Без WiFi, коли є USB» (`wifiAuto`, off by default, live): once the
 app has been on the link for 10 s, WiFi stops (`[wifi] off: the app is on USB`);
-30 s after the app is gone it starts again as at boot, home network first, then
+10 s after the app is gone it starts again as at boot, home network first, then
 the AP (`[wifi] on again`). Never mid-join and never with a phone on the board's
 own AP. The OTA trial counts the app on the link as a way in, like WiFi
 (`hkWifiSeen`). `/api/status` `mode` is `off` then.
@@ -304,7 +304,7 @@ Where the app and the browser differ:
 
 To the board the page is an app on the link: it pings every second, so with
 «Без WiFi, коли є USB» on, WiFi stops 10 s after it connects and comes back
-30 s after the tab closes.
+10 s after the tab closes.
 
 Only one program holds the vendor interface: the app, the page, or
 `tools/usb_link.py`. On Windows the WinUSB binding is the MS OS 2.0 descriptor,

@@ -68,7 +68,7 @@ private:
     static constexpr uint32_t STA_LOST_TO_AP_MS = 30000;
 
     static constexpr uint32_t OFF_AFTER_MS = 10000;   // the app this long on USB: WiFi off
-    static constexpr uint32_t ON_AFTER_MS  = 30000;   // the app this long gone: WiFi back
+    static constexpr uint32_t ON_AFTER_MS  = 10000;   // the app this long gone: WiFi back (its USB blips are ~1 s)
 
     static constexpr uint32_t DEAD_AFTER       = 3;                 // PUTs in a row with no answer
     static constexpr uint32_t DEAD_WAIT_MS     = 5UL * 60 * 1000;   // after the first rejoin

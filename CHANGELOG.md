@@ -5,12 +5,18 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+
 ### Fixed
 - **Panel menu: the cursor is the panel's highlight, the window slides.** The menu drew a `>` into the row and kept the cursor on the top row, the panel's highlight never moved. Now as MeganeCAN: two rows, the highlight (`29 01`) moves inside them, the text scrolls by a row only past an edge; no down arrow on the last row. A step inside the window sends only the highlight; the header lost its `2/6` counter so it does not redraw on every step. The highlight goes FIFO, so it can never overtake a newer screen.
 
 ## [1.12.0] - 2026-11-23
 
 Stabilisation after the car's 2026-11-22 drive (boots 282–292): panics on a USB replug, the app's USB link that never came up, heap dips, panel stalls from flash writes. Plan and evidence: `docs/design/stabilisation-1-12.md`.
+
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
 
 ### Fixed
 - **Panic on a USB replug.** The USB event handler logged on the core's 2 kB `arduino_usb_events` stack and overflowed it (car boots 289/290). It now only counts; applink says it.
@@ -36,6 +42,9 @@ The web installer, and WiFi from it (Improv).
 - **Web installer.** <https://barbedx.github.io/MegaOpen/> (ESP Web Tools, Chrome/Edge) flashes the Latest release, or a newer pre-release, over USB with no Python. A running board goes into download mode from the page («Перевести в режим прошивки», a 1200-baud open of its USB port; no buttons). The image is written around the `nvs` partition, so settings and WiFi survive. GitHub Pages builds the site after every release (`tools/stage_installer.py`, `.github/workflows/pages.yml`); the WebUSB page stays at `/usb/`.
 - **WiFi from the installer (Improv).** The firmware speaks Improv Wi-Fi on its USB serial (`src/net/Improv.*`, `ImprovSerial.*`): «Встановити» on a running board → «Connect to Wi-Fi» lists the networks it sees, and the board joins the chosen one at once, no reboot, and answers with its address. The network is saved as the first one only after it joined; a wrong password leaves the old one in place. Host test `test_improv`.
 
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+
 ### Fixed
 - **README's first flash wiped the settings.** The whole `-factory.bin` at `0x0` pads over `nvs` with 0xFF; README and the release notes now say so and point at the installer.
 
@@ -51,6 +60,9 @@ MegaOpen Companion over Bluetooth, and now playing from the head unit's apps wit
 ### Changed
 - The link's code is one session over two transports: `src/link/LinkSession.*` (HELLO, the channels to httpd, the events, the app's internet), `UsbPipe.*`, `BlePipe.*`, served by one task `applink` (was `usblink`) in `AppLink.*`; `UsbLink.*` is gone. The frame buffers moved from DRAM to PSRAM: 3.5 kB less static DRAM than 1.9.0.
 - `/api/status` `usb`: the session counters as before, plus `up` and `lastRxAgoMs`.
+
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
 
 ### Fixed
 - «Перевірити» and «Встановити» (GitHub update) refused with `fw_ap` whenever the board's WiFi was not connected, even with the app on the link offering its internet: now any way out counts (WiFi, or Companion over USB or Bluetooth). Its words say so.
@@ -113,6 +125,9 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 - **«Поля ГУ»** holds fields only: «Напруга АКБ», the one row protocol 112 has no field for, is gone with its mechanism (`fw` / `why`); the car's volts are on «Сигнали», the head unit measures its own. An intro row says what the tab is, and every protocol setting (`raise.*`) has a **?** with what it changes on the unit (`k.set.<id>.h`: a hint any setting may have now).
 - The head unit is «ГУ» in every Ukrainian text; «магнітола» stays for the stock radio on the panel bus alone.
 
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+
 ### Fixed
 - **«Версія коробки»** stayed at the version of the build that first saved the protocol settings: the string the head unit shows under «CANBUS Info» never followed an update. Empty now means the firmware's own version (the default), so it follows every update; a text typed there stays. A saved default («MegaOpen X.Y.Z») is cleared once. A text setting's placeholder says what empty means (`empty` in the catalog).
 
@@ -123,6 +138,9 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 
 ### Removed
 - The panel alert table (`/api/settings` `alerts`, the «Сповіщення» tab, `AlertRules`/`AlertEval`), the macro card on «Клавіші» with `/api/macros`, and the NVS keys `alerts` and `macros`: all of it is rules now. A settings file from 1.6 still imports; its `alerts` rows are skipped (the rules came from NVS on the update).
+
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
 
 ### Fixed
 - The car file could lose a part it held: ArduinoJson keeps a `const char[N]` by pointer (it takes one for a string literal), so a formula row (since 1.6.9) or a rule row written from a struct that was gone by the next save went into `/cfg/car.json` as garbage, and the next boot refused that part (`formulas in /cfg/car.json refused (...)`: the factory's ran). Every string is copied into the document now (`test_carfile`: the document owns its strings). A board that ran 1.6.9 and logs such a refusal: save that part once from its page (or its «Заводські»), the file is whole again.
@@ -156,6 +174,9 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 - The car screen's three rows are saved by the signal's name, not its number (they move when signals are added); the old keys are read once.
 - A settings file may be up to 64 kB (was 16 kB); the CAN rows in it leave out keys at their default, half the size.
 
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+
 ### Fixed
 - The USB link could lock up for good in the car ("USB: failed, write", no log push for 12 min, boot 192): when the app went without an unplug, the board waited 3 s for every frame it still had for it (alerts, responses) and did not read the next app's HELLO meanwhile, whose write timed out. Frames for an app gone quiet (no frame in 3 s) are now dropped at once, a host writing to the board is read first, and alerts wait for a live app. `/api/status` `usb` counts what the host did (`mounts`, `unmounts`, `suspends`, `resumes`) and the frames dropped; the log says each bus reset or suspend. Companion tries the USB again twice, 2 s apart, before it looks for the board on WiFi.
 
@@ -171,6 +192,9 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 - MegaOpen Companion: a USB tester in «More» › diagnostics: every USB device the head unit sees (name, VID:PID, classes; the board marked), and a log of what was plugged in and unplugged, with the time. A phone or a flash drive in the same cable and port says whether the port carries data; an ESP32-S3 seen as 303A:1001 means the board's own USB never came up.
 - «До ТО, км» (`service_calc`) to the km: the car's frame (0x715) says the km to the service only in steps of 150 km, cut down (27578 on the cluster reads 27450). When the step goes down the board knows the cluster is at its edge and counts the km the cluster's odometer adds from there; the edge is kept in NVS, so a reboot keeps it. Until the first step after a service: the step. The step itself stays as «До ТО, крок 150 км» (`service_km`).
 
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+
 ### Fixed
 - An update could roll back at random with the log push on: each push took internal heap below the OTA trial's healthy line (20 kB) for a moment, and each dip started its 60 s again (on the bench: one image "never became healthy", another confirmed at 118 s of 180). The log push now waits until the trial has confirmed (`[push] held until the OTA trial confirms`); the lines wait in the spool and the flash.
 
@@ -185,6 +209,9 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 ### Changed
 - «Оновити з GitHub» (check or install) pressed while the log push is uploading a part no longer answers «інше завантаження ще триває, спробуй за хвилину»: it queues («у черзі»), goes next (the push cannot take TLS again before it) and starts by itself, at most a minute later (`TlsJob::reserve`).
 
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+
 ### Fixed
 - «Мапа» on a wide screen (900 px and up: the head unit, a PC): the tabs and the table were scattered over the page's columns, the table squeezed into a strip on the right. Each tab's card now spans the full width.
 
@@ -196,6 +223,9 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 
 ### Changed
 - One page for the head-unit mapping: «Мапа» (`#map`, a card on «Авто») with three tabs, Сигнали | Поля ГУ | Сповіщення (`#map:fields`, `#map:alerts`). Сигнали is the old «Авто — наживо» table (source chips, ✓, 🔔, «Заводські прив'язки»), and each signal row now names the head-unit fields that take it («→ поле ГУ», a link to the field). Поля ГУ is the old RAV4 card from «Авто» (protocol, «Слати в ГУ», units, «Звідки», test ▶, «Прогін селектора»); «змінити в таблиці сигналів» and the other signal's name open that signal's source editor on Сигнали, without leaving the page. Сповіщення is the alert rules table; 🔔 lands there on the new row. `#live` is gone. Web only (docs/design/map-page.md).
+
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
 
 ### Fixed
 - «Авто» no longer shows «нема зв'язку» after leaving it for another page while its gears or climate-diag values were still loading.
@@ -216,6 +246,9 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 - «Заводські прив'язки» (the signals' factory bindings) moved from the head-unit card to the signals table, the page where bindings are edited; it leaves the head-unit field map alone.
 - The head-unit protocol is one interface (`Canbox::FieldProtocol`, step 5 of docs/design/hu-mapping.md): its fields and their defaults; the field map, `/api/hu/fields`, `/api/map` and the catalog (`proto`) read the active one, and the page shows «Протокол ГУ: Raise 112 (Toyota RAV4)». A stub protocol in the host tests runs the map unchanged.
 
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+
 ### Fixed
 - After the update to 1.6.3, empty alert rows and an empty car-screen slot came back as `fuel_pct` (Бак, %), and the live page could not add a rule («all 16»). An empty row was saved as the build's signal count, which moves each time a signal is appended; 1.6.3 appended `fuel_pct`. Saved, an empty row is now a fixed 0xFF (the alert table's format 2, `carSigV` for the car screen); a table or slot saved by 1.6.3 or before reads its old marker, and a `fuel_pct` there, as empty. Checked on the bench: saved on 1.6.2, wrong on 1.6.3, right on this build.
 - A status snapshot GitHub keeps refusing no longer stands in front of the log parts: the next one waits 10 min either way.
@@ -231,6 +264,9 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 - The head-unit experiments are field-map rules now (step 2 of docs/design/hu-mapping.md, finished): the switches «Експерименти ГУ» and «Напруга АКБ у полі ГУ» are gone. The fields they fed start off and are switched on in the map table's «Звідки» like any other: coolant (0x7D 09), the PRND probe (0x7D 06) and «Бак, %» (0x7D 04 D4-D5, F2 08 while off) → «свій сигнал»; the battery → another field's «Звідки» → `batt_v` ÷10 (rounded); the board's range and consumption → «Запас ходу» ← `range_calc` etc. On the first boot the old switches (NVS `huExp`) become those rules once (`W [hu] experiments 0x.. -> field map: saved`); a settings file from before brings its `exp` the same way and a new one carries `hu.fields`. A test send of a field that is off answers «поле вимкнене».
 - The tank in per cent is a car signal, `fuel_pct` (x10, `fuel_level` over 60 L, derived).
 - `[stk]` also shows `httpd`, the web server's stack left.
+
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
 
 ### Fixed
 - A crash of the web server (`task=httpd`, a stack overflow, two coredumps on the bench): the head unit's settings, now with the field map, were copied onto httpd's 4 kB stack by every map route and the settings file, and the file's field-map buffers sat there too; they are per-request (PSRAM) now. And httpd has 6 kB (`HTTPD_STACK`, TaskPlan.h): a settings-file import, the deepest route, left 256 B of the 4 kB, and in 1.6.2 it overflows. With 6 kB, 2.3 kB stay free after every map and settings route; about 1.7 kB less heap.
@@ -252,6 +288,9 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 - Six gears: the owner's car is a six-speed, and the computed five-speed table read its 6th (431) as N and its 2nd and 3rd at the edge. The defaults are now the ratios the 1.6.1 learner measured on a drive, 147 207 275 359 431 for 2nd..6th (1st, 80, from their progression), and Settings › «Передачі» has a 6th. The table moves to new keys, so a 1.6.1 board takes these defaults once.
 - The head-unit map names a field the board fills itself «плата → ГУ» (it is sent over the UART like the rest), not an empty binding, and it can be bound like any other: a CAN ID or a constant feeds it and the computation stands down; «плата → ГУ» in the editor brings it back.
 - Everything that goes to GitHub is one card, Плата › Логи в GitHub (the log, the CAN recording, the daily limit); the car page's recording card links to it. The live page's recording is «CSV сигналів у браузер», not a second «Запис».
+
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
 
 ### Fixed
 - The head unit's odometer was empty for a drive: 0x5FD did not come once (1.6.1 `[drive]`, two drives), so the field now takes the cluster's odometer (0x5C5, always on the bus) whenever 0x5FD is silent, not only under the 7D 04 experiments.
@@ -300,6 +339,9 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 - The T-2CAN builds use TinyUSB (`ARDUINO_USB_MODE=0`) with the board's own USB PID (`variants/t2can`, 303A:80C3) and a composite device descriptor. About 23 kB of DRAM at boot.
 - The web server's sockets have TCP_NODELAY: a small reply no longer waits for a delayed ACK (over the link 250 -> 7 ms).
 
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+
 ### Fixed
 - The car rebooted 12 times in a row (1.6.0-rc5, the coredumps): the log push's TLS handshakes, a backlog sent every 3 s, kept IDLE on core 0 out for 5 s and the task watchdog fired; each next boot's backlog did it again. The push runs at IDLE's priority now (they take turns) and a backlog goes every 6 s.
 - A coredump carried the GitHub token and could carry the WiFi passwords (it is the board's RAM): they are overwritten before it is pushed, with any other `github_pat_` / `ghp_` text. Revoke a token that went out with a 1.6.0-rc dump.
@@ -335,6 +377,9 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 - 26 more factory rows are measured, as the owner ✓'d them on «Авто — наживо» in the car: speed, rpm, steering, odo_cluster, out_temp, eng_temp, handbrake, reverse, brake, rear_defrost, rear_defrost_req, wipers, fog_front, fog_rear, fuel_level, ac_request, ac_comp_upc, clim_ac_sel, oil_level, clim_fan_state, batt_v, clutch, neutral, reverse_upc, locked, belt_drv. «Заводські прив'язки» no longer turns them back into hypotheses.
 - Panel menu › Lights › Brightness follows the knob: each step is applied (and stored) at once, not on the press that ends the edit. Settings marked `F_LIVE` in the registry do this.
 
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+
 ### Fixed
 - Log push: one file a minute, as meant. The lines logged during a push (a few kB) counted as a backlog, so the next file went 3 s later: a file every ~8 s, four times the commits. Only a backlog of 16 kB or more (a spool filled offline) drains fast now.
 - Head unit, «t° ОР» experiment (`0x7D 09`): the tablet showed 199 at 95 °C. Its "oil temp" is (78 − D2) mod 256, not D2 − 40 (the owner's sweep: D2 0 → 78, 40 → 38, 78 → 0, 160 → 174); the coolant now goes out as D2 = 78 − T and reads right. Below 0 °C it shows 0.
@@ -351,6 +396,9 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 
 ### Removed
 - The glass-sweep route `/api/display/inforaw` and its steps 7-15 in Сервіс › Заміри скла: the info row showed 8 at every declared length, so 8 is the width.
+
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
 
 ### Fixed
 - Panel menu: an item row is laid on the 20 cells the big font shows, not 26. A setting's value and a submenu's `>` stood past the glass's edge (Lights › Brightness showed no value). The header keeps 26. The media screen's menu layout scrolls title and artist in 20 columns too (it lost the last 2). Measured with Сервіс › Заміри скла: menu rows 20, header 26, fullscreen 22 for any glyph.
@@ -376,6 +424,9 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 - `/api/health` `keys.dest`: a destination that cannot take a key says why with a `code` (`uart_off`, `hu_silent`, `no_ams_role`…) in place of an English `why`.
 - Error replies are codes, one refusal a line (`pulseMs: number`, `param exp`, `busy`), not English sentences; the page shows them in its language. A refused macro now marks its row again (the reply said `row 3: …`, the page looked for `3: …`).
 
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+
 ### Fixed
 - Плата › Усі налаштування: a number setting showed its unit twice ("Брязкіт, мс, ms"), and the canbox version (text) was a number box.
 
@@ -390,6 +441,9 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 ### Changed
 - `/api/map`: the map part of a request is all or nothing. A refused confirm or a table that would overflow leaves the saved map as it was; «↺» restores each row's factory flag.
 - RAV4 page: the battery row shows the live volts and says protocol 112 has no field for them, with a link to the head-unit battery experiment.
+
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
 
 ### Fixed
 - `/api/health` `clock`: the head unit's clock (`0x9D`, once a minute) counts as a source. It used to say `clock_no_phone` while the head unit kept the panel's clock right. New codes `clock_phone`, `clock_hu`, `clock_no_source` (replace `clock_ok`, `clock_no_phone`), and `src`. With no phone the pane's clock face runs from the head unit's time (it stayed blank).
@@ -408,6 +462,9 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 - Panel menu: the car screen settings moved into Display › Car screen.
 - AffaDisplay v1.3.0 (from v1.1.1). The dev-only `/api/display/inforaw` (glass sweep) sends through the library's `showInfoRow`: the same bytes as before, and the hand-built frame (`display/InfoRaw.h`) is gone. `rows=3` puts the ruler in all three info rows (sweep step 15).
 - CI and release workflow actions on their current major versions (Node 24).
+
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
 
 ### Fixed
 - AffaDisplay v1.1.2: urgent panel jobs (power on/off) go out in the order they were queued; two of them used to go out reversed.
@@ -436,6 +493,9 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 - AffaDisplay v1.1.1 (docs and examples only; same firmware).
 - README: flashing and building from a clean machine (esptool 5 spelling, download mode, checksums, Windows path limit).
 
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+
 ### Fixed
 - `t2can_usbhid` builds on Windows again (the compile line passed the 32 kB limit).
 - A web key sent while four others wait for the panel's verdict is logged as unwatched; before, its refusal went unlogged.
@@ -459,6 +519,9 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 - AMS volume: commands per press measured from the phone's volume instead of a fixed 15.
 - No automatic screen covers a live popup, in any layout.
 - The generated web page is no longer tracked, so a build cannot mark the tree dirty.
+
+### Changed
+- WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
 
 ### Fixed
 - Steering angle centred on 0x7FFF, as the X84 matrix says.
