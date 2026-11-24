@@ -528,9 +528,7 @@ void WebUi::routesMap()
             for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) if (p->inputs().has(s)) in.add(Vehicle::meta(s).name);
             o["timed"] = p->timed();
         }
-        String out;
-        serializeJson(o, out);
-        return replyJson(r, out);
+        return replyDoc(r, o);
     });
 
     // {id, value}: the value is pinned for 30 s (RAM only, a pin wins over

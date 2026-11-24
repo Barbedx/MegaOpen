@@ -52,8 +52,7 @@ void WebUi::routesDisplay()
     route("/api/display", HTTP_GET, [this](PsychicRequest* r) {
         JsonDocument doc(&PsramJson::instance());
         fillDisplay(doc.to<JsonObject>());
-        String out; serializeJson(doc, out);
-        return replyJson(r, out);
+        return replyDoc(r, doc);
     });
 
     // The panel type and the board's role are registry entries (displayType,
@@ -395,8 +394,7 @@ void WebUi::routesAffaMap()
         _cfg->saveAffaMap(saved);
         LOGI("cfg", "stalk mapping saved (%u rows)", (unsigned)n);
         JsonDocument res(&PsramJson::instance()); res["ok"] = true; res["applied"] = n;
-        String out; serializeJson(res, out);
-        return replyJson(r, out);
+        return replyDoc(r, res);
     });
 
     route("/api/affamap/defaults", HTTP_POST, [this](PsychicRequest* r) {

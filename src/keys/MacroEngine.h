@@ -66,6 +66,7 @@ namespace Keys
         static constexpr uint8_t NAME_LEN    = 20;
 
         bool     enabled  = false;
+        uint16_t gen      = 0;      // the rule set's (Vehicle::RuleSet::gen) that `rule` indexes
         Trigger  trigger  = Trigger::Off;
         // Combo: the members, `members` of them. Sequence and Hold: keys[0].
         Action   keys[MAX_MEMBERS] = { Action::None, Action::None, Action::None };

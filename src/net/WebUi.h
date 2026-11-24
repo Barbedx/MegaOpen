@@ -120,6 +120,13 @@ static inline esp_err_t replyDoc(PsychicRequest* r, JsonDocument& d)
     serializeJson(d, out);
     return out.finish();
 }
+// The same for a part of a document (an object or an array inside it).
+static inline esp_err_t replyDoc(PsychicRequest* r, JsonVariantConst v)
+{
+    ChunkOut out(r);
+    serializeJson(v, out);
+    return out.finish();
+}
 #if FEATURE_DISPLAY_CAN
 #include "../display/AffaPort.h"
 #include "../display/PanelOps.h"

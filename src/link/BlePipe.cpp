@@ -45,18 +45,20 @@ namespace BlePipe
                     if (!ci.isEncrypted()) {
                         // Android subscribes before bonding sometimes: the
                         // subscription stays, the link counts once encrypted.
-                        LOGI("link", "ble: h=%u subscribed before encryption, waiting for the bond", (unsigned)h);
+                        LOGQ("link", "ble: h=%u subscribed before encryption, waiting for the bond", (unsigned)h);
                     }
                     s_conn = h;
                     ++s_st.subscribes;
                     s_st.mtu = ci.getMTU();
                     snprintf(s_st.addr, sizeof(s_st.addr), "%s", ci.getIdAddress().toString().c_str());
-                    LOGI("link", "ble: %s subscribed (h=%u, mtu %u, enc %d)", s_st.addr, (unsigned)h,
-                         (unsigned)s_st.mtu, (int)ci.isEncrypted());
+                    // The host task's stack: numbers through LOGQ; the address is
+                    // in /api/status (ble.peer).
+                    LOGQ("link", "ble: subscribed (h=%u, mtu %u, enc %d)", (unsigned)h,
+                         (unsigned)s_st.mtu, (unsigned)ci.isEncrypted());
                     if (s_wake) s_wake();
                 } else if (s_conn == h) {
                     s_conn = NONE;
-                    LOGI("link", "ble: h=%u unsubscribed", (unsigned)h);
+                    LOGQ("link", "ble: h=%u unsubscribed", (unsigned)h);
                 }
             }
         } s_txCb;

@@ -79,6 +79,10 @@ namespace Vehicle
     struct RuleSet {
         static constexpr uint16_t MAX_ROWS = 128;
         PsArray<RuleRow> rows;
+        // Which save this is (runtime only, 0 = boot's): a gesture carries it
+        // with its row index, so one seen between the keys task's new table
+        // and the car task's new set cannot fire another row.
+        uint16_t gen = 0;
         // The three alerts 1.6 shipped: the cluster's low-fuel lamp, driving
         // without lights, driving with the handbrake up. Names the apps know.
         void factory();

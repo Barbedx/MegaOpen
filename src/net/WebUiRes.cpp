@@ -298,10 +298,9 @@ void WebUi::routesRes()
         o["wanted"] = n;
         // Fewer rungs than buttons is normal on a one-leg channel; report it.
         o["placed"] = placed;
-        String out; serializeJson(o, out);
         LOGI("res", "auto-assign ch%u placed %u of %u",
                     (unsigned)ch, (unsigned)placed, (unsigned)n);
-        return replyJson(r, out);
+        return replyDoc(r, o);
     });
 
     // ---- the learn hold -----------------------------------------------------

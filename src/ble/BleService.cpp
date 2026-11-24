@@ -41,6 +41,10 @@ namespace BleService
         // sync at 0x08 with 401/644 renders Timeout. A blocked task yields; a loop cannot.
         // It also performs the keys' AMS writes and HID presses, which therefore share
         // a task with ServiceAms and can no longer race it over the one client.
+#if FEATURE_ANCS
+        static void ancsService();
+#endif
+
         static void bleServiceTask(void*)
         {
             bool amsPending = false;
@@ -70,6 +74,9 @@ namespace BleService
                 // trips: not while a HID release is owed or key writes wait.
                 Bluetooth::SetKeysBusy(g_bleKeys.hidHoldLeft(millis(), holdLeft) || g_bleKeys.pending());
                 BleHub::Service();
+#if FEATURE_ANCS
+                ancsService();
+#endif
                 // busyMax here is how long GATT setup, ANCS and one AMS write can hold
                 // this task.
                 App::Tasks::beat(g_bleTaskId, micros() - t0);
@@ -80,20 +87,41 @@ namespace BleService
         // Runs on the NimBLE host task (GATT subscription callback): no display calls,
         // nothing that blocks. Rows go to the ui task (App::Ui) under its spinlock.
         static uint32_t g_ancsCount = 0;
+        // One notification owed to ble_svc: the callback only copies it here.
+        // A newer one replaces an older one not yet shown (the panel has one
+        // popup; every notification is still in the library's own [ANCS] line).
+        struct AncsOwed { char title[64]; char text[192]; uint8_t cat; bool due; };
+        static AncsOwed     s_ancs = {};
+        static portMUX_TYPE s_ancsMux = portMUX_INITIALIZER_UNLOCKED;
+
         static void onAncsNotification(const AppleNotificationService::NotificationInfo& n)
         {
             ++g_ancsCount;
+            // The host task's stack is NimBLE's, not ours to size: no LOGI (a
+            // 320 B line) and no row folding (~420 B) on it. Two bounded copies.
+            portENTER_CRITICAL(&s_ancsMux);
+            strlcpy(s_ancs.title, n.title.c_str(), sizeof(s_ancs.title));
+            strlcpy(s_ancs.text, n.message.c_str(), sizeof(s_ancs.text));
+            s_ancs.cat = (uint8_t)n.categoryId;
+            s_ancs.due = true;
+            portEXIT_CRITICAL(&s_ancsMux);
+        }
 
+        // ble_svc: the line and the popup of the notification the callback left.
+        static void ancsService()
+        {
+            if (!s_ancs.due) return;
+            static AncsOwed n;      // 260 B: not on this task's stack
+            portENTER_CRITICAL(&s_ancsMux);
+            n = s_ancs;
+            s_ancs.due = false;
+            portEXIT_CRITICAL(&s_ancsMux);
+            const char* cat = AppleNotificationService::CategoryName(n.cat);
             // Always logged, in raw UTF-8.
-            LOGI("ancs", "%s | %s: %s",
-                        AppleNotificationService::CategoryName(n.categoryId),
-                        n.title.c_str(), n.message.c_str());
-
+            LOGI("ancs", "%s | %s: %s", cat, n.title, n.text);
 #if FEATURE_DISPLAY_CAN
             if (!s_settings->ancsPopup) return;
-            App::Ui::queueNotification(n.title.empty() ? AppleNotificationService::CategoryName(n.categoryId)
-                                                       : n.title.c_str(),
-                                       n.message.c_str());
+            App::Ui::queueNotification(n.title[0] ? n.title : cat, n.text);
 #endif
         }
 #endif

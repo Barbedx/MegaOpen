@@ -138,7 +138,7 @@ namespace App
         Staged<Vehicle::RuleSet>& ruleSet();
         // A gesture rule MacroEngine detected on the keys task: the car task
         // checks its "only if" and pause and performs its actions. Any task.
-        void fireRule(uint16_t row);
+        void fireRule(uint16_t row, uint16_t gen);
         // The page's «Спробувати»: the row's actions now, no trigger, no pause.
         void testRule(uint16_t row);
         // A row's state from the engine (plain fields of a row that stays

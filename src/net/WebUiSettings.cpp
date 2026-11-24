@@ -554,9 +554,7 @@ void WebUi::routesSettings()
             LOGI("knobs", "set from a settings file");
         }
 #endif
-        out = "";
-        serializeJson(o, out);
-        return replyJson(r, out);
+        return replyDoc(r, o);
     });
 }
 

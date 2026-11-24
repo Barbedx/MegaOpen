@@ -225,6 +225,13 @@ void test_a_gesture_rule_is_armed_by_its_formula_and_becomes_a_macro()
     TEST_ASSERT_EQUAL_UINT16(1, t.m[0].rule);
     TEST_ASSERT_EQUAL_UINT16(2, t.m[1].rule);
     TEST_ASSERT_EQUAL_UINT16(0xFFFF, t.m[2].rule);
+    // Each carries the save its row index is of: the car task drops a gesture
+    // of another save (the two tables are staged apart).
+    TEST_ASSERT_EQUAL_UINT16(0, t.m[0].gen);
+    set.gen = 7;
+    Rules::gestures(set, t, Keys::MacroTable::COUNT);
+    TEST_ASSERT_EQUAL_UINT16(7, t.m[0].gen);
+    TEST_ASSERT_EQUAL_UINT16(7, t.m[1].gen);
     // The keys task saw the combo: armed and the pause decide, and it counts.
     TEST_ASSERT_FALSE(r.gestureFire(1, 3000));             // speed 30: not armed
     s.set(SIG_SPEED, 0, 3);

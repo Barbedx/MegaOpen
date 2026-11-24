@@ -344,6 +344,7 @@ namespace Vehicle
             if (!r.isGesture()) continue;
             Keys::Macro& m = out.m[n];
             m.enabled  = r.on && r.gesture.valid() && r.nAct;
+            m.gen      = set.gen;
             m.trigger  = r.gesture.trigger;
             for (uint8_t k = 0; k < Keys::Macro::MAX_MEMBERS; ++k) m.keys[k] = r.gesture.keys[k];
             m.members  = r.gesture.members;

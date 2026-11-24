@@ -26,6 +26,8 @@ namespace App
             constexpr uint8_t  CMD_DEPTH  = 16;
             constexpr uint32_t PUBLISH_MS = 250;
             constexpr uint32_t LOG_MS     = 10000;   // the [car] line
+            constexpr uint8_t  BUSY_PASSES = 16;     // full drains in a row before a tick of sleep
+            uint32_t           s_paced = 0;          // times that sleep was taken ([car] paced=)
             constexpr uint32_t BUS_SILENT_MS = 5000; // no frame from any source: the values are stale
 
             enum class Op : uint8_t { Pin, Unpin, Test, Fire, Try };
@@ -35,6 +37,7 @@ namespace App
                 int32_t  value = 0;
                 uint32_t ms = 0;        // Test: how long
                 uint16_t row = 0;       // Fire, Try: the rule
+                uint16_t gen = 0;       // Fire: the rule set the row index is of
             };
 
             // The tests running now: a few at once is plenty for one person
@@ -507,6 +510,10 @@ namespace App
                     }
                     case Op::Fire:
                         // A gesture the keys task saw: its "only if" and pause decide.
+                        if (c.gen != s_ruleSet.live().gen) {
+                            LOGI("rule", "gesture for row %u of an older rule set: dropped", (unsigned)(c.row + 1));
+                            return;
+                        }
                         if (s_rules.gestureFire(c.row, now)) performRow(c.row, false);
                         return;
                     case Op::Try:
@@ -667,12 +674,13 @@ namespace App
                                   (unsigned long)st.dropped);
                 }
                 LOGS("car", "fps=%lu frames=%lu drainMax=%lu decode=%lu/%lu short=%lu "
-                               "busyMax=%luus cmdDrops=%lu src %s",
+                               "busyMax=%luus cmdDrops=%lu paced=%lu src %s",
                                (unsigned long)s_fps, (unsigned long)s_frames,
                                (unsigned long)s_drainMax, (unsigned long)s_decode.hits(),
                                (unsigned long)s_decode.unknown(), (unsigned long)s_decode.short_(),
                                (unsigned long)s_busyMaxUs,
-                               (unsigned long)s_cmdDrops.load(std::memory_order_relaxed), src);
+                               (unsigned long)s_cmdDrops.load(std::memory_order_relaxed),
+                               (unsigned long)s_paced, src);
                 s_drainMax = 0;
                 s_busyMaxUs = 0;
                 driveLine();
@@ -691,6 +699,7 @@ namespace App
                 odoRestore(millis());
                 uint32_t publishAt = millis(), logAt = publishAt, fpsAt = publishAt;
                 bool more = false;
+                uint8_t busyRun = 0;
                 // The bus heard, then silent for BUS_SILENT_MS: its values are
                 // no longer the car's (key off, a connector, a rate search).
                 uint32_t heardAt = 0;
@@ -699,8 +708,12 @@ namespace App
                 for (;;) {
                     // A source that filled its 64 comes straight back, after
                     // anything else at this priority has had a turn.
-                    if (more) taskYIELD();
-                    else      ulTaskNotifyTake(pdTRUE, idle);
+                    // A bus that fills every pass (a babbling node) must not
+                    // starve what runs below this task (httpd, net_svc, the
+                    // log): after BUSY_PASSES in a row, one tick of sleep.
+                    if (!more) { busyRun = 0; ulTaskNotifyTake(pdTRUE, idle); }
+                    else if (++busyRun >= BUSY_PASSES) { busyRun = 0; ++s_paced; vTaskDelay(1); }
+                    else taskYIELD();
 
                     const uint32_t t0 = micros();
                     const uint32_t now = millis();
@@ -901,7 +914,7 @@ namespace App
         Staged<Vehicle::RuleSet>& ruleSet() { return s_ruleSet; }
         RuleStats ruleStats() { return s_rulePub.read(); }
         bool ruleLive(uint16_t row, Vehicle::Rules::Live& out) { return s_rules.live(row, out); }
-        void fireRule(uint16_t row) { Cmd c; c.op = Op::Fire; c.row = row; post(c); }
+        void fireRule(uint16_t row, uint16_t gen) { Cmd c; c.op = Op::Fire; c.row = row; c.gen = gen; post(c); }
         void testRule(uint16_t row) { Cmd c; c.op = Op::Try;  c.row = row; post(c); }
 
         void injectAlert(const char* rule, int32_t value, const char* text)

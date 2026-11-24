@@ -354,7 +354,7 @@ namespace App
             // the row the macro stands for (Vehicle::Rules::gestures).
             static void macroFire(const Keys::Macro& m, void*)
             {
-                if (m.rule != 0xFFFF) App::Car::fireRule(m.rule);
+                if (m.rule != 0xFFFF) App::Car::fireRule(m.rule, m.gen);
             }
 
             // ---- the matrix map, staged ----------------------------------------------------

@@ -109,10 +109,15 @@ void WebUi::routesRules()
 const char* WebUi::applyRules(const Vehicle::RuleSet& set, bool factory, uint8_t& gestures)
 {
     gestures = 0;
-    if (!App::Car::ruleSet().edit([&](Vehicle::RuleSet& s) { s = set; })) return "busy";
+    // This save's number, on the set and on every gesture built from it.
+    static uint16_t s_gen = 0;
+    if (!++s_gen) s_gen = 1;
+    const uint16_t gen = s_gen;
+    if (!App::Car::ruleSet().edit([&](Vehicle::RuleSet& s) { s = set; s.gen = gen; })) return "busy";
     if (_st.macros) {
         const bool ok = _st.macros->edit([&](Keys::MacroTable& t) {
             gestures = Vehicle::Rules::gestures(set, t, Keys::MacroTable::COUNT);
+            for (uint8_t i = 0; i < Keys::MacroTable::COUNT; ++i) t.m[i].gen = gen;
         });
         if (ok) App::KeyBus::kick();
         else    LOGW("rule", "the gesture table is busy: the keys task keeps the old gestures until the next save");
