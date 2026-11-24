@@ -721,6 +721,7 @@ void test_the_can_object_reads_back_what_it_writes()
     }
     const char* bad[] = {
         "{\"id\":\"zz\",\"byte\":0,\"mask\":\"FF\"}",
+        "{\"id\":\"0x354\",\"mask\":\"FF\"}",                 // no byte: was stored as 255, and the whole table refused
         "{\"id\":\"0x354\",\"byte\":8,\"mask\":\"FF\"}",
         "{\"id\":\"0x354\",\"byte\":6,\"len\":3,\"mask\":\"FF\"}",
         "{\"id\":\"0x354\",\"byte\":0,\"mask\":\"0\"}",

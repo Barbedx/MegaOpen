@@ -26,6 +26,7 @@ namespace App
             constexpr uint8_t  CMD_DEPTH  = 16;
             constexpr uint32_t PUBLISH_MS = 250;
             constexpr uint32_t LOG_MS     = 10000;   // the [car] line
+            constexpr uint32_t BUS_SILENT_MS = 5000; // no frame from any source: the values are stale
 
             enum class Op : uint8_t { Pin, Unpin, Test, Fire, Try };
             struct Cmd {
@@ -139,7 +140,19 @@ namespace App
             int32_t  s_odoSaved = -1, s_odoCSaved = -1;
             uint32_t s_odoAt = 0;
 
+            // What this task wants kept in NVS ("odo"). It only publishes:
+            // net_svc writes it (Car::store), so no frame waits for a flash
+            // write. `restored` = read from NVS at start, nothing to write.
+            struct Keep {
+                int32_t km = -1, kmC = -1;
+                Vehicle::Derived::Service svc;
+                bool restored = false;
+            };
+            Keep           s_keepNow;      // this task's
+            Snapshot<Keep> s_keep;
+
             void svcRestore();
+            extern Vehicle::Derived::Service s_svcSaved;
 
             void odoRestore(uint32_t now)
             {
@@ -156,11 +169,16 @@ namespace App
                     LOGI("car", "odometer from NVS: %ld km (cluster %ld km), until the car sends it",
                                    (long)km, (long)kmC);
                 svcRestore();
+                s_keepNow.km = km;
+                s_keepNow.kmC = kmC;
+                s_keepNow.svc = s_svcSaved;
+                s_keepNow.restored = true;
+                s_keep.publish(s_keepNow);
             }
 
             // service_calc's edge (Derived::Service): saved when it moves, once
             // in 150 km; "odo" svB/svO/svS, svK = known.
-            Vehicle::Derived::Service s_svcSaved;
+            Vehicle::Derived::Service s_svcSaved;   // the last one published
 
             void svcRestore()
             {
@@ -184,13 +202,9 @@ namespace App
                 const Vehicle::Derived::Service& v = s_derived.service();
                 if (v == s_svcSaved) return;
                 s_svcSaved = v;
-                Preferences p;
-                p.begin("odo", false);
-                p.putBool("svK", v.known);
-                p.putInt("svB", v.base);
-                p.putInt("svO", v.odo);
-                p.putInt("svS", v.step);
-                p.end();
+                s_keepNow.svc = v;
+                s_keepNow.restored = false;
+                s_keep.publish(s_keepNow);
                 LOGI("car", "service: %s %ld km at cluster %ld km (step %ld)", v.known ? "edge" : "edge lost,",
                                (long)v.base, (long)v.odo, (long)v.step);
             }
@@ -203,11 +217,12 @@ namespace App
                 const int32_t kmC = st->has(Vehicle::SIG_ODO_CLUSTER) ? st->get(Vehicle::SIG_ODO_CLUSTER) : s_odoCSaved;
                 if ((km == s_odoSaved || km <= 0) && (kmC == s_odoCSaved || kmC <= 0)) return;
                 s_odoAt = now;
-                Preferences p;
-                p.begin("odo", false);
-                if (km > 0 && km != s_odoSaved) { p.putUInt("km", (uint32_t)km); s_odoSaved = km; }
-                if (kmC > 0 && kmC != s_odoCSaved) { p.putUInt("kmC", (uint32_t)kmC); s_odoCSaved = kmC; }
-                p.end();
+                if (km > 0) s_odoSaved = km;
+                if (kmC > 0) s_odoCSaved = kmC;
+                s_keepNow.km = s_odoSaved;
+                s_keepNow.kmC = s_odoCSaved;
+                s_keepNow.restored = false;
+                s_keep.publish(s_keepNow);
             }
 
             // Every 10 s while the car moves or runs: what the gear and the
@@ -676,6 +691,10 @@ namespace App
                 odoRestore(millis());
                 uint32_t publishAt = millis(), logAt = publishAt, fpsAt = publishAt;
                 bool more = false;
+                // The bus heard, then silent for BUS_SILENT_MS: its values are
+                // no longer the car's (key off, a connector, a rate search).
+                uint32_t heardAt = 0;
+                bool heard = false;
 
                 for (;;) {
                     // A source that filled its 64 comes straight back, after
@@ -700,6 +719,7 @@ namespace App
                         s_fpsCount += (uint32_t)got;
                         if (got > s_drainMax) s_drainMax = (uint32_t)got;
                         if (got >= DRAIN_MAX) more = true;
+                        if (got) { heard = true; heardAt = now; }
 
                         // A rate found (or set): the recorder's file header says it.
                         const uint32_t bps = src->bitrate();
@@ -711,6 +731,12 @@ namespace App
                         }
                     }
 
+                    if (heard && (uint32_t)(now - heardAt) >= BUS_SILENT_MS && s_s.state) {
+                        heard = false;
+                        s_s.state->busSilent(now);
+                        LOGI("car", "bus silent for %u s: speed and rpm 0, the other car values dropped",
+                             (unsigned)(BUS_SILENT_MS / 1000));
+                    }
                     runFormulas(now);            // after the frames: their values are in
 #if FEATURE_DIAG
                     CarDiag::loop(now);          // after the frames: their replies are in
@@ -822,6 +848,28 @@ namespace App
         void service(uint32_t nowMs)
         {
             if (!s_task) chores(nowMs);
+        }
+
+        void store()
+        {
+            static uint32_t seen = 0;
+            static Keep     w;          // what NVS holds, as far as this task knows
+            if (s_keep.seq() == seen) return;
+            Keep k;
+            seen = s_keep.read(k);
+            if (k.restored) { w = k; return; }
+            Preferences p;
+            p.begin("odo", false);
+            if (k.km > 0 && k.km != w.km) p.putUInt("km", (uint32_t)k.km);
+            if (k.kmC > 0 && k.kmC != w.kmC) p.putUInt("kmC", (uint32_t)k.kmC);
+            if (!(k.svc == w.svc)) {
+                p.putBool("svK", k.svc.known);
+                p.putInt("svB", k.svc.base);
+                p.putInt("svO", k.svc.odo);
+                p.putInt("svS", k.svc.step);
+            }
+            p.end();
+            w = k;
         }
 
         void test(uint8_t sig, int32_t value, uint32_t forMs)

@@ -351,8 +351,9 @@ bool Mcp2518Source::setTransmit(bool on, uint32_t nowMs)
 {
     if (on == _tx) return true;
     // Normal mode on a wrong rate would put error frames on the car's bus:
-    // only a rate the search locked, or the one set by hand.
-    if (on && (_txFault || !(_ab.locked() || _manual) || !_live)) return false;
+    // only a rate the search locked, or the one set by hand once a frame
+    // has come in at it (a wrong hand-set rate hears nothing).
+    if (on && (_txFault || !_live || (_manual ? _rateFrames == 0 : !_ab.locked()))) return false;
     _tx = on;
     const bool ok = start(_ab.rate(), nowMs);
     _txCheckAtMs = nowMs;

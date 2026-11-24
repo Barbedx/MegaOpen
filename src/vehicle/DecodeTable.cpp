@@ -235,7 +235,7 @@ namespace Vehicle
             uint32_t id = 0;
             if (!hexOf(o["id"], id) || id > 0x1FFFFFFFu) return "can.id: param";      // a CAN id, like 0x354
             int32_t b, len, shift, mul, div, add;
-            if (!intOf(o, "byte", -1, 0, 7, b)) return "can.byte: param";    // 0..7
+            if (!intOf(o, "byte", -1, 0, 7, b) || b < 0) return "can.byte: param";    // 0..7, and it must be there
             if (!intOf(o, "len", 1, 1, 4, len) || b + len > 8) return "can.len: param";     // 1..4 bytes, inside the 8
             if (!intOf(o, "shift", 0, 0, 31, shift)) return "can.shift: param";   // 0..31
             uint32_t mask = 0;

@@ -147,7 +147,13 @@ namespace App
                     else        LOGI("task", "every critical task is running again");
                 }
                 const bool wifi = s_h.wifiSeen ? s_h.wifiSeen() : true;
-                return wifi && alive && ESP.getFreeHeap() > OtaTrial::HEALTH_HEAP_MIN;
+                const bool web = s_h.webUp ? s_h.webUp() : true;
+                static bool s_webSaid = false;
+                if (!web && !s_webSaid && now > 30000) {
+                    s_webSaid = true;
+                    LOGW("ota", "the web server does not take a connection: the trial will not confirm");
+                }
+                return wifi && web && alive && ESP.getFreeHeap() > OtaTrial::HEALTH_HEAP_MIN;
             }
 
             void run(void*)

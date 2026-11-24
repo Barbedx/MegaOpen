@@ -93,7 +93,7 @@ bool WifiManager::linkPolicy(uint32_t nowMs)
         if (want && link && (uint32_t)(nowMs - _linkSince) >= OFF_AFTER_MS && _phase == Phase::Idle &&
             (_sta || WiFi.softAPgetStationNum() == 0)) {
             const uint32_t before = ESP.getFreeHeap();
-            if (_mdnsUp) { MDNS.end(); _mdnsUp = false; _mdns = String(); }
+            if (_mdnsUp) { MDNS.end(); _mdnsUp = false; setMdns(""); }
             // Else the core's own reconnect answers the disconnect this causes
             // (reason 8) with WiFi.begin(), and WiFi is back in 3 s. start()
             // turns it on again.
@@ -151,13 +151,13 @@ void WifiManager::startMdns()
     // STA only: in AP mode multicast sends fail continuously with ENOMEM, and AP
     // clients use the fixed AP address anyway.
     if (!_sta) {
-        if (_mdnsUp) { MDNS.end(); _mdnsUp = false; _mdns = String(); }
+        if (_mdnsUp) { MDNS.end(); _mdnsUp = false; setMdns(""); }
         return;
     }
     if (_mdnsUp) {
         MDNS.end();
         _mdnsUp = false;
-        _mdns = String();
+        setMdns("");
     }
     // Switchable to save heap: an abort under WiFi buffer pressure had a
     // backtrace in `_mdns_scheduler_run`. Off means no name, nothing else.
@@ -172,7 +172,7 @@ void WifiManager::startMdns()
     MDNS.addService("megaopen", "tcp", 80);
     MDNS.addServiceTxt("megaopen", "tcp", "fw", MEGAOPEN_VERSION);
     _mdnsUp = true;
-    _mdns = host + ".local";
+    setMdns((host + ".local").c_str());
 }
 
 // Modem sleep is mandatory with BT up: the IDF WiFi driver aborts ("Should enable
@@ -240,7 +240,7 @@ void WifiManager::loop(uint32_t nowMs)
             LOGI("wifi", "join now: no saved network");
         else {
             LOGI("wifi", "join now (panel menu)");
-            if (_mdnsUp) { MDNS.end(); _mdnsUp = false; _mdns = String(); }
+            if (_mdnsUp) { MDNS.end(); _mdnsUp = false; setMdns(""); }
             _sta = false;
             _staDownAt = 0;
             _lastRetry = nowMs;
@@ -373,7 +373,7 @@ void WifiManager::provision(const char* ssid, const char* pass, uint32_t nowMs)
         // Leaving the network we are on; startJoin's begin() associates anew.
         _sta = false;
         _staDownAt = 0;
-        if (_mdnsUp) { MDNS.end(); _mdnsUp = false; _mdns = String(); }
+        if (_mdnsUp) { MDNS.end(); _mdnsUp = false; setMdns(""); }
     }
     LOGI("wifi", "improv: joining \"%s\"", _curSsid.c_str());
     startJoin(nowMs, CONNECT_TIMEOUT_MS);
@@ -399,6 +399,24 @@ void WifiManager::snap(char* dst, const String& src)
     portENTER_CRITICAL(&_snapMux);
     memcpy(dst, b, sizeof(b));
     portEXIT_CRITICAL(&_snapMux);
+}
+
+void WifiManager::setMdns(const char* name)
+{
+    char b[sizeof(_mdns)];
+    snprintf(b, sizeof(b), "%s", name ? name : "");
+    portENTER_CRITICAL(&_snapMux);
+    memcpy(_mdns, b, sizeof(b));
+    portEXIT_CRITICAL(&_snapMux);
+}
+
+String WifiManager::mdnsHost() const
+{
+    char b[sizeof(_mdns)];
+    portENTER_CRITICAL(&_snapMux);
+    memcpy(b, _mdns, sizeof(b));
+    portEXIT_CRITICAL(&_snapMux);
+    return String(b);
 }
 
 String WifiManager::curSsid() const

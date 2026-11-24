@@ -2039,7 +2039,7 @@ void WebUi::routesCan()
             o["count"]   = e.count;
             o["len"]     = e.len;
             o["changed"] = e.changed;
-            char hex[24];
+            char hex[24] = "";      // a DLC-0 frame writes nothing below
             int n = 0;
             for (uint8_t b = 0; b < e.len && b < 8; ++b)
                 n += snprintf(hex + n, sizeof(hex) - n, "%02X", e.last[b]);

@@ -31,6 +31,10 @@ namespace App
             // WiFi has been usable at least once since boot (STA joined, or our
             // own AP up): the next OTA can arrive.
             bool (*wifiSeen)() = nullptr;
+            // The web server has taken a connection on its port at least once
+            // since boot: an image whose server never came up must not be
+            // confirmed, the next OTA arrives through it.
+            bool (*webUp)() = nullptr;
             // Every 10 s, after [win] and [task]: the heartbeat lines that have
             // no other owner.
             void (*beat)(uint32_t nowMs) = nullptr;

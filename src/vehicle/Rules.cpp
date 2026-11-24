@@ -205,6 +205,10 @@ namespace Vehicle
             r.gesture = s.isGesture();
             r.pauseS = s.pauseS;
             r.seen = false;
+            // Boot's set fires a rule that already holds (low fuel at key-on).
+            // A set saved later must not: editing one rule would fire every
+            // level rule that holds, pause ignored.
+            r.quiet = _applied;
             r.fires = 0;
             r.lastFireMs = 0;
             r.holds = !s.when[0];           // a formula-less gesture is always armed
@@ -221,6 +225,7 @@ namespace Vehicle
             for (uint8_t k = 0; on && k < s.nAct; ++k) on = s.act[k].valid();
             r.on = on;
         }
+        _applied = true;
         return ok;
     }
 
@@ -235,7 +240,9 @@ namespace Vehicle
             const bool was = r.holds;
             r.holds = Expr::holds(r.prog.eval(r.st, exprRead, &c, now));
             r.seen = true;
-            if (r.gesture || !r.holds || was) continue;
+            const bool quiet = r.quiet;
+            r.quiet = false;
+            if (r.gesture || !r.holds || was || quiet) continue;
             // false -> true (or true when first seen): fire, pause allowing.
             if (r.fires && (uint32_t)(now - r.lastFireMs) < (uint32_t)r.pauseS * 1000u) continue;
             ++r.fires;
@@ -299,6 +306,15 @@ namespace Vehicle
                 if (s < SIG_COUNT && st.has(s)) { numText(num, sizeof(num), st.get(s), meta(s).decimals); v = num; }
                 for (const char* q = v; *q && n + 1 < cap; ++q) b[n++] = *q;
                 p = e + 1;
+            }
+            // Cut at the cap: never inside a UTF-8 character (Cyrillic is two
+            // bytes; the panel drew a stray glyph, the app got invalid JSON).
+            size_t k = n;
+            while (k && ((uint8_t)b[k - 1] & 0xC0) == 0x80) --k;      // continuation bytes
+            if (k) {
+                const uint8_t lead = (uint8_t)b[k - 1];
+                const size_t need = lead >= 0xF0 ? 4 : lead >= 0xE0 ? 3 : lead >= 0xC0 ? 2 : 1;
+                if (need > 1 && n - (k - 1) < need) n = k - 1;
             }
             b[n] = 0;
             return (int)n;

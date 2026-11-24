@@ -5,6 +5,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Fixed
+- **Car values no longer freeze on the head unit when the car's bus goes silent.** After 5 s with no frame (key off, a connector, a rate search) speed and rpm read 0 and the other decoded values are dropped, so the head unit and the rules stop running on the last ones (`[car] bus silent`). Pinned signals stay.
+- **A pending request through the app could hang the board's GitHub jobs for good** when the link dropped at the wrong moment: no log push and no update check until a reboot, over WiFi too.
+- **One `/api/map` row without `byte` switched all decoding off** (and the saved map was discarded at the next boot). The row is refused now.
+- **Saving the rules no longer fires every rule that already holds.** A saved set learns the level; the next crossing fires as before. A rule true at boot still fires once.
+- **The climate read never transmits at a hand-set bitrate until a frame has been heard at it.**
+- Saving the log-push settings no longer rewinds the CAN push to what was last stored.
+- A popup text cut at its length never ends inside a character; a `K_CLOSE` lost to a full queue no longer leaves the panel menu on the glass; `/api/can/ids` for a frame with no data.
+
+### Changed
+- The odometer and the service edge are written to NVS by net_svc, not by the car task between frames.
+- The OTA trial also wants the web server to take a connection before it confirms: an image whose server never came up is rolled back.
+- The mDNS name is read through a locked copy (the panel menu's address row read a `String` another task rewrites).
+
 ## [1.12.1] - 2026-11-24
 
 ### Changed

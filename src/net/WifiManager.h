@@ -41,7 +41,8 @@ public:
     String ip() const;
     // AP name is derived from the MAC; set in begin(), never changed after.
     const String& apSsid() const { return _apSsid; }
-    const String& mdnsHost() const { return _mdns; }   // e.g. "megaopen.local"
+    // e.g. "megaopen.local"; a copy, for any task (net_svc rewrites the name).
+    String mdnsHost() const;
 
     // Second network (the head unit's hotspot), NVS namespace "net2".
     // Applied at the next boot or AP retry. Called on httpd: it persists and
@@ -115,7 +116,8 @@ private:
     volatile bool _stDirty = false;
     uint8_t  _retryIdx = 0;
     String   _apSsid;
-    String   _mdns;
+    char     _mdns[48] = {0};   // under _snapMux: the ui task reads it (the address row)
+    void     setMdns(const char* name);
     bool     _sta = false;
     bool     _mdnsUp = false;
     bool     _sleepOn = false;

@@ -1023,6 +1023,26 @@ void test_raise_targets_ids_are_unique_and_name_real_signals()
 // unique. The side of «Сигнали» is computed from the source: the car's for a
 // CAN row, Derived or a formula; the head unit's alone for a constant, a pin
 // or nothing.
+void test_a_silent_bus_zeroes_speed_and_rpm_and_drops_the_rest()
+{
+    State s;
+    s.set(SIG_SPEED, 8700, 100);
+    s.set(SIG_RPM, 2500, 100);
+    s.set(SIG_FUEL_LOW, 1, 100);
+    s.pin(SIG_BATT_V, 1250);
+    Expr::SigSet ch;
+    s.takeChanged(ch);
+    s.busSilent(6000);
+    TEST_ASSERT_TRUE(s.has(SIG_SPEED));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_SPEED));
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_RPM));
+    TEST_ASSERT_FALSE(s.has(SIG_FUEL_LOW));
+    TEST_ASSERT_EQUAL_INT32(1250, s.get(SIG_BATT_V));      // a pin is not the bus's
+    TEST_ASSERT_FALSE(s.has(SIG_ODOMETER));                // never decoded: still nothing
+    s.takeChanged(ch);
+    TEST_ASSERT_TRUE(ch.has(SIG_SPEED) && ch.has(SIG_FUEL_LOW));   // the rules see it
+}
+
 void test_signal_groups_have_ids_and_the_side_is_computed()
 {
     for (uint8_t g = 0; g < GRP_COUNT; ++g) {
@@ -1370,6 +1390,7 @@ int main(int, char**)
     RUN_TEST(test_radar_polarity_inverts_but_leaves_no_display_alone);
     RUN_TEST(test_the_version_string_is_settable_and_always_sixteen_bytes);
     RUN_TEST(test_the_version_string_follows_the_firmware_unless_the_owner_wrote_one);
+    RUN_TEST(test_a_silent_bus_zeroes_speed_and_rpm_and_drops_the_rest);
     RUN_TEST(test_signal_groups_have_ids_and_the_side_is_computed);
     return UNITY_END();
 }

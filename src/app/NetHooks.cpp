@@ -21,6 +21,7 @@
 #if FEATURE_BLE
 #include "../ble/BleHub.h"
 #endif
+#include "lwip/sockets.h"
 #include "../net/IpNotice.h"
 #include "../net/LogPush.h"
 #include "../net/WebUi.h"
@@ -92,6 +93,32 @@ namespace App
             // and rebooted 180 s after every OTA.
             // The OTA trial wants a way in for the next update: WiFi up once, or the app
             // on the link (USB or BLE) (it carries the page and the upload too).
+            // The web server's port takes a TCP connection from the board itself
+            // (the loopback the app link uses). Sticky; tried once a second until
+            // it does. It says "the server listens", not "every route works".
+            static bool hkWebUp()
+            {
+                static bool s_ok = false;
+                static uint32_t s_at = 0;
+                if (s_ok) return true;
+                const uint32_t now = millis();
+                if (s_at && (uint32_t)(now - s_at) < 1000) return false;
+                s_at = now ? now : 1;
+                if (!xTaskGetHandle("httpd")) return false;
+                const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+                if (fd < 0) return false;
+                struct timeval tv = {0, 300000};
+                ::setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+                struct sockaddr_in a;
+                memset(&a, 0, sizeof(a));
+                a.sin_family = AF_INET;
+                a.sin_port = htons(80);
+                a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+                s_ok = ::connect(fd, (struct sockaddr*)&a, sizeof(a)) == 0;
+                ::close(fd);
+                return s_ok;
+            }
+
             static bool hkWifiSeen()
             {
                 static bool s_seen = false;
@@ -223,6 +250,7 @@ namespace App
                 // Settings › Reminders, live: two bytes, read without the settings lock.
                 App::Car::setReminderSpeeds(s_cfg->s().remindLightsKmh, s_cfg->s().remindBrakeKmh);
                 App::Car::setGears(s_cfg->s().gearRatio);
+                App::Car::store();   // the odometer, the service edge: NVS from this task
                 // [stk] is a subset of [task] now. Kept until Step 6 retires it, so old
                 // logs and new ones still compare line for line.
                 const TaskHandle_t net = App::Housekeeping::task();
@@ -354,6 +382,7 @@ namespace App
                 h.web      = hkWeb;
                 h.wifi     = hkWifi;
                 h.wifiSeen = hkWifiSeen;
+                h.webUp    = hkWebUp;
                 h.beat     = hkBeat;
                 h.beatSlow = hkBeatSlow;
                 h.ctx      = hkCtx;

@@ -91,6 +91,9 @@ namespace App
 
         // The loop, when no task was created: commands, staging, test expiry.
         void service(uint32_t nowMs);
+        // net_svc, every beat: the odometer and the service edge the car task
+        // published go to NVS here, never on the car task.
+        void store();
 
         // ---- any task: the reminders' speeds (Settings › Reminders), km/h ------
         // Two bytes the car task reads on its next frame; 0 = that one off.

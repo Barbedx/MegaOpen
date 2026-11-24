@@ -353,7 +353,10 @@ namespace App
                         case MenuUi::Cmd::Prev:   s_keys.push(K_PREV); break;
                         case MenuUi::Cmd::Select: s_keys.push(K_SELECT); break;
                         case MenuUi::Cmd::Close:
-                            if (moveMode(Mode::Open, Mode::Closed)) s_keys.push(K_CLOSE);
+                            // A full ring undoes the move, as Open does: Closed
+                            // with the engine still open kept the menu on the glass.
+                            if (moveMode(Mode::Open, Mode::Closed) && !s_keys.push(K_CLOSE))
+                                moveMode(Mode::Closed, Mode::Open);
                             break;
                     }
                     return true;

@@ -483,6 +483,10 @@ namespace Link
             netService();
             txService();
             _kickAgain = _pipe.kick();
+        } else if (_netSt == NetSt::Send || _netSt == NetSt::Head) {
+            // netOpen() checked the link, the link went, then it set Send:
+            // down() saw Idle and failed nothing, and Send has no timeout.
+            netFail("unplugged");
         }
         uint8_t open = 0;
         for (const auto& c : _ch) open += c.fd >= 0;

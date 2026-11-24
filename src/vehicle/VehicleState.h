@@ -17,6 +17,11 @@ namespace Vehicle
         // No value any more (a formula that has none): has() is false again.
         void clear(uint8_t s);
 
+        // The bus went silent: speed and rpm read 0 (the head unit and the
+        // rules must not keep the last ones), every other decoded value is
+        // dropped. Pinned signals stay.
+        void busSilent(uint32_t nowMs);
+
         // --- from the web UI --------------------------------------------------
         void pin(uint8_t s, int32_t v);      // clamped to the signal's range
         void unpin(uint8_t s);

@@ -888,7 +888,10 @@ namespace LogPush
             portEXIT_CRITICAL(&s_mux);
         }
 
-        void load()
+        // progress = also where the CAN push stands (cnum..cused). Only at
+        // boot and when setCan() moved it: the job owns those in RAM between
+        // saves, and a settings POST must not rewind them to what NVS holds.
+        void load(bool progress)
         {
             Preferences p;
             p.begin("logpush", true);
@@ -902,7 +905,7 @@ namespace LogPush
             p.end();
             s_can = can;
             s_canMB = canMB;
-            s_cnum = cnum; s_coff = coff; s_cday = cday; s_cused = cused;
+            if (progress) { s_cnum = cnum; s_coff = coff; s_cday = cday; s_cused = cused; }
             if (!repo.length()) repo = REPO_DEFAULT;
             portENTER_CRITICAL(&s_mux);
             s_on = on;
@@ -923,7 +926,7 @@ namespace LogPush
         if (!s_buf) return false;
         s_size = size;
         snprintf(s_dev, sizeof(s_dev), "mo-%04X", (unsigned)(uint16_t)(ESP.getEfuseMac() & 0xFFFF));
-        load();
+        load(true);
         return true;
     }
 
@@ -1070,7 +1073,7 @@ namespace LogPush
         if (token && token[0]) p.putString("tok", token);
         if (repo) p.putString("repo", repo);
         p.end();
-        load();
+        load(false);
         // New settings: a stop is lifted, the next push is soon.
         portENTER_CRITICAL(&s_mux);
         if (s_state == State::Stopped || (ready() && s_state == State::Off)) s_state = State::Waiting;
@@ -1090,7 +1093,9 @@ namespace LogPush
         if (!p.begin("logpush", false)) return "nvs";
         if (on) p.putBool("can", *on);
         if (mb) p.putUInt("canMB", *mb);
+        bool moved = false;
         if (on && *on && !s_can) {
+            moved = true;
             // From now on: what was recorded before is not sent.
             uint32_t newest = 0;
 #if FEATURE_CAPTURE
@@ -1102,7 +1107,7 @@ namespace LogPush
             p.putUInt("coff", 0xFFFFFFFFu);
         }
         p.end();
-        load();
+        load(moved);
         s_canStarted = false;
         LOGI("push", "CAN to GitHub: %s, %u MB a day", s_can ? "on" : "off", (unsigned)s_canMB);
         return nullptr;

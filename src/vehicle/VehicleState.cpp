@@ -25,6 +25,15 @@ namespace Vehicle
         if (!_pinned[s]) _changed.set(s);
     }
 
+    void State::busSilent(uint32_t nowMs)
+    {
+        for (uint8_t s = 0; s < SIG_COUNT; ++s) {
+            if (_pinned[s] || !_ts[s]) continue;
+            if (s == SIG_SPEED || s == SIG_RPM) set(s, 0, nowMs);
+            else clear(s);
+        }
+    }
+
     void State::pin(uint8_t s, int32_t v)
     {
         if (s >= SIG_COUNT) return;

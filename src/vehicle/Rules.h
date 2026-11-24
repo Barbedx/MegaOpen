@@ -165,6 +165,7 @@ namespace Vehicle
             bool     on = false, gesture = false;
             bool     holds = false;         // the last evaluation ("" = true)
             bool     seen = false;          // evaluated at least once
+            bool     quiet = false;         // a set saved while running: the first look only learns the level
             uint32_t fires = 0, lastFireMs = 0;
             uint16_t pauseS = 0;
         };
@@ -175,6 +176,7 @@ namespace Vehicle
         // the row it reads gone.
         Row*     _rows = nullptr;
         uint16_t _n = 0;
+        bool     _applied = false;          // a set has been applied before (boot's)
         Expr::SigSet _none;
     };
 }

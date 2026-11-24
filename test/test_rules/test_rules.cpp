@@ -120,6 +120,47 @@ void test_true_at_first_sight_fires()
     TEST_ASSERT_EQUAL_UINT8(1, g_nFired);
 }
 
+// A set saved while running only learns the level: editing one rule must not
+// fire every level rule that holds. The next crossing fires as always.
+void test_a_saved_set_does_not_refire_what_already_holds()
+{
+    RuleSet set;
+    set.rows.push(signalRule("fast", "speed > 100", 5));
+    Rules r;
+    RuleProblem p;
+    TEST_ASSERT_TRUE(r.apply(set, p));
+    State s;
+    fresh();
+    s.set(SIG_SPEED, 12000, 1);
+    pass(r, s, 1000);
+    TEST_ASSERT_EQUAL_UINT8(1, g_nFired);          // boot's set: true at first sight
+    TEST_ASSERT_TRUE(r.apply(set, p));             // the page saved the rules
+    pass(r, s, 2000);
+    TEST_ASSERT_EQUAL_UINT8(1, g_nFired);          // still above 100: nothing
+    s.set(SIG_SPEED, 5000, 3000);
+    pass(r, s, 3000);
+    s.set(SIG_SPEED, 12000, 4000);
+    pass(r, s, 4000);
+    TEST_ASSERT_EQUAL_UINT8(2, g_nFired);          // a real crossing
+}
+
+// A popup cut at the buffer never ends inside a character.
+void test_the_popup_text_is_cut_between_characters()
+{
+    RuleSet set;
+    set.rows.push(signalRule("low", "batt_v < 11.8"));
+    Rules r;
+    RuleProblem p;
+    TEST_ASSERT_TRUE(r.apply(set, p));
+    State s;
+    char b[8];
+    // Seven bytes fit: "АБВ" (6) and half of "Г" would be the seventh.
+    Rules::popupText(b, sizeof(b), set.rows[0], "АБВГ", r.inputsOf(0), s);
+    TEST_ASSERT_EQUAL_STRING("АБВ", b);
+    Rules::popupText(b, sizeof(b), set.rows[0], "abcdefghij", r.inputsOf(0), s);
+    TEST_ASSERT_EQUAL_STRING("abcdefg", b);
+}
+
 // A threshold in the signal's own units; only inputs that changed are
 // evaluated; the rule re-arms below the threshold.
 void test_a_threshold_rule_fires_on_the_crossing()
@@ -342,6 +383,8 @@ int main(int, char**)
     UNITY_BEGIN();
     RUN_TEST(test_the_factory_rules_are_the_old_alerts);
     RUN_TEST(test_true_at_first_sight_fires);
+    RUN_TEST(test_a_saved_set_does_not_refire_what_already_holds);
+    RUN_TEST(test_the_popup_text_is_cut_between_characters);
     RUN_TEST(test_a_threshold_rule_fires_on_the_crossing);
     RUN_TEST(test_a_gesture_rule_is_armed_by_its_formula_and_becomes_a_macro);
     RUN_TEST(test_check_says_which_row_and_why);

@@ -478,7 +478,8 @@ void setup()
     // The OTA trial's verdict comes from net_svc (Housekeeping).
     App::OtaTrial::begin();
 
-    const char* mdns = g_wifi.mdnsHost().length() ? g_wifi.mdnsHost().c_str() : "(mdns FAILED)";
+    const String mdnsName = g_wifi.mdnsHost();
+    const char* mdns = mdnsName.length() ? mdnsName.c_str() : "(mdns FAILED)";
     // httpd is up: a copy under the lock, so the line is never torn.
     const auto staSsid = [] { Cfg::Config::Guard g(g_cfg); return g_cfg.s().ssid; }();
     if (g_wifi.connecting())
