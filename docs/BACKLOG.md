@@ -17,6 +17,74 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
+- **2026-11-24 — the release check through the app fails: the body's buffer
+  holds one byte less than the app's credit.** Car mo-4580, boot 294 (1.11.0),
+  five checks, each `[ota] github: through the app (usb, api.github.com)` then
+  `gh_json: IncompleteInput` ~220 ms later. `Session::netOpen` allocates
+  `NET_WINDOW + 1` bytes but creates the buffer with
+  `xStreamBufferCreateStatic(NET_WINDOW, …)`; a static stream buffer stores
+  size − 1, so 16383. The app sends a full 16384 before the first ack
+  (`LinkSession.kt` `room()`), the last byte does not fit, `netFail("window")`,
+  the reader sees the end mid-JSON. `releases/latest` is 19.7 kB since the
+  APK asset (1.11.0); a smaller reply fitted. Not reproduced on the bench.
+  Fix: `NET_WINDOW + 1` in the create (same shape in `BlePipe` `RX_BUF`), and
+  16383 in the app and `tools/usb_link.py` so a board up to 1.12.0 can still be
+  updated through the app. `src/link/LinkSession.cpp`, `src/link/BlePipe.cpp`,
+  `android/…/link/Frames.kt`.
+- **2026-11-24 — review of 1.12.0 (read only, nothing measured).** No crash
+  race, leak or overrun found; the ownership rules hold. What it did find:
+  - *Stale car values go to the head unit for ever.* `State::has()` is "ever
+    decoded" and never expires; the emitter asks it through `FieldView`. CAN A
+    silent (key off, a connector, an autobaud search) leaves speed, rpm and
+    doors frozen, and the rules keep running on them. The panel menu and the
+    car screen do apply `STALE_MS`. `src/vehicle/VehicleState.h`,
+    `src/proto/canbox/FieldView.h`, `Rav4Emitter.cpp`.
+  - *`netOpen` can wait for ever.* The link dropping between its
+    `netAvailable()` check and `_netSt = Send` is seen by `down()` as Idle;
+    the wait loop times out only in `Head`. netjob then never returns: no log
+    push, no update check, over WiFi too, until a reboot.
+    `src/link/LinkSession.cpp`.
+  - *NVS writes on the car task.* `odoKeep()` and `svcKeep()` run from
+    `frame()` (about once a minute at speed): the cache is off on both cores
+    for the write, and the slack is the chip's 32-frame FIFO, not the 256 ring
+    (the comment in `Mcp2518Source.cpp` says 170 ms). Against "nothing blocks on
+    flash in a hot path". `can2Detected` shows the way: publish, net_svc
+    stores. `src/app/CarTask.cpp`.
+  - *One bad `/api/map` row switches all decoding off.* `intOf()` returns its
+    default (−1 for `byte`) without the range check, the row is stored as
+    byte 255, `CanDecode::load` refuses the whole table, and the next boot
+    discards the saved file. The page always sends `byte`; a script or the
+    app need not. `src/vehicle/DecodeTable.cpp`.
+  - *Diag can go Normal on a hand-set bitrate no frame confirmed.*
+    `Mcp2518Source` takes a manual rate as locked, `CarDiag` reads "bus alive"
+    from a frame time that survives the rate change: error frames on the car
+    bus until the TEC check. Gate on frames at the current rate.
+    `src/bus/Mcp2518Source.cpp`, `src/app/CarDiag.cpp`.
+  - *The OTA verdict asks "is it running", not "can the next OTA arrive".* An
+    image with a dead httpd confirms after 60 s; key-off inside the first 60 s
+    after an OTA returns the old image without a word.
+    `src/app/Housekeeping.cpp`, `OtaVerdict.cpp`.
+  - *`LOGI` and `queueRows` on the NimBLE host stack* (the ANCS callback,
+    `BlePipe::onSubscribe`): 320 B + ~416 B of locals on a stack we do not
+    size, the `arduino_usb_eve` class. Unmeasured: read `[stk] nimble_host`
+    under an ANCS burst. `src/ble/BleService.cpp`, `src/app/UiTask.cpp`.
+  - *`WifiManager::_mdns` is a `String` the ui task reads* (`addressText`)
+    while net_svc reassigns it; `curSsid()` has the `_snapMux` copy, this
+    getter does not. `src/net/WifiManager.h`, `src/app/NetHooks.cpp`.
+  - *Saving any rule re-fires every level rule that holds*, pause ignored
+    (`apply()` resets `seen`/`fires` for all rows), key and frame actions
+    included. `src/vehicle/Rules.cpp`.
+  - *`POST /api/logpush` rewinds the CAN push* to what NVS holds (`load()` on
+    httpd over the job's RAM progress). `src/net/LogPush.cpp`.
+  - *Whole replies as `String` on httpd*, worst `mapToFile` for `/api/config`
+    (four parts, tens of kB each, beside a streaming `Writer`).
+    `src/net/WebUiMap.cpp`, `WebUi.cpp`.
+  - Small: `/api/can/ids` serialises an unset `hex[24]` for a DLC-0 frame
+    (`WebUi.cpp`); popup text cut mid-codepoint at 47 bytes (`Rules.cpp`); a
+    dropped `K_CLOSE` leaves the menu drawn up to 45 s (`PanelMenu.cpp`); the
+    car task has no pacer when `more` (`CarTask.cpp`); gestures and rules are
+    staged apart and joined by a row index (`WebUiRules.cpp`); `cfg/` includes
+    every module it stores (the registry knows the modules, not the reverse).
 - **2026-11-08 — WifiManager's boot scan probably always "fails".**
   `WifiManager::start()` scans with `WiFi.scanNetworks(true, false, false, 120)`
   when two networks are saved. arduino-esp32 2.0.17 (`WiFiScan.cpp:63`) sets
