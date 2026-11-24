@@ -278,6 +278,13 @@ after another, each researched, planned, then implemented.
    source in the build) `loop()` runs `App::Car::service` and
    `g_sniffer.applyRequests()` itself; with one, the car task does. One job,
    two homes chosen by `#if`. `src/main.cpp` loop(), `src/app/CarTask.*`.
+   OWNER 2026-11-24: env:direct, the matrix, the resistive keys and the
+   ladder output STAY (another car may have no keys on CAN). This item does
+   not need them gone: both envs build a vehicle source, the loop's branch is
+   the fallback for a car task that did not start (`!App::Car::running()`,
+   `src/app/LoopTask.cpp`). Note: the matrix and the resistive sink compile
+   only in env:direct today (`FEATURE_MATRIX=0`, `FEATURE_RESISTIVE_KEYS`
+   default 0 on t2can).
 4. **BLE lives in two places.** `src/bluetooth.cpp` and the
    `apple_*_service`/`current_time_service` files sit in `src/`'s root beside
    `src/ble/`; `bluetooth.cpp` serves "legacy top-level keys" in its status
