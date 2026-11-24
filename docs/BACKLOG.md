@@ -92,32 +92,39 @@ where.
   adds a "next try in N s" line (android/, feat/ble-link). The board side has
   no such line either: `/api/health` chain `app` now says the link
   (`app_usb`/`app_ble`/`app_none`).
-- **2026-11-04 — main.cpp is still the glue for every task.** 2867 lines,
-  ~165 file-scope globals, `setup()` about 800 lines (1817-2611), 133 `#if`.
-  It holds work that belongs to the task modules: the head-unit UART glue
-  (`huDrainSerial`, `onHu*`, `huLastFramesJson`) beside `app/HuTask`; the rule
-  actions (`performAction`, `macroFire`) beside `app/CarTask`/`KeysTask`; the
-  matrix and ladder GPIO and the keys task's hooks (`keys*`); net_svc's hooks
-  (`hk*`, `addressText`, `logPushSnapshot`); crash and boot-reason logging. Each
-  section could move next to its task, leaving setup() as the wiring list.
-  `src/main.cpp`.
-- **2026-11-04 — WebUi.cpp is 2559 lines, 64 routes.** The split files
-  (`WebUiMap`, `WebUiRules`, `WebUiKnobs`, `WebUiGhOta`, ...) exist, yet
-  settings, health, status, display, logs, keys and wifi routes all stay in
-  one file. `src/net/WebUi.cpp`.
-- **2026-11-04 — State has two writers' paths by build.** With no car task
-  (no vehicle source in the build) `loop()` runs `App::Car::service` and
-  `g_sniffer.applyRequests()` itself; with one, the car task does. One job,
-  two homes chosen by `#if`. `src/main.cpp` loop(), `src/app/CarTask.*`.
-- **2026-11-04 — BLE lives in two places.** `src/bluetooth.cpp` and the
-  `apple_*_service`/`current_time_service` files sit in `src/`'s root beside
-  `src/ble/`; `bluetooth.cpp` serves "legacy top-level keys" in its status
-  JSON. The stack is MeganeCAN's byte for byte and BLE is not a priority, so
-  moving it is cosmetic until BLE work resumes.
-- **2026-11-04 — "macro" names outlive the macros.** Since 1.7 the key
-  macros are rules (gesture rows); the runtime is still `Keys::MacroEngine`,
-  `MacroTable`, and main.cpp's `g_macroCfg`, `macroFilter`, `macroFire`.
-  Works; the names point at a feature that no longer exists on the page.
+- **2026-11-04 — the bench fell off WiFi and cannot rejoin.** This was not a
+  hang. mo-8428 (boot 204, 1.9.0 de349c5) pushed its last part at 2026-11-03
+  23:34 UTC (up 67 min, `rssi=-85`). It then ran 17 h 36 min with every task
+  alive (flash log read over `tools/usb_link.py` after a power cycle). It was
+  on its own AP. "Yozhik" answered every join with `reason=2` (AUTH_EXPIRE:
+  the AP did not answer the open-system auth frame, before any key, so this
+  is not a bad password, which would be 15). Then `did not join; AP`, retried
+  every minute. Boots 205 and 206 behave the same. 206 ran with BLE off
+  (heap 110 kB), so it is not BT coexistence and not memory. The board sees
+  "Yozhik" at -75 dBm right next to the router, and the PC does not see it on
+  2.4 GHz at all: the router's 2.4 GHz side is the suspect. `netjob age=58801
+  s` is not a stuck job. The push only posts while STA is connected
+  (`NetHooks.cpp` LogPush::tick), so with WiFi gone nothing ran. The minutes
+  around the loss are lost: the flash log keeps 8 x 256 kB, and boot 204's
+  first 11 h rotated out. Lesson: the bench is read over USB and over WiFi
+  before anything is said about it.
+- **2026-11-04 — the heartbeat hook applies settings.** net_svc's 10 s beat
+  (`hkBeat`, now `src/app/NetHooks.cpp`) also pushes the reminder speeds and
+  gear ratios into the car task every pass and saves a newly detected CAN A
+  rate to NVS. Settings work in a log hook: a setting applies up to 10 s late
+  and only while net_svc beats. Seen moving it in the main.cpp split.
+- **2026-11-04 — `[stk]` repeats `[task]`.** Its own comment says it is a
+  subset of `[task]`, "kept until Step 6 retires it" so old and new logs
+  compare. `src/app/NetHooks.cpp` hkBeat.
+- **2026-11-04 — comments point at main.cpp code that is gone.**
+  `Settings.h:104` "the BUS_OFF circuit breaker in main.cpp",
+  `MediaPane.h:23` "the double buffer in main.cpp", `MediaScreen.h:56`
+  "main.cpp's repaint gate": none is in main.cpp (before or after the split);
+  the render policy is `UiTask` since Step 4.
+- **2026-11-04 — a check_rules rule could never fire (fixed in the split).**
+  "the emitter is the hu task's" matched `g_emitter.x` on a pointer, so no
+  call through it was ever caught. The rule moved with the glue and now
+  matches `->`; it finds nothing today.
 - **2026-11-03 — older blob layouts are still read.** Not NVS keys but the
   layout versions inside a blob: `Knobs::Config::fromBlob` reads v3/v4
   (`BLOB_SIZE_V3`, the retired potentiometer fields stay in the layout),
@@ -147,6 +154,36 @@ where.
   store `carminat`.
 
 ## Open
+
+### Architecture (accepted 2026-11-04, fixed in this order)
+
+The owner's call on the 2026-11-04 sweep: all five are real and are fixed one
+after another, each researched, planned, then implemented.
+
+1. **main.cpp is still the glue for every task.** 2867 lines, ~165
+   file-scope globals, `setup()` about 800 lines, 133 `#if`. It holds work
+   that belongs to the task modules: the head-unit UART glue (`huDrainSerial`,
+   `onHu*`, `huLastFramesJson`), the rule actions (`performAction`), the keys
+   task's objects and hooks (`keys*`, the matrix and ladder GPIO), the panel's
+   tap and trace, net_svc's hooks (`hk*`, `addressText`, `logPushSnapshot`),
+   the BLE service task, crash and boot-reason logging. Plan:
+   `docs/design/main-split.md`.
+2. **WebUi.cpp is 2559 lines, 64 routes.** The split files (`WebUiMap`,
+   `WebUiRules`, `WebUiKnobs`, `WebUiGhOta`, ...) exist, yet settings, health,
+   status, display, logs, keys and wifi routes all stay in one file; ~25
+   `attach*` calls hand it raw pointers. `src/net/WebUi.cpp`.
+3. **State has two writers' paths by build.** With no car task (no vehicle
+   source in the build) `loop()` runs `App::Car::service` and
+   `g_sniffer.applyRequests()` itself; with one, the car task does. One job,
+   two homes chosen by `#if`. `src/main.cpp` loop(), `src/app/CarTask.*`.
+4. **BLE lives in two places.** `src/bluetooth.cpp` and the
+   `apple_*_service`/`current_time_service` files sit in `src/`'s root beside
+   `src/ble/`; `bluetooth.cpp` serves "legacy top-level keys" in its status
+   JSON. The stack is MeganeCAN's byte for byte (diff against it before
+   touching behaviour).
+5. **"macro" names outlive the macros.** Since 1.7 the key macros are rules
+   (gesture rows); the runtime is still `Keys::MacroEngine`, `MacroTable`,
+   and main.cpp's `g_macroCfg`, `macroFilter`, `macroFire`.
 
 ### Hardware (T-2CAN)
 

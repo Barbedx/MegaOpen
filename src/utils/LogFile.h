@@ -19,7 +19,7 @@
 //     at most every WARN_FLUSH_MS (5 s): a burst of warnings is one write, and
 //     a warning inside the window goes out with the first line after it
 //     (docs/design/stabilisation-1-12.md S4, E4),
-//   * on an explicit dump: flushNow() before a reboot (main.cpp's shutdown
+//   * on an explicit dump: flushNow() before a reboot (app/LogSetup's shutdown
 //     handler), or through LogBus::flushAndWait (the web reading /log/0.log).
 // There is deliberately NO timer: a periodic flush is a periodic stall.
 // The cost: a panic or a power cut loses what is still in the buffer (up to

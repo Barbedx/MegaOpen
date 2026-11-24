@@ -50,7 +50,7 @@ namespace LogBus
     using WakeHook = void (*)(uint32_t busyUs);
     void onWake(WakeHook h);
 
-    // For a reboot (main.cpp's shutdown handler): wakes the LogBus task to
+    // For a reboot (app/LogSetup's shutdown handler): wakes the LogBus task to
     // drain the ring through every sink and then run the onFlush() hook (the
     // flash log's sync), and waits for it. Only the LogBus task ever runs a
     // sink. Gives up after timeoutMs (false): a reboot must not hang on its log.

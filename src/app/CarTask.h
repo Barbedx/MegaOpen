@@ -15,7 +15,7 @@
 //
 // It owns the vehicle sources and everything behind them (the MCP2518FD's SPI),
 // the decode into Vehicle::State, the sniffer table and the
-// capture hook. Per frame: CanDecode, the main.cpp tap (raw ring, counters,
+// capture hook. Per frame: CanDecode, the loop task's tap (raw ring, counters,
 // the web's raw stream), the sniffer when it is on, the recorder.
 //
 // WAKES on a task notify from the MCP2518FD's INT (T-2CAN), or every 2 ms when
@@ -52,7 +52,7 @@ namespace App
             Vehicle::State*      state = nullptr;
             // Null = no table in this image.
             Vehicle::CanSniffer* sniffer = nullptr;
-            // Every frame, on the car task, after the decode: main.cpp's frame
+            // Every frame, on the car task, after the decode: the loop task's frame
             // ring, its counter and the web's raw stream. Must not block.
             void (*tap)(const Frame& f) = nullptr;
             // The decode map as the car file holds it (CarStore::loadDecode),
@@ -74,7 +74,7 @@ namespace App
             // notification). Null = no panel in this image: evaluated, not shown.
             void (*alert)(const char* title, const char* text) = nullptr;
             // A rule's other actions, performed by posting to the task that
-            // owns each (main.cpp performAction). Null = popups only.
+            // owns each (App::RuleActions::perform). Null = popups only.
             void (*perform)(const Vehicle::RuleAction& a) = nullptr;
             // Whether a popup may go up now: false while a menu or a person's
             // screen holds the glass. Null = always.

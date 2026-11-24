@@ -18,14 +18,14 @@ public:
 
     static TwaiVehicleSource& instance();
 
-    // The TWAI owner's hand-off (main.cpp, carLinkPump). Any one task, never blocks.
+    // The TWAI owner's hand-off (LoopTask.cpp, carLinkPump). Any one task, never blocks.
     static void push(const Frame& f, void* ctx);
     bool put(const Frame& f);
 
     const char* name() const override { return "twai"; }
     bool        begin() override { return true; }
     size_t      drain(Frame* out, size_t max, uint32_t nowMs) override;
-    // The car's TWAI runs at a fixed 500k (setup() in main.cpp).
+    // The car's TWAI runs at a fixed 500k (App::Loop::begin).
     uint32_t    bitrate() const override { return 500000; }
     Stats       stats() const override;
 

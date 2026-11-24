@@ -526,6 +526,11 @@ Six steps, which match the user's "all six steps". The draft's Steps 0 to 6 are 
 **Goal.** In the car the box recovers on its own, leaves evidence, and is identified by build. `main.cpp` shrinks to construction and wiring.
 
 **6a. Code motion**
+
+*Done 2026-11-04 by owner rather than into one `App.cpp`: see
+[main-split.md](main-split.md). No `App.cpp`/`AppContext.h`; the attach list
+is architecture item 2 (docs/BACKLOG.md).*
+
 - Create `src/app/App.{h,cpp}`: construction in today's order, feature gating, queue creation, task start.
 - Create `src/app/AppContext.h`: one struct of owner handles, queues and snapshot accessors handed to WebUi. It replaces the ~40 `attach*` raw pointers.
 - Create `src/app/Telemetry.{h,cpp}`.

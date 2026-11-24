@@ -85,19 +85,19 @@ Raise the log level for one session through `/api/settings` `{"logLevel":"DBG"}`
 | --- | --- | --- |
 | panel blank, never registers | health `panel`, `[disp]`, `AFFA-TWAI` | `src/app/PanelOwner.*`, `src/display/AffaPort.cpp`; protocol in AffaDisplay (`.pio/libdeps/t2can/AffaDisplay`), sequence in `docs/DISPLAY-INIT-SPEC.md` |
 | wrong role: two radios fight / nothing shows over the stock radio | health `panel` (`panel_foreign_master`, `panel_no_radio`), `[panel]`, `/api/settings` `panelRole` | `src/display/PanelRole.h` (the two roles), `src/app/PanelOwner.cpp` (applies it), `src/app/StockRadio.*` (extension only: the radio code), `src/display/PanelBusWatch.h` (reports only) |
-| panel keys slow / lost | `[key]` p99, drops | `src/keys/AffaKeySource.*`, `src/app/KeysTask.*`, `src/keys/KeyRouter.*` |
+| panel keys slow / lost | `[key]` p99, drops | `src/keys/AffaKeySource.*`, `src/app/KeysTask.*`, `src/app/KeyPath.*`, `src/keys/KeyRouter.*` |
 | wrong text / layout on glass | `[ui]`, `[media]` | `src/app/UiTask.*`, `src/display/PanelOps.*`, `MediaScreen.*`, `MediaPane.*`, `GlassGate.h` |
 | panel menu (hold right knob) | — | `src/app/PanelMenu.*`, `src/ui/MenuEngine.*`, `MenuInput.*` |
 | car screen (3 signals) | — | `src/ui/SignalText.*`, `src/app/UiTask.*` |
 | encoders / LED rings | health `knobs`, `lights`; `/api/knobs` | `src/knobs/*`, `src/input/*` |
-| head unit shows nothing / wrong | health `hu`; `/api/canbox/last?in=1`; `/api/messages` | `src/app/HuTask.*`, `src/proto/canbox/Rav4Emitter.*`, `src/sinks/CanboxUartSink.*`; `docs/raise-protocol.md`, `docs/hu-decoder.md` |
+| head unit shows nothing / wrong | health `hu`; `/api/canbox/last?in=1`; `/api/messages` | `src/app/HuTask.*`, `src/app/HuLink.*`, `src/proto/canbox/Rav4Emitter.*`, `src/sinks/CanboxUartSink.*`; `docs/raise-protocol.md`, `docs/hu-decoder.md` |
 | track title from HU | `[media]` | `src/media/HuMediaSource.*`, `MediaRouter.*` |
 | track / cover from the head unit's apps | health `app`, `media`; `/api/media` | `src/media/AppMediaSource.*`, routes `/api/app/media`, `/api/app/art`; Companion `android/`; `docs/design/companion-media.md` |
 | Companion does not connect (USB / BLE) | health `app`; `/api/status` `usb`, `ble`; `[link]`, `[usb]` | `src/link/AppLink.*`, `LinkSession.*`, `UsbPipe.*`, `BlePipe.*`; `docs/design/usb-link.md` |
 | iPhone: no track / clock / notifications | health `phone`, `media`, `clock`, `ancs`; `[ble]` | `src/ble/*`, `src/apple_*_service.cpp`, `src/current_time_service.cpp`, `src/media/AmsMediaSource.*` |
 | car value wrong / missing | «Мапа» page `#map` (`/api/map?live=1`), `[car]`, `[can2]` | `src/vehicle/decode_defaults.inc` (factory rows), `CanDecode.*`, `Signals.*`, `Derived.*` (gear, consumption, range); ids in `docs/megane-can-ids.md`, `docs/signal-glossary.md`; car checklist `docs/car-test-can-signals.md` |
 | new signals not shown | saved map hides new factory rows | press **«Заводські прив'язки»** on «Мапа» › Сигнали |
-| a rule does not fire / popup spam | `[rule]`; `GET /api/rules` (each row's live state) | `src/vehicle/Rules.*` (engine), `src/app/CarTask.cpp` (popups, fire), `main.cpp` performAction, `src/net/WebUiRules.cpp` |
+| a rule does not fire / popup spam | `[rule]`; `GET /api/rules` (each row's live state) | `src/vehicle/Rules.*` (engine), `src/app/CarTask.cpp` (popups, fire), `src/app/RuleActions.cpp`, `src/net/WebUiRules.cpp` |
 | car CAN silent | `[can2]` autobaud, `ab=searching` | `src/bus/Mcp2518Source.*`, `Autobaud.*`, `src/app/CarTask.*` |
 | a setting does not apply / save | `POST /api/settings` answers 400 with key + reason | `src/cfg/SettingsRegistry.cpp` (every setting, its range and apply bit), `Config.cpp` (NVS) |
 | web page broken | browser console | `web/js/*.js` (built into the image by `tools/gen_pages.py`), `src/net/WebUi*.cpp` |

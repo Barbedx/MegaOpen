@@ -104,7 +104,7 @@ namespace Knobs
         TaskHandle_t      _task = nullptr;
         int               _regId = -1;      // App::Tasks entry; written before the task starts
     public:
-        // Knob task stack high-water mark (the [stk] line in main.cpp).
+        // Knob task stack high-water mark (the [stk] line, app/NetHooks).
         uint32_t stackFree() const { return _task ? (uint32_t)uxTaskGetStackHighWaterMark(_task) : 0u; }
     private:
         uint32_t          _dropped = 0;

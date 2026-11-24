@@ -10,6 +10,7 @@ namespace App
         namespace
         {
             Setup        s_s;
+            MegaOpen::PanelOps s_ops;
             TaskHandle_t s_task = nullptr;
             uint8_t      s_features = 0;
 
@@ -42,7 +43,7 @@ namespace App
             void onComplete(affa::TxTicket t, affa::Result r, void*)
             {
                 // A posted key's verdict, not a render's: PanelOps reports it.
-                if (s_s.ops && s_s.ops->keyDone(t, r)) return;
+                if (s_ops.keyDone(t, r)) return;
                 if (r == affa::Result::Ok)           { ++s_delivered; s_failStreak = 0; }
                 // Aborted (superseded) and Cancelled (resync) are not transport
                 // faults and must not trip the breaker.
@@ -91,7 +92,7 @@ namespace App
                 p.polls         = s_polls;
                 p.foreignPolls  = d.foreignPolls();
                 p.pollLateMaxUs = s_pollLateWinUs;
-                p.queuePosted   = s_s.ops ? s_s.ops->posted() : 0;
+                p.queuePosted   = s_ops.posted();
                 p.queueDropped  = d.dispatchDropped();
                 // The link's own TX gate (affa::TxGate), sampled inside poll().
                 if (s_s.link) {
@@ -100,7 +101,7 @@ namespace App
                 }
                 p.carminat      = s_s.carminat != nullptr;
                 p.syncChanges   = s_syncChanges;
-                p.yielded       = s_s.ops ? s_s.ops->yielded() : 0;
+                p.yielded       = s_ops.yielded();
                 s_status.publish(p);
             }
         }
@@ -136,6 +137,8 @@ namespace App
 
         affa::AffaDisplayBase& lib() { return *s_s.display; }
 
+        MegaOpen::PanelOps& ops() { return s_ops; }
+
         bool present() { return s_s.display != nullptr; }
 
         MegaOpen::PanelRole role() { return s_s.role; }
@@ -146,8 +149,8 @@ namespace App
             affa::AffaDisplayBase& d = lib();
             // A resync posted since the last pass gives the fresh link a clean
             // run at the breaker.
-            if (s_s.ops && s_s.ops->resyncs() != s_resyncsSeen) {
-                s_resyncsSeen = s_s.ops->resyncs();
+            if (s_ops.resyncs() != s_resyncsSeen) {
+                s_resyncsSeen = s_ops.resyncs();
                 s_failStreak = 0;
             }
             // The gap since the last poll() began: a key decoded in this poll

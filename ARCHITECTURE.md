@@ -74,7 +74,13 @@ The rules behind this layout (the ownership and blocking rules are checked by
 | `utils/` | LogBus, flash log, locks, snapshots |
 | `ble/`, `*_service.cpp` | NimBLE hub, HID role, Apple AMS/ANCS and CTS clients |
 
-`main.cpp` wires everything together.
+`main.cpp` is the wiring: the shared objects (settings, the car's State, the
+web, WiFi) and `setup()` as the order things start in. Each task's work lives
+with its owner (`docs/design/main-split.md`): `app/KeyPath` (every key object,
+the keys and scan tasks' hooks), `app/HuLink` (the head unit's UART and frame
+ring), `app/LoopTask` (the loop: TWAI, the panel's construction, the pass),
+`app/Media`, `app/RuleActions`, `app/NetHooks` (net_svc's hooks and heartbeat
+lines), `app/LogSetup`, `app/BootLog`, `ble/BleService`.
 
 ## Feature flags
 

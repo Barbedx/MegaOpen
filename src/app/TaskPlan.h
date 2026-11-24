@@ -145,7 +145,7 @@ namespace App
         constexpr int         CAPWR_CORE  = 0;
         constexpr uint32_t    CAPWR_STACK = 6144;
 
-        // bt_begin (main.cpp): BleHub::Begin builds the GATT tree and needs
+        // bt_begin (ble/BleService.cpp): BleHub::Begin builds the GATT tree and needs
         // more stack than setup() has; the task deletes itself after.
         constexpr uint32_t    BT_BEGIN_STACK = 16384;
 

@@ -19,7 +19,7 @@
 //
 // The role is not detected and never switched by what the bus says. A stock
 // radio syncing beside an Emulator, or no radio beside an Extension, is
-// reported — health `panel`, a [panel] line (main.cpp panelWatchStep) — and
+// reported — health `panel`, a [panel] line (LoopTask.cpp panelWatchStep) — and
 // nothing more: the board does what its role says. App::Panel::role() is the
 // boot copy every task reads; Settings.panelRole is what the page saves for
 // the next boot.

@@ -243,7 +243,7 @@ are withdrawn.
 
 **What it buys.** The panel's clock came from the PHONE over BLE, so a car with
 no phone had no clock, and neither did a build without BLE. This
-arrives on a wire that is already connected. `onHuClock()` in main.cpp consumes
+arrives on a wire that is already connected. `onHuClock()` in `src/app/HuLink.cpp` consumes
 it, validated (`h ≤ 23`, `m ≤ 59`) rather than trusted, because the command is
 undocumented and another unit may put something else there.
 

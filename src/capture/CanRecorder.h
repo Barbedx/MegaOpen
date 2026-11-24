@@ -63,7 +63,7 @@ namespace Vehicle { class State; }
 // gives the same text to anyone else who wants it.
 namespace Capture
 {
-    // HU: the head unit's UART, a frame in records of 8 bytes (src/main.cpp
+    // HU: the head unit's UART, a frame in records of 8 bytes (src/app/HuLink.cpp
     // huRecord, tools/can_dump.py hu).
     enum Bus : uint8_t { CAR = 0, PANEL = 1, HU = 2 };
 

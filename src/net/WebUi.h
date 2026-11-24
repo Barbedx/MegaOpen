@@ -293,7 +293,7 @@ public:
     void attachKnobs(Knobs::Service* k) { _knobs = k; }
 #endif
 
-    // The head-unit UART ring as JSON, streamed; main.cpp owns the storage.
+    // The head-unit UART ring as JSON, streamed; app/HuLink owns the storage.
     using HuDumpFn = void (*)(bool inOnly, Catalog::Out& out);
     void attachHuRing(HuDumpFn f) { _huDump = f; }
 
@@ -338,11 +338,11 @@ public:
         _ghosts = ghosts; _encSteps = encSteps;
     }
 
-    // Not feature-gated: main.cpp's executor reports effects this build lacks.
+    // Not feature-gated: App::RuleActions reports effects this build lacks.
 
     PsychicHttpServer& server() { return _server; }
     // GET /api/status and /api/health, into `d`: the routes, and the status
-    // snapshot LogPush sends to GitHub (logPushSnapshot in main.cpp). Reads
+    // snapshot LogPush sends to GitHub (app/NetHooks logPushSnapshot). Reads
     // the same copies the routes read; safe beside httpd.
     void statusJson(JsonObject d);
     void healthJson(JsonObject d);
