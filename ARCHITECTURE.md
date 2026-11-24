@@ -72,7 +72,7 @@ The rules behind this layout (the ownership and blocking rules are checked by
 | `net/` | WiFi, web server and API, `/api/catalog` |
 | `cfg/` | NVS-backed settings |
 | `utils/` | LogBus, flash log, locks, snapshots |
-| `ble/`, `*_service.cpp` | NimBLE hub, HID role, Apple AMS/ANCS and CTS clients |
+| `ble/` | NimBLE hub, HID role, Apple AMS/ANCS and CTS clients (`*_service.cpp`, `bluetooth.cpp`: MeganeCAN's, byte for byte) |
 
 `main.cpp` is the wiring: the shared objects (settings, the car's State, the
 web, WiFi) and `setup()` as the order things start in. Each task's work lives

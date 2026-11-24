@@ -54,9 +54,14 @@ where.
   rewind, `mapToFile`'s Strings, `hex[24]`, the popup cut, `K_CLOSE`; the OTA
   verdict now also wants the web server to take a connection (it still does
   not know whether a route works, and key-off in the first 60 s still
-  reverts). STILL OPEN: the NimBLE host stack (unmeasured), the car task's
-  pacer, gestures joined to rules by a row index, the other `String` replies,
-  `cfg/` including every module. What it found:
+  reverts). Then (bfabfd1): the ANCS callback only copies, ble_svc logs and
+  folds the rows; the car task sleeps a tick after 16 full drains; a gesture
+  carries its rule set's `gen`; a rolled-back update is a warning once; the
+  simple 200 replies are streamed. STILL OPEN: BleHub's and HidRole's own
+  lines on the NimBLE host task (one per connect or subscribe, with
+  addresses: left as they are), `String` replies with another status code or
+  a few dozen bytes, `cfg/` including every module, WebUi's ~25 `attach*`.
+  What it found:
   - *Stale car values go to the head unit for ever.* `State::has()` is "ever
     decoded" and never expires; the emitter asks it through `FieldView`. CAN A
     silent (key off, a connector, an autobaud search) leaves speed, rpm and
@@ -277,10 +282,13 @@ after another, each researched, planned, then implemented.
    `apple_*_service`/`current_time_service` files sit in `src/`'s root beside
    `src/ble/`; `bluetooth.cpp` serves "legacy top-level keys" in its status
    JSON. The stack is MeganeCAN's byte for byte (diff against it before
-   touching behaviour).
+   touching behaviour). MOVED 2026-11-24: the five files are in `src/ble/`,
+   contents untouched but their include lines.
 5. **"macro" names outlive the macros.** Since 1.7 the key macros are rules
    (gesture rows); the runtime is still `Keys::MacroEngine`, `MacroTable`,
-   and main.cpp's `g_macroCfg`, `macroFilter`, `macroFire`.
+   and main.cpp's `g_macroCfg`, `macroFilter`, `macroFire`. RENAMED
+   2026-11-24 (5c28cf8): `Keys::GestureEngine`, `GestureTable`, `Gesture`,
+   `test_gesture`; the API, the car file and the log words are as they were.
 
 ### Hardware (T-2CAN)
 

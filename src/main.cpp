@@ -64,7 +64,7 @@
 #if FEATURE_BLE
 #include "ble/BleHub.h"
 #include "ble/BleService.h"
-#include "bluetooth.h"
+#include "ble/bluetooth.h"
 #endif
 #if FEATURE_DISPLAY_CAN
 #include "app/PanelOwner.h"

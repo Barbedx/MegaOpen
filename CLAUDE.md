@@ -94,7 +94,7 @@ Raise the log level for one session through `/api/settings` `{"logLevel":"DBG"}`
 | track title from HU | `[media]` | `src/media/HuMediaSource.*`, `MediaRouter.*` |
 | track / cover from the head unit's apps | health `app`, `media`; `/api/media` | `src/media/AppMediaSource.*`, routes `/api/app/media`, `/api/app/art`; Companion `android/`; `docs/design/companion-media.md` |
 | Companion does not connect (USB / BLE) | health `app`; `/api/status` `usb`, `ble`; `[link]`, `[usb]` | `src/link/AppLink.*`, `LinkSession.*`, `UsbPipe.*`, `BlePipe.*`; `docs/design/usb-link.md` |
-| iPhone: no track / clock / notifications | health `phone`, `media`, `clock`, `ancs`; `[ble]` | `src/ble/*`, `src/apple_*_service.cpp`, `src/current_time_service.cpp`, `src/media/AmsMediaSource.*` |
+| iPhone: no track / clock / notifications | health `phone`, `media`, `clock`, `ancs`; `[ble]` | `src/ble/*` (the hub, HID, the Apple AMS/ANCS and CTS clients, `bluetooth.cpp`), `src/media/AmsMediaSource.*` |
 | car value wrong / missing | «Мапа» page `#map` (`/api/map?live=1`), `[car]`, `[can2]` | `src/vehicle/decode_defaults.inc` (factory rows), `CanDecode.*`, `Signals.*`, `Derived.*` (gear, consumption, range); ids in `docs/megane-can-ids.md`, `docs/signal-glossary.md`; car checklist `docs/car-test-can-signals.md` |
 | new signals not shown | saved map hides new factory rows | press **«Заводські прив'язки»** on «Мапа» › Сигнали |
 | a rule does not fire / popup spam | `[rule]`; `GET /api/rules` (each row's live state) | `src/vehicle/Rules.*` (engine), `src/app/CarTask.cpp` (popups, fire), `src/app/RuleActions.cpp`, `src/net/WebUiRules.cpp` |

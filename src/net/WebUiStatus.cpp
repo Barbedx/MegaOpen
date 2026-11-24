@@ -37,7 +37,7 @@
 #include "../utils/JsonEscape.h"
 #include "../utils/Hex.h"
 #if FEATURE_BLE && FEATURE_ANCS
-#include "../apple_notification_service.h"
+#include "../ble/apple_notification_service.h"
 #endif
 
 using namespace Keys;

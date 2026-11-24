@@ -2,7 +2,7 @@
 #if FEATURE_BLE
 #include "BleHub.h"
 #include "HidRole.h"
-#include "../bluetooth.h"
+#include "bluetooth.h"
 #include "../app/BootLog.h"
 #include "../app/KeyPath.h"
 #include "../app/Media.h"
@@ -12,7 +12,7 @@
 #include "../media/AmsMediaSource.h"
 #include "../utils/Log.h"
 #if FEATURE_ANCS
-#include "../apple_notification_service.h"
+#include "apple_notification_service.h"
 #endif
 #if FEATURE_DISPLAY_CAN
 #include "../app/UiTask.h"

@@ -6,8 +6,8 @@
 #if FEATURE_BLE
 
 #include "AmsMediaSource.h"
-#include "../apple_media_service.h"
-#include "../bluetooth.h"
+#include "../ble/apple_media_service.h"
+#include "../ble/bluetooth.h"
 #include <Arduino.h>
 
 namespace { AmsMediaSource* s_self = nullptr; }

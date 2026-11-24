@@ -1,8 +1,8 @@
 #include "BleKeySinks.h"
 #if FEATURE_BLE
 #include <Arduino.h>
-#include "../apple_media_service.h"
-#include "../bluetooth.h"
+#include "../ble/apple_media_service.h"
+#include "../ble/bluetooth.h"
 #include "../ble/HidRole.h"
 #include "../utils/Log.h"
 

@@ -6,7 +6,7 @@
 #include "BleHub.h"
 #include "HidRole.h"
 #include "../link/BlePipe.h"
-#include "../bluetooth.h"
+#include "bluetooth.h"
 #include "../utils/Log.h"
 
 #include <Preferences.h>
