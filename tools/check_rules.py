@@ -292,10 +292,10 @@ for dirpath, _, files in os.walk(os.path.join(ROOT, 'src')):
               'only the panel task\'s files reach the library object: render through PanelOps')
 
 # ---- httpd ------------------------------------------------------------------------
-for rel in ['src/net/WebUi.cpp', 'src/net/WebUiMacro.cpp', 'src/net/WebUiRes.cpp',
-            'src/net/WebUiKnobs.cpp']:
-    if not os.path.exists(os.path.join(ROOT, rel)):
-        continue
+# Every route file: WebUi.cpp is the server and the core routes, the rest are
+# its topics (settings, display, media, CAN, status, map, rules, ...).
+for rel in sorted('src/net/' + f for f in os.listdir(os.path.join(ROOT, 'src', 'net'))
+                  if f.startswith('WebUi') and f.endswith('.cpp')):
     src = strip_comments(read(rel))
     check(rel, src, r'\b_tx\s*->\s*write\w*', 'httpd never writes the UART: App::Hu::post')
     check(rel, src, r'\b_engine\s*->\s*dispatch\w*', 'httpd never runs the sink chain: App::KeyBus')

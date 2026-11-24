@@ -143,7 +143,8 @@ def main():
             for m in re.finditer(r'"text/plain", "(?:[^"]*: )?([a-z][a-z0-9_]*)(?: [^"]*)?"\)', src):
                 if "e." + m.group(1) not in base:
                     errors.append("%s: replies with code %s, which uk.json has no e.%s for" % (rel, m.group(1), m.group(1)))
-            if n == "WebUi.cpp" or n == "ClockHealth.h":
+            webui = n.startswith("WebUi") and n.endswith(".cpp")   # the server and its route files
+            if webui or n == "ClockHealth.h":
                 for m in re.finditer(r'"((?:panel|media|clock|keys|ancs|hu|knobs|lights|phone)_[a-z_]+)"', src):
                     c = m.group(1)
                     if not c.endswith("_ok") and "w." + c not in base and "e." + c not in base:
@@ -155,7 +156,7 @@ def main():
                 for c in set(re.findall(pat, src)):
                     if "e." + c not in base:
                         errors.append("%s: status code %s has no e.%s in uk.json" % (rel, c, c))
-            if n == "WebUi.cpp":
+            if webui:
                 # A routing destination that cannot take a key says why (putDests).
                 for call in re.finditer(r'dest\(Keys::DEST_\w+,([^;]*)\);', src, re.S):
                     for c in re.findall(r'"([a-z_]+)"', call.group(1)):

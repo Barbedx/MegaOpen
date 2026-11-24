@@ -1,4 +1,5 @@
 #include "WebUi.h"
+#include "WebUiKit.h"
 #include "../utils/Scratch.h"
 #include <math.h>
 #include <esp_heap_caps.h>
@@ -628,12 +629,13 @@ void WebUi::mapToFile(ChunkOut& out)
     Scratch<Vehicle::RuleSet> rs;
     const bool haveR = rs && App::Car::ruleSet().peek(*rs);
     if (haveR) CarFile::putRules(o, *rs);
-    // serializeJson into a String replaces it: the key goes out on its own.
-    String s;
-    if (haveT) { out.put(",\"decode\":"); serializeJson(o["decode"], s); out.put(s.c_str(), s.length()); }
-    if (haveC) { out.put(",\"hu\":");     serializeJson(o["hu"], s);     out.put(s.c_str(), s.length()); }
-    if (haveF) { out.put(",\"formulas\":"); serializeJson(o["formulas"], s); out.put(s.c_str(), s.length()); }
-    if (haveR) { out.put(",\"rules\":");  serializeJson(o["rules"], s);  out.put(s.c_str(), s.length()); }
+    // Each part straight into the reply: as a String each grew by realloc
+    // through the internal heap (tens of kB for a full formula set).
+    ChunkWriter w{out};
+    if (haveT) { out.put(",\"decode\":");   serializeJson(o["decode"], w); }
+    if (haveC) { out.put(",\"hu\":");       serializeJson(o["hu"], w); }
+    if (haveF) { out.put(",\"formulas\":"); serializeJson(o["formulas"], w); }
+    if (haveR) { out.put(",\"rules\":");    serializeJson(o["rules"], w); }
 }
 
 const char* WebUi::mapFromFile(JsonObjectConst file, bool dry, FileParts& in)

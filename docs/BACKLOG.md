@@ -45,7 +45,18 @@ where.
   shows a check through USB that ends in `latest v…`. `src/link/LinkSession.cpp`, `src/link/BlePipe.cpp`,
   `android/…/link/Frames.kt`.
 - **2026-11-24 — review of 1.12.0 (read only, nothing measured).** No crash
-  race, leak or overrun found; the ownership rules hold. What it did find:
+  race, leak or overrun found; the ownership rules hold. FIXED the same day
+  (ef565c7 and the WebUi split after it; host tests for the silent bus, the
+  row without `byte`, the saved rules, the popup cut; bench CONFIRMED +
+  rc_smoke): the stale car values (a bus silent for 5 s zeroes speed and rpm
+  and drops the rest), `netOpen`, the NVS writes (net_svc stores), the
+  `/api/map` row, the hand-set rate, `_mdns`, the saved rules, the log-push
+  rewind, `mapToFile`'s Strings, `hex[24]`, the popup cut, `K_CLOSE`; the OTA
+  verdict now also wants the web server to take a connection (it still does
+  not know whether a route works, and key-off in the first 60 s still
+  reverts). STILL OPEN: the NimBLE host stack (unmeasured), the car task's
+  pacer, gestures joined to rules by a row index, the other `String` replies,
+  `cfg/` including every module. What it found:
   - *Stale car values go to the head unit for ever.* `State::has()` is "ever
     decoded" and never expires; the emitter asks it through `FieldView`. CAN A
     silent (key off, a connector, an autobaud search) leaves speed, rpm and
@@ -253,6 +264,11 @@ after another, each researched, planned, then implemented.
    `WebUiRules`, `WebUiKnobs`, `WebUiGhOta`, ...) exist, yet settings, health,
    status, display, logs, keys and wifi routes all stay in one file; ~25
    `attach*` calls hand it raw pointers. `src/net/WebUi.cpp`.
+   SPLIT 2026-11-24: the file is the server and the core routes (506
+   lines); the routes moved by topic (`WebUiSettings`, `WebUiDisplay`,
+   `WebUiMedia`, `WebUiCan`, `WebUiStatus`, helpers in `WebUiKit.h`), a move
+   only. Left: the ~25 `attach*` raw pointers, and every route file still
+   includes the whole old include list.
 3. **State has two writers' paths by build.** With no car task (no vehicle
    source in the build) `loop()` runs `App::Car::service` and
    `g_sniffer.applyRequests()` itself; with one, the car task does. One job,

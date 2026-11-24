@@ -32,7 +32,8 @@ import glob, gzip, json, os, re, subprocess, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV  = sys.argv[1] if len(sys.argv) > 1 else "direct"
 ELF  = os.path.join(ROOT, ".pio", "build", ENV, "firmware.elf")
-WEBUI = os.path.join(ROOT, "src", "net", "WebUi.cpp")
+# The server and its route files (WebUi.cpp, WebUiDisplay.cpp, WebUiMedia.cpp, ...), read as one text.
+WEBUI = sorted(glob.glob(os.path.join(ROOT, "src", "net", "WebUi*.cpp")))
 
 # page path -> the gz array its route serves
 SYM  = {"/": "PAGE_APP"}
@@ -101,7 +102,7 @@ def main():
     syms = nm_symbols(ELF)
     if syms is None:
         sys.exit("check_nav: could not run nm from the PlatformIO toolchain")
-    web = open(WEBUI, encoding="utf-8").read()
+    web = "".join(open(f, encoding="utf-8").read() + chr(10) for f in WEBUI)
     bad = root_serves_app(web)
     links = app_links()
     for href in ["/"] + links:

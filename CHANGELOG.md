@@ -15,6 +15,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - A popup text cut at its length never ends inside a character; a `K_CLOSE` lost to a full queue no longer leaves the panel menu on the glass; `/api/can/ids` for a frame with no data.
 
 ### Changed
+- `WebUi.cpp` is the server and the core routes (506 lines, was 2689); the routes live by topic in `WebUiSettings`, `WebUiDisplay`, `WebUiMedia`, `WebUiCan`, `WebUiStatus`, the shared helpers in `WebUiKit.h`. `check_rules`, `check_nav` and `check_i18n` read every `WebUi*.cpp`.
+- `GET /api/config` streams the map, the head-unit fields, the formulas and the rules straight into the reply (each was a whole `String` first).
 - The odometer and the service edge are written to NVS by net_svc, not by the car task between frames.
 - The OTA trial also wants the web server to take a connection before it confirms: an image whose server never came up is rolled back.
 - The mDNS name is read through a locked copy (the panel menu's address row read a `String` another task rewrites).
