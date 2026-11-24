@@ -5,6 +5,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.12.3] - 2026-11-24
+
 ### Fixed
 - A gesture seen while the rules are being saved can no longer fire another rule's actions: it carries the save its row belongs to, and the car task drops one of another save (`[rule] gesture for row N of an older rule set: dropped`).
 - A notification from the phone is logged and folded into its popup rows on ble_svc, not on the NimBLE host task's stack; the BLE link's subscribe lines go through the queued log.
@@ -14,6 +16,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 - `[car] ... paced=N`: the car task sleeps one tick after 16 full drains in a row, so a babbling bus cannot starve the web server and the log.
 
 ### Changed
+- `Keys::GestureEngine` (was `MacroEngine`): the names follow the gesture rules; the BLE service files moved into `src/ble/`. No behaviour, API or stored-data change.
 - More replies are streamed instead of built as one `String` (`/api/display`, the stalk map, the formula check, the config import).
 
 ## [1.12.2] - 2026-11-24
