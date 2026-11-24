@@ -857,7 +857,7 @@
  "bd.pass2Lbl": "Backup network password",
  "bd.noNet": "If none is in range",
  "bd.apAt": "hotspot at 192.168.4.1",
- "bd.apH": "Starts by itself when no network connects within 15 s or the link drops for 30 s. Retries the networks every 60 s while nobody is connected to the hotspot.",
+ "bd.apH": "Starts by itself when no network connects within 15 s or the link drops for 30 s. Retries the networks every 15 s while nobody is connected to the hotspot.",
  "bd.apPass": "Hotspot password",
  "bd.apPassLbl": "Hotspot/OTA password",
  "bd.min8": "at least 8 characters",

@@ -2024,6 +2024,7 @@ void setup()
             App::Ui::queueNotice(head, body);
             LOGI("menu", "address on the panel: %s / %s\n", head, body);
         };
+        m.wifiJoin = [] { g_wifi.joinNow(); };
         App::PanelMenu::begin(m);
     }
 #endif

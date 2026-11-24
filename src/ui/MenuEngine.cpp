@@ -94,6 +94,7 @@ namespace MenuUi
                 if (lv.ref == ROOT) {
                     if (_car && _car->groups) add(Kind::CarRoot, 0);
                     if (_addr && _addr->row) add(Kind::Address, 0);
+                    if (_addr && _addr->join) add(Kind::WifiJoin, 0);
                     add(Kind::PowerOff, 0);
                 }
                 break;
@@ -204,6 +205,7 @@ namespace MenuUi
             case Kind::CarGroup: enter(Kind::CarGroup, it.ref); return Out::Redraw;
             case Kind::Signal:   return Out::None;
             case Kind::Address:  close(); return Out::Address;
+            case Kind::WifiJoin: return Out::WifiJoin;
             case Kind::PowerOff: close(); return Out::PowerOff;
             case Kind::Setting: {
                 const SEntry& e = Registry::at(it.ref);
@@ -236,6 +238,7 @@ namespace MenuUi
             case Kind::CarRoot:  lay(out, cap, "Car data", ">"); break;
             case Kind::CarGroup: lay(out, cap, _car->groupTag(_car->ctx, it.ref), ">"); break;
             case Kind::PowerOff: lay(out, cap, "Power off", nullptr); break;
+            case Kind::WifiJoin: lay(out, cap, "WiFi: connect", nullptr); break;
             case Kind::Address: {
                 char row[COLS + 1];
                 _addr->row(_addr->ctx, row, sizeof(row));

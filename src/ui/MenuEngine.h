@@ -50,6 +50,9 @@ namespace MenuUi
     // "AP MegaOpen-4580"), ASCII, at most ROW_COLS. Null: no row.
     struct AddressView {
         void  (*row)(void* ctx, char* out, size_t cap) = nullptr;
+        // Null: no «WiFi: connect» row. Set: the row below the address, and
+        // Select asks the glue to scan and join the saved networks now.
+        void  (*join)(void* ctx) = nullptr;
         void* ctx = nullptr;
     };
 
@@ -62,6 +65,7 @@ namespace MenuUi
         Closed,     // the menu shut
         PowerOff,   // "Power off" chosen; the menu shut
         Address,    // the address row chosen; the menu shut (the glue shows it full size)
+        WifiJoin,   // «WiFi: connect» chosen; the menu stays open (the address row follows)
     };
 
     class Engine {
@@ -117,7 +121,7 @@ namespace MenuUi
         static constexpr uint8_t MAX_DEPTH = 4;
 
     private:
-        enum class Kind : uint8_t { Back, Exit, Group, Setting, CarRoot, CarGroup, Signal, Address, PowerOff };
+        enum class Kind : uint8_t { Back, Exit, Group, Setting, CarRoot, CarGroup, Signal, Address, WifiJoin, PowerOff };
         struct Item { Kind kind; uint8_t ref; };   // ref: registry index, car group or signal
         struct Level { Kind kind; uint8_t ref; uint8_t cursor; uint8_t top; };
 

@@ -287,6 +287,12 @@ namespace App
                         closeMenu("");
                         if (s_d.showAddress) s_d.showAddress();
                         break;
+                    case MenuUi::Out::WifiJoin:
+                        // The menu stays: the address row above shows the join
+                        // within a few seconds (it is refreshed every second).
+                        if (s_d.wifiJoin) s_d.wifiJoin();
+                        LOGI("menu", "wifi: join now");
+                        break;
                     case MenuUi::Out::PowerOff:
                         // Only from Open: a hold that closed the menu in the
                         // meantime wins, and the panel stays on.
@@ -318,6 +324,7 @@ namespace App
                 s_carView.row = sigRow;
             }
             if (d.address) s_addrView.row = addrRow;
+            if (d.wifiJoin) s_addrView.join = [](void*) { s_d.wifiJoin(); };
             s_menu.begin(&s_model, d.car ? &s_carView : nullptr, d.address ? &s_addrView : nullptr);
         }
 

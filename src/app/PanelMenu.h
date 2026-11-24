@@ -46,6 +46,8 @@ namespace App
             // 192.168.4.1). ui task. showAddress: the notice, full size.
             void (*address)(char* head, size_t hn, char* body, size_t bn) = nullptr;
             void (*showAddress)() = nullptr;
+            // «WiFi: connect» (WifiManager::joinNow), null: no row. Any task.
+            void (*wifiJoin)() = nullptr;
         };
 
         // setup(), before the keys and ui tasks start.

@@ -7,6 +7,10 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - **Panel menu: the cursor is the panel's highlight, the window slides.** The menu drew a `>` into the row and kept the cursor on the top row, the panel's highlight never moved. Now as MeganeCAN: two rows, the highlight (`29 01`) moves inside them, the text scrolls by a row only past an edge; no down arrow on the last row. A step inside the window sends only the highlight; the header lost its `2/6` counter so it does not redraw on every step. The highlight goes FIFO, so it can never overtake a newer screen.
@@ -17,6 +21,10 @@ Stabilisation after the car's 2026-11-22 drive (boots 282–292): panics on a US
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - **Panic on a USB replug.** The USB event handler logged on the core's 2 kB `arduino_usb_events` stack and overflowed it (car boots 289/290). It now only counts; applink says it.
@@ -44,6 +52,10 @@ The web installer, and WiFi from it (Improv).
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - **README's first flash wiped the settings.** The whole `-factory.bin` at `0x0` pads over `nvs` with 0xFF; README and the release notes now say so and point at the installer.
@@ -63,6 +75,10 @@ MegaOpen Companion over Bluetooth, and now playing from the head unit's apps wit
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - «Перевірити» and «Встановити» (GitHub update) refused with `fw_ap` whenever the board's WiFi was not connected, even with the app on the link offering its internet: now any way out counts (WiFi, or Companion over USB or Bluetooth). Its words say so.
@@ -127,6 +143,10 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - **«Версія коробки»** stayed at the version of the build that first saved the protocol settings: the string the head unit shows under «CANBUS Info» never followed an update. Empty now means the firmware's own version (the default), so it follows every update; a text typed there stays. A saved default («MegaOpen X.Y.Z») is cleared once. A text setting's placeholder says what empty means (`empty` in the catalog).
@@ -141,6 +161,10 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - The car file could lose a part it held: ArduinoJson keeps a `const char[N]` by pointer (it takes one for a string literal), so a formula row (since 1.6.9) or a rule row written from a struct that was gone by the next save went into `/cfg/car.json` as garbage, and the next boot refused that part (`formulas in /cfg/car.json refused (...)`: the factory's ran). Every string is copied into the document now (`test_carfile`: the document owns its strings). A board that ran 1.6.9 and logs such a refusal: save that part once from its page (or its «Заводські»), the file is whole again.
@@ -176,6 +200,10 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - The USB link could lock up for good in the car ("USB: failed, write", no log push for 12 min, boot 192): when the app went without an unplug, the board waited 3 s for every frame it still had for it (alerts, responses) and did not read the next app's HELLO meanwhile, whose write timed out. Frames for an app gone quiet (no frame in 3 s) are now dropped at once, a host writing to the board is read first, and alerts wait for a live app. `/api/status` `usb` counts what the host did (`mounts`, `unmounts`, `suspends`, `resumes`) and the frames dropped; the log says each bus reset or suspend. Companion tries the USB again twice, 2 s apart, before it looks for the board on WiFi.
@@ -194,6 +222,10 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - An update could roll back at random with the log push on: each push took internal heap below the OTA trial's healthy line (20 kB) for a moment, and each dip started its 60 s again (on the bench: one image "never became healthy", another confirmed at 118 s of 180). The log push now waits until the trial has confirmed (`[push] held until the OTA trial confirms`); the lines wait in the spool and the flash.
@@ -211,6 +243,10 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - «Мапа» on a wide screen (900 px and up: the head unit, a PC): the tabs and the table were scattered over the page's columns, the table squeezed into a strip on the right. Each tab's card now spans the full width.
@@ -226,6 +262,10 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - «Авто» no longer shows «нема зв'язку» after leaving it for another page while its gears or climate-diag values were still loading.
@@ -248,6 +288,10 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - After the update to 1.6.3, empty alert rows and an empty car-screen slot came back as `fuel_pct` (Бак, %), and the live page could not add a rule («all 16»). An empty row was saved as the build's signal count, which moves each time a signal is appended; 1.6.3 appended `fuel_pct`. Saved, an empty row is now a fixed 0xFF (the alert table's format 2, `carSigV` for the car screen); a table or slot saved by 1.6.3 or before reads its old marker, and a `fuel_pct` there, as empty. Checked on the bench: saved on 1.6.2, wrong on 1.6.3, right on this build.
@@ -267,6 +311,10 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - A crash of the web server (`task=httpd`, a stack overflow, two coredumps on the bench): the head unit's settings, now with the field map, were copied onto httpd's 4 kB stack by every map route and the settings file, and the file's field-map buffers sat there too; they are per-request (PSRAM) now. And httpd has 6 kB (`HTTPD_STACK`, TaskPlan.h): a settings-file import, the deepest route, left 256 B of the 4 kB, and in 1.6.2 it overflows. With 6 kB, 2.3 kB stay free after every map and settings route; about 1.7 kB less heap.
@@ -291,6 +339,10 @@ The stabilisation release: the review of 2026-11-03 (the architecture behind the
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - The head unit's odometer was empty for a drive: 0x5FD did not come once (1.6.1 `[drive]`, two drives), so the field now takes the cluster's odometer (0x5C5, always on the bus) whenever 0x5FD is silent, not only under the 7D 04 experiments.
@@ -341,6 +393,10 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - The car rebooted 12 times in a row (1.6.0-rc5, the coredumps): the log push's TLS handshakes, a backlog sent every 3 s, kept IDLE on core 0 out for 5 s and the task watchdog fired; each next boot's backlog did it again. The push runs at IDLE's priority now (they take turns) and a backlog goes every 6 s.
@@ -379,6 +435,10 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - Log push: one file a minute, as meant. The lines logged during a push (a few kB) counted as a backlog, so the next file went 3 s later: a file every ~8 s, four times the commits. Only a backlog of 16 kB or more (a spool filled offline) drains fast now.
@@ -399,6 +459,10 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - Panel menu: an item row is laid on the 20 cells the big font shows, not 26. A setting's value and a submenu's `>` stood past the glass's edge (Lights › Brightness showed no value). The header keeps 26. The media screen's menu layout scrolls title and artist in 20 columns too (it lost the last 2). Measured with Сервіс › Заміри скла: menu rows 20, header 26, fullscreen 22 for any glyph.
@@ -426,6 +490,10 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - Плата › Усі налаштування: a number setting showed its unit twice ("Брязкіт, мс, ms"), and the canbox version (text) was a number box.
@@ -444,6 +512,10 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - `/api/health` `clock`: the head unit's clock (`0x9D`, once a minute) counts as a source. It used to say `clock_no_phone` while the head unit kept the panel's clock right. New codes `clock_phone`, `clock_hu`, `clock_no_source` (replace `clock_ok`, `clock_no_phone`), and `src`. With no phone the pane's clock face runs from the head unit's time (it stayed blank).
@@ -465,6 +537,10 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - AffaDisplay v1.1.2: urgent panel jobs (power on/off) go out in the order they were queued; two of them used to go out reversed.
@@ -495,6 +571,10 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - `t2can_usbhid` builds on Windows again (the compile line passed the 32 kB limit).
@@ -522,6 +602,10 @@ The USB link (docs/design/usb-link.md) and the app rebuilt (docs/design/companio
 
 ### Changed
 - WiFi comes back 10 s after the app leaves USB (was 30 s; with «No WiFi on USB»).
+- From the AP the board retries the saved networks every 15 s (was 60): the hotspot is dual-band and moves to 5 GHz once a phone joins first, so the board has to get in while it is on 2.4.
+
+### Added
+- **Panel menu: «WiFi: connect»** below the address row: scan and join the saved networks now (`[wifi] join now`). The menu stays open; the address row above shows the result.
 
 ### Fixed
 - Steering angle centred on 0x7FFF, as the X84 matrix says.

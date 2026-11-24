@@ -228,6 +228,27 @@ void WifiManager::loop(uint32_t nowMs)
         LOGI("wifi", "improv: \"%s\" saved as the first network", _ssid1.c_str());
     }
 
+    // «WiFi: connect» from the panel menu: the boot scan-and-join, now.
+    if (_joinReq.exchange(false, std::memory_order_acq_rel)) {
+        if (_off)
+            LOGI("wifi", "join now: WiFi is off while the app is on USB");
+        else if (_phase != Phase::Idle)
+            LOGI("wifi", "join now: already %s", _phase == Phase::Scanning ? "scanning" : "joining");
+        else if (_sta && WiFi.status() == WL_CONNECTED)
+            LOGI("wifi", "join now: already on \"%s\"", _curSsid.c_str());
+        else if (!_ssid1.length() && !_ssid2.length())
+            LOGI("wifi", "join now: no saved network");
+        else {
+            LOGI("wifi", "join now (panel menu)");
+            if (_mdnsUp) { MDNS.end(); _mdnsUp = false; _mdns = String(); }
+            _sta = false;
+            _staDownAt = 0;
+            _lastRetry = nowMs;
+            start(nowMs);
+            return;
+        }
+    }
+
     if (linkPolicy(nowMs)) return;
 
     if (_phase == Phase::Scanning) {

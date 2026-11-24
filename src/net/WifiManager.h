@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <atomic>
 #include "../cfg/Config.h"
 
 // STA if credentials exist and associate within the timeout, otherwise an AP,
@@ -28,6 +29,12 @@ public:
     // internet (the garage) costs a few seconds an hour, not a reconnect loop.
     void setUplinkProbe(uint32_t (*noAnswer)()) { _noAnswer = noAnswer; }
     bool off() const { return _off; }
+    // Any task (the panel menu): scan and join the saved networks now, instead
+    // of waiting for the AP retry. The head unit's hotspot is dual-band and
+    // moves to 5 GHz once a phone joins it first; the board (2.4 GHz only) has
+    // to get in while it is still on 2.4, or after it was switched back.
+    // Ignored while STA is up, a join is running, or WiFi is off for USB.
+    void joinNow() { _joinReq.store(true, std::memory_order_release); }
     // A boot join, scan or AP retry in progress; neither STA nor AP is settled.
     bool connecting() const { return _phase != Phase::Idle; }
     bool sleeping() const { return _sleepOn; }
@@ -62,7 +69,7 @@ private:
     static constexpr uint32_t CONNECT_TIMEOUT_MS = 15000;  // boot: then the AP comes up
     static constexpr uint32_t RETRY_JOIN_MS = 8000;        // a retry from AP mode
     static constexpr uint32_t SCAN_TIMEOUT_MS = 6000;
-    static constexpr uint32_t RETRY_MS = 60000;   // periodic STA retry while in AP
+    static constexpr uint32_t RETRY_MS = 15000;   // periodic STA retry while in AP (was 60 s: a dual-band hotspot is lost to 5 GHz in that time)
     // STA down this long (drove away from home): bring the AP back, so the board
     // is reachable in the car again; the AP retry rejoins whichever net is near.
     static constexpr uint32_t STA_LOST_TO_AP_MS = 30000;
@@ -119,6 +126,7 @@ private:
     uint32_t _staDownAt = 0;     // 0 = STA up (or not in STA)
     bool   (*_linkAlive)() = nullptr;
     bool     _off = false;
+    std::atomic<bool> _joinReq{false};   // joinNow(), taken by loop()
     uint32_t _linkSince = 0;     // the app on USB since; 0 = not
     uint32_t _linkGoneAt = 0;    // the app gone since; 0 = there
     uint32_t (*_noAnswer)() = nullptr;

@@ -322,6 +322,27 @@ void test_address_row()
     TEST_ASSERT_FALSE(f.e.isOpen());
 }
 
+// «WiFi: connect»: below the address when the glue can join; Select asks for
+// the join and the menu stays open on the same row (the address row follows).
+void test_wifi_connect_row()
+{
+    Fixture f;
+    TEST_ASSERT_FALSE(f.go("WiFi"));
+    AddressView a;
+    a.row = [](void*, char* out, size_t cap) { snprintf(out, cap, "AP MegaOpen-4580"); };
+    a.join = [](void*) {};
+    f.e.begin(&f.m, &f.car, &a);
+    f.e.open();
+    TEST_ASSERT_EQUAL(8, f.e.count());
+    TEST_ASSERT_EQUAL_STRING("AP MegaOpen-4580", f.item(5).c_str());
+    TEST_ASSERT_EQUAL_STRING("WiFi: connect", f.item(6).c_str());
+    TEST_ASSERT_EQUAL_STRING("Power off", f.item(7).c_str());
+    TEST_ASSERT_TRUE(f.go("WiFi"));
+    TEST_ASSERT_EQUAL(Out::WifiJoin, f.e.key(Cmd::Select));
+    TEST_ASSERT_TRUE(f.e.isOpen());
+    TEST_ASSERT_EQUAL(6, f.e.cursor());
+}
+
 // ---- the car ------------------------------------------------------------------------
 
 void test_car_groups_with_data_only()
@@ -655,6 +676,7 @@ int main(int, char**)
     RUN_TEST(test_close_from_inside_an_edit);
     RUN_TEST(test_power_off);
     RUN_TEST(test_address_row);
+    RUN_TEST(test_wifi_connect_row);
     RUN_TEST(test_car_groups_with_data_only);
     RUN_TEST(test_refresh_when_data_goes);
     RUN_TEST(test_screen_sliding_window);
