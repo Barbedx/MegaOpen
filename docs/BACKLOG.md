@@ -17,6 +17,15 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
+- **2026-11-24 — the heap corruption of boot 190 came back once (bench, boot
+  20, 1.12.0 + the main.cpp split, 1dc0ad3).** `multi_heap_free` assert in
+  `esp_http_client_cleanup` ← `GhOta` `done()` ← `runCheck()` on netjob, the
+  check over WiFi, during the first `rc_smoke` run ~70 s after an OTA (right
+  after CONFIRMED). The same signature as boot 190. Not again in: a second
+  smoke run, a smoke run with six checks forced in parallel (1.12.1, 67009b1;
+  `[mem] low min=15188 … ctx=job` there), three checks through the USB
+  gateway. Coredump on the bench: `/crash/00019.cdmp`. Whether the split
+  changed the odds is unknown; the trap is still the HEAP_SENTINEL build.
 - **2026-11-24 — the release check through the app fails: the body's buffer
   holds one byte less than the app's credit.** Car mo-4580, boot 294 (1.11.0),
   five checks, each `[ota] github: through the app (usb, api.github.com)` then
@@ -26,10 +35,14 @@ where.
   size − 1, so 16383. The app sends a full 16384 before the first ack
   (`LinkSession.kt` `room()`), the last byte does not fit, `netFail("window")`,
   the reader sees the end mid-JSON. `releases/latest` is 19.7 kB since the
-  APK asset (1.11.0); a smaller reply fitted. Not reproduced on the bench.
-  Fix: `NET_WINDOW + 1` in the create (same shape in `BlePipe` `RX_BUF`), and
-  16383 in the app and `tools/usb_link.py` so a board up to 1.12.0 can still be
-  updated through the app. `src/link/LinkSession.cpp`, `src/link/BlePipe.cpp`,
+  APK asset (1.11.0); a smaller reply fitted. **The cause is not proven:** on
+  the bench (1.12.0) `tools/usb_link.py gateway check` with the old 16384
+  passed (16.9 kB reply; the PC sends 1 kB pieces and the reader kept up), and
+  1.12 rewrote the link's send path since the car's 1.11.0, so the car's
+  failure may be something 1.12 already removed. Done in 1.12.1 (1dc0ad3):
+  `NET_WINDOW + 1` in the create (same in `BlePipe` `RX_BUF`), 16383 in the app
+  and `tools/usb_link.py`. Open until the car on 1.12.1 with the new app
+  shows a check through USB that ends in `latest v…`. `src/link/LinkSession.cpp`, `src/link/BlePipe.cpp`,
   `android/…/link/Frames.kt`.
 - **2026-11-24 — review of 1.12.0 (read only, nothing measured).** No crash
   race, leak or overrun found; the ownership rules hold. What it did find:
