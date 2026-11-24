@@ -5,6 +5,8 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.12.2] - 2026-11-24
+
 ### Fixed
 - **Car values no longer freeze on the head unit when the car's bus goes silent.** After 5 s with no frame (key off, a connector, a rate search) speed and rpm read 0 and the other decoded values are dropped, so the head unit and the rules stop running on the last ones (`[car] bus silent`). Pinned signals stay.
 - **A pending request through the app could hang the board's GitHub jobs for good** when the link dropped at the wrong moment: no log push and no update check until a reboot, over WiFi too.
