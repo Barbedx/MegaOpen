@@ -104,7 +104,13 @@ namespace App
             uint32_t        s_retryAtMs = 0;  // a refused render, tried again
             uint32_t        s_refreshAtMs = 0;
             uint32_t        s_lastKeyMs = 0;  // the menu closes IDLE_MS after it
-            MenuUi::Engine::Screen s_sent;    // what the glass shows
+            // What the glass shows: the screen (s_sentOk: it is current) and
+            // the highlighted row (-1: none; a new screen drops it). A move
+            // inside the window changes only the highlight and sends only
+            // that, as MeganeCAN did; a scroll sends the screen, then the row.
+            MenuUi::Engine::Screen s_sent;
+            bool            s_sentOk = false;
+            int8_t          s_hlSent = -1;
 
             constexpr uint32_t REFRESH_MS = 1000;   // live values, at most this often
             constexpr uint32_t RETRY_MS   = 100;
@@ -129,7 +135,7 @@ namespace App
             // "eng_temp" ... "92C" (src/ui/SignalText.h); "--" past STALE_MS.
             void sigRow(void*, uint8_t s, char* out, size_t cap)
             {
-                MenuUi::signalRow(out, cap, MenuUi::ROW_COLS - 1, Vehicle::meta(s), s_d.car->get(s),
+                MenuUi::signalRow(out, cap, MenuUi::ROW_COLS, Vehicle::meta(s), s_d.car->get(s),
                                   s_d.car->ageMs(s, millis()) <= MenuUi::STALE_MS, Vehicle::verified(s));
             }
 
@@ -172,27 +178,39 @@ namespace App
                        !strcmp(a.row[1], b.row[1]) && a.more_up == b.more_up && a.more_down == b.more_down;
             }
 
+            // The screen if its text changed, then the highlight if its row
+            // did (or the screen was just sent: a new screen drops it). The
+            // two go through the panel's queue in that order (PanelOps:
+            // Highlight is FIFO, never coalesced ahead of a newer screen).
             void render(uint32_t now)
             {
                 MenuUi::Engine::Screen s;
                 s_menu.screen(s);
                 MegaOpen::PanelOps::Req r;
-                r.op = MegaOpen::PanelOps::Op::Menu;
-                snprintf(r.a, sizeof(r.a), "%s", s.header);
-                snprintf(r.b, sizeof(r.b), "%s", s.row[0]);
-                snprintf(r.c, sizeof(r.c), "%s", s.row[1]);
-                r.u16 = scrollByte(s.more_up, s.more_down);
                 // The ui task holds the glass while the menu is open (isOpen()
                 // is in its glassHeld()); a deliberate render would only start
                 // a hold timer that means nothing here.
                 r.deliberate = false;
                 r.quiet = true;
-                if (s_d.ops->submit(r)) {
+                if (!s_sentOk || !sameScreen(s, s_sent)) {
+                    r.op = MegaOpen::PanelOps::Op::Menu;
+                    snprintf(r.a, sizeof(r.a), "%s", s.header);
+                    snprintf(r.b, sizeof(r.b), "%s", s.row[0]);
+                    snprintf(r.c, sizeof(r.c), "%s", s.row[1]);
+                    r.u16 = scrollByte(s.more_up, s.more_down);
+                    if (!s_d.ops->submit(r)) { s_retryAtMs = now + RETRY_MS; return; }
                     s_sent = s;
-                    s_dirty = false;
-                } else {
-                    s_retryAtMs = now + RETRY_MS;
+                    s_sentOk = true;
+                    s_hlSent = -1;
                 }
+                if (s_hlSent != (int8_t)s.sel) {
+                    r.op = MegaOpen::PanelOps::Op::Highlight;
+                    r.a[0] = r.b[0] = r.c[0] = 0;
+                    r.u16 = s.sel;
+                    if (!s_d.ops->submit(r)) { s_retryAtMs = now + RETRY_MS; return; }
+                    s_hlSent = (int8_t)s.sel;
+                }
+                s_dirty = false;
             }
 
             void commit(uint8_t index, int32_t value)
@@ -232,6 +250,7 @@ namespace App
                     refreshSnap();
                     refreshKnobs();
                     s_menu.open();
+                    s_sentOk = false;            // the glass shows something else
                     s_dirty = true;
                     s_refreshAtMs = now + REFRESH_MS;
                     LOGI("menu", "open");
@@ -368,10 +387,10 @@ namespace App
                 if (!s_menu.editing()) s_menu.refresh();
                 MenuUi::Engine::Screen s;
                 s_menu.screen(s);
-                if (!sameScreen(s, s_sent)) s_dirty = true;
+                if (!s_sentOk || !sameScreen(s, s_sent) || s_hlSent != (int8_t)s.sel) s_dirty = true;
             }
-            // The popup covered the list; draw it again once it is gone.
-            if (s_popupWas && !popupUp) s_dirty = true;
+            // The popup covered the list; draw it again, whole, once it is gone.
+            if (s_popupWas && !popupUp) { s_sentOk = false; s_dirty = true; }
             s_popupWas = popupUp;
 
             if (s_dirty && ready && !popupUp && (int32_t)(now - s_retryAtMs) >= 0) render(now);

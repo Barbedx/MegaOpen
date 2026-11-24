@@ -9,7 +9,7 @@ namespace MenuUi
     namespace
     {
         constexpr uint8_t ROOT = 0xFF;
-        constexpr uint8_t TEXT = ROW_COLS - 1;  // column 0 is the cursor marker
+        constexpr uint8_t TEXT = ROW_COLS;      // the whole row: the cursor is the panel's highlight
 
         // `left` from column 0, `right` flush with the end; `right` wins the
         // space when both do not fit.
@@ -44,9 +44,10 @@ namespace MenuUi
         _open = true;
         _editing = false;
         _depth = 0;
-        _stack[0] = Level{Kind::Group, ROOT, 0};
+        _stack[0] = Level{Kind::Group, ROOT, 0, 0};
         build();
         _cursor = _n > 1 ? 1 : 0;      // past "< Exit"
+        _top = 0;                      // "< Exit" on the top row, the cursor below it
     }
 
     void Engine::close()
@@ -119,9 +120,11 @@ namespace MenuUi
     {
         if (_depth + 1 >= MAX_DEPTH) return;
         _stack[_depth].cursor = _cursor;
-        _stack[++_depth] = Level{kind, ref, 0};
+        _stack[_depth].top = _top;
+        _stack[++_depth] = Level{kind, ref, 0, 0};
         build();
         _cursor = 0;
+        _top = 0;
     }
 
     void Engine::leave()
@@ -130,7 +133,19 @@ namespace MenuUi
         --_depth;
         build();
         _cursor = _stack[_depth].cursor;
+        _top = _stack[_depth].top;
         if (_cursor >= _n) _cursor = _n ? _n - 1 : 0;
+        follow();
+    }
+
+    // The window moves only as far as the cursor needs: a step inside it
+    // moves the highlight, a step past an edge scrolls by one row.
+    void Engine::follow()
+    {
+        if (_n <= 2) { _top = 0; return; }
+        if (_cursor < _top) _top = _cursor;
+        else if (_cursor > _top + 1) _top = (uint8_t)(_cursor - 1);
+        if (_top > _n - 2) _top = (uint8_t)(_n - 2);
     }
 
     void Engine::refresh()
@@ -141,8 +156,9 @@ namespace MenuUi
         build();
         if (had)
             for (uint8_t i = 0; i < _n; ++i)
-                if (_items[i].kind == was.kind && _items[i].ref == was.ref) { _cursor = i; return; }
+                if (_items[i].kind == was.kind && _items[i].ref == was.ref) { _cursor = i; follow(); return; }
         if (_cursor >= _n) _cursor = _n ? _n - 1 : 0;
+        follow();
         _editing = false;
     }
 
@@ -176,8 +192,8 @@ namespace MenuUi
         }
 
         if (!_n) return Out::None;
-        if (c == Cmd::Next) { _cursor = (uint8_t)((_cursor + 1) % _n); return Out::Redraw; }
-        if (c == Cmd::Prev) { _cursor = (uint8_t)(_cursor ? _cursor - 1 : _n - 1); return Out::Redraw; }
+        if (c == Cmd::Next) { _cursor = (uint8_t)((_cursor + 1) % _n); follow(); return Out::Redraw; }
+        if (c == Cmd::Prev) { _cursor = (uint8_t)(_cursor ? _cursor - 1 : _n - 1); follow(); return Out::Redraw; }
 
         const Item it = _items[_cursor];
         switch (it.kind) {
@@ -255,24 +271,23 @@ namespace MenuUi
         if (lv.kind == Kind::Group && lv.ref != ROOT) t = Registry::at(lv.ref).tag;
         else if (lv.kind == Kind::CarRoot)            t = "Car data";
         else if (lv.kind == Kind::CarGroup)           t = _car->groupTag(_car->ctx, lv.ref);
-        char pos[8];
-        snprintf(pos, sizeof(pos), "%u/%u", (unsigned)(_n ? _cursor + 1 : 0), (unsigned)_n);
-        lay(out, cap, t, pos, COLS);
+        // No "2/6" counter: the header would change on every step, and a
+        // step inside the window must stay a highlight, not a whole new
+        // screen (which blinks). The scroll arrows say where the window is.
+        lay(out, cap, t, nullptr, COLS);
     }
 
     void Engine::screen(Screen& s) const
     {
         title(s.header, sizeof(s.header));
-        // The cursor rides the top row; the last row pair stays full.
-        uint8_t top = _cursor;
-        if (_n >= 2 && top > _n - 2) top = _n - 2;
-        if (_n < 2) top = 0;
+        // The sliding window (follow()); the panel highlights row s.sel.
+        const uint8_t top = _top;
         for (uint8_t k = 0; k < 2; ++k) {
             const uint8_t i = top + k;
             if (i >= _n) { s.row[k][0] = 0; continue; }
-            s.row[k][0] = i == _cursor ? '>' : ' ';
-            item(i, s.row[k] + 1, sizeof(s.row[k]) - 1);
+            item(i, s.row[k], sizeof(s.row[k]));
         }
+        s.sel = _cursor > top ? 1 : 0;
         s.more_up = top > 0;
         s.more_down = top + 2 < _n;
     }

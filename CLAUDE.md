@@ -132,6 +132,22 @@ AffaDisplay (`github.com/Barbedx/AffaDisplay`, pinned by release tag, e.g.
 released as a new tag; MegaOpen then bumps the pin. Never patch
 `.pio/libdeps`. Its known gaps are in its `CHANGELOG.md`.
 
+**The library is transport only: every UI behaviour is MegaOpen's.** Its menu
+widget (MenuModel: sliding window + `highlightItem`, MeganeCAN's behaviour) was
+deleted in AffaDisplay 2.0 (`68a6843`, 2026-08-08), and nothing carried the
+behaviour over: the panel menu (2026-10-20) was written from scratch with a `>` marker
+and the window riding the cursor, and its tests asserted exactly that (found on
+glass 2026-11-24). So, before writing UI on the panel: take the behaviour from
+the OEM captures, MeganeCAN (`src/display/Carminat/Menu/Menu.cpp`) or the
+deleted widget (`git show 68a6843^:src/widget/MenuModel.cpp` in AffaDisplay),
+write it as a test of the *sequence* the glass shows, and use the panel's own
+primitives (`highlightItem`, scroll arrows), not characters drawn into rows.
+Panel menu now: two-row window, highlight moves inside it, text scrolls only
+past an edge (`MenuEngine::follow`, `test_screen_sliding_window`); a screen
+drops the highlight, so it is always sent screen → highlight, and Highlight is
+FIFO in `PanelOps` (the library's coalescing would let it overtake a newer
+screen).
+
 ## Releases
 
 Tag `vX.Y.Z-rcN` → CI publishes a prerelease (OTA `.bin`, `-factory.bin` for

@@ -5,6 +5,9 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Fixed
+- **Panel menu: the cursor is the panel's highlight, the window slides.** The menu drew a `>` into the row and kept the cursor on the top row, the panel's highlight never moved. Now as MeganeCAN: two rows, the highlight (`29 01`) moves inside them, the text scrolls by a row only past an edge; no down arrow on the last row. A step inside the window sends only the highlight; the header lost its `2/6` counter so it does not redraw on every step. The highlight goes FIFO, so it can never overtake a newer screen.
+
 ## [1.12.0] - 2026-11-23
 
 Stabilisation after the car's 2026-11-22 drive (boots 282–292): panics on a USB replug, the app's USB link that never came up, heap dips, panel stalls from flash writes. Plan and evidence: `docs/design/stabilisation-1-12.md`.

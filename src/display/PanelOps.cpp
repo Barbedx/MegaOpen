@@ -268,7 +268,23 @@ namespace MegaOpen
             case Op::Time:           res = d.setTime(r.a); break;
             case Op::Power:          res = d.setPower(r.flag); break;
             case Op::Menu:           res = d.showMenu(r.a, r.b, r.c, (uint8_t)r.u16); break;
-            case Op::Highlight:      res = d.highlightItem((uint8_t)r.u16); break;
+            // highlightItem()'s frame, but in plain FIFO order: the library's
+            // own call coalesces in its Highlight slot, keeping the OLD job's
+            // place, so a highlight posted after a new menu screen could go
+            // out ahead of it, and the screen (which drops the highlight)
+            // would land last. The panel menu sends screen + highlight as a
+            // pair and needs them on the wire in that order.
+            case Op::Highlight:
+                if (_carminat) {
+                    if (r.u16 > 1) { res = affa::Submitted::refused(affa::Result::BadArgument); break; }
+                    namespace C = affa::carminat;
+                    const uint8_t f[8] = {0x07, C::kCmdHilite, C::kSelectModeList,
+                                          r.u16 ? C::kRowTagBottom : C::kRowTagTop, 0x80, 0x00, 0x00, 0x00};
+                    res = d.enqueue(C::kIdSetText, f, sizeof(f));
+                } else {
+                    res = d.highlightItem((uint8_t)r.u16);
+                }
+                break;
             case Op::Popup:          res = d.showPopupText(r.a, r.p[0], r.p[1], r.p[2]); break;
             case Op::HidePopup:      res = d.hidePopup(); break;
             case Op::Fullscreen:     res = d.showFullscreenText(r.a, r.b, r.c); break;

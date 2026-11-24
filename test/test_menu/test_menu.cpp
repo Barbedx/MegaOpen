@@ -68,7 +68,7 @@ namespace
     };
 
     // A row as the menu lays it out: left text, right text flush with column w.
-    std::string pad(const char* l, const char* r, size_t w = ROW_COLS - 1)
+    std::string pad(const char* l, const char* r, size_t w = ROW_COLS)
     {
         std::string s(l);
         s.append(w - strlen(l) - strlen(r), ' ');
@@ -355,28 +355,59 @@ void test_refresh_when_data_goes()
 
 // ---- the screen ---------------------------------------------------------------------
 
-void test_screen_window_and_marker()
+// The window slides as MeganeCAN's and the OEM's did: the cursor is the panel's
+// highlight (s.sel), it moves inside the two rows, and the text scrolls by one
+// row only when it steps past an edge, the highlight staying on that edge.
+// Root: 0 < Exit, 1 Display, 2 Lights, 3 Service, 4 Car data, 5 Power off.
+void test_screen_sliding_window()
 {
     Fixture f;
     Engine::Screen s;
-    f.e.screen(s);
-    TEST_ASSERT_EQUAL_STRING(pad("MENU", "2/6", COLS).c_str(), s.header);
-    TEST_ASSERT_EQUAL('>', s.row[0][0]);
-    TEST_ASSERT_EQUAL(' ', s.row[1][0]);
-    TEST_ASSERT_TRUE(s.more_up);           // "< Exit" above
-    TEST_ASSERT_TRUE(s.more_down);
-    f.e.key(Cmd::Prev);
-    f.e.screen(s);
-    TEST_ASSERT_EQUAL_STRING(">< Exit", s.row[0]);
-    TEST_ASSERT_FALSE(s.more_up);
-    f.e.key(Cmd::Prev);                    // the last row
-    f.e.screen(s);
-    TEST_ASSERT_EQUAL_STRING(">Power off", s.row[1]);
-    TEST_ASSERT_EQUAL(' ', s.row[0][0]);
-    TEST_ASSERT_TRUE(s.more_up);
-    TEST_ASSERT_FALSE(s.more_down);
+    struct Step { uint8_t top, sel; bool up, down; };
+    auto at = [&](const Step& w) {
+        f.e.screen(s);
+        TEST_ASSERT_EQUAL(w.top, f.e.top());
+        TEST_ASSERT_EQUAL(w.sel, s.sel);
+        TEST_ASSERT_EQUAL(w.up, s.more_up);
+        TEST_ASSERT_EQUAL(w.down, s.more_down);
+        TEST_ASSERT_EQUAL_STRING(f.item(w.top).c_str(), s.row[0]);
+        TEST_ASSERT_EQUAL_STRING(f.item(w.top + 1).c_str(), s.row[1]);
+        TEST_ASSERT_TRUE(s.row[0][0] != '>' && s.row[1][0] != '>');   // no marker character
+    };
+    // Opens on Display: "< Exit" above it in the same window.
+    at({0, 1, false, true});
+    TEST_ASSERT_EQUAL_STRING("MENU", s.header);   // fixed: a step changes no header
+    f.e.key(Cmd::Next); at({1, 1, true, true});     // [Display  Lights*]
+    f.e.key(Cmd::Next); at({2, 1, true, true});     // [Lights   Service*]
+    f.e.key(Cmd::Next); at({3, 1, true, true});
+    f.e.key(Cmd::Next); at({4, 1, true, false});    // the last: no down arrow
+    f.e.key(Cmd::Prev); at({4, 0, true, false});    // up inside the window: highlight only
+    f.e.key(Cmd::Prev); at({3, 0, true, true});     // past the top edge: scroll, stay on top
+    f.e.key(Cmd::Prev); at({2, 0, true, true});
+    f.e.key(Cmd::Prev); at({1, 0, true, true});
+    f.e.key(Cmd::Prev); at({0, 0, false, true});    // "< Exit": no up arrow
+    f.e.key(Cmd::Prev); at({4, 1, true, false});    // wraps to the last row
+    f.e.key(Cmd::Next); at({0, 0, false, true});    // and back to the first
     TEST_ASSERT_TRUE(strlen(s.header) <= COLS);
-    TEST_ASSERT_TRUE(strlen(s.row[0]) <= ROW_COLS);
+}
+
+// A submenu opens on its first row; Back returns to the same window and row.
+void test_window_kept_across_a_submenu()
+{
+    Fixture f;
+    f.e.key(Cmd::Next);
+    f.e.key(Cmd::Next);                             // Service, window [Lights Service*]
+    Engine::Screen s;
+    f.e.screen(s);
+    const uint8_t top = f.e.top(), sel = s.sel;
+    f.e.key(Cmd::Select);                           // into Service
+    f.e.screen(s);
+    TEST_ASSERT_EQUAL(0, f.e.top());
+    TEST_ASSERT_EQUAL(0, s.sel);
+    f.e.key(Cmd::Select);                           // "< Back"
+    f.e.screen(s);
+    TEST_ASSERT_EQUAL(top, f.e.top());
+    TEST_ASSERT_EQUAL(sel, s.sel);
 }
 
 // Every row the menu can show fits the panel and is ASCII.
@@ -626,7 +657,8 @@ int main(int, char**)
     RUN_TEST(test_address_row);
     RUN_TEST(test_car_groups_with_data_only);
     RUN_TEST(test_refresh_when_data_goes);
-    RUN_TEST(test_screen_window_and_marker);
+    RUN_TEST(test_screen_sliding_window);
+    RUN_TEST(test_window_kept_across_a_submenu);
     RUN_TEST(test_every_row_fits);
     RUN_TEST(test_closed_only_menu_opens);
     RUN_TEST(test_open_takes_scroll_and_select_passes_volume);
