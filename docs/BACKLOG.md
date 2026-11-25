@@ -17,6 +17,40 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
+- **2026-11-25 — the car cannot update from GitHub (owner: "an error while
+  downloading", over WiFi and through the app).** mo-4580 boots 297-298 are
+  still 1.11.0 (no 1.12.x ever reached the car). Two installs of
+  `megaopen-t2can-1.12.5.bin` broke at the start: `gh_broke 24693 1852768`,
+  mbedTLS `read error -0x7180` / `-0x0001`. Internal heap: 64 kB at setup's
+  end, 20-35 kB while driving, `[hb] min=1900` and `[win] min=2044
+  big=1524` at 313 s with no job running; the install started at 37.9 kB,
+  14.1 kB after TLS, min 8.0 kB. The bench does the same download from
+  89 kB and never goes under 67 kB. So in the car the TLS connection costs
+  ~24 kB internal where `NetBudget.h` counts ~10 kB, and something takes
+  ~35 kB between setup and the drive (suspects, unmeasured: the Companion
+  on BLE with "net offered", the CAN recording at 690 fps, the log push,
+  RSSI -76..-84). 1.12's NetBudget would have refused at under 20 kB and
+  let this one start. Way round, told to the owner: the page's «або файлом
+  .bin» (plain HTTP, no TLS). OPEN: read the heap lines of the first drive
+  on 1.12.x; if the car still idles at 20-35 kB, find the taker before
+  touching the budget's numbers. Where: `src/net/GhOta.cpp`,
+  `src/net/NetBudget.h`, `docs/design/stabilisation-1-12.md`.
+- **2026-11-25 — the rules editor (owner: "a mess").** Three things under
+  it, all FIXED in 1.12.6: every rule was drawn as a whole card at once; the
+  «when» field took `input.in.code` (the hex-code field: 62 px wide, upper
+  case), so a formula showed as five capital letters; typing in it threw
+  (`checkFormula` looked for the field's `td`, a rule card has none), so the
+  live check never showed for a rule. Now: one row per rule («when → do»),
+  one open at a time, the switch saves at once. Where: `web/js/72-map.js`,
+  `web/app.css`.
+- **2026-11-25 — an event rule's popup, 1.12.6.** The pending popup was
+  shown only if the rule "still holds" once the glass is free; an event is
+  true for one evaluation, so `changed(gear) and speed > 5` lost its popup
+  as soon as the speed moved while the menu was up. FIXED: an event's popup
+  is owed for 4 s (`EVENT_POPUP_TTL_MS`), then dropped as old news; an
+  event's pause may be 1 s (`RuleRow::pauseMin`), a state's stays 5 s.
+  Bench cannot show it (no car bus): `test_an_event_rule_may_pause_one_second`
+  covers the pause, the 4 s window is untested.
 - **2026-11-25 — gears on the car (owner: "gear 0 all the time", the popup
   comes once, the tablet shows no window).** From mo-4580 boot 294 (1.11.0,
   90 `[drive]` samples): every "gear 0, clutch up, moving" sample has ratio

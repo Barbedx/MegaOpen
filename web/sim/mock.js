@@ -521,7 +521,7 @@ function ruleWhy(r){const n=String(r.name||'');if(!n||n.length>31)return n+': ru
  if(g){const keys=(g.keys||[]).filter(k=>k&&k!=='None');
   const bad=g.trigger==='combo'?(keys.length<2||keys.some(k=>!hold(k))||new Set(keys).size!==keys.length):g.trigger==='sequence'?(!keys.length||!(g.taps>=2&&g.taps<=10)||g.windowMs<50):g.trigger==='hold'?(!keys.length||!hold(keys[0])):true;
   if(bad)return n+': rule_gesture'}
- else{if(!r.when)return n+': rule_when';if(!(r.pause>=5))return n+': rule_pause'}
+ else{if(!r.when)return n+': rule_when';if(!(r.pause>=(/\b(changed|rises|falls)\s*\(/.test(r.when)?1:5)))return n+': rule_pause'}
  const acts=r.do||[];if(!acts.length||acts.length>3)return n+': rule_action';
  for(const a of acts){const fx=(C.enums.ruleEffects||[]).find(e=>e.v===a.effect);if(!fx||a.effect==='none')return n+': rule_action';
   if(fx.field==='action'&&(!a.action||a.action==='None'))return n+': rule_action';if((fx.field==='code'||fx.field==='raw')&&!parseInt(a.codeHex,16))return n+': rule_action';

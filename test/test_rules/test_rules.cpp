@@ -277,6 +277,43 @@ void test_a_gesture_rule_is_armed_by_its_formula_and_becomes_a_macro()
     TEST_ASSERT_FALSE(t.m[2].enabled);
 }
 
+// An event (changed, rises, falls) cannot hold the glass, so its pause may be
+// 1 s: two shifts 2 s apart are two popups. A state keeps the 5 s floor.
+void test_an_event_rule_may_pause_one_second()
+{
+    RuleSet set;
+    RuleProblem p;
+    set.rows.push(signalRule("gear", "changed(gear) and gear != 0", 1));
+    set.rows.push(signalRule("fast", "speed > 100", 5));
+    TEST_ASSERT_TRUE(Rules::check(set, p));
+    Rules r;
+    TEST_ASSERT_TRUE(r.apply(set, p));
+    TEST_ASSERT_TRUE(r.event(0));
+    TEST_ASSERT_FALSE(r.event(1));
+    State s;
+    fresh();
+    s.set(SIG_GEAR, 1, 1);
+    pass(r, s, 1000);
+    s.set(SIG_GEAR, 2, 2);
+    pass(r, s, 10000);
+    s.set(SIG_GEAR, 3, 3);
+    pass(r, s, 12000);                   // 2 s later: shown too
+    TEST_ASSERT_EQUAL_UINT8(2, g_nFired);
+    s.set(SIG_GEAR, 4, 4);
+    pass(r, s, 12500);                   // half a second: inside the pause
+    TEST_ASSERT_EQUAL_UINT8(2, g_nFired);
+
+    set.rows[0].pauseS = 0;              // an event still has a floor
+    TEST_ASSERT_FALSE(Rules::check(set, p));
+    TEST_ASSERT_EQUAL_UINT16(0, p.row);
+    TEST_ASSERT_EQUAL_STRING("rule_pause", p.e.code);
+    set.rows[0].pauseS = 1;
+    set.rows[1].pauseS = 1;              // a state does not get the event's floor
+    TEST_ASSERT_FALSE(Rules::check(set, p));
+    TEST_ASSERT_EQUAL_UINT16(1, p.row);
+    TEST_ASSERT_EQUAL_STRING("rule_pause", p.e.code);
+}
+
 // check() names the row and what is wrong; a row that does not check is off,
 // the others run.
 void test_check_says_which_row_and_why()
@@ -421,6 +458,7 @@ int main(int, char**)
     RUN_TEST(test_the_popup_text_is_cut_between_characters);
     RUN_TEST(test_a_threshold_rule_fires_on_the_crossing);
     RUN_TEST(test_a_pulse_rule_fires_on_every_pulse);
+    RUN_TEST(test_an_event_rule_may_pause_one_second);
     RUN_TEST(test_a_gesture_rule_is_armed_by_its_formula_and_becomes_a_macro);
     RUN_TEST(test_check_says_which_row_and_why);
     RUN_TEST(test_the_popup_text);

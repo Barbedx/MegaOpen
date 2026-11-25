@@ -59,23 +59,31 @@ const actHTML=(a,k)=>{const fld=ruFld(a.effect);return `<div class="act" data-a=
  <label data-show="text">${t('ru.text')}${txt('#arg',fld==='text'?(a.arg||''):'',t('ru.textPh'),'in','text','maxlength="39"')}</label>
  <label data-show="scene">${t('ru.scene')}${sel('#argScene',CAT.scenes.map(s=>[s.id,s.name]),fld==='scene'?a.arg:'','data-str')}</label></div>
  <button class="btn sm" type="button" data-delact title="${esc(t('ru.delAct'))}">✕</button></div>`};
-const ruleHTML=(x,i)=>{const g=x.gesture,isG=!!g,keys=isG?(g.keys||[]).filter(k=>realActions().some(a=>a.id===k)):[];
- return `<div class="rule mac" data-r="${i}" data-kind="${isG?'g':'s'}">
- <div class="mh">${sw('#on',x.on!==false,`aria-label="${esc(t('ru.on'))}"`)}<input class="in grow" data-f="name" value="${esc(x.name||'')}" maxlength="31" aria-label="${esc(t('ru.name'))}">${chipH(isG?'warn':'ok',isG?t('ru.kindGesture'):t('ru.kindSig'))}<span class="chip off" data-live>${esc(ruLive(x.live))}</span></div>
- ${isG?`<div class="multi" data-f="keys" data-v="${esc(keys.join(','))}">${realActions().map(a=>`<button type="button" data-key="${esc(a.id)}" class="${keys.includes(a.id)?'on':''}">${esc(a.name)}</button>`).join('')}</div>
+/* закрите правило — один рядок: «коли → що»; жест — його слово і клавіші */
+const ruEnum=(e,v)=>(enumOpts(e).find(o=>o[0]===v)||[v,v])[1];
+const ruSum=x=>{const g=x.gesture,acts=(x.do||[]).map(a=>ruEnum('ruleEffects',a.effect)+(a.arg?' «'+a.arg+'»':'')).join(', ');
+ const when=g?ruEnum('ruleTriggers',g.trigger)+': '+(g.keys||[]).map(k=>(CAT.actions.find(a=>a.id===k)||{name:k}).name).join(' + ')+(x.when?' · '+x.when:''):x.when||'';
+ return when+' → '+acts};
+/* заготовки «коли» над сигналом, чиє ім'я вже в полі: подія на кожну зміну, поява, зникнення */
+const ruTpl=()=>[['changed',t('ru.tplChanged')],['rises',t('ru.tplRises')],['falls',t('ru.tplFalls')]];
+const ruleHTML=(x,i,open)=>{const g=x.gesture,isG=!!g,keys=isG?(g.keys||[]).filter(k=>realActions().some(a=>a.id===k)):[];
+ return `<div class="rule mac${open?' open':''}" data-r="${i}" data-kind="${isG?'g':'s'}">
+ <div class="mh">${sw('#on',x.on!==false,`aria-label="${esc(t('ru.on'))}"`)}<input class="in grow" data-f="name" value="${esc(x.name||'')}" maxlength="31" aria-label="${esc(t('ru.name'))}"><span class="rsum" data-open title="${esc(t('ru.open'))}">${esc(ruSum(x))}</span><span class="chip off" data-live>${esc(ruLive(x.live))}</span><button class="btn sm" type="button" data-open aria-expanded="${open?'true':'false'}" title="${esc(t('ru.open'))}">${open?'▴':'▾'}</button></div>
+ <div class="rb">${isG?`<div class="multi" data-f="keys" data-v="${esc(keys.join(','))}">${realActions().map(a=>`<button type="button" data-key="${esc(a.id)}" class="${keys.includes(a.id)?'on':''}">${esc(a.name)}</button>`).join('')}</div>
  <div class="mg"><label>${t('ru.trigger')}${sel('#trigger',enumOpts('ruleTriggers').filter(o=>o[0]!=='off'),g.trigger,'data-str')}</label>
  <label data-taps>${t('ru.taps')}${num('#taps',g.taps||3,'min="2" max="10"')}</label><label data-taps>${t('ru.window')}${num('#windowMs',g.windowMs||600,'min="50" max="2000" step="50"')}</label>
  <label class="ck"><input type="checkbox" class="cb" data-f="swallow"${g.swallow!==false?' checked':''}> ${t('ru.swallow')}</label></div>`:''}
  <div class="mg"><label class="wide">${isG?t('ru.onlyIf'):t('ru.when')}${txt('#when',x.when||'',isG?'':t('ru.whenPh'),'in code','text','maxlength="255" autocapitalize="off" spellcheck="false" list="fmNames"')}<small class="muted" data-chk></small></label>
- <label>${t('ru.pause')}${num('#pause',x.pause??(isG?0:5),`min="${isG?0:5}" max="65535"`)}</label></div>
+ <label>${t('ru.pause')}${num('#pause',x.pause??(isG?0:5),`min="${isG?0:1}" max="65535"`)}</label></div>
+ ${isG?'':`<div class="fr rtpl"><small class="muted">${t('ru.tpl')}</small>${ruTpl().map(([f,n])=>`<button class="btn sm" type="button" data-tpl="${f}">${esc(n)}</button>`).join('')}</div>`}
  <div class="acts">${(x.do||[]).map((a,k)=>actHTML(a,k)).join('')}</div>
- <div class="mf"><span class="mw"></span><button class="btn sm" type="button" data-addact>${t('ru.addAct')}</button><button class="btn sm" type="button" data-test>${t('ru.try')}</button><button class="btn sm dng" type="button" data-del>${t('ru.del')}</button></div></div>`};
+ <div class="mf"><span class="mw"></span><button class="btn sm" type="button" data-addact>${t('ru.addAct')}</button><button class="btn sm" type="button" data-test>${t('ru.try')}</button><button class="btn sm dng" type="button" data-del>${t('ru.del')}</button></div></div></div>`};
 const ruVis=c=>{$$('.act',c).forEach(a=>{const fld=ruFld($('[data-f="effect"]',a).value);$$('[data-show]',a).forEach(l=>l.hidden=!l.dataset.show.split(' ').includes(fld||'-'))});
  const tg=$('[data-f="trigger"]',c);if(tg)$$('[data-taps]',c).forEach(l=>l.hidden=tg.value!=='sequence')};
 const MAP_TABS={sig:'lvCard',fields:'cMap',formulas:'fmCard',rules:'ruCard'};
 SCR.map={title:'map.title',hidden:true,async render(m){
  const[r,se,mp,hf,fm,ru]=await Promise.all([API.get('/api/map?meta=1&live=1'),API.get('/api/settings'),API.get('/api/map'),API.get('/api/hu/fields').catch(()=>null),API.get('/api/formulas').catch(()=>null),API.get('/api/rules').catch(()=>null)]);
- this.F=(fm&&fm.rows)||[];this.R=(ru&&ru.rows)||[];
+ this.F=(fm&&fm.rows)||[];this.R=(ru&&ru.rows)||[];this.ro=-1;
  this.M=r.meta;this.n=0;this.grp='all';this.mp=mp;this.sw=null;this.last=null;this.setFl(hf);
  const tab=location.hash.split(':')[1]||'';this.tb=MAP_TABS[tab]?tab:'sig';
  /* фільтр за групою: значення — 'all' або назва групи, як у data-g рядка */
@@ -129,7 +137,7 @@ SCR.map={title:'map.title',hidden:true,async render(m){
   /* 🔔: правило на цей сигнал — так/ні на появу, число на перевищення теперішнього значення */
   const b=e.target.closest('[data-add]');if(!b)return;const mm=this.M[+b.dataset.add],cur=(((this.last||{}).sigs||[])[+b.dataset.add]||[])[0];
   this.R=this.readRules();this.R.push({name:mm[0],on:true,when:mm[3]?`rises(${mm[0]})`:`${mm[0]} > ${cur==null?0:cur}`,pause:60,do:[{effect:'popup',arg:''}]});
-  this.drawRules();this.go('rules');hlRow($$('#ruT .rule').pop())};
+  this.ro=this.R.length-1;this.drawRules();this.go('rules');hlRow($$('#ruT .rule').pop())};
  // Поля ГУ
  saver($('#cMap .row'),()=>API.post('/api/map',{send:$('[data-k="/api/map|send"]').checked}),'[data-k]');
  saver($('#cProto'),genericSave,'[data-k]');
@@ -159,22 +167,30 @@ SCR.map={title:'map.title',hidden:true,async render(m){
   if(e.target.dataset.f==='fsrc'){const l=$('[data-gosrc]',ed),s=val(e.target);l.dataset.goto=s;l.textContent=lvName(this.M.find(x=>x[0]===s)||[s])}});
  // Правила
  const ruT=$('#ruT');
- ruT.addEventListener('change',e=>{const c=e.target.closest('.rule');if(c&&/effect|trigger/.test(e.target.dataset.f||''))ruVis(c)});
+ /* перемикач правила зберігає одразу: вимкнути балакуче правило — один дотик */
+ ruT.addEventListener('change',e=>{const c=e.target.closest('.rule');if(!c)return;if(/effect|trigger/.test(e.target.dataset.f||''))ruVis(c);
+  if(e.target.dataset.f==='on')run(e.target,ruSave,t('ru.saved'))});
  /* жива перевірка формули, як у формул: /api/expr на даних авто зараз */
  ruT.addEventListener('input',e=>{const f=e.target.closest('[data-f="when"]');if(!f)return;clearTimeout(f._t);f._t=setTimeout(()=>this.checkFormula(f),400)});
- ruT.addEventListener('click',e=>{const b=e.target.closest('button');if(!b||b.dataset.key!==undefined)return;const c=b.closest('.rule');if(!c)return;const i=+c.dataset.r;
+ ruT.addEventListener('click',e=>{const b=e.target.closest('button,[data-open]');if(!b||b.dataset.key!==undefined)return;const c=b.closest('.rule');if(!c)return;const i=+c.dataset.r;
+  /* одне відкрите правило: решта — рядками */
+  if(b.dataset.open!==undefined){this.R=this.readRules();this.ro=this.ro===i?-1:i;this.drawRules();return}
+  /* заготовка: ім'я сигналу з поля «коли» загортається у функцію; подія — пауза 1 с */
+  if(b.dataset.tpl!==undefined){const w=$('[data-f="when"]',c),m=(w.value.match(/[A-Za-z_][A-Za-z0-9_]*/g)||[]).find(n=>this.M.some(x=>x[0]===n));
+   if(!m){sv(svOf(b),'bad',t('ru.tplNeed'));w.focus();return}
+   w.value=`${b.dataset.tpl}(${m})`;$('[data-f="pause"]',c).value=1;this.checkFormula(w);return}
   if(b.dataset.addact!==undefined){this.R=this.readRules();if(this.R[i].do.length>=3)return;this.R[i].do.push({effect:'popup',arg:''});this.drawRules();return}
   if(b.dataset.delact!==undefined){this.R=this.readRules();this.R[i].do.splice(+b.closest('.act').dataset.a,1);this.drawRules();return}
   if(b.dataset.test!==undefined){run(b,()=>API.post('/api/rules/test?id='+i),t('ru.queued'));return}
-  if(b.dataset.del!==undefined)ask(b,t('ru.delAsk',$('[data-f="name"]',c).value),()=>{this.R=this.readRules();this.R.splice(i,1);this.drawRules()})});
- $('#ruAddS').onclick=()=>{this.R=this.readRules();this.R.push({name:t('ru.newName'),on:true,when:'',pause:5,do:[{effect:'popup',arg:''}]});this.drawRules();const n=$$('#ruT [data-f="when"]').pop();if(n)n.focus()};
- $('#ruAddG').onclick=()=>{this.R=this.readRules();this.R.push({name:t('ru.newName'),on:true,gesture:{trigger:'combo',keys:[],taps:3,windowMs:600,swallow:true},when:'',pause:0,do:[{effect:'key',codeHex:'07'}]});this.drawRules();hlRow($$('#ruT .rule').pop())};
+  if(b.dataset.del!==undefined)ask(b,t('ru.delAsk',$('[data-f="name"]',c).value),()=>{this.R=this.readRules();this.R.splice(i,1);this.ro=-1;this.drawRules()})});
+ $('#ruAddS').onclick=()=>{this.R=this.readRules();this.R.push({name:t('ru.newName'),on:true,when:'',pause:5,do:[{effect:'popup',arg:''}]});this.ro=this.R.length-1;this.drawRules();const n=$$('#ruT [data-f="when"]').pop();if(n)n.focus()};
+ $('#ruAddG').onclick=()=>{this.R=this.readRules();this.R.push({name:t('ru.newName'),on:true,gesture:{trigger:'combo',keys:[],taps:3,windowMs:600,swallow:true},when:'',pause:0,do:[{effect:'key',codeHex:'07'}]});this.ro=this.R.length-1;this.drawRules();hlRow($$('#ruT .rule').pop())};
  /* помилка «<назва>: <код>»: картка з цією назвою позначається, слова — e.<код> */
  const ruSave=async()=>{$$('#ruT .rule').forEach(c=>{c.classList.remove('bad');$('.mw',c).textContent=''});
   try{await API.post('/api/rules',{rows:this.readRules().map(({live,...x})=>x)});await this.reloadRules()}
-  catch(e){const mm=/^(.*?): (.*)$/.exec(e.message||'');const c=mm&&$$('#ruT .rule').find(x=>$('[data-f="name"]',x).value===mm[1]);if(c){c.classList.add('bad');$('.mw',c).textContent=errLine(mm[2])}throw e}};
+  catch(e){const mm=/^(.*?): (.*)$/.exec(e.message||'');const c=mm&&$$('#ruT .rule').find(x=>$('[data-f="name"]',x).value===mm[1]);if(c){this.ro=+c.dataset.r;c.classList.add('bad','open');$('.mw',c).textContent=errLine(mm[2])}throw e}};
  $('#ruSave').onclick=e=>run(e.target,ruSave,t('ru.saved'));
- $('#ruFac').onclick=e=>ask(e.target,t('ru.factoryAsk'),()=>run(e.target,async()=>{await API.post('/api/rules',{reset:true});await this.reloadRules()},t('ru.factoryDone')));
+ $('#ruFac').onclick=e=>ask(e.target,t('ru.factoryAsk'),()=>run(e.target,async()=>{await API.post('/api/rules',{reset:true});this.ro=-1;await this.reloadRules()},t('ru.factoryDone')));
 },
 /* вкладка: панелі показати/сховати, хеш без hashchange; на «Сигнали» — свіжі позначки «→ поле ГУ» */
 go(tb){this.tb=tb;put($('[data-f="mTab"]'),tb);for(const[k,id]of Object.entries(MAP_TABS))$('#'+id).hidden=k!==tb;
@@ -211,7 +227,7 @@ draw(r){if(r)this.last=r;const tb=$('#lvT');if(!tb||!r||!r.sigs||$('.ask',tb)||$
  tb.innerHTML=h||`<tr><td colspan="6" class="muted">${esc(t('lv.noValues'))}</td></tr>`;
  if(r.ruleStats)$('#lvAl').textContent=r.ruleStats.fired+' / '+r.ruleStats.shown+' / '+r.ruleStats.dropped},
 /* правила: картки з this.R (рядки /api/rules); поля читаються назад так, як прошивка їх приймає */
-drawRules(){const tb=$('#ruT');if(!tb)return;tb.innerHTML=this.R.length?this.R.map(ruleHTML).join(''):`<div class="row muted">${esc(t('ru.none'))}</div>`;$$('.rule',tb).forEach(ruVis)},
+drawRules(){const tb=$('#ruT');if(!tb)return;tb.innerHTML=this.R.length?this.R.map((x,i)=>ruleHTML(x,i,i===this.ro)).join(''):`<div class="row muted">${esc(t('ru.none'))}</div>`;$$('.rule',tb).forEach(ruVis)},
 readRules(){return $$('#ruT .rule').map(c=>{const g=f=>val($(`[data-f="${f}"]`,c)),isG=c.dataset.kind==='g',was=this.R[+c.dataset.r]||{};
  const acts=$$('.act',c).map(a=>{const h=f=>val($(`[data-f="${f}"]`,a)),fx=h('effect'),fld=ruFld(fx),o={effect:fx};
   if(fld==='action')o.action=h('action');if(fld==='code'||fld==='raw')o.codeHex=(h('codeHex')||'').trim();if(fld==='raw')o.data=(h('data')||'').trim();
@@ -233,7 +249,7 @@ drawFormulas(){const tb=$('#fmT');if(!tb)return;
 readFormulas(){return $$('#fmT tr[data-r]').map(tr=>{const g=f=>val($(`[data-f="${f}"]`,tr));const was=this.F[+tr.dataset.r]||{};
  return {name:(g('name')||'').trim(),f:(g('f')||'').trim(),unit:(g('unit')||'').trim(),dec:+g('dec')||0,bool:!!g('bool'),on:!!g('on'),v:was.v??null}})},
 async reloadFormulas(){const fm=await API.get('/api/formulas');this.F=fm.rows||[];this.drawFormulas()},
-async checkFormula(el){const out=$('[data-chk]',el.closest('td'));if(!out)return;const f=el.value.trim();if(!f){out.textContent='';return}
+async checkFormula(el){const out=$('[data-chk]',el.closest('td,label'));if(!out)return;const f=el.value.trim();if(!f){out.textContent='';return}
  try{const r=await API.post('/api/expr',{f});if(el.value.trim()!==f)return;
   out.textContent=r.ok?'= '+(r.v==null?t('fm.noValue'):r.v):'✗ '+t('e.'+r.code)+' · '+t('fm.at',r.pos+1)}
  catch(e){out.textContent='✗ '+errT(e)}},

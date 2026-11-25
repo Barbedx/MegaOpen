@@ -36,6 +36,7 @@ void WebUi::routesRules()
                 JsonObject v = o["live"].to<JsonObject>();
                 v["on"]    = l.running;
                 v["holds"] = l.holds;
+                v["event"] = l.event;
                 v["fires"] = l.fires;
                 if (l.fires) v["agoMs"] = now - l.lastFireMs;
                 else         v["agoMs"] = nullptr;

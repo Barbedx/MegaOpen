@@ -261,7 +261,9 @@ namespace App
             RuleStats                s_ruleSt;
             Snapshot<RuleStats>      s_rulePub;
             // The one pending popup (newest wins), shown when the glass is free.
-            struct Pending { bool has = false, test = false; uint16_t row = 0; int32_t value = 0; char text[48] = ""; };
+            struct Pending { bool has = false, test = false; uint16_t row = 0; int32_t value = 0; uint32_t ms = 0; char text[48] = ""; };
+            // An event's popup waits for the glass this long, then it is old news.
+            constexpr uint32_t EVENT_POPUP_TTL_MS = 4000;
             Pending                  s_pend;
             // The recent alerts, a ring under its own lock (alertsSince()).
             portMUX_TYPE s_logMux = portMUX_INITIALIZER_UNLOCKED;
@@ -334,7 +336,9 @@ namespace App
 
             // ---- the rules --------------------------------------------------------------
             // One popup pending at a time, newest wins; shown when the glass is
-            // free, dropped if its rule no longer holds by then (a test shows
+            // free. A state's popup is dropped if its rule no longer holds by then;
+            // an event's (changed, rises, falls) is owed whatever the formula
+            // says a pass later, for EVENT_POPUP_TTL_MS (a test shows
             // regardless). The apps read the shown ones from the ring.
             void queuePopup(uint16_t row, int32_t value, const char* text, bool test)
             {
@@ -343,6 +347,7 @@ namespace App
                 s_pend.test = test;
                 s_pend.row = row;
                 s_pend.value = value;
+                s_pend.ms = millis();
                 snprintf(s_pend.text, sizeof(s_pend.text), "%s", text);
             }
 
@@ -395,7 +400,10 @@ namespace App
                 if (s_s.glassFree && !s_s.glassFree()) return;
                 const Vehicle::RuleSet& set = s_ruleSet.live();
                 const bool valid = s_pend.row < set.rows.size();
-                const bool holds = valid && (set.rows[s_pend.row].isGesture() || s_rules.holds(s_pend.row));
+                const bool holds = valid && (set.rows[s_pend.row].isGesture() ||
+                                             (s_rules.event(s_pend.row)
+                                                  ? (uint32_t)(now - s_pend.ms) < EVENT_POPUP_TTL_MS
+                                                  : s_rules.holds(s_pend.row)));
                 s_pend.has = false;
                 if (!valid || (!holds && !s_pend.test)) {
                     ++s_ruleSt.dropped;

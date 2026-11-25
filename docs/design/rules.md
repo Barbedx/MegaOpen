@@ -238,7 +238,7 @@ A rule:
 | name, on | |
 | trigger | **signal**: a boolean formula; it fires on false -> true (true when first seen counts: the lamp lit at ignition), re-arms when false. **gesture**: MacroEngine's combo / N taps / hold, swallowing the presses or not |
 | only if | a boolean formula, for a gesture (a signal rule writes it into its trigger) |
-| pause | at least this long between two firings (5 s at the least) |
+| pause | at least this long between two firings (5 s at the least; 1 s for an event: a formula with `changed`, `rises` or `falls`) |
 | actions | up to 3, in order: popup (text with `{signal}`), panel text (3 rows), pane scene, key action, key code, raw HU frame, HU message (by name) |
 
 Running: signal rules on the car task after the formulas, re-evaluated when
@@ -262,7 +262,7 @@ bounded by what the keys task scans per event (32).
 - `src/vehicle/Rules.*`: RuleRow / RuleSet (PSRAM), check / apply / step /
   holds / gestureFire / popupText / gestures, fromAlertBlob / fromMacroBlob.
   A gesture's pause may be 0 (its re-arm is its debounce); a signal rule's is
-  5 s at least. Formula-less gesture = always armed.
+  5 s at least, 1 s when its formula is an event (`Expr::Program::pulsed`). Formula-less gesture = always armed.
 - The car task (`CarTask.cpp`) runs `step()` after the formulas with the same
   changed set and tick, queues ONE pending popup (newest wins; shown when the
   glass is free, dropped if the rule no longer holds, a test shows regardless)

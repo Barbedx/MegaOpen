@@ -5,6 +5,19 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.12.6] - 2026-11-25
+
+### Changed
+- «Мапа › Правила»: each rule is one row (the switch, the name, «when → do», its state); ▾ opens one for editing, the others stay rows. The switch saves at once, so a talkative rule is off in one touch.
+- A rule on an event (`changed`, `rises`, `falls`) may pause 1 s instead of 5: two gear shifts 2 s apart are two popups. A rule on a state keeps the 5 s floor.
+
+### Added
+- Templates under «when»: with a signal's name typed in, «on every change», «when it appears», «when it goes» wrap it into the event and set the pause to 1 s.
+
+### Fixed
+- The «when» field of a rule was 62 px wide and showed the formula in capitals (it had the hex-code field's style); its live check («= value» under the field) threw instead of showing.
+- An event rule's popup is shown once the glass is free (within 4 s) even if its formula no longer holds by then; it was dropped when anything the formula reads had moved while the panel menu was up.
+
 ## [1.12.5] - 2026-11-25
 
 ### Fixed

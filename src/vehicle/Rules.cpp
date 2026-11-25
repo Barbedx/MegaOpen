@@ -177,13 +177,13 @@ namespace Vehicle
             const bool g = r.isGesture();
             if (g && !r.gesture.valid()) return fail(p, i, "rule_gesture");
             if (!g && !r.when[0]) return fail(p, i, "rule_when");
-            if (!g && r.pauseS < RuleRow::PAUSE_MIN_S) return fail(p, i, "rule_pause");
             if (!r.nAct || r.nAct > RuleRow::MAX_ACTIONS) return fail(p, i, "rule_action");
             for (uint8_t k = 0; k < r.nAct; ++k)
                 if (!r.act[k].valid()) return fail(p, i, "rule_action");
             if (r.when[0]) {
                 Expr::Error e;
                 if (!prog.compile(r.when, exprResolve, nullptr, e)) { p.row = i; p.e = e; return false; }
+                if (!g && r.pauseS < RuleRow::pauseMin(prog.pulsed())) return fail(p, i, "rule_pause");
             }
         }
         return true;
@@ -220,7 +220,7 @@ namespace Vehicle
             }
             // The same per-row rules as check(), without the whole-set caps:
             // a row that does not check stays off, the others run.
-            bool on = s.on && compiled && (s.isGesture() ? s.gesture.valid() : (s.when[0] && s.pauseS >= RuleRow::PAUSE_MIN_S)) &&
+            bool on = s.on && compiled && (s.isGesture() ? s.gesture.valid() : (s.when[0] && s.pauseS >= RuleRow::pauseMin(r.prog.pulsed()))) &&
                       s.nAct && s.nAct <= RuleRow::MAX_ACTIONS;
             for (uint8_t k = 0; on && k < s.nAct; ++k) on = s.act[k].valid();
             r.on = on;
@@ -269,6 +269,11 @@ namespace Vehicle
         return _rows && row < _n && _rows[row].on && _rows[row].holds;
     }
 
+    bool Rules::event(uint16_t row) const
+    {
+        return _rows && row < _n && _rows[row].on && !_rows[row].gesture && _rows[row].prog.pulsed();
+    }
+
     const Expr::SigSet& Rules::inputsOf(uint16_t row) const
     {
         return _rows && row < _n ? _rows[row].prog.inputs() : _none;
@@ -282,6 +287,7 @@ namespace Vehicle
         out.gesture = r.gesture;
         out.holds = r.on && r.holds;
         out.running = r.on && (r.gesture || !r.prog.empty());
+        out.event = !r.gesture && r.prog.pulsed();
         out.fires = r.fires;
         out.lastFireMs = r.lastFireMs;
         return true;

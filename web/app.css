@@ -140,6 +140,15 @@ details.sub>summary{padding:12px;cursor:pointer;font-weight:700;color:var(--mute
 /* правила: дії рядками, формула на всю ширину */
 .rule .mh .in.grow{min-width:9em}   /* two chips beside it at 360 px: the chips wrap, the name stays a target */
 .rule .acts{display:grid;gap:6px}
+.rule .rb{display:grid;gap:8px}
+.rule:not(.open) .rb{display:none}   /* closed: one row; the fields stay in the DOM, a save reads them */
+.rule.open .rsum{display:none}
+/* row 1: switch, name, open; row 2: «when → do» and the live chip */
+.rule .mh .rsum{order:2;flex:1 1 60%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:var(--mute);cursor:pointer;padding:6px 0}
+.rule .mh [data-live]{order:3}
+.rtpl{align-items:center;flex-wrap:wrap}
+/* the formula is not a hex code: input.in.code is 62 px wide and upper case */
+.rule input.in.code[data-f="when"]{width:100%;text-transform:none}
 .act{display:flex;gap:8px;align-items:end}
 .act .mg{flex:1}
 .mg label.wide{grid-column:1/-1}

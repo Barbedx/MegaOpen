@@ -63,6 +63,12 @@ namespace Vehicle
         // value would otherwise keep the glass on popups for the drive. A
         // gesture has its own debounce (it re-arms on release): any pause, 0 too.
         static constexpr uint16_t PAUSE_MIN_S = 5;
+        // An event rule (its formula uses changed(), rises() or falls()) is
+        // true for one evaluation, so it cannot hold the glass: two gear
+        // shifts 2 s apart are two popups. 1 s still keeps a noisy signal
+        // from firing at the bus rate.
+        static constexpr uint16_t PAUSE_MIN_EVENT_S = 1;
+        static constexpr uint16_t pauseMin(bool event) { return event ? PAUSE_MIN_EVENT_S : PAUSE_MIN_S; }
 
         char        name[RULE_NAME + 1] = "";
         bool        on = true;
@@ -104,7 +110,7 @@ namespace Vehicle
         Rules& operator=(const Rules&) = delete;
 
         // Every row sound: a name, a formula that compiles (a signal rule must
-        // have one), a pause of PAUSE_MIN_S or more for a signal rule, at
+        // have one), a pause of pauseMin() or more for a signal rule, at
         // least one action and each with what it needs, a gesture that
         // Gesture::valid would take. False with the first problem.
         static bool check(const RuleSet& set, RuleProblem& p);
@@ -132,12 +138,15 @@ namespace Vehicle
         // the rule still holds. Any task (plain reads of a row that stays put).
         bool holds(uint16_t row) const;
         bool armed(uint16_t row) const { return holds(row); }
+        // The row's formula is an event (Expr::Program::pulsed): its popup is
+        // owed once it fired, whatever the formula says a pass later.
+        bool event(uint16_t row) const;
 
         // The signals the row's formula reads (empty for a formula-less gesture).
         const Expr::SigSet& inputsOf(uint16_t row) const;
 
         struct Live {
-            bool     on = false, gesture = false, holds = false, running = false;
+            bool     on = false, gesture = false, holds = false, running = false, event = false;
             uint32_t fires = 0, lastFireMs = 0;
         };
         bool     live(uint16_t row, Live& out) const;   // any task
