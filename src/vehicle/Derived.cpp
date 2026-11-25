@@ -123,11 +123,18 @@ namespace Vehicle
             ratio = (int32_t)((int64_t)speed * 100 / rpm);
             put(s, SIG_GEAR_RATIO, ratio, now);
         }
+        // A shift is 3 -> 4, not 3 -> 0 -> 4: with the clutch down, or the
+        // ratio between two gears (the clutch slipping), the gear is the last
+        // one matched. 0 is neutral, a standstill or no engine speed.
         int8_t g;
-        if (s.get(SIG_REVERSE) || s.get(SIG_REVERSE_UPC))       g = -1;
-        else if (s.get(SIG_NEUTRAL) || s.get(SIG_CLUTCH) ||
-                 speed < CRAWL || rpm < MIN_RPM)                 g = 0;
-        else                                                     g = gearFor(_g, ratio);
+        if (s.get(SIG_REVERSE) || s.get(SIG_REVERSE_UPC))                 g = _gearKept = -1;
+        else if (s.get(SIG_NEUTRAL) || speed < CRAWL || rpm < MIN_RPM)     g = _gearKept = 0;
+        else {
+            const int8_t m = s.get(SIG_CLUTCH) ? 0 : gearFor(_g, ratio);
+            if (m) _gearKept = m;
+            else if (_gearKept < 0) _gearKept = 0;   // out of reverse, nothing matched yet
+            g = _gearKept;
+        }
         put(s, SIG_GEAR, g, now);
     }
 

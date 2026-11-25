@@ -193,6 +193,33 @@ void test_a_threshold_rule_fires_on_the_crossing()
     TEST_ASSERT_TRUE(r.holds(0));
 }
 
+// A pulse (changed, rises, falls) is an event, not a state: the gear shown on
+// every shift. Two changes in a row are two fires, not one that "still holds".
+void test_a_pulse_rule_fires_on_every_pulse()
+{
+    RuleSet set;
+    set.rows.push(signalRule("gear", "changed(gear) and gear != 0", 5));
+    Rules r;
+    RuleProblem p;
+    TEST_ASSERT_TRUE(r.apply(set, p));
+    State s;
+    fresh();
+    s.set(SIG_GEAR, 1, 1);
+    pass(r, s, 1000);                    // first sight: no change yet
+    s.set(SIG_GEAR, 2, 2);
+    pass(r, s, 10000);
+    TEST_ASSERT_EQUAL_UINT8(1, g_nFired);
+    s.set(SIG_GEAR, 3, 3);               // the next shift, no clutch seen between
+    pass(r, s, 20000);
+    TEST_ASSERT_EQUAL_UINT8(2, g_nFired);
+    s.set(SIG_GEAR, 0, 4);               // clutch: not shown
+    pass(r, s, 30000);
+    TEST_ASSERT_EQUAL_UINT8(2, g_nFired);
+    s.set(SIG_GEAR, 4, 5);
+    pass(r, s, 40000);
+    TEST_ASSERT_EQUAL_UINT8(3, g_nFired);
+}
+
 // A gesture rule: GestureEngine detects it on the keys task; here it is only
 // armed by its "only if", and it becomes a Gesture for the detector.
 void test_a_gesture_rule_is_armed_by_its_formula_and_becomes_a_macro()
@@ -393,6 +420,7 @@ int main(int, char**)
     RUN_TEST(test_a_saved_set_does_not_refire_what_already_holds);
     RUN_TEST(test_the_popup_text_is_cut_between_characters);
     RUN_TEST(test_a_threshold_rule_fires_on_the_crossing);
+    RUN_TEST(test_a_pulse_rule_fires_on_every_pulse);
     RUN_TEST(test_a_gesture_rule_is_armed_by_its_formula_and_becomes_a_macro);
     RUN_TEST(test_check_says_which_row_and_why);
     RUN_TEST(test_the_popup_text);

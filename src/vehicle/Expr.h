@@ -96,6 +96,9 @@ namespace Expr
         // It reads the clock (held, avg, rate, integral): evaluate on a tick
         // too, not only when an input changed.
         bool timed() const { return _timed; }
+        // Uses changed(), rises() or falls(): its truth is an event, one
+        // evaluation long, not a state that lasts.
+        bool pulsed() const { return _pulsed; }
         uint16_t stateSlots() const { return _slots; }
 
         // State for one program's stateful calls; reset() when the program
@@ -115,6 +118,7 @@ namespace Expr
         PsArray<Op> _ops;
         SigSet      _in;
         bool        _timed = false;
+        bool        _pulsed = false;
         uint16_t    _slots = 0;
         friend struct Parser;
     };

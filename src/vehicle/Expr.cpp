@@ -291,6 +291,7 @@ namespace Expr
                 slot = p._slots++;
             }
             if (f->timed) p._timed = true;
+            if (f->code == F_CHANGED || f->code == F_RISES || f->code == F_FALLS) p._pulsed = true;
             return emit(f->code, 1 - (int)argc, argc, slot, k);
         }
     };
@@ -307,6 +308,7 @@ namespace Expr
         _ops.clear();
         _in.clear();
         _timed = false;
+        _pulsed = false;
         _slots = 0;
     }
 

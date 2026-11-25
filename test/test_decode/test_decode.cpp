@@ -766,10 +766,10 @@ void test_a_bound_row_decodes_into_state()
 void test_gear_is_the_nearest_ratio_within_the_band()
 {
     const Derived::Gears g;
-    TEST_ASSERT_EQUAL_INT8(1, Derived::gearFor(g, 75));
+    TEST_ASSERT_EQUAL_INT8(1, Derived::gearFor(g, 94));        // the car, 2026-11-23: 90..94 in 1st
     TEST_ASSERT_EQUAL_INT8(4, Derived::gearFor(g, 280));
     TEST_ASSERT_EQUAL_INT8(5, Derived::gearFor(g, 330));
-    TEST_ASSERT_EQUAL_INT8(0, Derived::gearFor(g, 100));        // between 1st and 2nd: no gear
+    TEST_ASSERT_EQUAL_INT8(0, Derived::gearFor(g, 115));        // between 1st and 2nd: no gear
     TEST_ASSERT_EQUAL_INT8(0, Derived::gearFor(g, 500));
     Derived::Gears six;
     six.ratio[5] = 420;
@@ -791,9 +791,13 @@ void test_gear_from_speed_rpm_and_the_switches()
     TEST_ASSERT_EQUAL_INT32(270, s.get(SIG_GEAR_RATIO));
     TEST_ASSERT_EQUAL_INT32(4, s.get(SIG_GEAR));
     s.set(SIG_CLUTCH, 1, t);
-    drive(5000, 1850);
-    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_GEAR));
+    drive(5000, 1200);                                          // the clutch down: still 4th
+    TEST_ASSERT_EQUAL_INT32(4, s.get(SIG_GEAR));
     s.set(SIG_CLUTCH, 0, t);
+    drive(5000, 1600);                                          // 31.2: between 4th and 5th (slipping)
+    TEST_ASSERT_EQUAL_INT32(4, s.get(SIG_GEAR));
+    drive(5000, 1400);                                          // 35.7: 5th, straight from 4th
+    TEST_ASSERT_EQUAL_INT32(5, s.get(SIG_GEAR));
     s.set(SIG_NEUTRAL, 1, t);
     drive(5000, 1850);
     TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_GEAR));
@@ -804,7 +808,9 @@ void test_gear_from_speed_rpm_and_the_switches()
     drive(500, 1000);
     TEST_ASSERT_EQUAL_INT32(-1, s.get(SIG_GEAR));
     s.set(SIG_REVERSE_UPC, 0, t);
-    drive(2000, 2700);                                          // 7.4: first
+    drive(2000, 4000);                                          // 5.0: out of reverse, no gear yet
+    TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_GEAR));
+    drive(2000, 2200);                                          // 9.1: first
     TEST_ASSERT_EQUAL_INT32(1, s.get(SIG_GEAR));
 }
 

@@ -17,6 +17,22 @@ entry is fixed (moved to **Done** with its commit), promoted to an Open section,
 or dropped with a word why. Newest at the top. One entry: date, what, evidence,
 where.
 
+- **2026-11-25 — gears on the car (owner: "gear 0 all the time", the popup
+  comes once, the tablet shows no window).** From mo-4580 boot 294 (1.11.0,
+  90 `[drive]` samples): every "gear 0, clutch up, moving" sample has ratio
+  90..94 = 1st, the table said 80 (band ±12 %). FIXED: default 91; the car's
+  NVS still holds 80 (Config saves every key), the owner sets it once. The
+  rule engine fired an event rule only on false -> true, so `changed(gear)`
+  on two shifts in a row fired once (`test_a_pulse_rule_fires_on_every_pulse`
+  failed before the fix): FIXED, `Expr::Program::pulsed()`. The gear went
+  through 0 on every clutch press: now kept through a shift (`Derived::gear`).
+  OPEN: the car's own rule `gear` is not in the pushed logs (only its name,
+  14 fires in 100 min), its text must be read from `/api/rules`; a 5 s
+  minimum pause (`RuleRow::PAUSE_MIN_S`) still swallows two shifts within
+  5 s; the Companion shows an alert as an Android notification only
+  (`Reminders.show`, needs «Сповіщення» on and the permission), there is no
+  window over other apps, and no record of what was agreed; the owner calls
+  the rules editor a mess (no specifics yet).
 - **2026-11-24 — the heap corruption of boot 190 came back once (bench, boot
   20, 1.12.0 + the main.cpp split, 1dc0ad3).** `multi_heap_free` assert in
   `esp_http_client_cleanup` ← `GhOta` `done()` ← `runCheck()` on netjob, the

@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+### Fixed
+- 1st gear is recognised: its ratio is 91 (the car's log of 2026-11-23: 90..94, 298 s), not the guessed 80, which never matched, so the car drove in "gear 0". A board that has saved its settings keeps the stored 80: set «Авто › Передачі › 1-ша» to 91 once.
+- A rule on an event (`changed(gear)`, `rises(...)`, `falls(...)`) fires on every event. Two changes in a row counted as one condition that "still holds", so a gear popup came once and then never again.
+
+### Changed
+- The gear holds through a shift: with the clutch down, or the ratio between two gears, it stays the last gear matched (3 -> 4, no 0 between). 0 is neutral, a standstill or no engine speed.
+
 ## [1.12.4] - 2026-11-24
 
 ### Changed

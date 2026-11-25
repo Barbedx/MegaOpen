@@ -237,7 +237,9 @@ namespace Vehicle
             Row& r = _rows[i];
             if (!r.on || r.prog.empty()) continue;
             if (r.seen && !r.prog.inputs().any(changed) && !(tick && r.prog.timed())) continue;
-            const bool was = r.holds;
+            // A pulse is an event: true twice in a row is two events (a gear
+            // shown on every shift), where a state fires on false -> true only.
+            const bool was = r.holds && !r.prog.pulsed();
             r.holds = Expr::holds(r.prog.eval(r.st, exprRead, &c, now));
             r.seen = true;
             const bool quiet = r.quiet;

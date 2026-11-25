@@ -57,7 +57,7 @@ namespace App
             volatile uint8_t   s_rmLights = Vehicle::Derived::LIGHTS_KMH, s_rmBrake = Vehicle::Derived::BRAKE_KMH;
             // Settings › Gears: written by any task, applied by this one.
             portMUX_TYPE       s_gearMux = portMUX_INITIALIZER_UNLOCKED;
-            uint16_t           s_gearSet[6] = {80, 147, 207, 275, 359, 431};
+            uint16_t           s_gearSet[6] = {91, 147, 207, 275, 359, 431};
             volatile bool      s_gearDirty = false;
 
             // The gear learner: steady ratios with the clutch up, binned (2 units

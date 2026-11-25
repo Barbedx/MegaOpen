@@ -60,7 +60,7 @@ namespace Cfg
         _s.logSerial = _p.getUChar("logSer", 2);
         _s.logStatus = _p.getUChar("logStat", 1);
         {
-            static const uint16_t def[6] = {80, 147, 207, 275, 359, 431};
+            static const uint16_t def[6] = {91, 147, 207, 275, 359, 431};
             static const char* const key[6] = {"g1", "g2", "g3", "g4", "g5", "g6"};
             for (int i = 0; i < 6; ++i) _s.gearRatio[i] = _p.getUShort(key[i], def[i]);
         }

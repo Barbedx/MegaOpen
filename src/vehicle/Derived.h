@@ -6,6 +6,9 @@
 // Signals computed from decoded ones, on the car task after each frame's
 // decode (it is State's only writer). Portable and native-tested (test_decode).
 //
+//   gear        (a shift keeps the last gear while the clutch is down or the
+//               ratio is between two gears; 0 is neutral, a standstill or a
+//               stalled engine, never "the clutch is pressed")
 //   gear        a manual gearbox has no gear on CAN: the speed/rpm ratio is
 //               matched against a table of km/h per 1000 rpm. R from either
 //               reverse bit, N from the neutral bit, the clutch, or a crawl.
@@ -43,10 +46,10 @@ namespace Vehicle
 
         // km/h per 1000 rpm x10, 1st..6th; 0 = no such gear. The defaults are
         // the owner's Mégane II CC, a six-speed: 2nd..6th learned on a drive
-        // (1.6.1 [gear], 2026-10-27: 147 207 275 359 431); 1st (80) not yet
-        // seen, from the ratios' progression.
+        // (1.6.1 [gear], 2026-10-27: 147 207 275 359 431); 1st from the car's
+        // log of 2026-11-23 (91, 298 s; the guessed 80 never matched it).
         struct Gears {
-            uint16_t ratio[GEARS] = {80, 147, 207, 275, 359, 431};
+            uint16_t ratio[GEARS] = {91, 147, 207, 275, 359, 431};
         };
 
         void setGears(const Gears& g) { _g = g; }
@@ -100,6 +103,7 @@ namespace Vehicle
         void svc(State& s, uint32_t now);
 
         Gears    _g;
+        int8_t   _gearKept = 0;          // the last forward gear matched
         int32_t  _lightsOn = LIGHTS_KMH * 100, _brakeOn = BRAKE_KMH * 100;   // km/h x100
         uint32_t _speedTs = 0, _rpmTs = 0, _cntTs = 0, _svcTs = 0, _odoTs = 0;
         Service  _svc;
