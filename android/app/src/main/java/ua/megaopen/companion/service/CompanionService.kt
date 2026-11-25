@@ -62,7 +62,10 @@ class CompanionService : LifecycleService() {
         reminders = Reminders(this, lifecycleScope, graph.settings, graph.connection) { text -> speak(text) }
         lifecycleScope.launch {
             graph.connection.alerts.collect { a ->
-                val text = Phrases.say(a, graph.settings.values.value) ?: return@collect
+                val s = graph.settings.values.value
+                // Shown whether it is said or not: a gear is a window, not a phrase.
+                if (s.window) Phrases.show(a, s)?.let { window.show(it) }
+                val text = Phrases.say(a, s) ?: return@collect
                 speak(text)
                 reminders?.onAlert(a, text)
             }
@@ -75,6 +78,7 @@ class CompanionService : LifecycleService() {
     }
 
     private var reminders: Reminders? = null
+    private val window by lazy { AlertWindow(this) }
 
     // Said only with the voice on; the notification goes either way.
     private fun speak(text: String) {
@@ -92,6 +96,7 @@ class CompanionService : LifecycleService() {
 
     override fun onDestroy() {
         reminders?.stop()
+        window.remove()
         graph.mediaSender.stop()
         try { unregisterReceiver(detach) } catch (_: Exception) {}
         graph.connection.stop()

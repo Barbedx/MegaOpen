@@ -16,6 +16,7 @@ namespace Cfg
             bool    has(const char* k) override                { return p.isKey(k); }
             bool    getBool(const char* k, bool d) override    { return p.getBool(k, d); }
             uint8_t getU8(const char* k, uint8_t d) override   { return p.isKey(k) ? p.getUChar(k, d) : d; }
+            uint16_t getU16(const char* k, uint16_t d) override { return p.isKey(k) ? p.getUShort(k, d) : d; }
             void    getStr(const char* k, char* out, size_t cap) override
             {
                 if (!cap) return;

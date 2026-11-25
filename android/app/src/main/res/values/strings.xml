@@ -112,6 +112,9 @@
     <string name="voice_speeds_note">From which speed the lights and handbrake reminders start: the board\'s settings › Reminders.</string>
     <string name="notify_title">Notifications</string>
     <string name="notify_on">Show the alerts as notifications</string>
+    <string name="window_on">A window over other apps</string>
+    <string name="window_note">Every alert and every popup of your own rules (a gear) for a moment over the map or the player. Needs the "Display over other apps" permission.</string>
+    <string name="window_allow">Allow</string>
     <string name="notify_note">On the screen while the alert lasts (lights still off), gone when it is fixed.</string>
     <!-- Bluetooth, now playing -->
     <string name="state_ble">On Bluetooth: %1$s</string>

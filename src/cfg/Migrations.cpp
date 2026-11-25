@@ -31,6 +31,17 @@ namespace Cfg
                          "gr1", "gr2", "gr3", "gr4", "gr5",
                          "decode", "huFmap", "alerts", "macros"});
             }
+
+            // v4 -> v5 (1.12.5): 1st gear. "g1" = 80 was a guess that no car
+            // matched (the owner's drives in 1st at 90..94), and Config saves
+            // every key, so the guess sat in NVS as if it were chosen. Its
+            // MEANING changes ("not measured" -> the default), so the stored
+            // guess goes and Config reads today's default; any other value is
+            // the owner's and stays. The owner's ask, 2026-11-25.
+            void toV5(Store& s)
+            {
+                if (s.has("g1") && s.getU16("g1", 0) == 80) s.remove("g1");
+            }
         }
 
         uint8_t run(Store& s, uint8_t& was)
@@ -46,6 +57,7 @@ namespace Cfg
             // defaults only (those are Config::begin's now) and are gone: a
             // fresh board (no "cfgVer") runs the steps from here as well.
             if (v < 4) toV4(s);
+            if (v < 5) toV5(s);
 
             // An NVS write can fail (full namespace).
             if (s.putU8("cfgVer", CURRENT)) return CURRENT;

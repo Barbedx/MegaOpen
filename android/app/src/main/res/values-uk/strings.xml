@@ -104,6 +104,9 @@
     <string name="voice_speeds_note">З якої швидкості нагадувати про фари й ручник — у налаштуваннях плати › Нагадування.</string>
     <string name="notify_title">Сповіщення</string>
     <string name="notify_on">Показувати попередження сповіщеннями</string>
+    <string name="window_on">Вікно поверх інших програм</string>
+    <string name="window_note">Кожне попередження і кожен попап ваших правил (передача) на пару секунд поверх карти чи плеєра. Потрібен дозвіл «Поверх інших програм».</string>
+    <string name="window_allow">Дати дозвіл</string>
     <string name="notify_note">На екрані, поки попередження триває (фари досі вимкнені), і зникає, коли виправлено.</string>
     <string name="state_ble">По Bluetooth: %1$s</string>
     <string name="state_waiting_usb">Чекаю плату на USB</string>

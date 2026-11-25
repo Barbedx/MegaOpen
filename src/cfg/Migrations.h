@@ -39,13 +39,14 @@ namespace Cfg
     namespace Migrations
     {
         // The schema this firmware writes.
-        inline constexpr uint8_t CURRENT = 4;
+        inline constexpr uint8_t CURRENT = 5;
 
         // The few NVS calls a step makes (Config adapts Preferences).
         struct Store {
             virtual bool    has(const char* key) = 0;
             virtual bool    getBool(const char* key, bool def) = 0;
             virtual uint8_t getU8(const char* key, uint8_t def) = 0;
+            virtual uint16_t getU16(const char* key, uint16_t def) = 0;
             // The stored text into out (cap incl. the NUL); "" when absent.
             virtual void    getStr(const char* key, char* out, size_t cap) = 0;
             virtual bool    putU8(const char* key, uint8_t v) = 0;

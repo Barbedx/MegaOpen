@@ -23,6 +23,7 @@ namespace
         bool has(const char* k) override { return kv.count(k) != 0; }
         bool getBool(const char* k, bool d) override { return has(k) ? kv[k] == "1" : d; }
         uint8_t getU8(const char* k, uint8_t d) override { return has(k) ? (uint8_t)std::stoi(kv[k]) : d; }
+        uint16_t getU16(const char* k, uint16_t d) override { return has(k) ? (uint16_t)std::stoi(kv[k]) : d; }
         void getStr(const char* k, char* out, size_t cap) override
         {
             snprintf(out, cap, "%s", has(k) ? kv[k].c_str() : "");
@@ -60,7 +61,7 @@ void test_v4_funcreg_off_is_the_extension_role()
 {
     Fake f;
     f.kv = {{"cfgVer", "3"}, {"funcReg", "0"}};
-    TEST_ASSERT_EQUAL_UINT8(4, run(f));
+    TEST_ASSERT_EQUAL_UINT8(Migrations::CURRENT, run(f));
     TEST_ASSERT_EQUAL_STRING("extension", f.kv["panelRole"].c_str());
     TEST_ASSERT_FALSE(f.has("funcReg"));
 }
@@ -88,7 +89,7 @@ void test_v4_keeps_a_stored_role()
 void test_v4_leaves_no_old_key()
 {
     Fake f;
-    f.kv = {{"cfgVer", "3"}, {"gr1", "80"}, {"gr5", "400"}, {"g1", "80"},
+    f.kv = {{"cfgVer", "3"}, {"gr1", "80"}, {"gr5", "400"}, {"g1", "85"},
             {"carSig0", "3"}, {"carSigV", "2"}, {"carSigN0", "batt_v"},
             {"decode", "x"}, {"huFmap", "x"}, {"alerts", "x"}, {"macros", "x"}};
     run(f);
@@ -96,6 +97,24 @@ void test_v4_leaves_no_old_key()
         TEST_ASSERT_FALSE_MESSAGE(f.has(k), k);
     TEST_ASSERT_TRUE(f.has("g1"));
     TEST_ASSERT_TRUE(f.has("carSigN0"));
+}
+
+// v5: the guessed 1st gear (80) goes, so the default (91) is read; a value
+// the owner set stays. Safe twice.
+void test_v5_drops_the_guessed_first_gear_only()
+{
+    Fake f;
+    f.kv = {{"cfgVer", "4"}, {"g1", "80"}, {"g2", "147"}};
+    TEST_ASSERT_EQUAL_UINT8(Migrations::CURRENT, run(f));
+    TEST_ASSERT_FALSE(f.has("g1"));
+    TEST_ASSERT_TRUE(f.has("g2"));
+    Fake own;
+    own.kv = {{"cfgVer", "4"}, {"g1", "88"}};
+    run(own);
+    TEST_ASSERT_EQUAL_STRING("88", own.kv["g1"].c_str());
+    f.kv["cfgVer"] = "4";
+    run(f);
+    TEST_ASSERT_FALSE(f.has("g1"));
 }
 
 // A board at CURRENT runs nothing, even with an old key present.
@@ -129,6 +148,7 @@ int main(int, char**)
     RUN_TEST(test_v4_funcreg_on_is_the_emulator_role);
     RUN_TEST(test_v4_keeps_a_stored_role);
     RUN_TEST(test_v4_leaves_no_old_key);
+    RUN_TEST(test_v5_drops_the_guessed_first_gear_only);
     RUN_TEST(test_a_current_board_runs_nothing);
     RUN_TEST(test_a_failed_version_write_repeats_safely);
     return UNITY_END();

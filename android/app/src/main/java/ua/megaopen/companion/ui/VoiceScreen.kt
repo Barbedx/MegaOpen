@@ -31,6 +31,7 @@ import ua.megaopen.companion.AppGraph
 import ua.megaopen.companion.R
 import ua.megaopen.companion.alerts.Alert
 import ua.megaopen.companion.alerts.Phrases
+import ua.megaopen.companion.service.AlertWindow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,6 +103,16 @@ fun VoiceScreen(graph: AppGraph) {
         Section(stringResource(R.string.notify_title)) {
             SwitchRow(stringResource(R.string.notify_on), s.notify, { v -> scope.launch { graph.settings.setNotify(v) } },
                 note = stringResource(R.string.notify_note))
+            SwitchRow(stringResource(R.string.window_on), s.window, { v -> scope.launch { graph.settings.setWindow(v) } },
+                note = stringResource(R.string.window_note))
+            if (s.window && !AlertWindow.allowed(ctx)) {
+                OutlinedButton(onClick = {
+                    ctx.startActivity(
+                        Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            android.net.Uri.parse("package:" + ctx.packageName))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }) { Text(stringResource(R.string.window_allow)) }
+            }
         }
     }
 }

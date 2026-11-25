@@ -49,6 +49,8 @@ class Settings(ctx: Context, scope: CoroutineScope) {
         val repeat: Map<String, Int> = emptyMap(),
         /** An Android notification with each alert, there while it lasts. */
         val notify: Boolean = true,
+        /** Each alert (a rule's popup too) as a window over the other apps for a moment. */
+        val window: Boolean = true,
     ) {
         fun repeatOf(sig: String, default: Int) = repeat[sig] ?: default
     }
@@ -84,6 +86,7 @@ class Settings(ctx: Context, scope: CoroutineScope) {
             phrases = say,
             repeat = rep,
             notify = p[NOTIFY] ?: true,
+            window = p[WINDOW] ?: true,
         )
     }
 
@@ -103,6 +106,7 @@ class Settings(ctx: Context, scope: CoroutineScope) {
     suspend fun setPendingTag(v: String) = edit { it[PENDING] = v }
     suspend fun setRepeat(sig: String, seconds: Int) = edit { it[intPreferencesKey(REP + sig)] = seconds.coerceIn(0, 600) }
     suspend fun setNotify(v: Boolean) = edit { it[NOTIFY] = v }
+    suspend fun setWindow(v: Boolean) = edit { it[WINDOW] = v }
 
     /** The install went through: the pending tag is this install's now. */
     suspend fun settleTag() = edit {
@@ -127,6 +131,7 @@ class Settings(ctx: Context, scope: CoroutineScope) {
         val TAG = stringPreferencesKey("installedTag")
         val PENDING = stringPreferencesKey("pendingTag")
         val NOTIFY = booleanPreferencesKey("notify")
+        val WINDOW = booleanPreferencesKey("window")
         const val OFF = "off_"
         const val SAY = "say_"
         const val REP = "rep_"

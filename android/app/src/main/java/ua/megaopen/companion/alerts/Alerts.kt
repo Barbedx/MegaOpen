@@ -30,6 +30,21 @@ object Phrases {
 
     fun kind(sig: String): Kind? = KNOWN.firstOrNull { it.sig == sig }
 
+    /**
+     * What to show for this alert, or null: nothing. A rule of the owner's is
+     * always shown with the board's text (a gear on every shift), said or not;
+     * one of the three warnings unless it is switched off.
+     */
+    fun show(a: Alert, s: Settings.Values): String? {
+        val k = kind(a.sig)
+        val text = when {
+            k == null -> a.text
+            k.sig in s.off -> return null
+            else -> s.phrases[k.sig] ?: k.default(s.voiceLang)
+        }
+        return text.replace("{v}", a.value.toString()).trim().ifEmpty { null }
+    }
+
     /** What to say for this alert with these settings, or null: nothing. */
     fun say(a: Alert, s: Settings.Values): String? {
         val k = kind(a.sig)

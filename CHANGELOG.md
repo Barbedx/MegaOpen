@@ -5,9 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.12.5] - 2026-11-25
+
 ### Fixed
-- 1st gear is recognised: its ratio is 91 (the car's log of 2026-11-23: 90..94, 298 s), not the guessed 80, which never matched, so the car drove in "gear 0". A board that has saved its settings keeps the stored 80: set «Авто › Передачі › 1-ша» to 91 once.
+- 1st gear is recognised: its ratio is 91 (the car's log of 2026-11-23: 90..94, 298 s), not the guessed 80, which never matched, so the car drove in "gear 0". A stored 80 (the old guess, saved with the other settings) is dropped on the first boot, a value you set yourself stays (settings schema v5).
 - A rule on an event (`changed(gear)`, `rises(...)`, `falls(...)`) fires on every event. Two changes in a row counted as one condition that "still holds", so a gear popup came once and then never again.
+
+### Added
+- Companion: an alert as a window over whatever is on the screen (the map, the player) for 2.5 s: the three warnings and every popup of your own rules, a gear on each shift, said or not. «Голос › Вікно поверх інших програм», on by default; Android asks once for "Display over other apps" (the button under the switch).
 
 ### Changed
 - Companion: your own rules are no longer said aloud unless «Голос › Озвучувати власні правила» is on (it was on by default, so every gear popup was spoken). Lights, handbrake and fuel are said as before.

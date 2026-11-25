@@ -16,6 +16,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- An alert (a gear) as a window over the map or the player (service/AlertWindow.kt). -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- The app updates itself from GitHub; Android still asks each time. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 

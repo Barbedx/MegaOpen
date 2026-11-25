@@ -23,6 +23,15 @@ class PhrasesTest {
         assertNull(Phrases.say(a("drive_handbrake"), s.copy(off = setOf("drive_handbrake"))))
     }
 
+    @Test fun aRuleIsShownEvenWhenItIsNotSaid() {
+        val quiet = Settings.Values()
+        assertNull(Phrases.say(a("gear", "gear: 3"), quiet))
+        assertEquals("gear: 3", Phrases.show(a("gear", "gear: 3"), quiet))
+        assertEquals("Увімкніть фари", Phrases.show(a("drive_no_lights"), s))
+        assertNull(Phrases.show(a("drive_handbrake"), s.copy(off = setOf("drive_handbrake"))))
+        assertNull(Phrases.show(a("gear", "  "), quiet))
+    }
+
     @Test fun otherAlertsSayTheBoardsTextOnlyWhenAsked() {
         val on = s.copy(others = true)
         assertEquals("coolant_temp: 110 C", Phrases.say(a("coolant_temp", "coolant_temp: 110 C"), on))
