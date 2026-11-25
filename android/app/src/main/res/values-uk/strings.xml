@@ -46,8 +46,8 @@
     <string name="voice_no_lang">У рушія немає голосу цією мовою: поставте його або оберіть іншу.</string>
     <string name="voice_what">Що казати</string>
     <string name="voice_play">Сказати</string>
-    <string name="voice_others">Інші попередження</string>
-    <string name="voice_others_note">Ваші власні правила на платі, текстом плати</string>
+    <string name="voice_others">Озвучувати власні правила</string>
+    <string name="voice_others_note">Кожен попап ваших правил на платі (передача теж), текстом плати. Фари, ручник і пальне озвучуються й без цього</string>
     <string name="voice_phrase_note">Порожня фраза — стандартна (сіра). {v} замінюється значенням.</string>
 
     <string name="board_none">Плати поки нема: підключіть її по USB, оберіть по Bluetooth або дайте застосунку знайти її по WiFi (Ще › Підключення).</string>

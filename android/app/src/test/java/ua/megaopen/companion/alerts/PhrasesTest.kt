@@ -23,9 +23,11 @@ class PhrasesTest {
         assertNull(Phrases.say(a("drive_handbrake"), s.copy(off = setOf("drive_handbrake"))))
     }
 
-    @Test fun otherAlertsSayTheBoardsTextUnlessOff() {
-        assertEquals("coolant_temp: 110 C", Phrases.say(a("coolant_temp", "coolant_temp: 110 C"), s))
+    @Test fun otherAlertsSayTheBoardsTextOnlyWhenAsked() {
+        val on = s.copy(others = true)
+        assertEquals("coolant_temp: 110 C", Phrases.say(a("coolant_temp", "coolant_temp: 110 C"), on))
+        assertNull(Phrases.say(a("gear", "gear: 3"), Settings.Values()))     // the default: a rule is not said
         assertNull(Phrases.say(a("coolant_temp", "x"), s.copy(others = false)))
-        assertNull(Phrases.say(a("coolant_temp", "  "), s))
+        assertNull(Phrases.say(a("coolant_temp", "  "), on))
     }
 }

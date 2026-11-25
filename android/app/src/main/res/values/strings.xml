@@ -50,8 +50,8 @@
     <string name="voice_no_lang">The engine has no voice for this language: install it, or pick another.</string>
     <string name="voice_what">What to say</string>
     <string name="voice_play">Say it</string>
-    <string name="voice_others">Other alerts</string>
-    <string name="voice_others_note">Your own alert rules on the board, said with the board\'s text</string>
+    <string name="voice_others">Say my own rules</string>
+    <string name="voice_others_note">Every popup of your own rules on the board (a gear too), with the board\'s text. Lights, handbrake and fuel are said without it</string>
     <string name="voice_phrase_note">An empty phrase says the default (grey). {v} is replaced by the value.</string>
 
     <!-- The board's page -->

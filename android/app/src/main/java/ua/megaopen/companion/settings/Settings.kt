@@ -35,7 +35,9 @@ class Settings(ctx: Context, scope: CoroutineScope) {
         val voiceLang: String = "uk",
         val volume: Int = 100,
         /** Alerts the app has no phrase for: said with the board's text. */
-        val others: Boolean = true,
+        // Off by default: a rule of the owner's is a popup (a gear on every
+        // shift), not something to say. The three warnings are said regardless.
+        val others: Boolean = false,
         /** Updates: the rc channel. */
         val pre: Boolean = false,
         /** The release this install came from, "" when put on by hand. */
@@ -74,7 +76,7 @@ class Settings(ctx: Context, scope: CoroutineScope) {
             autostart = p[AUTOSTART] ?: true,
             voiceLang = p[LANG] ?: "uk",
             volume = p[VOLUME] ?: 100,
-            others = p[OTHERS] ?: true,
+            others = p[OTHERS] ?: false,
             pre = p[PRE] ?: false,
             installedTag = p[TAG] ?: "",
             pendingTag = p[PENDING] ?: "",
