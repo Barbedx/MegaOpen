@@ -7,7 +7,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
 import ua.megaopen.companion.BuildConfig
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -34,6 +33,8 @@ object DeviceInfo {
     fun apps(versions: List<Pair<String, String?>>): String =
         "tablet apps: " + versions.joinToString(", ") { (p, v) -> "$p ${v ?: "absent"}" }
 
+    fun form(msg: String): ByteArray = ("msg=" + java.net.URLEncoder.encode(msg, "UTF-8")).toByteArray(Charsets.US_ASCII)
+
     fun lines(ctx: Context): List<String> {
         val dm = ctx.resources.displayMetrics
         val pm = ctx.packageManager
@@ -52,7 +53,10 @@ object DeviceInfo {
     suspend fun send(ctx: Context, board: Board) = withContext(Dispatchers.IO) {
         try {
             for (l in lines(ctx)) {
-                if (board.postJson("/api/app/info", JSONObject().put("msg", l)).code != 200) break
+                // A form, as the page posts to the board's plain routes (web/js/10-api.js formBody).
+                val r = board.request("POST", "/api/app/info",
+                    mapOf("X-MegaOpen" to "1", "Content-Type" to "application/x-www-form-urlencoded"), form(l))
+                if (r.code != 200) break
                 delay(400)   // the board takes one line every 300 ms
             }
         } catch (e: CancellationException) {
