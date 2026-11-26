@@ -105,4 +105,12 @@
             </intent-filter>
         </receiver>
     </application>
+
+    <!-- The head unit's own apps, whose versions go into the board's log (board/DeviceInfo.kt). -->
+    <queries>
+        <package android:name="com.dudu.autoui" />
+        <package android:name="com.syu.ms" />
+        <package android:name="com.syu.canbus" />
+        <package android:name="com.syu.fourcamera2" />
+    </queries>
 </manifest>

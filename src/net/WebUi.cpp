@@ -341,6 +341,24 @@ void WebUi::routes()
         return r->reply(200, "text/plain", "OK");
     });
 
+    // What the head unit is, as MegaOpen Companion says it once per
+    // connection (android board/DeviceInfo.kt): model, Android, the firmware
+    // build's date, its own apps' versions. One [app] line each; the log push
+    // carries it out of the car. Folded and cut like a page error.
+    route("/api/app/info", HTTP_POST, [](PsychicRequest* r) {
+        static uint32_t s_lastMs = 0;
+        const uint32_t now = millis();
+        if (now - s_lastMs < 300) return r->reply(200, "text/plain", "OK");
+        s_lastMs = now;
+        String msg = paramStr(r, "msg");
+        msg.replace('\n', ' ');
+        msg.replace('\r', ' ');
+        if (msg.length() > 200) msg.remove(200);
+        if (!msg.length()) return r->reply(400, "text/plain", "param msg");
+        LOGI("app", "%s", msg.c_str());
+        return r->reply(200, "text/plain", "OK");
+    });
+
     route("/api/logs/tags", HTTP_GET, [](PsychicRequest* r) {
         JsonDocument d(&PsramJson::instance());
         JsonArray a = d["tags"].to<JsonArray>();

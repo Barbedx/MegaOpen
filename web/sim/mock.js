@@ -176,6 +176,7 @@ function logsSince(since){if(since>logSeq)since=0;const old=RING.length?RING[0].
 /* ---- маршрути мок-API ---- */
 const R={},g=(p,f)=>R['GET '+p]=f,po=(p,f)=>R['POST '+p]=f;
 /* помилка сторінки: прошивка пише її в журнал [page]; мок лише приймає */
+po('/api/app/info',q=>{emit(1,'NET','[app] '+(q.msg||''));return 'OK'});
 po('/api/page/error',q=>{emit(1,'NET','[page] '+(q.where||'')+': '+(q.msg||'')+(q.req?' @ '+q.req:''));return 'OK'});
 /* помилки прошивки: text/plain, тіло — сам текст */
 const fail=(st,text)=>({__status:st,body:String(text)});

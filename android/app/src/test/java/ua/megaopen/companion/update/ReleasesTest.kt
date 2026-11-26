@@ -90,6 +90,11 @@ class ReleasesTest {
         assertEquals("b86fc6b051f63d73de262d4c34e3a0a9", BoardFlash.md5(byteArrayOf(65, 66)))
     }
 
+    @Test fun theAppsLineNamesAMissingOne() {
+        assertEquals("tablet apps: com.syu.ms 1.0 (190000000), com.syu.canbus absent",
+            ua.megaopen.companion.board.DeviceInfo.apps(listOf("com.syu.ms" to "1.0 (190000000)", "com.syu.canbus" to null)))
+    }
+
     @Test fun sumLine() {
         val sums = "aa11  megaopen-t2can-1.6.0.bin\nBB22  megaopen-companion-1.6.0.apk\n"
         assertEquals("bb22", Releases.sumFor(sums, "megaopen-companion-1.6.0.apk"))

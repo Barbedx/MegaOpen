@@ -45,6 +45,28 @@ where.
   ran at the time (a smoke run and a GitHub check had just been there), and
   whether the 89 kB still holds. The new signals make it readable on
   «Мапа › Сигнали» › «Плата».
+  **Looked into the same day (the owner asked):** the board's log of that
+  boot (34, `/api/logs/file?n=1`) has no line for the failed attempt:
+  neither `[ota] page upload` (written by `/ota/start`'s hook before
+  `Update.begin`) nor `[web] refused`. So the first `/ota/start` never
+  reached a handler; curl (`-s -m 10`, its exit code unread) printed
+  nothing, and the upload then failed only because no update had been
+  begun. The board had had no request for 42 minutes (heap 41 kB, loop gaps
+  under 20 ms, RSSI -60..-66, WiFi sleep on for BLE coexistence). Not
+  reproduced: 9 requests after it, 6 of them with the PC's ARP entry
+  cleared, connected in 30-70 ms. Cause below HTTP, unknown; the suspect
+  is the first packet to a sleeping radio after a long quiet. Done about
+  it: Companion asks `/ota/start` up to three times. Left: the release
+  check's own command should read the HTTP code of `/ota/start` before it
+  uploads (it is typed by hand from CLAUDE.md).
+- **2026-11-26 — the bench heap, corrected: 41 kB idle on 1.12.7, 82 kB at
+  the end of setup.** Boot 34's `[hb]` gives heap 41012, min 18456 with
+  nothing running, the GitHub check at 80 s took it to 34 kB and `[mem]
+  low min=18596` followed; `[mem] ble.begin` alone costs 84 kB. The "bench
+  idles at 89 kB" in the 2026-11-25 entry was a figure from an earlier
+  build or a moment right after boot, not checked then. The same board in
+  the car (identical hardware) at 20-35 kB is therefore not far from the
+  bench: the gap to explain is ~10-20 kB, not ~55 kB.
 - **2026-11-26 — DUDU's status bar, the owner's photo (2026-11-22 17:32, car
   standing).** He switched every icon on and asks where each number comes
   from. Ours for sure: «134 km ▬ 95%» (range `0x21`, per cent `0x7D 04`

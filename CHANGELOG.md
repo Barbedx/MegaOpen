@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.12.9] - 2026-11-26
+
+### Added
+- Companion tells the board what the head unit is on every connection (`POST /api/app/info`): model, Android, the firmware build and its date, the versions of the launcher and of the canbox decoder. The board writes it as `[app]` lines, so the pushed log names the head unit's firmware.
+
+### Fixed
+- Companion's «Оновити плату» asks `/ota/start` up to three times: one such request on the bench got no answer and the upload after it failed.
+
 ## [1.12.8] - 2026-11-26
 
 ### Added

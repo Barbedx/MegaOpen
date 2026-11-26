@@ -71,6 +71,7 @@ map; this file is the "where do I look" index for a session in the car.
 | `[ota]` | trial / CONFIRMED / rolling back |
 | `[usb]` | USB link: host SOFs / addressed / configured (link up), bus reset, suspend; the app's frames |
 | `[link]` | Companion: BLE subscribe, HELLO, gone, `app via usb`, `ble` or `none` |
+| `[app]` | what the head unit is, said by Companion on each connection: model, Android, the firmware build and its date, the launcher's and the canbox decoder's versions |
 | `[page]` | the web page's own errors, sent by the page: which screen, the text, the request that failed |
 | `[push]` | log push to GitHub: file sent, bytes queued, GitHub's refusal |
 | `[rule]` | rules (docs/design/rules.md): each fire, popups shown/dropped, the gestures on the keys task |

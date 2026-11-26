@@ -6,7 +6,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.launch
 import ua.megaopen.companion.board.BoardConnection
+import ua.megaopen.companion.board.DeviceInfo
 import ua.megaopen.companion.link.BleLink
 import ua.megaopen.companion.link.UsbLink
 import ua.megaopen.companion.link.UsbSeen
@@ -43,4 +46,9 @@ class AppGraph(app: Application) {
     /** What the voice said last, for the home screen. */
     val lastSaid: StateFlow<String> = _lastSaid
     fun said(text: String) { _lastSaid.value = text }
+
+    init {
+        // Each new way in to the board: what this head unit is, into the board's log.
+        scope.launch { connection.board.filterNotNull().collect { b -> DeviceInfo.send(app, b) } }
+    }
 }

@@ -64,7 +64,23 @@ object BoardFlash {
         } catch (e: Exception) {
             ""
         }
-        val start = board.request("GET", "/ota/start?mode=fr&hash=${md5(data)}", GATE)
+        // Three tries: on the bench one /ota/start in a quiet hour got no answer
+        // at all (docs/BACKLOG.md, 2026-11-26) and the next one did. Asking
+        // twice is harmless: it only begins the update again.
+        var start: ua.megaopen.companion.link.HttpWire.Response? = null
+        var why: Exception? = null
+        for (i in 1..3) {
+            try {
+                start = board.request("GET", "/ota/start?mode=fr&hash=${md5(data)}", GATE)
+                break
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                why = e
+                delay(2_000)
+            }
+        }
+        if (start == null) throw why ?: IOException("no answer to /ota/start")
         if (start.code != 200) throw IOException("HTTP ${start.code} ${start.text().take(80)}")
         val boundary = "----MegaOpen" + java.lang.Long.toHexString(System.nanoTime())
         // The board reboots right after its answer; on a link the answer may not make it.
