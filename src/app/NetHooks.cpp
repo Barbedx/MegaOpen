@@ -172,6 +172,7 @@ namespace App
                 d["uptimeMs"] = millis();
                 s_web->statusJson(d["status"].to<JsonObject>());
                 s_web->healthJson(d["health"].to<JsonObject>());
+                s_web->carJson(d["car"].to<JsonObject>());
                 const size_t n = serializeJson(d, out, cap);
                 return n < cap ? n : 0;
             }

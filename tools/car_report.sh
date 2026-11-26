@@ -51,6 +51,7 @@ get /api/settings settings.json
 get /api/config   config.json
 get "/api/map?live=1" map-live.json
 get /api/fw       fw.json
+get /api/car      car.json
 get /api/cap/list cap-list.json
 get "/api/logs/file?n=0" log-0.txt
 get "/api/logs/file?n=1" log-1.txt

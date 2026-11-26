@@ -353,6 +353,10 @@ public:
     // the same copies the routes read; safe beside httpd.
     void statusJson(JsonObject d);
     void healthJson(JsonObject d);
+    // The car as the board has it now, for the pushed status: `sigs` every
+    // signal with a value, `hu` what each field of the head unit is sent,
+    // `huFrom` the fields that do not take their own signal.
+    void carJson(JsonObject d);
 
     // /api/display's body.
     void fillDisplay(JsonObject d);

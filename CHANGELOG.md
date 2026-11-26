@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.12.10] - 2026-11-26
+
+### Added
+- The status file the board pushes to GitHub every 10 minutes has a `car` part: every signal with a value, what each field of the head unit is sent now, and the fields that take another signal. The same object is `GET /api/car`. A wrong number on the head unit can be traced from home.
+
 ## [1.12.9] - 2026-11-26
 
 ### Added

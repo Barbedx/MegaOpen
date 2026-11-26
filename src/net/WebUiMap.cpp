@@ -133,8 +133,49 @@ namespace
     }
 }
 
+// The pushed status's car part (LogPush's snapshot, NetHooks): a wrong number
+// on the head unit could not be traced from the log, which has no values in
+// it (2026-11-26: the tank per cent that grew while driving).
+void WebUi::carJson(JsonObject d)
+{
+    if (!_state) return;
+    char v[16], b[160];
+    JsonObject sg = d["sigs"].to<JsonObject>();
+    for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) {
+        if (!Vehicle::exists(s) || !_state->has(s)) continue;
+        const Vehicle::Meta& m = Vehicle::meta(s);
+        sg[m.name] = serialized(String(dec(v, sizeof(v), _state->get(s), m.decimals)));
+    }
+    Scratch<Canbox::HuConfig> cfg;
+    Scratch<Canbox::FieldMap> eff;
+    if (!cfg || !eff || !App::Hu::emitterCfg().peek(*cfg)) return;
+    const Canbox::Protocol& P = Canbox::activeProtocol();
+    P.withDefaults(cfg->fields, *eff);
+    const Canbox::FieldView fv(*_state, eff.get());
+    d["proto"] = P.id();
+    JsonObject hu = d["hu"].to<JsonObject>();
+    JsonObject from = d["huFrom"].to<JsonObject>();
+    for (uint8_t i = 0; i < P.fieldCount(); ++i) {
+        const TargetView t = P.field(i);
+        if (t.sig >= Vehicle::SIG_COUNT) continue;
+        if (fv.has(t.sig)) hu[t.id] = serialized(String(Canbox::fmtFixed(v, sizeof(v), fv.get(t.sig), t.dec)));
+        const Canbox::FieldRule* ru = eff->find(t.sig);
+        if (ru && !(ru->kind == Canbox::FK_SIGNAL && ru->src == ru->field)) {
+            CarFile::ruleJson(b, sizeof(b), *ru);
+            from[t.id] = serialized(String(b));
+        }
+    }
+}
+
 void WebUi::routesMap()
 {
+    // The same object the pushed status carries as `car`: every value the
+    // board has and what the head unit is sent, in one GET (tools/car_report.sh).
+    route("/api/car", HTTP_GET, [this](PsychicRequest* r) {
+        JsonDocument d(&PsramJson::instance());
+        carJson(d.to<JsonObject>());
+        return replyDoc(r, d);
+    });
     // {send, uart, rows:[{id, src, can, k, v, how, left, raw}]}.
     // The field's name, unit, range and fw are the catalog's (`raise`); the
     // page joins the two by id. Values have the decimal point placed.

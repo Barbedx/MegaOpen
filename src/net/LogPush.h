@@ -64,7 +64,7 @@ namespace LogPush
     using SnapshotFn = size_t (*)(char* out, size_t cap);
     void setSnapshot(SnapshotFn fn);
     constexpr uint32_t SNAP_MS  = 10UL * 60 * 1000;
-    constexpr size_t   SNAP_MAX = 12 * 1024;
+    constexpr size_t   SNAP_MAX = 24 * 1024;   // status, health and the car's values (WebUi::carJson)
 
     enum class State : uint8_t {
         Off,        // switched off, or no token
