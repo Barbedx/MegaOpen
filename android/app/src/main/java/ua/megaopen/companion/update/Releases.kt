@@ -16,6 +16,9 @@ object Releases {
 
     class Release(val tag: String, val apkUrl: String, val apkName: String, val sumsUrl: String?)
 
+    /** The board's image in a release: megaopen-<env>-X.Y.Z.bin (not the -factory one). */
+    class Firmware(val tag: String, val version: String, val url: String, val name: String, val sumsUrl: String?)
+
     /** v1.6.0-rc2 -> [1, 6, 0, 2]; a final sorts after its rcs. Null: not a release tag. */
     fun order(tag: String): List<Int>? {
         val m = Regex("""^v?(\d+)\.(\d+)\.(\d+)(?:-rc(\d+))?$""").find(tag.trim()) ?: return null
@@ -64,6 +67,39 @@ object Releases {
             if (!pre && o.optBoolean("prerelease")) continue
             val r = parse(o) ?: continue
             if (best == null || compare(order(r.tag)!!, order(best.tag)!!) > 0) best = r
+        }
+        return best
+    }
+
+    /** One release's image for the board's build [env] ("t2can"), if it has one. */
+    fun firmware(o: JSONObject, env: String): Firmware? {
+        if (env.isEmpty() || o.optBoolean("draft")) return null
+        val tag = o.optString("tag_name")
+        if (order(tag) == null) return null
+        val assets = o.optJSONArray("assets") ?: return null
+        val want = Regex("^megaopen-" + Regex.escape(env) + """-(\d+\.\d+\.\d+)\.bin$""")
+        var bin: JSONObject? = null
+        var ver = ""
+        var sums: String? = null
+        for (i in 0 until assets.length()) {
+            val a = assets.getJSONObject(i)
+            val n = a.optString("name")
+            val m = want.find(n)
+            if (m != null) { bin = a; ver = m.groupValues[1] }
+            if (n == "SHA256SUMS") sums = a.optString("browser_download_url")
+        }
+        val b = bin ?: return null
+        return Firmware(tag, ver, b.optString("browser_download_url"), b.optString("name"), sums)
+    }
+
+    /** The newest release with the board's image; an rc only when [pre]. */
+    fun newestFirmware(list: JSONArray, env: String, pre: Boolean): Firmware? {
+        var best: Firmware? = null
+        for (i in 0 until list.length()) {
+            val o = list.getJSONObject(i)
+            if (!pre && o.optBoolean("prerelease")) continue
+            val f = firmware(o, env) ?: continue
+            if (best == null || compare(order(f.tag)!!, order(best.tag)!!) > 0) best = f
         }
         return best
     }

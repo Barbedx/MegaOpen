@@ -74,6 +74,15 @@
     <string name="upd_allow">Allow this app to install apps, then press Update again</string>
     <string name="upd_error">Not updated: %1$s</string>
     <string name="upd_not_installed">Not installed: %1$s</string>
+    <string name="upd_board_none">No board connected: its firmware was not checked</string>
+    <string name="upd_board_no_image">The releases have no firmware for this board</string>
+    <string name="upd_board_found">The board has %1$s, GitHub has %2$s</string>
+    <string name="upd_board_install">Update the board to %1$s</string>
+    <string name="upd_board_downloading">Downloading %1$s…</string>
+    <string name="upd_board_sending">Sending to the board (%1$s), up to three minutes. Keep the ignition on</string>
+    <string name="upd_board_done">The board runs %1$s. It confirms the version after a minute of work</string>
+    <string name="upd_board_sent">Sent, but the board has not answered with the new version yet. Check in a minute</string>
+    <string name="upd_board_error">The board was not updated: %1$s</string>
 
     <!-- Connection -->
     <string name="conn_title">Connection</string>

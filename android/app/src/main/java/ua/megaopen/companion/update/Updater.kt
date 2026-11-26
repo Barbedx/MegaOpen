@@ -9,6 +9,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import ua.megaopen.companion.BuildConfig
+import ua.megaopen.companion.board.Board
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -33,11 +34,51 @@ class Updater(private val ctx: Context) {
      * [progress] gets 0..100. Returns when the system has taken it.
      */
     suspend fun install(r: Releases.Release, progress: (Int) -> Unit) = withContext(Dispatchers.IO) {
+        val f = fetch(r.apkUrl, r.apkName, r.sumsUrl, progress)
+
+        val pi = ctx.packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        params.setAppPackageName(ctx.packageName)
+        val id = pi.createSession(params)
+        pi.openSession(id).use { s ->
+            f.inputStream().use { inp ->
+                s.openWrite("apk", 0, f.length()).use { out ->
+                    inp.copyTo(out)
+                    s.fsync(out)
+                }
+            }
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
+            val done = PendingIntent.getBroadcast(ctx, id, Intent(ctx, InstallReceiver::class.java), flags)
+            s.commit(done.intentSender)
+        }
+        f.delete()
+    }
+
+    /**
+     * The newest image for the board's build, which the board names itself
+     * (/api/fw `env`, as its own GitHub update does). The board in a car has
+     * too little memory left for the TLS download (docs/BACKLOG.md,
+     * 2026-11-25); this device has plenty, and hands the file over plain HTTP.
+     */
+    suspend fun boardFirmware(board: Board, pre: Boolean): Releases.Firmware? = withContext(Dispatchers.IO) {
+        val env = board.json("/api/fw").optString("env")
+        if (env.isEmpty()) throw IOException("the board did not name its build")
+        Releases.newestFirmware(JSONArray(text("$api/releases?per_page=10")), env, pre)
+    }
+
+    /** The image, downloaded and checked against SHA256SUMS. [progress] gets 0..100. */
+    suspend fun firmwareBytes(f: Releases.Firmware, progress: (Int) -> Unit): ByteArray = withContext(Dispatchers.IO) {
+        val file = fetch(f.url, f.name, f.sumsUrl, progress)
+        try { file.readBytes() } finally { file.delete() }
+    }
+
+    /** Download [name] into the cache and check it against the release's SHA256SUMS. */
+    private fun fetch(url: String, name: String, sums: String?, progress: (Int) -> Unit): File {
         val dir = File(ctx.cacheDir, "update").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
-        val f = File(dir, r.apkName)
+        val f = File(dir, name)
         val md = MessageDigest.getInstance("SHA-256")
-        val c = open(r.apkUrl, "application/octet-stream")
+        val c = open(url, "application/octet-stream")
         try {
             val total = c.contentLengthLong
             var got = 0L
@@ -58,26 +99,13 @@ class Updater(private val ctx: Context) {
             c.disconnect()
         }
         val have = md.digest().joinToString("") { "%02x".format(it) }
-        val sumsUrl = r.sumsUrl ?: throw IOException("no SHA256SUMS in the release")
-        val want = Releases.sumFor(text(sumsUrl), r.apkName) ?: throw IOException("SHA256SUMS has no line for ${r.apkName}")
-        if (want != have) throw IOException("SHA-256 does not match")
-
-        val pi = ctx.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-        params.setAppPackageName(ctx.packageName)
-        val id = pi.createSession(params)
-        pi.openSession(id).use { s ->
-            f.inputStream().use { inp ->
-                s.openWrite("apk", 0, f.length()).use { out ->
-                    inp.copyTo(out)
-                    s.fsync(out)
-                }
-            }
-            val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
-            val done = PendingIntent.getBroadcast(ctx, id, Intent(ctx, InstallReceiver::class.java), flags)
-            s.commit(done.intentSender)
+        val sumsUrl = sums ?: throw IOException("no SHA256SUMS in the release")
+        val want = Releases.sumFor(text(sumsUrl), name) ?: throw IOException("SHA256SUMS has no line for $name")
+        if (want != have) {
+            f.delete()
+            throw IOException("SHA-256 does not match")
         }
-        f.delete()
+        return f
     }
 
     private fun open(url: String, accept: String): HttpURLConnection {

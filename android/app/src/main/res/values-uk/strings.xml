@@ -68,6 +68,15 @@
     <string name="upd_allow">Дозвольте цьому застосунку встановлювати застосунки й натисніть «Оновити» ще раз</string>
     <string name="upd_error">Не оновлено: %1$s</string>
     <string name="upd_not_installed">Не встановлено: %1$s</string>
+    <string name="upd_board_none">Плата не підключена: її прошивку не перевірено</string>
+    <string name="upd_board_no_image">Для цієї плати в релізах прошивки нема</string>
+    <string name="upd_board_found">На платі %1$s, на GitHub %2$s</string>
+    <string name="upd_board_install">Оновити плату до %1$s</string>
+    <string name="upd_board_downloading">Завантажую %1$s…</string>
+    <string name="upd_board_sending">Передаю на плату (%1$s), до трьох хвилин. Не вимикайте запалювання</string>
+    <string name="upd_board_done">Плата на %1$s. За хвилину роботи вона підтвердить версію</string>
+    <string name="upd_board_sent">Передано, але плата ще не відповіла новою версією. Перевірте за хвилину</string>
+    <string name="upd_board_error">Плату не оновлено: %1$s</string>
 
     <string name="conn_title">Підключення</string>
     <string name="conn_note">По USB тут нічого не треба. По WiFi застосунок сам знайде плату (mDNS, потім адреси точки доступу); адресу вписуйте, лише якщо не знаходить.</string>

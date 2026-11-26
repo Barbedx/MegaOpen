@@ -60,6 +60,36 @@ class ReleasesTest {
         assertTrue(Releases.isNewer(Releases.parse(rel("v1.6.2"))!!, mine))
     }
 
+    private fun fwRel(tag: String, pre: Boolean, vararg names: String): JSONObject {
+        val assets = JSONArray()
+        for (n in names) assets.put(JSONObject().put("name", n).put("browser_download_url", "https://github.com/x/$tag/$n"))
+        return JSONObject().put("tag_name", tag).put("prerelease", pre).put("assets", assets)
+    }
+
+    @Test fun theBoardsImageIsItsBuildsOtaFile() {
+        val list = JSONArray()
+            .put(fwRel("v1.12.6-rc1", true, "megaopen-t2can-1.12.6.bin", "megaopen-t2can-1.12.6-factory.bin",
+                "megaopen-t2can_usbhid-1.12.6.bin", "SHA256SUMS"))
+            .put(fwRel("v1.11.0", false, "megaopen-t2can-1.11.0.bin", "SHA256SUMS"))
+            .put(fwRel("v1.12.9", false, "megaopen-companion-1.12.9.apk"))
+        val rc = Releases.newestFirmware(list, "t2can", pre = true)!!
+        assertEquals("v1.12.6-rc1", rc.tag)
+        assertEquals("1.12.6", rc.version)
+        assertEquals("megaopen-t2can-1.12.6.bin", rc.name)
+        assertEquals("https://github.com/x/v1.12.6-rc1/SHA256SUMS", rc.sumsUrl)
+        assertEquals("v1.11.0", Releases.newestFirmware(list, "t2can", pre = false)!!.tag)
+        assertEquals("megaopen-t2can_usbhid-1.12.6.bin", Releases.newestFirmware(list, "t2can_usbhid", pre = true)!!.name)
+        assertNull(Releases.newestFirmware(list, "direct", pre = true))
+        assertNull(Releases.newestFirmware(list, "", pre = true))
+    }
+
+    @Test fun theUploadIsOneFilePart() {
+        val body = String(BoardFlash.multipart("B", "fw.bin", byteArrayOf(65, 66)), Charsets.ISO_8859_1)
+        assertEquals("--B\r\nContent-Disposition: form-data; name=\"file\"; filename=\"fw.bin\"\r\n" +
+            "Content-Type: application/octet-stream\r\n\r\nAB\r\n--B--\r\n", body)
+        assertEquals("b86fc6b051f63d73de262d4c34e3a0a9", BoardFlash.md5(byteArrayOf(65, 66)))
+    }
+
     @Test fun sumLine() {
         val sums = "aa11  megaopen-t2can-1.6.0.bin\nBB22  megaopen-companion-1.6.0.apk\n"
         assertEquals("bb22", Releases.sumFor(sums, "megaopen-companion-1.6.0.apk"))

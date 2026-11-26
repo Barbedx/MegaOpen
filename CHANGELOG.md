@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.12.7] - 2026-11-26
+
+### Added
+- Companion, «Ще › Оновлення»: «Перевірити» also looks for the board's firmware, and «Оновити плату» downloads the image on the head unit (checked against `SHA256SUMS`) and hands it to the board over plain HTTP, straight to the board's WiFi address when the head unit reaches it, else over the USB or Bluetooth link. For a board in the car, whose own GitHub download breaks for lack of memory.
+
 ## [1.12.6] - 2026-11-25
 
 ### Changed

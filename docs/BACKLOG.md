@@ -35,6 +35,15 @@ where.
   on 1.12.x; if the car still idles at 20-35 kB, find the taker before
   touching the budget's numbers. Where: `src/net/GhOta.cpp`,
   `src/net/NetBudget.h`, `docs/design/stabilisation-1-12.md`.
+- **2026-11-26 — Companion updates the board (1.12.7), untested on a device.**
+  The owner's ask after the entry above: the app downloads the image and
+  uploads it (`update/BoardFlash.kt`, `/ota/start` + `/ota/upload`). No
+  Android device or JDK on the dev PC: CI compiles it and runs the unit
+  tests (asset choice, the multipart body); the download, the choice of the
+  WiFi address over the link and the upload itself were never run. An rc and
+  its final carry one version and the board does not tell its tag over the
+  API, so the app offers the image whenever a release has one and shows both
+  versions instead of deciding "newer".
 - **2026-11-25 — the rules editor (owner: "a mess").** Three things under
   it, all FIXED in 1.12.6: every rule was drawn as a whole card at once; the
   «when» field took `input.in.code` (the hex-code field: 62 px wide, upper

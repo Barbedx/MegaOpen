@@ -61,6 +61,7 @@ import ua.megaopen.companion.link.BlePermissions
 import ua.megaopen.companion.link.LinkStats
 import ua.megaopen.companion.link.UsbSeen
 import ua.megaopen.companion.settings.ConnMode
+import ua.megaopen.companion.update.BoardFlash
 import ua.megaopen.companion.update.Releases
 
 @Composable
@@ -81,6 +82,9 @@ private fun UpdatesSection(graph: AppGraph) {
     var found by remember { mutableStateOf<Releases.Release?>(null) }
     var busy by remember { mutableStateOf(false) }
     var pct by remember { mutableStateOf(-1) }
+    val board by graph.connection.board.collectAsStateWithLifecycle()
+    var fw by remember { mutableStateOf<Releases.Firmware?>(null) }
+    var bStatus by remember { mutableStateOf("") }
 
     Section(stringResource(R.string.upd_title)) {
         Text(stringResource(R.string.upd_version, BuildConfig.VERSION_NAME, s.installedTag.ifEmpty { BuildConfig.RELEASE_TAG }.ifEmpty { "—" }))
@@ -98,6 +102,21 @@ private fun UpdatesSection(graph: AppGraph) {
                         status = if (newer) ctx.getString(R.string.upd_available, r!!.tag) else ctx.getString(R.string.upd_none)
                     } catch (e: Exception) {
                         status = ctx.getString(R.string.upd_error, e.message ?: e.javaClass.simpleName)
+                    }
+                    // The board's image, from the same releases: offered whenever there is one,
+                    // the two versions side by side (an rc and its final carry one version).
+                    val b = board
+                    fw = null
+                    try {
+                        if (b == null) bStatus = ctx.getString(R.string.upd_board_none)
+                        else {
+                            val f = graph.updater.boardFirmware(b, s.pre)
+                            fw = f
+                            bStatus = if (f == null) ctx.getString(R.string.upd_board_no_image)
+                                      else ctx.getString(R.string.upd_board_found, b.json("/api/status").optString("fw"), f.tag)
+                        }
+                    } catch (e: Exception) {
+                        bStatus = ctx.getString(R.string.upd_board_error, e.message ?: e.javaClass.simpleName)
                     } finally {
                         busy = false
                     }
@@ -125,8 +144,31 @@ private fun UpdatesSection(graph: AppGraph) {
                 }
             }) { Text(stringResource(R.string.upd_install, r.tag)) }
         }
-        if (pct >= 0) LinearProgressIndicator(progress = { pct / 100f }, modifier = Modifier.fillMaxWidth())
         if (status.isNotEmpty()) Note(status)
+        val f = fw
+        val b = board
+        if (f != null && b != null) Button(enabled = !busy, onClick = {
+            busy = true
+            scope.launch {
+                try {
+                    bStatus = ctx.getString(R.string.upd_board_downloading, f.name)
+                    val data = graph.updater.firmwareBytes(f) { p -> pct = p }
+                    pct = -1
+                    val to = BoardFlash.direct(b)
+                    bStatus = ctx.getString(R.string.upd_board_sending, to.via.name)
+                    val now = BoardFlash.flash(to, f, data)
+                    bStatus = if (now == f.version) ctx.getString(R.string.upd_board_done, now) else ctx.getString(R.string.upd_board_sent)
+                    fw = null
+                } catch (e: Exception) {
+                    bStatus = ctx.getString(R.string.upd_board_error, e.message ?: e.javaClass.simpleName)
+                } finally {
+                    busy = false
+                    pct = -1
+                }
+            }
+        }) { Text(stringResource(R.string.upd_board_install, f.tag)) }
+        if (pct >= 0) LinearProgressIndicator(progress = { pct / 100f }, modifier = Modifier.fillMaxWidth())
+        if (bStatus.isNotEmpty()) Note(bStatus)
     }
 }
 
