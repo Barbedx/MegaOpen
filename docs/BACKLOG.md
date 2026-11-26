@@ -35,6 +35,16 @@ where.
   on 1.12.x; if the car still idles at 20-35 kB, find the taker before
   touching the budget's numbers. Where: `src/net/GhOta.cpp`,
   `src/net/NetBudget.h`, `docs/design/stabilisation-1-12.md`.
+- **2026-11-26 — bench, 1.12.7 → 1.12.8-rc1: the first local OTA failed, the
+  heap is lower than the figure the car was compared with.** `/ota/start`
+  answered with an empty body and the upload with «Failed to write chunked
+  data to free space»; the same two requests a minute later went through
+  (CONFIRMED, smoke 63/0). Before it `/api/status` gave heap 40 kB; on 1.12.8
+  two minutes after boot `board_heap` 48 kB, `board_heap_min` 27 kB, where
+  the 2026-11-25 entry says the bench idles at 89 kB. Not looked into: what
+  ran at the time (a smoke run and a GitHub check had just been there), and
+  whether the 89 kB still holds. The new signals make it readable on
+  «Мапа › Сигнали» › «Плата».
 - **2026-11-26 — DUDU's status bar, the owner's photo (2026-11-22 17:32, car
   standing).** He switched every icon on and asks where each number comes
   from. Ours for sure: «134 km ▬ 95%» (range `0x21`, per cent `0x7D 04`
