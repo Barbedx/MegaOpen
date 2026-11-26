@@ -35,6 +35,29 @@ where.
   on 1.12.x; if the car still idles at 20-35 kB, find the taker before
   touching the budget's numbers. Where: `src/net/GhOta.cpp`,
   `src/net/NetBudget.h`, `docs/design/stabilisation-1-12.md`.
+- **2026-11-26 evening — the car, boots 299-301 (still 1.11.0), owner:
+  "glitchy, cannot get on the WiFi, cannot update".** Three things in the
+  pushed logs. (1) Boots 299 and 300 never joined: `STA disconnected
+  reason=201` (no such AP) on every try for "MegaYozh" and "Yozhik", the
+  board stayed on its own AP; boot 301 joined "MegaYozh" in 10 s. The
+  phone's hotspot was not on the air for the board (off, asleep, or 5 GHz
+  only); not a board fault as far as the log shows. (2) Boot 301: the app
+  came up on USB for the first time in the car (`usb: the app said HELLO`,
+  `mounted:true`), but the board hears it for an instant only: `app via
+  usb` for exactly `ALIVE_MS` (3 s), then `via ble` or `none`, then usb
+  again 2 s later, 42 switches in two boots; status: usb rx 28 frames, tx
+  168. The app pings once a second, so its frames stop reaching the board
+  right after each open. Each USB open makes the app stop BLE (one link at
+  a time) and makes the board switch WiFi off (`off: the app is on USB`),
+  so all three ways in flap together. (3) The board's own GitHub update,
+  through the app on USB, broke at 341293 of 1855120 when the link went
+  (`gh_broke`); heap was fine (58-62 kB with WiFi off). No `[ota] page
+  upload` line: the app's new «Оновити плату» was not used, or the app is
+  still the old one. OPEN: why the app's frames stop on USB in the car
+  (`docs/design/usb-link.md`, the 2026-10-28 car USB findings); whether
+  the board should drop WiFi for a USB link that is not alive for longer
+  than a HELLO. Told the owner: set the app to Bluetooth or WiFi only, or
+  pull the USB cable, then update over WiFi.
 - **2026-11-26 — bench, 1.12.7 → 1.12.8-rc1: the first local OTA failed, the
   heap is lower than the figure the car was compared with.** `/ota/start`
   answered with an empty body and the upload with «Failed to write chunked
