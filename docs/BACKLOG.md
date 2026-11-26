@@ -35,6 +35,29 @@ where.
   on 1.12.x; if the car still idles at 20-35 kB, find the taker before
   touching the budget's numbers. Where: `src/net/GhOta.cpp`,
   `src/net/NetBudget.h`, `docs/design/stabilisation-1-12.md`.
+- **2026-11-26 night — the car on 1.12.9: three open things from the
+  owner's photos.** (1) No log has reached megaopen-logs since 19:47 (the
+  last 1.11.0 boot); the owner updated at about 19:58, the page works, he
+  was on WiFi and on USB since. Not known why: nothing to read. First look:
+  `GET /api/logpush` (`state`, `err`) on the car. (2) DUDU's status bar
+  shows «67%» beside the range where `fuel_pct` is 51.7 % (31 L, the
+  cluster's needle at a half), and it grows while driving: 67, 70, 75, 76;
+  on 2026-11-22 it stood at 95 after a drive. So it is not the tank. The
+  engine temperature fits (not checked against `eng_temp` yet); the
+  owner's guess is the average speed. If it is the temperature, this DUDU
+  build reads `0x7D 04`/`0x7D 09` differently from 260929
+  (`docs/hu-decoder.md`). (3) The range on the tablet, 119-134 km, is
+  `range_calc = fuel_level * 100 / cons_avg` with `cons_avg` since boot:
+  26 L/100 km after idling, where the cluster says 300 km. Offered: keep a
+  long average across boots. From 1.12.10 the pushed status has every value
+  and what each field is sent (`car`), so (2) can be read from home once
+  (1) works.
+- **2026-11-26 — a failed build was pushed to master (78dd2aa).** The
+  check command joined its steps with `;`, so the commit and push ran
+  after `pio run` had failed: "1.12.10" made `MEGAOPEN_VERSION_WIRE` 17
+  characters. CI caught it, no tag was put on it; fixed in 5754d74 (the
+  wire string has no pad when the version fills the field). From 1.12.100
+  or 1.100.0 the string will not fit at all: the field is 16 bytes.
 - **2026-11-26 evening — the car, boots 299-301 (still 1.11.0), owner:
   "glitchy, cannot get on the WiFi, cannot update".** Three things in the
   pushed logs. (1) Boots 299 and 300 never joined: `STA disconnected
