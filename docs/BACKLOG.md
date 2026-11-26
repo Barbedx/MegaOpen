@@ -35,6 +35,18 @@ where.
   on 1.12.x; if the car still idles at 20-35 kB, find the taker before
   touching the budget's numbers. Where: `src/net/GhOta.cpp`,
   `src/net/NetBudget.h`, `docs/design/stabilisation-1-12.md`.
+- **2026-11-26 — DUDU's status bar, the owner's photo (2026-11-22 17:32, car
+  standing).** He switched every icon on and asks where each number comes
+  from. Ours for sure: «134 km ▬ 95%» (range `0x21`, per cent `0x7D 04`
+  D4-D5), the lights icon beside it, «☼ 1.0°C» (outside, `0x28` D5), the
+  speed tile. The unit's own: 13.5 V (`0x7D 0B` is not decoded, we send no
+  voltage), the weather, 4G, GPS, the «Waiting for Data» trip tiles. Silent
+  and unmapped: «-°C» (first in the row), «-%» with a thermometer, «-%»
+  with a pump, «-°C» (last). Which syu code each one reads is not known:
+  `docs/hu-decoder.md` covers `com.syu.ms`, the launcher's dex is packed
+  (Legu). Open: the coolant goes out as `0x7D 09` and was seen on the
+  tablet as "oil temp" on 2026-10-25, yet no temperature shows here: engine
+  off, the field switched off, or another widget; not checked.
 - **2026-11-26 — Companion updates the board (1.12.7), untested on a device.**
   The owner's ask after the entry above: the app downloads the image and
   uploads it (`update/BoardFlash.kt`, `/ota/start` + `/ota/upload`). No
