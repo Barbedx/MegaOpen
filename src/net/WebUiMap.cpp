@@ -82,7 +82,7 @@ namespace
         uint8_t how[Vehicle::SIG_COUNT], conf[Vehicle::SIG_COUNT] = {};
         for (uint8_t s = 0; s < Vehicle::SIG_COUNT; ++s) {
             const uint8_t* in = nullptr;
-            how[s] = Vehicle::fromDiag(s) ? 'r' : Vehicle::Derived::inputs(s, in) ? 'd' : 'o';
+            how[s] = Vehicle::fromBoard(s) ? 'h' : Vehicle::fromDiag(s) ? 'r' : Vehicle::Derived::inputs(s, in) ? 'd' : 'o';
         }
         // A formula over Derived's math; a row or a constant over both.
         const Expr::SigSet ft = App::Car::formulaTargets();

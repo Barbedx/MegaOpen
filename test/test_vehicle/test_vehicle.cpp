@@ -1030,9 +1030,11 @@ void test_a_silent_bus_zeroes_speed_and_rpm_and_drops_the_rest()
     s.set(SIG_RPM, 2500, 100);
     s.set(SIG_FUEL_LOW, 1, 100);
     s.pin(SIG_BATT_V, 1250);
+    s.set(SIG_BOARD_HEAP, 64, 100);
     Expr::SigSet ch;
     s.takeChanged(ch);
     s.busSilent(6000);
+    TEST_ASSERT_EQUAL_INT32(64, s.get(SIG_BOARD_HEAP));    // the board's own number is not the bus's
     TEST_ASSERT_TRUE(s.has(SIG_SPEED));
     TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_SPEED));
     TEST_ASSERT_EQUAL_INT32(0, s.get(SIG_RPM));
@@ -1050,7 +1052,15 @@ void test_signal_groups_have_ids_and_the_side_is_computed()
         for (uint8_t h = 0; h < g; ++h) TEST_ASSERT_TRUE_MESSAGE(strcmp(groupId(g), groupId(h)) != 0, groupId(g));
     }
     TEST_ASSERT_EQUAL_STRING("", groupId(GRP_COUNT));
-    for (char c : {'c', 'd', 'f'}) TEST_ASSERT_TRUE(fromCar(c));
+    for (char c : {'c', 'd', 'f', 'r', 'h'}) TEST_ASSERT_TRUE(fromCar(c));
+    // The board's own signals: a group of their own, found by name like any other.
+    for (const char* n : {"board_heap", "board_heap_min", "board_psram", "board_uptime", "wifi_rssi"}) {
+        const uint8_t sg = sigByName(n);
+        TEST_ASSERT_TRUE_MESSAGE(sg < SIG_USER_0 && fromBoard(sg), n);
+        TEST_ASSERT_EQUAL_UINT8(GRP_BOARD, meta(sg).group);
+    }
+    TEST_ASSERT_FALSE(fromBoard(SIG_SPEED));
+    TEST_ASSERT_FALSE(fromBoard(SIG_USER_0));
     for (char c : {'k', 'p', 'o', '?'}) TEST_ASSERT_FALSE(fromCar(c));
 }
 

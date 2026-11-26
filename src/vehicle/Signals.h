@@ -28,6 +28,7 @@ namespace Vehicle
         GRP_SAFETY,      // belts, airbag, locks, roof
         GRP_DYNAMICS,    // accelerations, yaw
         GRP_USER,        // the owner's own (formulas)
+        GRP_BOARD,       // the board itself: memory, uptime, WiFi (after GRP_USER: the page knows that one by its number)
         GRP_COUNT
     };
 
@@ -44,7 +45,9 @@ namespace Vehicle
     // no data for (the radar, the tyres, the amplifier, its settings, the A/C
     // panel, the hybrid, the selector). Computed, never declared, so a new
     // signal cannot land on the wrong side.
-    constexpr bool fromCar(char src) { return src == 'c' || src == 'd' || src == 'f' || src == 'r'; }
+    // 'h' is the board's own hardware (fromBoard): not the car's, but a value
+    // the board has, so it stands on the same side and a field may take it.
+    constexpr bool fromCar(char src) { return src == 'c' || src == 'd' || src == 'f' || src == 'r' || src == 'h'; }
 
     enum Sig : uint8_t {
         // ---- drive ---------------------------------------------------------
@@ -275,6 +278,15 @@ namespace Vehicle
         SIG_CLIM_AC_REQ,       // 0 auto, 1 off, 2 on
         SIG_CLIM_CLEAR,        // «voir clair»: the screen demist button
 
+        // ---- the board itself (App::Car's boardSignals, once a second):
+        // no CAN row, no formula; a field of the head unit or a rule may take
+        // them like any other signal.
+        SIG_BOARD_HEAP,        // free internal heap, kB
+        SIG_BOARD_HEAP_MIN,    // its lowest since boot, kB
+        SIG_BOARD_PSRAM,       // free PSRAM, kB
+        SIG_BOARD_UPTIME,      // minutes since boot
+        SIG_WIFI_RSSI,         // dBm; no value while not on a network
+
         // The owner's own signals (docs/design/rules.md, slice 3): slots named
         // at run time by their formulas (setUserSignal). An unnamed slot does
         // not exist: its name is "" and no list shows it. Last: everything
@@ -289,6 +301,7 @@ namespace Vehicle
     constexpr bool isUser(uint8_t s) { return s >= SIG_USER_0 && s < SIG_COUNT; }
     // Read from an ECU by a diagnostic request (App::CarDiag), not decoded
     // from a broadcast frame: the live row's source 'r', verified as read.
+    constexpr bool fromBoard(uint8_t s) { return s >= SIG_BOARD_HEAP && s <= SIG_WIFI_RSSI; }
     constexpr bool fromDiag(uint8_t s)
     {
         return s == SIG_CABIN_TEMP || s == SIG_CLIM_SUN || (s >= SIG_CLIM_SET && s <= SIG_CLIM_CLEAR);

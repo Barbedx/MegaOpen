@@ -28,7 +28,7 @@ namespace Vehicle
     void State::busSilent(uint32_t nowMs)
     {
         for (uint8_t s = 0; s < SIG_COUNT; ++s) {
-            if (_pinned[s] || !_ts[s]) continue;
+            if (_pinned[s] || !_ts[s] || fromBoard(s)) continue;
             if (s == SIG_SPEED || s == SIG_RPM) set(s, 0, nowMs);
             else clear(s);
         }

@@ -71,6 +71,7 @@ counts. `shift`/`bits` are LSB-based inside the big-endian word that the field s
 
 ## Notes
 
+- **The board's own** (`Vehicle::fromBoard`, source letter `h`, class «Плата» on the page): `board_heap`, `board_heap_min`, `board_psram` (kB), `board_uptime` (min), `wifi_rssi` (dBm, no value off a network). Not from the car: `App::Car`'s `boardSignals` writes them once a second.
 - **SIG_SPEED**: The cluster reports the speed it RECEIVES over CAN as a 16-bit /100, the same encoding as x0r's 0x354.
 - **SIG_RPM**: The cluster's received-over-CAN rpm is 16-bit /8, exactly x0r's 0x181. Logged 2026-06-14 at idle: 747 rpm.
 - **SIG_STEERING**: ESP's diag angle is (raw-32767)/10. The broadcast bias may be 0x7FFF, not 0x8000: one LSB, 0.1 deg.

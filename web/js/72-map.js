@@ -10,11 +10,11 @@
    Правила — GET/POST /api/rules (рядки як у файлі авто, CarFile::ruleRowTo), жива
    частина раз на 2 с, лише коли вкладка відкрита; «спробувати» — POST /api/rules/test. */
 /* група сигналу (meta[4]) — lv.grp.<n>; джерело — lv.src.<літера> і колір чипа */
-const LV_SRC={c:'ok',k:'warn',p:'warn',d:'ok',f:'ok',r:'ok',o:'off'};
-/* клас джерела (docs/design/rules.md, крок 1): CAN, перевірений чи ні; плата; стала (або закріплено); нема */
-const LV_CLS=['all','canOk','canHyp','board','user','const','none'];
+const LV_SRC={c:'ok',k:'warn',p:'warn',d:'ok',f:'ok',r:'ok',h:'ok',o:'off'};
+/* клас джерела (docs/design/rules.md, крок 1): CAN, перевірений чи ні; розрахунок плати; сама плата (залізо: пам'ять, WiFi); свої; стала (або закріплено); нема */
+const LV_CLS=['all','canOk','canHyp','board','hw','user','const','none'];
 /* формула: свій сигнал (група GRP_USER, meta[4] === 12) — «Свої», вбудований — «Плата» */
-const lvCls=(src,ok,m)=>src==='c'?(ok?'canOk':'canHyp'):src==='f'?(m&&m[4]===12?'user':'board'):src==='d'||src==='r'?'board':src==='k'||src==='p'?'const':'none';
+const lvCls=(src,ok,m)=>src==='c'?(ok?'canOk':'canHyp'):src==='f'?(m&&m[4]===12?'user':'board'):src==='d'||src==='r'?'board':src==='h'?'hw':src==='k'||src==='p'?'const':'none';
 /* meta: [name, unit, decimals, yes/no, group, min, max, label]; sigs: [value, ageMs, src, verified, confirm, car]
    car: 1 — бік авто (CAN-рядок, розрахунок, формула), 0 — лише ГУ (стала, закріплено, нічого): рахує прошивка (Vehicle::fromCar).
    confirm: 1 — гіпотеза на CAN, можна «✓ підтвердити»; 2 — підтверджено тут, можна «↺ скасувати».
@@ -36,10 +36,15 @@ const srcBtn=r=>r.rule?`<button class="srcb k" type="button" data-ed>${esc(ruleL
 const vCell=r=>(r.rule||r.def?(r.sent==null?DASH:String(r.sent)):fmtV(r))+(r.how==='test'?t('ca.testLeft',r.left):'');
 const mapRow=r=>`<tr data-id="${r.id}" data-g="${esc(r.group)}"${r.def?' data-def="1"':''} class="${r.how==='test'?'testing':''}"><td>${esc(r.name)}<small>${r.cmd}</small></td><td class="num" data-v>${esc(vCell(r))}</td><td>${srcBtn(r)}</td>
  <td>${`<div class="tcell">${r.kind==='b'?`<select class="in" data-t aria-label="${esc(t('ca.testVal'))}"><option value="1">${t('ca.yes')}</option><option value="0">${t('ca.no')}</option></select>`:`<input class="in" type="number" data-t step="${r.dec?Math.pow(10,-r.dec):1}" min="${r.min}" max="${r.max}" placeholder="${r.min}…${r.max}" aria-label="${esc(t('ca.testVal'))}">`}<button class="btn sm" type="button" data-send title="${esc(t('ca.sendT'))}">▶</button></div>`}</td></tr>`;
+/* сигнали для «Звідки → інший сигнал»: спершу клас джерела (CAN, розрахунок, плата, свої…), тоді сигнал цього класу з його значенням зараз */
+const srcList=(M,live)=>M.map((m,i)=>{const x=((live||{}).sigs||[])[i]||[];return m[0]?{id:m[0],cls:lvCls(x[2]||'o',x[3],m),v:x[0],m}:null}).filter(Boolean);
+const srcOpts=(L,cls)=>L.filter(s=>s.cls===cls).map(s=>[s.id,lvName(s.m)+' · '+s.id+(s.v==null?'':' = '+lvVal(s.m,s.v))]);
+const srcClsOpts=L=>LV_CLS.filter(c=>c!=='all'&&L.some(s=>s.cls===c)).map(c=>[c,t('lv.cls.'+c)+' · '+L.filter(s=>s.cls===c).length]);
 /* редактор «Звідки» поля ГУ; посилання [data-goto] — до сигналу на вкладці «Сигнали», з відкритою прив'язкою */
-const mapEd=(r,sigs)=>{const ru=r.rule||{from:'auto',src:'',mul:1,div:1,add:0},cs=ru.src||((sigs||[])[0]||[])[0]||'';return `<tr class="mapEd" data-for="${r.id}"><td colspan="4"><div class="mg">
+const mapEd=(r,sigs,live)=>{const ru=r.rule||{from:'auto',src:'',mul:1,div:1,add:0},L=srcList(sigs||[],live),cur=L.find(s=>s.id===ru.src),cc=cur?cur.cls:((srcClsOpts(L)[0]||[])[0]||'none'),cs=ru.src||((srcOpts(L,cc)[0]||[])[0]||'');return `<tr class="mapEd" data-for="${r.id}"><td colspan="4"><div class="mg">
  <label>${t('ca.from')}${sel('#from',[['auto',r.def?t('ca.fromDefL',ruleLbl(r.def)):t('ca.fromOwn')],...(r.def?[['own',t('ca.fromOwnL')]]:[]),['sig',t('ca.fromSig')],['k',t('ca.fromK')],['off',t('ca.fromOff')]],ru.from,'data-str')}</label>
- <label data-fr="sig">${t('ca.fromSigPick')}${sel('#fsrc',(sigs||[]).map(m=>[m[0],lvName(m)]),ru.src,'data-str')}<a href="#" data-goto="${esc(cs)}" data-gosrc>${esc(lvName((sigs||[]).find(m=>m[0]===cs)||[cs]))}</a></label>
+ <label data-fr="sig">${t('ca.fromCls')}${sel('#fcls',srcClsOpts(L),cc,'data-str')}</label>
+ <label data-fr="sig">${t('ca.fromSigPick')}${sel('#fsrc',srcOpts(L,cc),cs,'data-str')}<a href="#" data-goto="${esc(cs)}" data-gosrc>${esc(lvName((sigs||[]).find(m=>m[0]===cs)||[cs]))}</a></label>
  <label data-fr="sig">×${num('#fmul',ru.mul,'step="1"')}</label><label data-fr="sig">÷${num('#fdiv',ru.div,'step="1" min="1"')}</label><label data-fr="sig">+${num('#fadd',ru.from==='sig'?ru.add:0,'step="1"')}</label>
  <label data-fr="k">${t('ca.value')}${num('#fk',ru.from==='k'?ru.add:0,'step="1"')}</label>
  <span data-fr="auto" class="mw">${esc(t('ca.ownIs',bindLbl(r)))} <a href="#" data-goto="${r.id}">${t('ca.ownEdit')}</a></span></div>
@@ -156,7 +161,10 @@ SCR.map={title:'map.title',hidden:true,async render(m){
   const b=e.target.closest('button');if(!b)return;
   const tr=b.closest('tr');
   if(b.dataset.send!==undefined){const id=tr.dataset.id,v=$('[data-t]',tr).value;if(v===''){sv(svOf(b),'bad',t('ca.enterVal'));return}run(b,()=>API.post('/api/map/test',{id,value:+v})).then(()=>this.map());return}
-  if(b.dataset.ed!==undefined){const id=tr.dataset.id,open=$(`#map tr[data-for="${id}"]`);if(open){open.remove();return}const r=this.withRules(raiseRows(this.mp)).find(x=>x.id===id);tr.insertAdjacentHTML('afterend',mapEd(r,this.M));this.edVis($(`#map tr[data-for="${id}"]`));return}
+  if(b.dataset.ed!==undefined){const id=tr.dataset.id,open=$(`#map tr[data-for="${id}"]`);if(open){open.remove();return}const r=this.withRules(raiseRows(this.mp)).find(x=>x.id===id);
+   /* свіжі значення й джерела сигналів: на цій вкладці їх ніхто не опитує */
+   try{this.last=await API.get('/api/map?live=1')}catch(err){}
+   if($(`#map tr[data-for="${id}"]`))return;tr.insertAdjacentHTML('afterend',mapEd(r,this.M,this.last));this.edVis($(`#map tr[data-for="${id}"]`));return}
   const ed=b.closest('tr.mapEd');if(!ed)return;const id=ed.dataset.for;
   if(b.dataset.close!==undefined){ed.remove();return}
   if(b.dataset.save!==undefined){const g=f=>val($(`[data-f="${f}"]`,ed));const from=g('from')||'auto';
@@ -164,6 +172,8 @@ SCR.map={title:'map.title',hidden:true,async render(m){
    run(b,()=>API.post('/api/hu/fields',{rows:[rule]}),t('ca.saved')).then(r=>{if(r){ed.remove();this.map()}})}});
  mapT.addEventListener('change',e=>{const ed=e.target.closest('tr.mapEd');if(!ed)return;if(e.target.dataset.f==='from')this.edVis(ed);
   /* обрано інший сигнал: посилання веде до нього */
+  /* обрано інший клас джерела: список сигналів — лише цього класу */
+  if(e.target.dataset.f==='fcls'){const s=$('[data-f="fsrc"]',ed);s.innerHTML=srcOpts(srcList(this.M,this.last),val(e.target)).map(([a,b])=>`<option value="${esc(a)}">${esc(b)}</option>`).join('');s.dispatchEvent(new Event('change',{bubbles:true}));return}
   if(e.target.dataset.f==='fsrc'){const l=$('[data-gosrc]',ed),s=val(e.target);l.dataset.goto=s;l.textContent=lvName(this.M.find(x=>x[0]===s)||[s])}});
  // Правила
  const ruT=$('#ruT');

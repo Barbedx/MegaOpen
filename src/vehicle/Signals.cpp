@@ -204,6 +204,11 @@ namespace Vehicle
         {"clim_recirc",     "0-2",    0,       2, 0, false, GRP_CLIMATE},
         {"clim_ac_req",     "0-2",    0,       2, 0, false, GRP_CLIMATE},
         {"clim_clear",      "",       0,       1, 0, true,  GRP_CLIMATE},
+        {"board_heap",      "kB",     0,     512, 0, false, GRP_BOARD},
+        {"board_heap_min",  "kB",     0,     512, 0, false, GRP_BOARD},
+        {"board_psram",     "kB",     0,   16384, 0, false, GRP_BOARD},
+        {"board_uptime",    "min",    0,   65535, 0, false, GRP_BOARD},
+        {"wifi_rssi",       "dBm", -127,       0, 0, false, GRP_BOARD},
     };
 
     static_assert(sizeof(kMeta) / sizeof(kMeta[0]) == SIG_USER_0,
@@ -247,7 +252,7 @@ namespace Vehicle
             {"drive", "Drive"},           {"body", "Body"},       {"lights", "Lights"},   {"trip", "Trip"},
             {"climate", "Climate"},       {"radar", "Parking"},   {"tpms", "Tyres"},      {"audio", "Audio"},
             {"settings", "Car settings"}, {"engine", "Engine"},   {"safety", "Safety"},   {"dynamics", "Dynamics"},
-            {"user", "Own"},
+            {"user", "Own"},              {"board", "Board"},
         };
     }
 

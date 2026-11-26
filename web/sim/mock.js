@@ -416,11 +416,13 @@ function liveVal(n,t){const s=t/1000,w=(p,a,b)=>a+(b-a)*(.5+.5*Math.sin(s/p));
 /* будь-який сигнал за назвою (WebUiMap.cpp: id поля ГУ — назва його сигналу): межі з META, прив'язка — своя, заводська або нема */
 const sigT=id=>C.raise.find(x=>x.id===id)||(m=>m&&{id:m[0],dec:m[2],min:+decStr(m[5],m[2]),max:+decStr(m[6],m[2]),kind:m[3]?'b':'n'})(META.find(m=>m[0]===id));
 const bindOf=id=>S.map[id]||(r=>r&&r.can?{src:'can',can:r.can,k:0}:{src:'off',can:null,k:0})(SIM_DECODE.rows.find(x=>x.sig===id));
+/* сигнали самої плати (Vehicle::fromBoard): джерело 'h' */
+const BOARD_SIG={board_heap:88,board_heap_min:61,board_psram:7420,board_uptime:12,wifi_rssi:-58};
 const mapBase=()=>({send:S.emitter,uart:S.set.uartEnabled});
 g('/api/map',q=>{const o=mapBase();o.rows=q.live?[]:C.raise.map(t=>({id:t.id,...S.map[t.id],...mapVal(t)}));
- if(q.live){const t=Date.now();o.sigs=META.map(m=>{const v=liveVal(m[0],t),src=DIAG.has(m[0])?'r':DERIVED.has(m[0])?'d':BOUND.has(m[0])?'c':'o';
+ if(q.live){const t=Date.now();o.sigs=META.map(m=>{const v=BOARD_SIG[m[0]]!==undefined?BOARD_SIG[m[0]]:liveVal(m[0],t),src=BOARD_SIG[m[0]]!==undefined?'h':DIAG.has(m[0])?'r':DERIVED.has(m[0])?'d':BOUND.has(m[0])?'c':'o';
   const ms=src==='c'&&measured(m[0]);
-  return [v===undefined?null:decStr(v,m[2]),v===undefined?null:Math.floor(Math.random()*300),src,ms?1:0,src!=='c'?0:!ms?1:FACT_HYP.has(m[0])?2:0,(src==='c'||src==='d'||src==='f'||src==='r')?1:0]});
+  return [v===undefined?null:decStr(v,m[2]),v===undefined?null:Math.floor(Math.random()*300),src,ms?1:0,src!=='c'?0:!ms?1:FACT_HYP.has(m[0])?2:0,(src==='c'||src==='d'||src==='f'||src==='r'||src==='h')?1:0]});
   o.ruleStats=S.ruleStats}
  if(q.sig){const t=sigT(q.sig);if(!t)return fail(404,'not_found');o.rows=[{id:t.id,...bindOf(t.id),...mapVal(t),...(DERIVED.has(t.id)?{calc:true}:{})}]}
  if(q.meta)o.meta=META.map(m=>[m[0],m[1],m[2],m[3],m[4],decStr(m[5],m[2]),decStr(m[6],m[2]),m[7]]);

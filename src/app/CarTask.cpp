@@ -10,6 +10,7 @@
 #include "../utils/Snapshot.h"
 #include "freertos/queue.h"
 #include <esp_heap_caps.h>
+#include <WiFi.h>
 #include <new>
 #include <atomic>
 #include <string.h>
@@ -294,6 +295,21 @@ namespace App
             // Vehicle::verified(): measured rows, and no pin (a constant or a
             // test); a derived signal, when every input is. Run after anything
             // that changes either.
+            // The board's own numbers as signals (Vehicle::fromBoard), once a
+            // second: a field of the head unit, a formula or a rule takes
+            // them by name like a car value.
+            void boardSignals(uint32_t now)
+            {
+                Vehicle::State* st = s_s.state;
+                if (!st) return;
+                st->set(Vehicle::SIG_BOARD_HEAP, (int32_t)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024), now);
+                st->set(Vehicle::SIG_BOARD_HEAP_MIN, (int32_t)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024), now);
+                st->set(Vehicle::SIG_BOARD_PSRAM, (int32_t)(heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024), now);
+                st->set(Vehicle::SIG_BOARD_UPTIME, (int32_t)(now / 60000), now);
+                if (WiFi.isConnected()) st->set(Vehicle::SIG_WIFI_RSSI, WiFi.RSSI(), now);
+                else st->clear(Vehicle::SIG_WIFI_RSSI);
+            }
+
             void refreshVerified()
             {
                 const Vehicle::DecodeTable& t = s_table.live();
@@ -303,7 +319,8 @@ namespace App
                     const uint8_t n = Vehicle::Derived::inputs(s, in);
                     bool ok = !pinned(s);
                     if (n) for (uint8_t i = 0; i < n; ++i) ok = ok && t.measured(in[i]) && !pinned(in[i]);
-                    else   ok = ok && (t.measured(s) || Vehicle::fromDiag(s));   // read from the ECU: as good as measured
+                    else   ok = ok && (t.measured(s) || Vehicle::fromDiag(s) ||   // read from the ECU: as good as measured
+                                       Vehicle::fromBoard(s));                    // the board's own numbers
                     Vehicle::setVerified(s, ok);
                 }
                 // A formula's target, not fed by a row: as good as its inputs
@@ -763,6 +780,7 @@ namespace App
                     CarDiag::loop(now);          // after the frames: their replies are in
 #endif
                     if ((uint32_t)(now - fpsAt) >= 1000) {
+                        boardSignals(now);
                         fpsAt = now;
                         s_fps = s_fpsCount;
                         s_fpsCount = 0;

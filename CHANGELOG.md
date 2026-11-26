@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions follo
 
 ## [Unreleased]
 
+## [1.12.8] - 2026-11-26
+
+### Added
+- The board's own numbers are signals: `board_heap`, `board_heap_min`, `board_psram` (kB), `board_uptime` (min), `wifi_rssi` (dBm). A field of the head unit, a formula or a rule takes them by name; on «Мапа › Сигнали» they are the class «Плата».
+
+### Changed
+- «Мапа › Поля ГУ», «Звідки» → «інший сигнал»: first where the signal is from (CAN ✓, CAN ?, computed, the board, own, constants), then a signal of that class with its value now. It was one list of every signal.
+- The class of computed signals is «Розрахунок»; «Плата» now means the board's hardware.
+
 ## [1.12.7] - 2026-11-26
 
 ### Added
