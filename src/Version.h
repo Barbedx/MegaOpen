@@ -8,7 +8,7 @@
 
 // Wire field: Rav4Emitter's MSG_VERSION is exactly 16 bytes, space-padded.
 // Written out literally so it cannot overrun the field.
-#define MEGAOPEN_VERSION_WIRE "MegaOpen 1.12.10 "
+#define MEGAOPEN_VERSION_WIRE "MegaOpen 1.12.10"
 static_assert(sizeof(MEGAOPEN_VERSION_WIRE) == 17,
               "MSG_VERSION is a fixed 16-byte field plus its NUL");
 
